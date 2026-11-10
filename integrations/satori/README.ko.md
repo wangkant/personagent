@@ -3,9 +3,9 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · 한국어 · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
 
 
-이 커넥터는 [personagent](https://github.com/wangkant/personagent)를 [Satori](https://satori.chat) 서버에 연결합니다. Satori는 크로스 플랫폼 채팅 프로토콜입니다. [Koishi](https://koishi.chat)(`server-satori` 플러그인 포함), Chronocat, LLOneBot 같은 서버가 채팅 플랫폼에 로그인하고, 이런 클라이언트는 웹소켓 하나로 모든 로그인의 모든 메시지를 받습니다. 그래서 커넥터 프로세스 하나로 서버에 어댑터가 있는 모든 플랫폼에 페르소나를 둘 수 있습니다.
+이 커넥터는 [personagent](https://github.com/wangkant/personagent)를 [Satori](https://satori.chat) 서버에 연결합니다. Satori는 크로스 플랫폼 채팅 프로토콜입니다. [Koishi](https://koishi.chat)(`server-satori` 플러그인 포함), Chronocat, LLOneBot 같은 서버가 채팅 플랫폼에 로그인하고, 이런 클라이언트는 웹소켓 하나로 모든 로그인의 모든 메시지를 받습니다. 그래서 커넥터 프로세스 하나로 서버에 어댑터가 있는 모든 플랫폼에 캐릭터를 둘 수 있습니다.
 
-Satori와 Koishi는 서드파티 소프트웨어입니다. personagent가 직접 연결하는 QQ, WeChat, Telegram, Discord나 로컬 페이지가 AstrBot으로 설정하는 플랫폼에는 필요하지 않습니다. 이미 Koishi를 쓰고 있거나 Koishi로만 닿는 플랫폼을 원할 때 이 커넥터를 쓰세요.
+Satori와 Koishi는 서드파티 소프트웨어입니다. personagent가 직접 연결하는 QQ, WeChat, Telegram, Discord나 로컬 페이지가 AstrBot으로 설정하는 플랫폼에는 필요하지 않습니다. 이미 Koishi를 쓰고 있거나 Koishi로만 닿는 플랫폼을 원할 때 이 커넥터를 쓰십시오.
 
 커넥터는 허용된 각 메시지를 중립 이벤트로 에이전트의 `POST /v1/events`에 전달하고([docs/connectors.md](../../docs/connectors.ko.md)), 답변을 Satori로 돌려보냅니다. 에이전트의 아웃박스도 가져오므로 예약된 말 걸기, 후속 질문, 변명도 채팅에 도달합니다.
 
@@ -13,19 +13,19 @@ Satori와 Koishi는 서드파티 소프트웨어입니다. personagent가 직접
 
 ## 설정 (Koishi 사용)
 
-1. **Koishi.** 데스크톱 실행기나 `npm init koishi@latest`로 Koishi를 설치합니다. 콘솔에서 `adapter-telegram`이나 `adapter-discord` 같은 플랫폼 어댑터를 추가해 설정하고 봇이 온라인인지 확인합니다. `server`와 `server-satori` 플러그인을 켭니다. 그러면 Koishi가 `http://127.0.0.1:5140/satori`에서 Satori를 제공합니다. 이 컴퓨터 외의 것이 그 포트에 닿을 수 있다면 `server-satori`에 `token`을 설정하세요.
+1. **Koishi.** 데스크톱 실행기나 `npm init koishi@latest`로 Koishi를 설치합니다. 콘솔에서 `adapter-telegram`이나 `adapter-discord` 같은 플랫폼 어댑터를 추가해 설정하고 봇이 온라인인지 확인합니다. `server`와 `server-satori` 플러그인을 켭니다. 그러면 Koishi가 `http://127.0.0.1:5140/satori`에서 Satori를 제공합니다. 이 컴퓨터 외의 것이 그 포트에 닿을 수 있다면 `server-satori`에 `token`을 설정하십시오.
 
-   Koishi는 다른 플러그인도 계속 실행합니다. 채팅 모델이나 답변 플러그인처럼 메시지에 답하는 것이 있으면 페르소나와 함께 답하고, 커넥터는 이를 막을 수 없습니다. 그 플러그인을 끄거나 전달하는 대화에서 제외하세요.
+   Koishi는 다른 플러그인도 계속 실행합니다. 채팅 모델이나 답변 플러그인처럼 메시지에 답하는 것이 있으면 캐릭터와 함께 답하고, 커넥터는 이를 막을 수 없습니다. 그 플러그인을 끄거나 전달하는 대화에서 제외하십시오.
 
-2. **에이전트.** personagent를 실행합니다(`personagent run`, README 참고). 커넥터와 에이전트가 다른 호스트에 있으면 에이전트의 `.env`에 `CONNECTOR_TOKEN`을 설정하고 에이전트를 HTTPS 뒤에 두세요. 호스트가 하나여도 프록시나 터널을 추가하기 전에 토큰을 설정하세요.
+2. **에이전트.** personagent를 실행합니다(`personagent run`, README 참고). 커넥터와 에이전트가 다른 호스트에 있으면 에이전트의 `.env`에 `CONNECTOR_TOKEN`을 설정하고 에이전트를 HTTPS 뒤에 두십시오. 호스트가 하나여도 프록시나 터널을 추가하기 전에 토큰을 설정하십시오.
 
-3. **커넥터.** 커넥터는 이 저장소의 스크립트이므로 저장소 사본(클론 또는 GitHub ZIP)과 자체 Python 환경이 필요합니다. `satori-python`은 personagent의 의존성이 아니기 때문입니다. personagent의 `.venv`가 있는 클론에서는 그 환경에 설치하세요.
+3. **커넥터.** 커넥터는 이 저장소의 스크립트이므로 저장소 사본(클론 또는 GitHub ZIP)과 자체 Python 환경이 필요합니다. `satori-python`은 personagent의 의존성이 아니기 때문입니다. personagent의 `.venv`가 있는 클론에서는 그 환경에 설치하십시오.
 
    ```bash
    .venv/bin/python -m pip install -r integrations/satori/requirements.txt
    ```
 
-   PyPI에서 pip로 personagent를 설치했거나 uvx로 실행한다면 사본 옆에 별도의 venv를 만드세요.
+   PyPI에서 pip로 personagent를 설치했거나 uvx로 실행한다면 사본 옆에 별도의 venv를 만드십시오.
 
    ```bash
    python -m venv connector-venv
@@ -46,7 +46,7 @@ Satori와 Koishi는 서드파티 소프트웨어입니다. personagent가 직접
 
    `--config FILE`은 다른 설정 파일을 읽습니다. 모든 설정은 환경 변수로도 줄 수 있으며, 환경 변수가 파일보다 우선합니다.
 
-4. **작동 확인.** 서버에 있는 봇마다 로그에 `Satori login telegram:7000 is ONLINE` 같은 줄이 나옵니다. 전달되는 그룹에서 봇을 멘션하세요. 에이전트 로그에 그 턴이 나오고 답변이 채팅에 나타납니다. 아무 일도 없으면 `SATORI_LOG_LEVEL=DEBUG`를 설정하세요.
+4. **작동 확인.** 서버에 있는 봇마다 로그에 `Satori login telegram:7000 is ONLINE` 같은 줄이 나옵니다. 전달되는 그룹에서 봇을 멘션하십시오. 에이전트 로그에 그 턴이 나오고 답변이 채팅에 나타납니다. 아무 일도 없으면 `SATORI_LOG_LEVEL=DEBUG`를 설정하십시오.
 
 ## 설정 항목
 
@@ -61,8 +61,8 @@ Satori와 Koishi는 서드파티 소프트웨어입니다. personagent가 직접
 | `SATORI_PLATFORMS` | 전체 | 커넥터를 이 Satori 플랫폼으로 제한합니다. |
 | `SATORI_PLATFORM_NAMES` | `qq=qqbot` | 에이전트가 보는 플랫폼 이름을 바꿉니다: `satori_name=name, ...` |
 | `SATORI_OUTBOX_ENABLED` | `true` | 에이전트의 아웃박스를 가져옵니다. |
-| `SATORI_CONNECTOR_ID` | `SATORI_URL`에서 생성 | 에이전트 쪽의 이 커넥터 ID. 바꾸지 마세요. |
-| `SATORI_TIMEOUT_S` | `420` | 한 턴에 걸릴 수 있는 시간. 에이전트의 3 × `LLM_TIMEOUT_S`보다 크게 두세요. |
+| `SATORI_CONNECTOR_ID` | `SATORI_URL`에서 생성 | 에이전트 쪽의 이 커넥터 ID. 바꾸지 마십시오. |
+| `SATORI_TIMEOUT_S` | `420` | 한 턴에 걸릴 수 있는 시간. 에이전트의 3 × `LLM_TIMEOUT_S`보다 크게 두십시오. |
 | `SATORI_INLINE_IMAGES_ENABLED` | `false` | URL을 에이전트에 넘기지 않고 공개 이미지 URL을 커넥터에서 내려받습니다. |
 | `SATORI_LOG_LEVEL` | `INFO` | |
 
@@ -83,7 +83,7 @@ Koishi의 `inspect` 플러그인은 메시지의 플랫폼, 채널, 길드, 사�
 
 personagent는 ID를 `<platform>:<id>`로 저장하며, 플랫폼은 Satori 로그인의 플랫폼(`telegram`, `discord`, `onebot` 등)입니다. 4단계의 로그 줄에 표시됩니다. 특별한 경우가 두 가지 있습니다.
 
-- **OneBot을 통한 QQ**(Koishi의 `adapter-onebot`, 뒤에 NapCat이나 LLOneBot)는 QQ 번호를 ID로 씁니다. 기존 QQ 배포에서 에이전트가 배운 것을 유지하려면 에이전트의 `CONNECTOR_QQ_PLATFORMS`에 플랫폼을 추가하세요(`CONNECTOR_QQ_PLATFORMS=onebot`). 그러면 ID가 NapCat의 QQ 번호처럼 접두사 없이 저장되고 `ACCESS_GROUPS`와 `ACCESS_DM_USERS`의 QQ 항목이 적용됩니다. ID가 실제로 QQ 번호인 플랫폼에만 하세요.
+- **OneBot을 통한 QQ**(Koishi의 `adapter-onebot`, 뒤에 NapCat이나 LLOneBot)는 QQ 번호를 ID로 씁니다. 기존 QQ 배포에서 에이전트가 배운 것을 유지하려면 에이전트의 `CONNECTOR_QQ_PLATFORMS`에 플랫폼을 추가하십시오(`CONNECTOR_QQ_PLATFORMS=onebot`). 그러면 ID가 NapCat의 QQ 번호처럼 접두사 없이 저장되고 `ACCESS_GROUPS`와 `ACCESS_DM_USERS`의 QQ 항목이 적용됩니다. ID가 실제로 QQ 번호인 플랫폼에만 적용하십시오.
 - **QQ 공식 봇 API**(Koishi의 `adapter-qq`)는 플랫폼을 `qq`라고 부르지만 ID는 QQ 번호가 아니라 openid입니다. 커넥터는 플랫폼 이름을 `qqbot`으로 바꿉니다. `SATORI_PLATFORM_NAMES`로 이 변경을 덮어쓸 수 있습니다. personagent는 Koishi 없이 QQ 공식 봇에 직접 연결할 수도 있습니다.
 
 ## 지원 기능
@@ -94,7 +94,7 @@ personagent는 ID를 `<platform>:<id>`로 저장하며, 플랫폼은 Satori 로�
 | 호출 감지(`addressed`) | 봇에 대한 `<at>`(ID로, 서버가 ID를 주지 않으면 봇 이름으로)와 봇 메시지에 대한 답장. `@all`은 멘션이 아니라 텍스트로 칩니다. |
 | 인용 메시지 | 인용한 텍스트, 보낸 사람, ID를 `<quote>` 요소나 `message.quote`에서 가져옵니다. |
 | 받은 이미지 | `data:`와 `internal:` 이미지, Satori 서버의 이미지는 인라인으로 넣습니다. 공개 URL은 에이전트가 가져오도록 넘깁니다. 사설 네트워크 URL은 `(sent an image)`로 설명합니다. 메시지당 최대 4개, 각 4 MB까지 내려받습니다. |
-| 스티커와 이모지 | `<emoji>`와 QQ `<face>`는 이모지로 도착하며, 페르소나는 자신이 볼 수 없음을 압니다. |
+| 스티커와 이모지 | `<emoji>`와 QQ `<face>`는 이모지로 도착하며, 캐릭터는 자신이 볼 수 없음을 압니다. |
 | 음성, 동영상, 파일 | 말로 설명합니다: `(sent a voice message)`, `(sent a video)`, `(sent a file: deck.pdf)`. |
 | 답변 | 텍스트와 `data:` URI 이미지를 각각 별도 메시지로 짧은 간격을 두고 보냅니다. 그룹에서는 에이전트가 요청한 멘션이 `<at>`이 됩니다. |
 | 수동 답장 플랫폼 | 답변에 이벤트의 `referrer`를 담습니다. QQ 공식 봇 API가 메시지에 답할 때 필요합니다. |

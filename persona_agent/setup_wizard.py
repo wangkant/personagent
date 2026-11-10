@@ -92,108 +92,108 @@ _TEXT: dict[str, tuple[str, str]] = {
     "title_again": ("Reconfigure", "重新配置"),
     "folder": ("Settings are saved in {path}", "设置保存在 {path}"),
     "enter_hint": ("Press Enter to accept the value in [brackets].",
-                   "直接回车 = 使用方括号里的值。"),
+                   "按回车键即采用方括号中的值。"),
     "step": ("Step {n} of 3: {what}", "第 {n} 步（共 3 步）：{what}"),
     "step_model": ("the AI model", "AI 模型"),
     "step_character": ("the character", "角色"),
     "step_chat": ("chat apps (optional)", "聊天平台（可选）"),
-    "required": ("(required, please enter a value)", "（必填，请输入）"),
+    "required": ("(required, please enter a value)", "（必填，请输入一个值）"),
     "yes_no": ("Y/n", "Y/n"),
     "no_yes": ("y/N", "y/N"),
-    "bad_number": ("Enter a number from 1 to {n}.", "请输入 1 到 {n} 的数字。"),
+    "bad_number": ("Enter a number from 1 to {n}.", "请输入 1 至 {n} 之间的数字。"),
     "saved": ("Saved to {path}", "已保存到 {path}"),
     # model
     "provider_intro": (
         "The bot talks through an AI service with an OpenAI-compatible API.\n"
         "You sign up with one of these and create an API key (a password for programs).",
-        "机器人通过一个兼容 OpenAI 接口的 AI 服务说话。\n"
-        "在下面任选一家注册，创建一个 API key（给程序用的密码）。"),
+        "机器人通过兼容 OpenAI 接口的 AI 服务进行对话。\n"
+        "请从以下服务中任选一家注册，并创建一个 API key（供程序使用的密码）。"),
     "provider_choose": ("Service", "选择服务"),
     "base_url_explain": (
         "Base URL = the API address on your provider's page, such as https://api.deepseek.com",
-        "Base URL = 服务商文档里写的 API 地址，例如 https://api.deepseek.com"),
+        "Base URL 即服务商文档中注明的 API 地址，例如 https://api.deepseek.com"),
     "base_url": ("Base URL", "Base URL（API 地址）"),
     "base_url_scheme": ("Start the address with https:// (or http:// for a server on this computer).",
-                        "地址要以 https:// 开头（本机上的服务用 http://）。"),
+                        "地址须以 https:// 开头（本机上的服务可使用 http://）。"),
     "model_explain": ("Model = the model's id at that service, such as {example}",
-                      "模型名 = 这家服务里模型的 ID，例如 {example}"),
-    "model": ("Model", "模型名"),
+                      "模型名称即该服务中模型的 ID，例如 {example}"),
+    "model": ("Model", "模型名称"),
     "ollama_model": ("Use a model you have pulled; `ollama list` shows them.",
-                     "填已经下载好的模型，`ollama list` 可以查看。"),
-    "key_where": ("Create an API key here: {url}", "在这里创建 API key：{url}"),
+                     "请填写已下载的模型，可通过 `ollama list` 查看。"),
+    "key_where": ("Create an API key here: {url}", "请在此处创建 API key：{url}"),
     "key_prompt": ("API key (paste it, then press Enter)",
-                   "API key（粘贴后按回车）"),
-    "key_visible": ("Show the API key in this terminal?", "在这个终端里显示 API Key 吗？"),
+                   "API key（粘贴后按回车键）"),
+    "key_visible": ("Show the API key in this terminal?", "是否在此终端中显示 API Key？"),
     "key_current": ("Current API key: {value}", "当前 API Key：{value}"),
     "key_keep": ("API key (Enter keeps {masked})",
-                 "API key（回车保留 {masked}）"),
-    "key_got": ("key {masked}", "已记下 {masked}"),
+                 "API key（按回车键保留 {masked}）"),
+    "key_got": ("key {masked}", "已记录 {masked}"),
     "testing": ("Testing the key with one tiny request to {url}",
-                "用一个很小的请求测试密钥：{url}"),
-    "test_ok": ("It works.", "可以用。"),
-    "test_failed": ("It did not work ({what}).", "没有成功（{what}）。"),
-    "test_unreachable": ("no answer", "连接不上"),
-    "retry": ("Change the answers and try again?", "修改后再试一次吗？"),
+                "正在通过一个很小的请求测试密钥：{url}"),
+    "test_ok": ("It works.", "测试通过。"),
+    "test_failed": ("It did not work ({what}).", "测试未通过（{what}）。"),
+    "test_unreachable": ("no answer", "无法连接"),
+    "retry": ("Change the answers and try again?", "是否修改后重试？"),
     "kept_anyway": ("Saved anyway. Fix it later by running this setup again.",
-                    "仍然保存了。之后可以重新运行本设置来修正。"),
+                    "设置已照常保存。之后可重新运行本设置进行修正。"),
     "fix_401": ("The service refused the key. Check that you copied all of it and that it\n"
                 "belongs to this service.",
-                "服务商拒绝了这个密钥。确认复制完整，并且是这家服务的密钥。"),
+                "服务商拒绝了该密钥。请确认密钥已完整复制，且属于该服务。"),
     "key_page": ("Keys: {url}", "密钥页面：{url}"),
     "fix_402": ("The account has no balance or free quota left. Top it up in the service's console.",
-                "账户余额或免费额度用完了，请到服务商控制台充值。"),
+                "账户余额或免费额度已用完，请前往服务商控制台充值。"),
     "fix_404": ("Nothing answers at that address, or the model name is unknown.\n"
                 "Check the Base URL (it usually looks like {example}) and the model name.",
-                "这个地址没有对应的接口，或者模型名不存在。\n"
-                "检查 Base URL（一般类似 {example}）和模型名。"),
+                "该地址没有对应的接口，或模型名称不存在。\n"
+                "请检查 Base URL（通常形如 {example}）和模型名称。"),
     "fix_400": ("The service rejected the request. Its answer: {detail}\n"
                 "Usually the model name is wrong, or the model is not enabled for your account.",
-                "服务商拒绝了请求，返回：{detail}\n"
-                "通常是模型名写错了，或者账户还没开通这个模型。"),
+                "服务商拒绝了该请求，返回内容为：{detail}\n"
+                "通常是由于模型名称有误，或账户尚未开通该模型。"),
     "fix_429": ("Too many requests or no quota right now. Wait a minute, or check your plan.",
-                "请求太频繁或额度不足。稍等一分钟，或检查你的套餐。"),
+                "请求过于频繁或额度不足。请等待一分钟后重试，或检查你的套餐。"),
     "fix_429_free": ("OpenRouter's free models stop at 50 requests a day, until midnight UTC.",
-                     "OpenRouter 的免费模型每天限 50 次请求，到 UTC 零点恢复。"),
+                     "OpenRouter 的免费模型每天限 50 次请求，于 UTC 零点重置。"),
     "fix_5xx": ("The service had an internal error. Try again in a few minutes.",
-                "服务商内部出错，过几分钟再试。"),
+                "服务商内部出错，请几分钟后重试。"),
     "fix_net": ("Could not reach {host}: {detail}\n"
                 "Check the address and your network or proxy.",
-                "连接不上 {host}：{detail}\n"
-                "检查地址、网络或代理设置。"),
+                "无法连接 {host}：{detail}\n"
+                "请检查地址、网络或代理设置。"),
     "fix_ollama": ("Is Ollama running? Start it with `ollama serve`.",
-                   "Ollama 在运行吗？用 `ollama serve` 启动。"),
+                   "请确认 Ollama 正在运行，可使用 `ollama serve` 启动。"),
     # character
     "name_explain": ("Name = what people in the chat call the bot. It answers when its name comes up.",
-                     "名字 = 群友怎么称呼它。消息里出现这个名字时，它会回应。"),
-    "name": ("Bot name", "机器人名字"),
+                     "名称即群成员对机器人的称呼。消息中出现该名称时，机器人会作出回应。"),
+    "name": ("Bot name", "机器人名称"),
     "renamed": ("(a new name starts a new character: what {old} learned does not carry over)",
-                "（改名等于换一个新角色：{old}学到的东西不会带过来）"),
-    "name_follows": ("(the name follows the character: {name})", "（名字跟着角色改成了{name}）"),
+                "（更改名称即创建新角色：{old}学到的内容不会沿用）"),
+    "name_follows": ("(the name follows the character: {name})", "（名称已随角色更改为{name}）"),
     "lang_switched": ("(the examples, filters and checks switch to {lang} as well)",
-                      "（示例、过滤规则和检查也会一起切换到{lang}）"),
+                      "（示例、过滤规则和检查也将一并切换为{lang}）"),
     "char_intro": ("Pick a character. It is written to persona.txt, which you can edit any time.",
-                   "选一个性格。会写进 persona.txt，以后随时可以改。"),
+                   "请选择一种性格。该设置将写入 persona.txt，之后可随时修改。"),
     "char_choose": ("Character", "性格"),
-    "char_keep": ("Character (Enter keeps the current one)", "性格（回车保留现在的）"),
+    "char_keep": ("Character (Enter keeps the current one)", "性格（按回车键保留当前设置）"),
     "char_custom": ("persona.txt has your own edits, so it is left as it is.",
-                    "persona.txt 已经被你改过，保持不变。"),
+                    "persona.txt 已包含你的修改，因此保持不变。"),
     "persona_written": ("persona.txt written ({what})", "已写入 persona.txt（{what}）"),
     # chat apps / AstrBot
     "connect_intro": (
         "Optional: put the bot in groups on QQ, Telegram, Discord and more through AstrBot.\n"
         "Already installed? Use it. Otherwise this setup can download and install it for you.",
-        "可选：通过 AstrBot 接进 QQ、Telegram、Discord 等聊天平台。\n"
-        "已经装过就直接连接；还没有的话，可以在这里自动下载安装。"),
+        "可选：通过 AstrBot 将机器人接入 QQ、Telegram、Discord 等聊天平台。\n"
+        "如已安装，可直接连接；如尚未安装，可在此处自动下载并安装。"),
     "astrbot_install_q": ("Download and install AstrBot now? (includes Python 3.12 if needed)",
-                          "现在自动下载安装 AstrBot 吗？（需要时会一并下载 Python 3.12）"),
+                          "是否立即自动下载并安装 AstrBot？（如有需要，将一并下载 Python 3.12）"),
     "astrbot_installing": ("Installing AstrBot in {path}. The first download may take a few minutes.",
-                           "正在把 AstrBot 安装到 {path}，首次下载可能需要几分钟。"),
+                           "正在将 AstrBot 安装到 {path}，首次下载可能需要几分钟。"),
     "astrbot_install_failed": ("AstrBot installation failed: {error}\n"
                                "Your agent settings are saved. Retry with `personagent connect astrbot --install`.",
                                "AstrBot 安装未完成：{error}\n"
                                "已保留机器人设置。可运行 `personagent connect astrbot --install` 重试。"),
     "astrbot_start": ("Start the installed AstrBot in another terminal:",
-                      "在另一个终端里启动已安装的 AstrBot："),
+                      "请在另一个终端中启动已安装的 AstrBot："),
     "start_title": ("personagent · Start", "personagent · 开始使用"),
     "start_status": ("Character: {name}  |  API key: {masked}", "角色：{name}  |  API Key：{masked}"),
     "start_unset": ("not set up", "尚未配置"),
@@ -213,15 +213,15 @@ _TEXT: dict[str, tuple[str, str]] = {
                    "0. 退出"),
     "start_choose": ("Choose 0–6", "请选择 0–6"),
     "start_failed": ("The command exited with code {code}. You can retry from this menu.",
-                     "命令退出，状态码 {code}。可在菜单中重新操作。"),
+                     "命令已退出，状态码为 {code}。可在菜单中重新操作。"),
     "connect_q": ("Connect to AstrBot now? (No = chat in this terminal only)",
-                  "现在连接 AstrBot 吗？（否 = 只在终端里聊天）"),
+                  "是否立即连接 AstrBot？（否 = 仅在终端中聊天）"),
     "astrbot_explain": ("AstrBot folder = the one holding cmd_config.json: AstrBot's data folder or the one above it.",
-                        "AstrBot 文件夹 = 放 cmd_config.json 的那个：AstrBot 的 data 文件夹，或者它的上一级。"),
+                        "AstrBot 文件夹即存放 cmd_config.json 的文件夹：AstrBot 的 data 文件夹或其上一级文件夹。"),
     "astrbot_dir": ("AstrBot folder", "AstrBot 文件夹"),
     "astrbot_bad": ("No cmd_config.json in {path}. Start AstrBot once so it creates one, or give its data folder.",
-                    "{path} 里没有 cmd_config.json。先启动一次 AstrBot 让它生成，或者填它的 data 文件夹。"),
-    "docker_q": ("Does AstrBot run in Docker?", "AstrBot 是在 Docker 里运行的吗？"),
+                    "{path} 中没有 cmd_config.json。请先启动一次 AstrBot 以生成该文件，或填写其 data 文件夹。"),
+    "docker_q": ("Does AstrBot run in Docker?", "AstrBot 是否在 Docker 中运行？"),
     "docker_fix": (
         "Inside Docker, 127.0.0.1 is the container itself, so the plugin cannot reach\n"
         "personagent at {url}, and it refuses plain http:// to any other address. Either:\n"
@@ -232,67 +232,67 @@ _TEXT: dict[str, tuple[str, str]] = {
         "     A NapCat container in the same file needs host networking too; its\n"
         "     WebSocket address becomes ws://127.0.0.1:6199/ws.\n"
         "  2. An HTTPS address for personagent (a reverse proxy or a tunnel), entered below.",
-        "在 Docker 里，127.0.0.1 指的是容器自己，插件访问不到 {url} 上的 personagent，\n"
-        "而发往其他地址的明文 http:// 会被插件拒绝。二选一：\n"
-        "  1. 主机网络：在 AstrBot 的 compose 文件里把 `ports:` 和 `networks:` 换成\n"
-        "     `network_mode: host`（docker run 用 --network host），然后重建容器。\n"
-        "     Docker Desktop（Windows/macOS）需要 4.34 以上，并打开\n"
+        "在 Docker 中，127.0.0.1 指向容器自身，因此插件无法访问 {url} 上的 personagent，\n"
+        "且插件会拒绝发往其他地址的明文 http:// 请求。请选择以下方式之一：\n"
+        "  1. 主机网络：在 AstrBot 的 compose 文件中将 `ports:` 和 `networks:` 替换为\n"
+        "     `network_mode: host`（docker run 使用 --network host），然后重建容器。\n"
+        "     Docker Desktop（Windows/macOS）须为 4.34 或更高版本，并开启\n"
         "     设置 > Resources > Network > Enable host networking。\n"
-        "     同一个文件里的 NapCat 容器也要用主机网络，它的 WebSocket 地址改成\n"
+        "     同一文件中的 NapCat 容器也须使用主机网络，其 WebSocket 地址改为\n"
         "     ws://127.0.0.1:6199/ws。\n"
-        "  2. 给 personagent 一个 HTTPS 地址（反向代理或隧道），在下面填写。"),
+        "  2. 为 personagent 配置 HTTPS 地址（反向代理或隧道），并在下方填写。"),
     "docker_url": ("personagent's HTTPS address (Enter = keep {url} and use host networking)",
-                   "personagent 的 HTTPS 地址（回车 = 保留 {url}，使用主机网络）"),
+                   "personagent 的 HTTPS 地址（按回车键 = 保留 {url} 并使用主机网络）"),
     "url_refused": ("The plugin only accepts a 127.0.0.1 / localhost address or an https:// one.",
-                    "插件只接受 127.0.0.1 / localhost 地址，或者 https:// 地址。"),
+                    "插件仅接受 127.0.0.1 / localhost 地址或 https:// 地址。"),
     "coding_connected": ("{name} is in {target}. Start a new session there and ask it to talk to {name}.",
-                         "{name} 已接入 {target}。在那边开一个新会话，让它和 {name} 说话。"),
+                         "{name} 已接入 {target}。请在其中新建会话，并让其与 {name} 对话。"),
     "coding_removed": ("personagent is out of {target}.", "personagent 已从 {target} 移除。"),
     "coding_no_cli": ("`{command}` is not on PATH. Install it first, then run this again.",
-                      "PATH 里没有 `{command}`。先安装它，再运行一次。"),
+                      "PATH 中未找到 `{command}`。请先安装，然后重新运行此命令。"),
     "coding_no_key": ("No model key yet: run personagent and paste it into the page first.",
-                      "还没有模型密钥：先运行 personagent，在页面里填好。"),
+                      "尚未设置模型密钥：请先运行 personagent，并在页面中填写。"),
     "coding_dsh_restart": ("Restart DeepSeek Harness first. A way of running it you have not started yet "
                            "has no profile: start it once and run this again.",
-                           "先重启 DeepSeek Harness。还没启动过的运行方式没有配置：先启动一次，再运行这条命令。"),
+                           "请先重启 DeepSeek Harness。尚未启动过的运行方式没有配置文件：请先启动一次，再运行此命令。"),
     "coding_react": ("When a turn ends the character may say a line. The folder's name and the start of the "
                      "coding agent's last message go to your model service, at most once per "
                      "CODING_REACT_COOLDOWN_S.",
-                     "每轮结束时角色可能说一句话。文件夹名和编程助手最后一条消息的开头会发给你的模型服务，"
-                     "频率不超过 CODING_REACT_COOLDOWN_S 一次。"),
+                     "每轮结束时，角色可能会发表一句评论。文件夹名称及编程助手最后一条消息的开头将发送至你的模型服务，"
+                     "每个 CODING_REACT_COOLDOWN_S 周期内最多一次。"),
     "coding_no_dsh": ("No DeepSeek Harness profile under {path}. Start it once, then run this again.",
-                      "{path} 下没有 DeepSeek Harness 配置。先启动一次，再运行这条命令。"),
+                      "{path} 下没有 DeepSeek Harness 配置。请先启动一次，再运行此命令。"),
     "coding_no_react_dsh": ("--react is for claude-code and codex: DeepSeek Harness has no way yet to "
                             "show a hook's message to you.",
-                            "--react 只支持 claude-code 和 codex：DeepSeek Harness 目前无法把 hook 的消息显示给你。"),
+                            "--react 仅支持 claude-code 和 codex：DeepSeek Harness 目前无法向你显示 hook 的消息。"),
     "coding_react_trust": ("Codex runs a new hook only after you trust it: type /hooks in a Codex session.",
-                           "Codex 只运行你信任过的 hook：在 Codex 会话里输入 /hooks 确认。"),
-    "platform_intro": ("Which chat app should the bot join?", "机器人要进哪个聊天平台？"),
+                           "Codex 仅运行你已信任的 hook：请在 Codex 会话中输入 /hooks 进行确认。"),
+    "platform_intro": ("Which chat app should the bot join?", "请选择机器人要加入的聊天平台。"),
     "platform_choose": ("Chat app", "聊天平台"),
-    "platform_other": ("Another app, already set up in AstrBot", "其他平台（已在 AstrBot 里配好）"),
+    "platform_other": ("Another app, already set up in AstrBot", "其他平台（已在 AstrBot 中配置）"),
     "qq_via": ("QQ (through NapCat)", "QQ（通过 NapCat）"),
     "qq_id": ("The bot's own QQ number (the account NapCat logs in with)",
-              "机器人自己的 QQ 号（NapCat 登录的那个号）"),
+              "机器人自身的 QQ 号（即 NapCat 登录的账号）"),
     "qq_groups": ("QQ group numbers it should join, comma-separated",
-                  "要加入的 QQ 群号，多个用逗号隔开"),
+                  "要加入的 QQ 群号，多个群号以逗号分隔"),
     "groups_other": ("Group ids it should join, comma-separated (send /sid in the group to see its id)",
-                     "要加入的群 ID，多个用逗号隔开（在群里发 /sid 可以看到）"),
-    "ids_keep": ("Enter keeps these, '-' clears them", "回车保留，输入 - 清空"),
-    "ids_none": ("Enter = none yet", "回车 = 暂不设置"),
+                     "要加入的群 ID，多个 ID 以逗号分隔（在群聊中发送 /sid 即可查看）"),
+    "ids_keep": ("Enter keeps these, '-' clears them", "按回车键保留，输入 - 清空"),
+    "ids_none": ("Enter = none yet", "按回车键 = 暂不设置"),
     "admin_explain": ("Admin = you. The bot is closest to you, you can always message it privately,\n"
                       "and you can manage what it remembers.",
-                      "管理员 = 你自己。机器人和你最熟，你随时可以私聊它，也可以管理它记住的内容。"),
-    "admin_qq": ("Your own QQ number (Enter = no admin)", "你自己的 QQ 号（回车 = 不设管理员）"),
+                      "管理员即你本人。机器人与你关系最近，你可随时与其私聊，并管理其记住的内容。"),
+    "admin_qq": ("Your own QQ number (Enter = no admin)", "你本人的 QQ 号（按回车键 = 不设管理员）"),
     "admin_other": ("Your user id on {platform} (send /sid to the bot to see it; Enter = no admin)",
-                    "你在 {platform} 上的用户 ID（私聊机器人发 /sid 可以看到；回车 = 不设管理员）"),
+                    "你在 {platform} 上的用户 ID（私聊机器人并发送 /sid 即可查看；按回车键 = 不设管理员）"),
     "admin_any": ("Your account as platform:id, such as wecom:alice (send /sid to the bot; Enter = no admin)",
-                  "你的账号，格式 平台:ID，例如 wecom:alice（私聊机器人发 /sid 可以看到；回车 = 不设管理员）"),
-    "admin_name": ("What should the bot call you?", "机器人怎么称呼你？"),
+                  "你的账号，格式为 平台:ID，例如 wecom:alice（私聊机器人并发送 /sid 即可查看；按回车键 = 不设管理员）"),
+    "admin_name": ("What should the bot call you?", "机器人应如何称呼你？"),
     "dm_users": ("Who else may message the bot privately? Comma-separated ids",
-                 "还允许谁私聊机器人？填 ID，逗号隔开"),
-    "token_skip": ("Enter = already set up in AstrBot", "回车 = 已经在 AstrBot 里配好"),
+                 "还允许哪些用户私聊机器人？请填写 ID，以逗号分隔"),
+    "token_skip": ("Enter = already set up in AstrBot", "按回车键 = 已在 AstrBot 中配置"),
     "platform_written": ("{kind} switched on in AstrBot's settings; it starts with AstrBot.",
-                         "已在 AstrBot 的设置里开启 {kind}，随 AstrBot 一起启动。"),
+                         "已在 AstrBot 的设置中启用 {kind}，将随 AstrBot 一同启动。"),
     "plugin_installed": ("AstrBot plugin installed: {path}", "AstrBot 插件已安装：{path}"),
     "plugin_config": ("Plugin settings written: {path}", "插件设置已写入：{path}"),
     "write_failed": ("Could not write to {path}: {error}", "无法写入 {path}：{error}"),
@@ -301,52 +301,52 @@ _TEXT: dict[str, tuple[str, str]] = {
     "url_kept": ("Keeping personagent_url {url} (personagent listens on port {port})",
                  "保留 personagent_url {url}（personagent 监听端口 {port}）"),
     "retired_removed": ("Removed {path}: the same plugin under an older name, which would forward every message twice",
-                        "已删除 {path}：这是同一个插件的旧名字，留着会把每条消息转发两遍"),
+                        "已删除 {path}：这是同一插件的旧名称，保留会导致每条消息被转发两次"),
     "retired_config": ("Removed {path}, the older plugin's settings. QQ routing came across;\n"
                        "set groups and dm_users again in AstrBot's WebUI.",
                        "已删除旧插件的设置 {path}。QQ 转发设置已沿用；\n"
-                       "groups 和 dm_users 请在 AstrBot 的 WebUI 里重新设置。"),
+                       "请在 AstrBot 的 WebUI 中重新设置 groups 和 dm_users。"),
     "allowlists_empty": ("The plugin forwards no group or DM yet: add groups / dm_users in AstrBot's WebUI.",
-                         "插件还没有放行任何群或私聊：在 AstrBot 的 WebUI 里填 groups / dm_users。"),
-    "allowlists_kept": ("Kept the plugin's groups and dm_users.", "保留了插件已有的 groups 和 dm_users。"),
+                         "插件尚未放行任何群聊或私聊：请在 AstrBot 的 WebUI 中填写 groups / dm_users。"),
+    "allowlists_kept": ("Kept the plugin's groups and dm_users.", "已保留插件现有的 groups 和 dm_users。"),
     # finish
     "done": ("Setup complete", "设置完成"),
     "next": ("Next:", "接下来："),
     "next_demo": ("Watch it stay quiet and learn from a correction (a minute, no chat account needed):",
-                  "看它如何判断该不该开口、如何从纠正中学习（一分钟，不需要聊天账号）："),
-    "next_chat": ("Chat with {name} in this terminal:", "在终端里和{name}聊天："),
+                  "观察角色如何判断是否发言、如何从纠正中学习（约一分钟，无需聊天账号）："),
+    "next_chat": ("Chat with {name} in this terminal:", "在终端中与{name}聊天："),
     "next_run": ("Start personagent and keep it running (AstrBot talks to it):",
-                 "启动 personagent 并保持运行（AstrBot 会连接它）："),
+                 "启动 personagent 并保持运行（AstrBot 将与其连接）："),
     "next_restart": ("Restart AstrBot, or reload plugins in its WebUI, so it loads the plugin.",
-                     "重启 AstrBot，或在它的 WebUI 里重载插件，让插件生效。"),
+                     "重启 AstrBot，或在其 WebUI 中重新加载插件，使插件生效。"),
     "next_qq": ("In AstrBot's WebUI add the QQ (OneBot v11 / aiocqhttp) platform, and point NapCat's\n"
                 "     reverse WebSocket at ws://127.0.0.1:6199/ws. Guide: https://docs.astrbot.app",
-                "在 AstrBot 的 WebUI 里添加 QQ（OneBot v11 / aiocqhttp）平台，再把 NapCat 的\n"
+                "在 AstrBot 的 WebUI 中添加 QQ（OneBot v11 / aiocqhttp）平台，再将 NapCat 的\n"
                 "     反向 WebSocket 指向 ws://127.0.0.1:6199/ws。教程：https://docs.astrbot.app"),
-    "next_say": ("Say \"{name}, hi\" in one of those groups.", "在其中一个群里说「{name}，你好」。"),
+    "next_say": ("Say \"{name}, hi\" in one of those groups.", "在其中一个群聊中发送「{name}，你好」。"),
     "next_persona": ("Edit {path} to change who {name} is, then restart.",
-                     "修改 {path} 可以调整{name}的人设，改完重启。"),
+                     "修改 {path} 即可调整{name}的人设，修改后请重新启动。"),
     "next_key": ("Add your API key: run this setup again, or set LLM_API_KEY in {path}.",
-                 "填上 API key：重新运行本设置，或在 {path} 里设置 LLM_API_KEY。"),
-    "chat_now": ("Chat with the bot in this terminal now?", "现在就在终端里和机器人聊聊吗？"),
+                 "请填写 API key：重新运行本设置，或在 {path} 中设置 LLM_API_KEY。"),
+    "chat_now": ("Chat with the bot in this terminal now?", "是否立即在终端中与机器人聊天？"),
     "skipped": ("Setup questions skipped: {why}. Run `{cmd}` in a terminal, or pass "
                 "--no-input with --provider, --key-env and --name.",
-                "已跳过设置问答：{why}。请在终端里运行 `{cmd}`，或加 --no-input 和 "
+                "已跳过设置问答：{why}。请在终端中运行 `{cmd}`，或使用 --no-input 并指定 "
                 "--provider、--key-env、--name 等参数。"),
     "key_cleared": ("The API key saved for the previous AI service was cleared, so it is not sent to the new one. "
                     "Pass --key-env VAR to set a key for this service.",
-                    "原来那个 AI 服务的 API key 已清除，不会发给新服务。"
-                    "请用 --key-env VAR 为新服务设置 key。"),
+                    "原 AI 服务的 API key 已清除，不会发送至新服务。"
+                    "请使用 --key-env VAR 为新服务设置 key。"),
     "skip_tty": ("input is not a terminal", "输入不是终端"),
     "rerun_q": ("personagent is already set up. Run the setup questions again?",
-                "personagent 已经设置过了。要重新回答设置问题吗？"),
+                "personagent 已完成设置。是否重新回答设置问题？"),
     "kept_config": ("Keeping the current setup.", "保留现有设置。"),
     "home_diverges": ("AGENT_HOME in {env} points at {other}, so personagent reads its settings there,\n"
                       "not here. Move the files there, or remove that line.",
-                      "{env} 里的 AGENT_HOME 指向 {other}，personagent 会从那里读设置，\n"
-                      "而不是这里。把文件挪过去，或者删掉那一行。"),
+                      "{env} 中的 AGENT_HOME 指向 {other}，personagent 将从该位置读取设置，\n"
+                      "而非此处。请将文件移至该位置，或删除该行。"),
     "home_unresolved": ("AGENT_HOME is {value}, which cannot be resolved; check it before starting.",
-                        "AGENT_HOME 是 {value}，无法解析；启动前请检查。"),
+                        "AGENT_HOME 为 {value}，无法解析；请在启动前检查。"),
 }
 
 
@@ -382,7 +382,7 @@ PROVIDERS: tuple[Provider, ...] = (
              "openrouter/free", "https://openrouter.ai/keys",
              ("openrouter/free picks one of OpenRouter's free models for each request. The key costs "
               "nothing and the limit is 50 requests a day. Some free providers keep what they receive.",
-              "openrouter/free 每次请求会选一个 OpenRouter 的免费模型。密钥不花钱，每天限 50 次请求。"
+              "openrouter/free 会为每次请求选用一个 OpenRouter 免费模型。密钥本身不收费，每天限 50 次请求。"
               "部分免费服务商会保留收到的内容。")),
     Provider("deepseek", ("DeepSeek", "DeepSeek 深度求索"), "https://api.deepseek.com",
              "deepseek-flash", "https://platform.deepseek.com/api_keys"),
@@ -392,16 +392,16 @@ PROVIDERS: tuple[Provider, ...] = (
              "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus",
              "https://bailian.console.aliyun.com/",
              ("Outside mainland China use https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-              "国际站的密钥要用 https://dashscope-intl.aliyuncs.com/compatible-mode/v1")),
+              "中国大陆以外地区请使用 https://dashscope-intl.aliyuncs.com/compatible-mode/v1")),
     Provider("zhipu", ("Zhipu GLM", "智谱 GLM"), "https://open.bigmodel.cn/api/paas/v4",
              "glm-4.7-flash", "https://bigmodel.cn/usercenter/proj-mgmt/apikeys",
-             ("glm-4.7-flash is free to use.", "glm-4.7-flash 可以免费使用。")),
+             ("glm-4.7-flash is free to use.", "glm-4.7-flash 可免费使用。")),
     Provider("moonshot", ("Moonshot / Kimi", "月之暗面 Kimi"), "https://api.moonshot.cn/v1",
              "kimi-k2.6", "https://platform.kimi.com/console/api-keys"),
     Provider("ark", ("Volcengine Ark / Doubao", "火山方舟（豆包）"),
              "https://ark.cn-beijing.volces.com/api/v3", "doubao-seed-2-1-lite-260915",
              "https://console.volcengine.com/ark/region:ark+cn-beijing/apikey",
-             ("Enable the model in the Ark console first.", "先在方舟控制台的开通管理里开通这个模型。")),
+             ("Enable the model in the Ark console first.", "请先在方舟控制台的「开通管理」中开通该模型。")),
     Provider("openai", ("OpenAI", "OpenAI"), "https://api.openai.com/v1", "gpt-6-luna",
              "https://platform.openai.com/api-keys"),
     Provider("gemini", ("Google Gemini", "Google Gemini"),
@@ -1111,7 +1111,7 @@ _PLATFORM_PROMPTS = {
     "qq_official": (("QQ bot AppID", "QQ 官方机器人 AppID"),
                     ("QQ bot AppSecret", "QQ 官方机器人 AppSecret")),
     "telegram": (("Telegram bot token (from @BotFather)",
-                  "Telegram 机器人 token（找 @BotFather 创建）"),),
+                  "Telegram 机器人 token（通过 @BotFather 创建）"),),
     "discord": (("Discord bot token (Developer Portal > Bot)",
                  "Discord 机器人 token（Developer Portal > Bot）"),),
     "slack": (("Slack bot token (xoxb-...)", "Slack bot token（xoxb-...）"),

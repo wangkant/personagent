@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent" width="100%">
 </p>
 
-<h3 align="center">一個知道什麼時候該安靜、能從別人的糾正中學習的群組聊天角色。</h3>
+<h3 align="center">一個懂得適時保持安靜、能從他人糾正中學習的群組聊天角色。</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/personagent/"><img src="https://img.shields.io/pypi/v/personagent?style=flat-square&label=PyPI&labelColor=24292f&color=0969da&cacheSeconds=3600" alt="PyPI"></a>
@@ -15,49 +15,49 @@
 
 *本頁譯自英文版與簡體中文版，以英文版為準，英文版可能較新。*
 
-personagent 是放進群組聊天裡的一個角色：選一個現成的或自己寫一個，接上任何相容 OpenAI 的模型就能用。先在自己電腦上和它聊，再從同一個本機頁面把它帶進 QQ、微信、Telegram、Discord 和另外十八個平台。
+personagent 是一個加入群組聊天的角色：可選用現成角色或自行撰寫，接上任何相容 OpenAI 的模型即可使用。先在自己的電腦上與它對話，再從同一個本機頁面將它接入 QQ、微信、Telegram、Discord 及另外十八個平台。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本機頁面的「連接平台」：能接入的平台一目瞭然" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本機頁面的「連接平台」：可接入的平台一目瞭然" width="960">
 </p>
 
-<p align="center"><em>「連接平台」和設定、角色聊天都在同一個本機頁面裡。</em></p>
+<p align="center"><em>「連接平台」、設定與角色聊天均位於同一個本機頁面中。</em></p>
 
-## 為什麼用它
+## 為何選用
 
 <table>
 <tr>
-<td width="220" valign="top"><strong>知道什麼時候該安靜</strong></td>
+<td width="220" valign="top"><strong>懂得適時保持安靜</strong></td>
 <td valign="top">
-叫它就回。沒人叫它時，由一個模型判斷真人這時會不會接話。<br>
-有人連續洗版，它只回一則。
+被點名時即會回覆。無人點名時，由一個模型判斷真人此時是否會接話。<br>
+有人連續洗版時，它只回覆一則。
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>只從站得住腳的糾正中學習</strong></td>
+<td width="220" valign="top"><strong>只從有充分依據的糾正中學習</strong></td>
 <td valign="top">
-糾正教會的事（例如群組裡怎麼稱呼健身房）會帶進這個聊天之後的每一則回覆。<br>
-搗亂的人、旁觀者都教不壞它。<br>
-每一項變更都有紀錄，哪一項都可以撤回。
+從糾正中學到的事（例如群組中如何稱呼健身房）會套用於該聊天此後的每一則回覆。<br>
+蓄意搗亂者或旁觀者都無法讓它學壞。<br>
+每一項變更都有紀錄，且均可撤回。
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>上手快，你的群組在哪它就去哪</strong></td>
+<td width="220" valign="top"><strong>容易上手，可接入你所在的群組</strong></td>
 <td valign="top">
-一行指令就在電腦上開啟它，頁面有中文、英文和另外八種語言。<br>
-填一個模型金鑰就能聊，再用手機掃描一次或貼上一兩項，就能接入一個平台。
+一行指令即可在電腦上開啟，頁面提供中文、英文及另外八種語言。<br>
+填入一個模型金鑰即可聊天，再以手機掃描一次或貼上一至兩項，即可接入一個平台。
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>現成角色可以挑，也能自己寫</strong></td>
+<td width="220" valign="top"><strong>可選用現成角色，也可自行撰寫</strong></td>
 <td valign="top">
-七個現成個性。其中三個是社群裡早就有人畫的角色：DeepSeek 鯨魚娘、GPT 娘（白龍）和 Claude 娘，立繪會眨眼、會思考、會開口說話。<br>
-人設隨時可以改寫，角色學到的東西會留著。
+提供七種現成個性。其中三個是社群中早已有人繪製的角色：DeepSeek 鯨魚娘、GPT 娘（白龍）和 Claude 娘，立繪會眨眼、思考與開口說話。<br>
+人設可隨時改寫，角色學到的內容會予以保留。
 </td>
 </tr>
 </table>
 
-每個聊天有自己的記憶，叫它忘它就忘：`小夏 記住 阿傑喜歡貓`、`小夏 忘掉 喜歡貓`（[記憶指令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#教它)）。
+每個聊天都有獨立的記憶，也可以要求角色忘記指定的內容：`小夏，記住 阿傑不吃辣`、`小夏 忘掉 不吃辣`（[記憶指令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#教導角色)）。
 
 ## 從這裡開始
 
@@ -66,35 +66,35 @@ python -m pip install personagent
 personagent
 ```
 
-如果裝了 [uv](https://docs.astral.sh/uv/)，`uvx personagent` 不必另外安裝就能執行。Windows 也可以下載原始碼 ZIP，雙擊 `start.bat`。
+若已安裝 [uv](https://docs.astral.sh/uv/)，`uvx personagent` 無須另行安裝即可執行。在 Windows 上，也可以下載原始碼 ZIP，再按兩下 `start.bat`。
 
-在 Windows 上，它會開一個獨立的視窗；在 macOS 和 Linux 上在瀏覽器裡開啟。貼上模型 API 金鑰，按下「驗證並開始聊天」。還沒有金鑰？預設選中的是 OpenRouter 的免費模型，它的金鑰不用付費。`personagent demo` 不用金鑰，會播放三段寫好的場景。[簡明入門](https://github.com/wangkant/personagent/blob/main/docs/start.zh-TW.md)把頁面一個畫面一個畫面講了一遍。
+在 Windows 上，它會在獨立的視窗中開啟；在 macOS 和 Linux 上則在瀏覽器中開啟。貼上模型 API 金鑰，再點選「驗證並開始聊天」。尚未取得金鑰時，可使用預設選取的 OpenRouter 免費模型，其金鑰無須付費。`personagent demo` 無須金鑰，會播放三段預先編寫的場景。[入門指南](https://github.com/wangkant/personagent/blob/main/docs/start.zh-TW.md)逐一說明了頁面中的各個畫面。
 
-personagent 本身免費。錢付給你選的模型服務，依它自己的價格計算。OpenRouter 的免費模型每天可以請求 50 次，有些免費服務商會保留收到的內容；Ollama 在你自己的電腦上跑模型，不需要金鑰。
+personagent 本身免費。費用支付給你選擇的模型服務，依該服務的價格計算。OpenRouter 的免費模型每天可請求 50 次，部分免費服務商會保留收到的內容；Ollama 在你自己的電腦上執行模型，不需要金鑰。
 
-## 接進你的群組
+## 接入你的群組
 
 在本機頁面開啟「連接平台」：
 
-| 頁面分組 | 平台 | 需要準備什麼 |
+| 頁面分組 | 平台 | 需要準備的項目 |
 |---|---|---|
-| 掃描即可連接 | QQ、個人微信 | 手機。微信機器人只能一對一聊天 |
-| 填寫一至兩項 | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、飛書、釘釘、Slack、企業微信智慧機器人、Mattermost、Misskey | 從平台後台複製，頁面會說明要複製哪一項 |
-| 進階 | 企業微信應用程式、微信公眾號、QQ（Webhook）、OneBot v11（NapCat）、Satori | 公開網址，或本機的其他軟體 |
+| 掃描連接 | QQ、個人微信 | 手機。微信機器人僅限一對一聊天 |
+| 填寫一至兩項 | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、飛書、釘釘、Slack、企業微信智慧機器人、Mattermost、Misskey | 從平台後台複製，頁面會註明需要複製的項目 |
+| 進階 | 企業微信應用、微信公眾號、QQ（Webhook）、OneBot v11（NapCat）、Satori | 公開網址，或本機的其他軟體 |
 
-連好的平台之後每次啟動 personagent 都會自動連上。掃描連接的平台，以及 Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 自己連接；其餘平台透過它在背景下載並執行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入。在伺服器上，`personagent up` 不開瀏覽器就能全部啟動。各平台的設定方法見[使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#接進聊天平臺)；從零接上 QQ 見[部署教學](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-TW.md)。
+已連接的平台在此後每次啟動 personagent 時都會自動連線。掃描連接的平台，以及 Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 直接連線；其餘平台透過它在背景下載並執行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入。在伺服器上，`personagent up` 無須開啟瀏覽器即可全部啟動。各平台的設定方式請參閱[使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#接入聊天平台)；從頭接入 QQ 的步驟請參閱[部署教學](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-TW.md)。
 
-已經在跑 AstrBot、Koishi 或 Matrix？personagent 可以接在它後面，只擔任那個角色：見[你自己執行的橋接](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#你自己執行的橋接)、[Satori 連接器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.zh-TW.md)和 [Matrix 連接器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.zh-TW.md)。
+若已在執行 AstrBot、Koishi 或 Matrix，personagent 可以接在其後方，僅負責扮演角色：請參閱[你自己執行的橋接](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#你自己執行的橋接)、[Satori 聯結器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.zh-TW.md)和 [Matrix 聯結器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.zh-TW.md)。
 
-## 程式助手
+## 程式設計助理
 
-**讓程式助手幫你安裝。** 把下面這句話傳給能在你電腦上執行指令的 AI 程式助手。模型金鑰由你自己填進本機頁面，不經過助手。
+**由程式設計助理代為安裝。** 將下列這句話傳送給能在你的電腦上執行指令的 AI 程式設計助理。模型金鑰由你自行填入本機頁面，不經過助理。
 
 ```text
 讀 https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agents.md ，然後幫我把 personagent 安裝並設定好
 ```
 
-**寫程式時和角色說話。** Claude Code、Codex 和 DeepSeek Harness（`dsh`）都能找到你的角色，聊天和記憶與本機頁面是同一份：
+**撰寫程式時與角色對話。** Claude Code、Codex 和 DeepSeek Harness（`dsh`）都能找到你的角色，聊天內容與記憶和本機頁面共用同一份：
 
 ```bash
 personagent connect claude-code
@@ -102,27 +102,27 @@ personagent connect codex
 personagent connect dsh
 ```
 
-`--remove` 會把它移除；在頁面「連接平台」的「程式設計助理」中也可以完成串接與移除。權限，以及讓角色在一輪結束時說一句話的 `--react`，見[手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#程式設計助手)。
+`--remove` 可將其移除；在頁面「連接平台」的「程式設計助理」中，也可以完成串接與移除。權限，以及讓角色在每輪結束時發表一句評論的 `--react`，請參閱[手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#程式設計助理)。
 
 ## 更新與解除安裝
 
-PyPI 上有新版本時，頁面會顯示一則提示和對應的更新指令。用 pip 安裝的話是 `python -m pip install -U personagent`。對於大多數安裝方式，頁面「應用程式」檢視中的「更新並重新開啟」可以代你執行。設定、角色、它學到的東西和連好的平台都會保留。要解除安裝，照[解除安裝步驟](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英文）做。
+PyPI 上有新版本時，頁面會顯示提示和對應的更新指令。以 pip 安裝時，指令為 `python -m pip install -U personagent`。對於大多數安裝方式，頁面「應用程式」檢視中的「更新並重新開啟」可代為執行。設定、角色、學到的內容和已連接的平台都會保留。如需解除安裝，請依照[解除安裝步驟](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英文）操作。
 
 ## 隱私
 
-personagent 儲存的一切都在你自己機器上的一個主目錄裡。你選的模型服務商會看到它回覆的對話；personagent 每天會向 pypi.org 查詢一次有沒有新版本（設定 `UPDATE_CHECK_ENABLED=false` 可以關閉）。接入真人之前，請告訴他們這是機器人，並徵得他們同意；哪些內容會傳到哪裡，[手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#隱私與知情同意)裡都列著。
+personagent 儲存的所有內容都位於你自己電腦上的一個主目錄中。你選擇的模型服務商會看到它所回覆的對話；personagent 每天會向 pypi.org 查詢一次是否有新版本（設定 `UPDATE_CHECK_ENABLED=false` 即可關閉）。與真人互動之前，請告知對方這是機器人，並徵得其同意；哪些內容會傳送至何處，[手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#隱私與知情同意)中均有列出。
 
 ## 文件
 
-- [使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md)：設定、連接器、教它、「動態」頁、疑難排解。
-- [部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-TW.md)：真正上線要知道的事、費用，以及機器人不說話時該查什麼。
-- [連接器協定](https://github.com/wangkant/personagent/blob/main/docs/connectors.zh-TW.md)：給想自己寫連接器的人看。
-- [工具腳本](https://github.com/wangkant/personagent/blob/main/docs/tools.zh-TW.md)：`tools/` 裡的腳本，從複製下來的原始碼執行時使用。
-- [更新日誌](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md)（英文） · [貢獻指南](https://github.com/wangkant/personagent/blob/main/.github/CONTRIBUTING.md)（英文） · [安全性政策](https://github.com/wangkant/personagent/blob/main/.github/SECURITY.md)（英文） · [免責聲明](https://github.com/wangkant/personagent/blob/main/docs/DISCLAIMER.zh-TW.md)
+- [使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md)：設定、聯結器、教導角色、「動態」頁面、疑難排解。
+- [部署指南](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-TW.md)：正式上線須知、費用，以及機器人沒有回應時的檢查項目。
+- [聯結器協定](https://github.com/wangkant/personagent/blob/main/docs/connectors.zh-TW.md)：供自行撰寫聯結器的開發者參考。
+- [工具腳本](https://github.com/wangkant/personagent/blob/main/docs/tools.zh-TW.md)：`tools/` 中的腳本，從複製的原始碼執行時使用。
+- [更新紀錄](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md)（英文） · [貢獻指南](https://github.com/wangkant/personagent/blob/main/.github/CONTRIBUTING.md)（英文） · [安全性政策](https://github.com/wangkant/personagent/blob/main/.github/SECURITY.md)（英文） · [免責宣告](https://github.com/wangkant/personagent/blob/main/docs/DISCLAIMER.zh-TW.md)
 
 ## 授權條款
 
-personagent 以 [PolyForm Noncommercial License 1.0.0](https://github.com/wangkant/personagent/blob/main/LICENSE) 釋出，© 2026 Qiankang (Kant) Wang：可免費用於非商業目的的使用、修改和分享，不得用於商業目的。`integrations/` 下的連接器仍採用 MIT 許可，1.4.0 及更早的版本亦然。三張角色立繪採用 CC BY-NC-SA 4.0 授權，姓名標示見 [persona_agent/static/characters/LICENSE.md](https://github.com/wangkant/personagent/blob/main/persona_agent/static/characters/LICENSE.md)。
+personagent 以 [PolyForm Noncommercial License 1.0.0](https://github.com/wangkant/personagent/blob/main/LICENSE) 發布，© 2026 Qiankang (Kant) Wang：可免費用於非商業目的的使用、修改和分享，不得用於商業目的。`integrations/` 下的聯結器仍採用 MIT 授權，1.4.0 及更早的版本亦然。三張角色立繪採用 CC BY-NC-SA 4.0 授權，姓名標示見 [persona_agent/static/characters/LICENSE.md](https://github.com/wangkant/personagent/blob/main/persona_agent/static/characters/LICENSE.md)。
 
 ## 致謝
 

@@ -1,8 +1,8 @@
 # 開始使用 personagent
 
-[English](start.md) · [简体中文](start.zh-CN.md) · 繁體中文 · [日本語](start.ja.md) · [한국어](start.ko.md) · [Español](start.es.md) · [Français](start.fr.md) · [Deutsch](start.de.md) · [Português (Brasil)](start.pt-BR.md) · [Русский](start.ru.md) · 簡體中文 · [繁體中文](start.zh-TW.md) · [日本語](start.ja.md) · [한국어](start.ko.md) · [Español](start.es.md) · [Français](start.fr.md) · [Deutsch](start.de.md) · [Português (Brasil)](start.pt-BR.md) · [Русский](start.ru.md) · [完整手冊](guide.zh-TW.md)
+[English](start.md) · [简体中文](start.zh-CN.md) · 繁體中文 · [日本語](start.ja.md) · [한국어](start.ko.md) · [Español](start.es.md) · [Français](start.fr.md) · [Deutsch](start.de.md) · [Português (Brasil)](start.pt-BR.md) · [Русский](start.ru.md) · [完整手冊](guide.zh-TW.md)
 
-## 開啟應用
+## 開啟應用程式
 
 從 PyPI 安裝後開啟：
 
@@ -11,50 +11,50 @@ python -m pip install personagent
 personagent
 ```
 
-裝了 [uv](https://docs.astral.sh/uv/) 的話，`uvx personagent` 無需單獨安裝即可執行。
+若已安裝 [uv](https://docs.astral.sh/uv/)，`uvx personagent` 無須另行安裝即可執行。
 
-在 Windows 上，頁面開在獨立的視窗裡。在 macOS 和 Linux 上在瀏覽器裡開啟；執行 `pip install "personagent[app]"` 之後也能開視窗。
+在 Windows 上，頁面會在獨立的視窗中開啟。在 macOS 和 Linux 上，頁面會在瀏覽器中開啟；執行 `pip install "personagent[app]"` 之後，也可以在視窗中開啟。
 
-也可以讓 AI 程式設計助手代勞：讓它讀 [setup-for-agents.md](setup-for-agents.md)，然後幫你把 personagent 裝好並設定好。
+也可以交由 AI 程式設計助理處理：請它閱讀 [setup-for-agents.md](setup-for-agents.md)，再由它完成 personagent 的安裝與設定。
 
-在 Windows 上也可以下載原始碼 ZIP，解壓後雙擊 `start.bat`。它會在資料夾裡建好自己的 Python 環境，再開啟同一個本地頁面。第一次執行時，還會在桌面和開始功能表裡放一個 personagent 圖示。
+在 Windows 上，也可以下載原始碼 ZIP，解壓縮後按兩下 `start.bat`。它會在資料夾中建立專用的 Python 環境，再開啟同一個本機頁面。首次執行時，還會在桌面和「開始」功能表中新增 personagent 圖示。
 
-從 Git 倉庫執行時，請為它單獨建一個虛擬環境：先執行 `python -m venv .venv`，再執行 `.venv/bin/python -m pip install -e .` 和 `.venv/bin/python -m persona_agent`。Windows 上的直譯器是 `.venv\Scripts\python.exe`，也可以直接雙擊 `start.bat`。
+從 Git 儲存庫執行時，請為它另建一個虛擬環境：先執行 `python -m venv .venv`，再執行 `.venv/bin/python -m pip install -e .` 和 `.venv/bin/python -m persona_agent`。Windows 上的直譯器是 `.venv\Scripts\python.exe`，也可以直接按兩下 `start.bat`。
 
-## 填 Key，開始聊天
+## 填入金鑰，開始聊天
 
-選擇模型服務，填入 API 金鑰，點「驗證並開始聊天」。預設選中的是 OpenRouter 的免費模型和溫柔傾聽者這個角色。金鑰不花錢，每天限 50 次請求。模型名稱和介面地址在「更多設定」裡，角色的名字和性格在「給角色換個名字或性格」裡。
+選擇模型服務，填入 API 金鑰，再點選「驗證並開始聊天」。預設選取的是 OpenRouter 的免費模型和「溫和的傾聽者」這個角色。此金鑰不需付費，每天限 50 次請求。模型名稱和服務位址位於「進階設定」中，角色的名稱和個性位於「變更角色名稱或個性」中。
 
-金鑰只儲存在本機，點「顯示」可以核對。聊天訊息會傳送給你選擇的模型服務，按該服務的正常價格計費。
+金鑰只儲存在本機，點選「顯示」即可核對。聊天訊息會傳送至你選擇的模型服務，並依該服務的一般價格計費。
 
-角色直接在頁面裡回覆。設定會儲存下來，下次開啟就直接進入聊天。
+角色會直接在頁面中回覆。設定會自動儲存，下次開啟時將直接進入聊天。
 
-設定完成後，「角色與設定」裡有一個「人設」框，內容就是角色當前使用的人設。改寫它是誰、怎麼說話，然後點「儲存人設」，修改立即生效，角色學到的東西也會保留。
+設定完成後，「角色與設定」中有一個「人設」欄位，內容即為角色目前使用的人設。修改角色的身分與說話方式後點選「儲存人設」，變更將立即生效，角色已學到的內容也會保留。
 
-再往下是「更多功能」，可以開啟網路搜尋、圖片理解和偶爾主動發言。網路搜尋預設使用 DuckDuckGo，填入 Tavily 的金鑰會更穩定。其下方的「進階設定」集中了以往只能在 `.env` 中修改的設定。連接第一個平台之前，「開始聊天」頁面上方會顯示一條「開始使用」提示。
+其下方是「更多功能」，可以開啟網路搜尋、辨識圖片和偶爾主動發言。網路搜尋預設使用 DuckDuckGo，填入 Tavily 的金鑰可提升穩定性。再往下的「進階設定」集中了以往只能在 `.env` 中修改的設定。連接第一個平台之前，「開始聊天」頁面上方會顯示「開始使用」提示。
 
-另有兩個檢視無須連接平台即可使用。「演練」會播放預先編寫的示範，並提供一個模擬群組聊天，讓你查看角色回覆或保持沉默的原因。「應用程式」會逐項檢查角色所依賴的服務、顯示執行記錄，並提供版本更新、備份與桌面圖示等功能。
+另有兩個檢視無須連接平台即可使用。「演練」會播放預先編寫的示範，並提供一個模擬群組，讓你查看角色回覆或保持沉默的原因。「應用程式」會逐項檢查角色所依賴的服務、顯示執行記錄，並提供版本更新、備份與桌面圖示等功能。
 
-## 帶到其他平臺
+## 接入其他平台
 
-1. 點「連線平臺」，選擇一個平臺。連線後，角色會回覆這個平臺上的群聊和私聊。
-   - **掃描即可連接**：QQ 和個人微信。點「獲取二維碼」，然後在手機上確認。
-     - QQ：用手機 QQ 掃碼。QQ 會新建一個機器人，或讓你選一個已有的，金鑰由 personagent 自動取回。如果機器人是你自己在 [QQ 官方頁面](https://q.qq.com/qqbot/openclaw/login.html)建立的，點「改為手動填寫」，填入 AppID 和 AppSecret。
-     - 微信：用微信掃碼。微信不會把群訊息轉給這類機器人，所以它只能私聊。
-   - **填寫一至兩項**：Telegram（向 @BotFather 申請 Token）、Discord（機器人 Token，並開啟 Message Content Intent）、KOOK、飛書、釘釘、Slack、企業微信智慧機器人、Mattermost、Misskey、Matrix、Twitch、IRC、Zulip、VK 和 Stoat。頁面會寫明要從平台後台複製哪幾項，其餘設定都使用預設值。Twitch 另需透過一個連結核准登入。
-   - **高階**：企業微信應用、微信公眾號和 QQ（Webhook）需要一個能轉發到回撥埠的公網地址；OneBot v11（NapCat）和 Satori 需要在本機另外執行相應的軟體。
-2. QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 直接連線。其他平臺透過第三方橋接程式 AstrBot 接入。第一次連線這類平臺時，personagent 會下載 AstrBot 和一個獨立的 Python 3.12 執行環境，下載完成前請保持頁面開啟。之後 AstrBot 在後臺執行，沒有需要另外登入的管理後臺。
-3. 儲存之前，personagent 會先向平臺核驗憑據。平臺拒絕時，頁面會給出提示，不儲存任何內容。
-4. 已連線的平臺列在「連線平臺」頁面頂部，可以在那裡重新設定或斷開。
+1. 點選「連接平台」，選擇一個平台。連接後，角色會回覆該平台上的群組與私訊。
+   - **掃描連接**：QQ 和個人微信。點選「取得 QR 碼」，然後在手機上確認。
+     - QQ：使用手機 QQ 掃描。QQ 會新建一個機器人，或讓你選擇既有的機器人，金鑰由 personagent 自動取回。如果機器人是你自行在 [QQ 官方頁面](https://q.qq.com/qqbot/openclaw/login.html)建立的，請點選「改為手動填寫」，填入 AppID 和 AppSecret。
+     - 微信：使用微信掃描。微信不會將群組訊息轉送給這類機器人，因此它僅限私訊。
+   - **填寫一至兩項**：Telegram（向 @BotFather 申請 Token）、Discord（機器人 Token，並開啟 Message Content Intent）、KOOK、飛書、釘釘、Slack、企業微信智慧機器人、Mattermost、Misskey、Matrix、Twitch、IRC、Zulip、VK 和 Stoat。頁面會註明需要從平台後台複製哪幾項，其餘設定均使用預設值。Twitch 另需透過一個連結核准登入。
+   - **進階**：企業微信應用、微信公眾號和 QQ（Webhook）需要一個可轉送至回呼連接埠的公開網址；OneBot v11（NapCat）和 Satori 需要在本機另外執行相應的軟體。
+2. QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 直接連線。其他平台透過第三方橋接程式 AstrBot 接入。首次連接這類平台時，personagent 會下載 AstrBot 和一個獨立的 Python 3.12 執行環境，下載完成前請保持頁面開啟。之後 AstrBot 會在背景執行，不需要另外登入管理後台。
+3. 儲存之前，personagent 會先向平台驗證憑證。平台拒絕時，頁面會顯示提示，且不會儲存任何內容。
+4. 已連接的平台會列在「連接平台」頁面頂端，可在該處重新設定或中斷連線。
 
-QQ 機器人連好後，在手機 QQ 的「聯絡人 → 機器人」裡找到它，可以私聊，也可以把它加到你擔任群主的群裡。這條路線使用 QQ 官方機器人平臺，不需要個人 QQ 小號，也不需要安裝其他軟體。機器人能進哪些群由 QQ 決定：透過認證之前，它只能加入管理員擔任群主的群，也不需要配置沙箱。在群裡它預設只收到 @ 它的訊息，群主可以在這個群裡機器人的資料頁開啟「接收全量訊息」。認證和其他賬號方面的事項見 [QQ 機器人官方指南](https://bot.q.qq.com/wiki/bot_new_product-intro/)。
+QQ 機器人連接完成後，可在手機 QQ 的「聯絡人 → 機器人」中找到它，既可以私訊，也可以將它加入你擔任群主的群組。此方式使用 QQ 官方機器人平台，不需要個人 QQ 次要帳號，也不需要安裝其他軟體。機器人可以加入哪些群組由 QQ 決定：通過認證之前，它只能加入管理員擔任群主的群組，也不需要設定沙箱。在群組中，它預設只會收到 @ 它的訊息，群主可以在該群組的機器人資料頁開啟「接收全量訊息」。認證及其他帳號相關事項，請參閱 [QQ 機器人官方指南](https://bot.q.qq.com/wiki/bot_new_product-intro/)。
 
-二維碼過期後可以重新獲取；下載失敗可以重試，不必重新填寫模型設定。連線某個平臺時，只會對這個平臺的群聊和私聊放行，其他介面卡仍沿用原有的群和私聊限制。目前不提供 LINE，因為 AstrBot 只能透過它的管理後臺接收 LINE 回撥，而 personagent 不執行這個後臺。
+QR 碼過期後可以重新取得；下載失敗時可以重試，無須重新填寫模型設定。連接某個平台時，只會對該平台的群組與私訊開放，其他配接器仍沿用原有的群組與私訊限制。目前不提供 LINE，因為 AstrBot 只能透過其管理後台接收 LINE 的回呼，而 personagent 不會執行該後台。
 
-## 下次使用
+## 再次使用
 
-再次開啟 personagent 即可。配置會保留，已連線的平臺會自動恢復。如果它已經在執行，再次開啟會把它的視窗叫到前面。使用期間請保持它開著：無論是點「退出」還是關閉視窗，它啟動的程序都會一起結束；意外崩潰後殘留的程序會在下次啟動時清理。在 Windows 上，`personagent shortcut` 會在桌面和開始功能表裡放一個圖示，點它就能開啟，不用終端機。同樣在 Windows 上，「應用程式」頁面的「背景執行」可讓 personagent 在關閉視窗後繼續於通知區域的圖示中執行，角色照常回覆。
+再次開啟 personagent 即可。設定會保留，已連接的平台會自動恢復。如果它已在執行，再次開啟會將其視窗移至最前方。使用期間請保持它開啟：無論是點選「結束」還是關閉視窗，它啟動的處理程序都會一併結束；意外當機後殘留的處理程序會在下次啟動時清除。在 Windows 上，`personagent shortcut` 會在桌面和「開始」功能表中新增圖示，點選即可開啟，無須使用終端機。同樣在 Windows 上，「應用程式」頁面的「背景執行」可讓 personagent 在關閉視窗後繼續以通知區域圖示的形式執行，角色照常回覆。
 
-PyPI 上有新版本時，「開始聊天」頁面會顯示一條提示，給出更新內容的連結和與當前安裝方式對應的更新命令；解壓原始碼 ZIP 執行的，提示會讓你到釋出頁下載新版原始碼。對於大多數安裝方式，「應用程式」頁面的「更新並重新開啟」可以直接完成更新。personagent 每天最多向 pypi.org 查詢一次，請求中只包含它的版本號。在 `.env` 中設定 `UPDATE_CHECK_ENABLED=false` 可以關閉這項檢查。
+PyPI 上有新版本時，「開始聊天」頁面會顯示提示，並提供更新說明的連結，以及與目前安裝方式對應的更新指令；若是解壓縮原始碼 ZIP 後執行，提示會引導你前往發布頁面下載新版原始碼。對於大多數安裝方式，「應用程式」頁面的「更新並重新開啟」可以直接完成更新。personagent 每天最多向 pypi.org 查詢一次，請求中只包含其版本號。在 `.env` 中設定 `UPDATE_CHECK_ENABLED=false` 即可關閉此項檢查。
 
-習慣命令列的使用者可以使用 `personagent start --terminal`、`personagent init --terminal`、`personagent up`，以及 `chat`、`demo`（不需要金鑰）、`run` 和 `connect` 命令。這些命令會保留已有的 `.env`、修改過的人設和學到的記憶。其他平臺的接入方法見[完整手冊](guide.zh-TW.md)。
+習慣使用命令列的使用者可以使用 `personagent start --terminal`、`personagent init --terminal`、`personagent up`，以及 `chat`、`demo`（不需要金鑰）、`run` 和 `connect` 指令。這些指令會保留既有的 `.env`、修改過的人設和學到的記憶。其他平台的接入方式請參閱[完整手冊](guide.zh-TW.md)。

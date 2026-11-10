@@ -509,8 +509,8 @@ def _pointer() -> str:
     en = ("personagent is running. Its Activity view is in the local page: run "
           "`{cli}` on this computer to open it. On a server, `{cli} learned` "
           "reviews what it learned.\n")
-    zh = ("personagent 正在运行。「动态」在本地页面里：在这台电脑上运行 `{cli}` 打开。"
-          "在服务器上，用 `{cli} learned` 查看它学到了什么。\n")
+    zh = ("personagent 正在运行。「动态」位于本地页面中：请在本机上运行 `{cli}` 打开。"
+          "在服务器上，可使用 `{cli} learned` 查看角色学到的内容。\n")
     configured = langs.normalize(os.getenv("AGENT_LANG", ""))
     shown = [en, zh]
     if configured not in ("", "en", "zh"):

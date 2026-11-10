@@ -15,13 +15,13 @@
 
 *이 문서는 영어 README를 번역한 것입니다. 기준이 되는 영어 README가 더 최신일 수 있습니다.*
 
-personagent는 그룹 채팅에 들어가는 캐릭터입니다. 준비된 캐릭터를 고르거나 직접 써서, OpenAI 호환 모델이라면 어떤 모델로든 실행할 수 있습니다. 먼저 내 컴퓨터에서 이야기해 보고, 같은 로컬 페이지에서 QQ, WeChat, Telegram, Discord와 그 밖의 18개 앱으로 데려가세요.
+personagent는 그룹 채팅에 들어가는 캐릭터입니다. 준비된 캐릭터를 고르거나 직접 써서, OpenAI 호환 모델이라면 어떤 모델로든 실행할 수 있습니다. 먼저 사용자의 컴퓨터에서 대화해 보고, 같은 로컬 페이지에서 QQ, WeChat, Telegram, Discord와 그 밖의 18개 플랫폼에 연결하십시오.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="로컬 페이지의 앱 연결 화면. 참여할 수 있는 모든 플랫폼이 표시되어 있습니다" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="로컬 페이지의 플랫폼 연결 화면. 참여할 수 있는 모든 플랫폼이 표시되어 있습니다" width="960">
 </p>
 
-<p align="center"><em>앱 연결 화면은 설정, 캐릭터 채팅과 같은 로컬 페이지에 있습니다.</em></p>
+<p align="center"><em>플랫폼 연결 화면은 설정, 캐릭터 채팅과 같은 로컬 페이지에 있습니다.</em></p>
 
 ## 왜 personagent인가
 
@@ -44,8 +44,8 @@ personagent는 그룹 채팅에 들어가는 캐릭터입니다. 준비된 캐�
 <tr>
 <td width="220" valign="top"><strong>시작하기 쉽고, 그룹이 있는 곳에서 지냅니다.</strong></td>
 <td valign="top">
-명령 하나로 내 컴퓨터에서 열리며, 영어, 중국어 또는 다른 8개 언어로 볼 수 있습니다.<br>
-모델 키 하나만 붙여 넣으면 채팅할 수 있고, 휴대폰 스캔 한 번이나 값 한두 개를 붙여 넣어 앱을 연결합니다.
+명령 하나로 사용자의 컴퓨터에서 열리며, 영어, 중국어 또는 다른 8개 언어로 볼 수 있습니다.<br>
+모델 키 하나만 붙여 넣으면 채팅할 수 있고, 휴대폰 스캔 한 번이나 값 한두 개를 붙여 넣어 플랫폼을 연결합니다.
 </td>
 </tr>
 <tr>
@@ -68,27 +68,27 @@ personagent
 
 [uv](https://docs.astral.sh/uv/)가 있다면 `uvx personagent`로 별도 설치 없이 실행할 수 있습니다. Windows에서는 소스 ZIP을 내려받아 `start.bat`을 더블클릭해도 됩니다.
 
-Windows에서는 전용 창에서 열리고, macOS와 Linux에서는 브라우저에서 열립니다. 모델 API 키를 붙여 넣고 **확인하고 채팅 시작**을 누르세요. 아직 키가 없나요? OpenRouter의 무료 모델이 미리 선택되어 있고, 그 키는 무료입니다. `personagent demo`는 키 없이 대본이 있는 장면 세 개를 보여 줍니다. [시작 가이드](https://github.com/wangkant/personagent/blob/main/docs/start.ko.md)가 페이지를 화면별로 안내합니다.
+Windows에서는 전용 창에서 열리고, macOS와 Linux에서는 브라우저에서 열립니다. 모델 API 키를 붙여 넣고 **확인 후 채팅 시작**을 누르십시오. 아직 키가 없습니까? OpenRouter의 무료 모델이 미리 선택되어 있고, 그 키는 무료입니다. `personagent demo`는 키 없이 대본이 있는 장면 세 개를 보여 줍니다. [시작 가이드](https://github.com/wangkant/personagent/blob/main/docs/start.ko.md)가 페이지를 화면별로 안내합니다.
 
-personagent는 무료입니다. 비용은 선택한 모델 서비스에, 그 서비스의 요금대로 냅니다. OpenRouter의 무료 모델은 하루 50회까지 요청할 수 있고, 일부 무료 제공자는 받은 내용을 보관합니다. Ollama는 키 없이 내 컴퓨터에서 모델을 실행합니다.
+personagent는 무료입니다. 비용은 선택한 모델 서비스에, 그 서비스의 요금대로 냅니다. OpenRouter의 무료 모델은 하루 50회까지 요청할 수 있고, 일부 무료 제공자는 받은 내용을 보관합니다. Ollama는 키 없이 사용자의 컴퓨터에서 모델을 실행합니다.
 
 ## 그룹에 넣기
 
-로컬 페이지에서 **앱 연결**을 여세요.
+로컬 페이지에서 **플랫폼 연결**을 여십시오.
 
-| 페이지 표시 | 앱 | 필요한 것 |
+| 페이지 표시 | 플랫폼 | 필요한 것 |
 |---|---|---|
-| 스캔해서 연결 | QQ, 개인 WeChat | 휴대폰. WeChat 봇은 1:1 대화만 가능 |
+| 스캔하여 연결 | QQ, 개인 WeChat | 휴대폰. WeChat 봇은 1:1 대화만 가능 |
 | 값 한두 개 붙여넣기 | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, WeCom AI 봇, Mattermost, Misskey | 앱 콘솔에서 얻는 값. 어떤 값인지 페이지에 표시 |
 | 고급 | WeCom 앱, WeChat 공식 계정, QQ 웹훅, OneBot v11 (NapCat), Satori | 공개 주소, 또는 이 컴퓨터의 다른 소프트웨어 |
 
-연결된 앱은 personagent가 시작될 때마다 함께 다시 시작됩니다. 스캔해서 연결하는 앱과 Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat는 personagent가 직접 연결하고, 나머지는 personagent가 내려받아 백그라운드에서 실행하는 [AstrBot](https://github.com/AstrBotDevs/AstrBot)을 거칩니다. 서버에서는 `personagent up`으로 브라우저 없이 모든 것을 시작합니다. 앱별 설정 방법은 [사용자 가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#채팅에-넣기)에, QQ를 처음부터 연결하는 방법은 [중국어 배포 가이드](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)에 있습니다.
+연결된 플랫폼은 personagent가 시작될 때마다 함께 다시 시작됩니다. 스캔하여 연결하는 플랫폼과 Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat는 personagent가 직접 연결하고, 나머지는 personagent가 내려받아 백그라운드에서 실행하는 [AstrBot](https://github.com/AstrBotDevs/AstrBot)을 거칩니다. 서버에서는 `personagent up`으로 브라우저 없이 모든 것을 시작합니다. 플랫폼별 설정 방법은 [사용자 가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#채팅에-넣기)에, QQ를 처음부터 연결하는 방법은 [중국어 배포 가이드](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)에 있습니다.
 
-이미 AstrBot, Koishi, Matrix를 운영 중인가요? personagent를 그 뒤에서 캐릭터로 실행할 수 있습니다. [직접 실행하는 브리지](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#직접-실행하는-브리지), [Satori 커넥터](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ko.md), [Matrix 커넥터](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ko.md)를 참고하세요.
+이미 AstrBot, Koishi, Matrix를 운영 중입니까? personagent를 그 뒤에서 캐릭터로 실행할 수 있습니다. [직접 실행하는 브리지](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#직접-실행하는-브리지), [Satori 커넥터](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ko.md), [Matrix 커넥터](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ko.md)를 참고하십시오.
 
-## 코딩 에이전트
+## 코딩 어시스턴트
 
-**설정을 맡기기.** 컴퓨터에서 명령을 실행할 수 있는 코딩 에이전트에게 아래 한 줄을 전달하세요. 모델 키는 직접 로컬 페이지에 붙여 넣으므로, 키가 에이전트를 거치지 않습니다.
+**설정을 맡기기.** 컴퓨터에서 명령을 실행할 수 있는 코딩 어시스턴트에게 아래 한 줄을 전달하십시오. 모델 키는 직접 로컬 페이지에 붙여 넣으므로, 키가 에이전트를 거치지 않습니다.
 
 ```text
 https://raw.githubusercontent.com/wangkant/personagent/main/docs/setup-for-agents.md 를 읽고 personagent를 설정해 줘.
@@ -102,21 +102,21 @@ personagent connect codex
 personagent connect dsh
 ```
 
-`--remove`는 연결을 다시 해제하며, **플랫폼 연결** 아래의 **코딩 어시스턴트**에서 페이지로 연결과 해제를 모두 할 수 있습니다. 권한, 그리고 턴이 끝날 때 캐릭터가 한마디 하게 하는 `--react`는 [가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#코딩-에이전트)에서 다룹니다.
+`--remove`는 연결을 다시 해제하며, **플랫폼 연결** 아래의 **코딩 어시스턴트**에서 페이지로 연결과 해제를 모두 할 수 있습니다. 권한, 그리고 턴이 끝날 때 캐릭터가 한마디 하게 하는 `--react`는 [가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#코딩-어시스턴트)에서 다룹니다.
 
 ## 업데이트와 제거
 
-PyPI에 새 버전이 올라오면 페이지에 알림과 업데이트 명령이 표시됩니다. pip라면 `python -m pip install -U personagent`입니다. 대부분의 설치 방식에서는 페이지의 앱 보기에 있는 **업데이트 후 다시 열기**가 이 명령을 대신 실행합니다. 설정, 캐릭터, 배운 것, 연결된 앱이 모두 남습니다. 제거하려면 [제거 절차](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)(영어)를 따르세요.
+PyPI에 새 버전이 올라오면 페이지에 알림과 업데이트 명령이 표시됩니다. pip라면 `python -m pip install -U personagent`입니다. 대부분의 설치 방식에서는 페이지의 앱 보기에 있는 **업데이트 후 다시 열기**가 이 명령을 대신 실행합니다. 설정, 캐릭터, 배운 것, 연결된 플랫폼이 모두 남습니다. 제거하려면 [제거 절차](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)(영어)를 따르십시오.
 
 ## 개인정보
 
-personagent가 저장하는 모든 것은 내 컴퓨터의 홈 폴더 하나에 남습니다. 선택한 모델 제공자는 자신이 답하는 대화를 보게 되며, personagent는 하루에 한 번 pypi.org에 새 버전이 나왔는지 묻습니다(`UPDATE_CHECK_ENABLED=false`로 끌 수 있습니다). 실제 사람들과 연결하기 전에 봇이라는 사실을 알리고 동의를 받으세요. 무엇이 어디로 가는지는 [가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#개인정보와-동의)에 나와 있습니다.
+personagent가 저장하는 모든 것은 사용자 컴퓨터의 홈 폴더 하나에 남습니다. 선택한 모델 제공자는 자신이 답하는 대화를 보게 되며, personagent는 하루에 한 번 pypi.org에 새 버전이 나왔는지 묻습니다(`UPDATE_CHECK_ENABLED=false`로 끌 수 있습니다). 실제 사람들과 연결하기 전에 봇이라는 사실을 알리고 동의를 받으십시오. 무엇이 어디로 가는지는 [가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#개인정보와-동의)에 나와 있습니다.
 
 ## 문서
 
 - [사용자 가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md): 설정, 커넥터, 가르치기, 활동 화면, 문제 해결.
 - [배포 가이드](https://github.com/wangkant/personagent/blob/main/docs/deploy.ko.md): 실제 운영하기, 비용, 봇이 조용해졌을 때 확인할 것.
-- [커넥터 프로토콜](https://github.com/wangkant/personagent/blob/main/docs/connectors.ko.md): 직접 커넥터를 만들 때 참고하세요.
+- [커넥터 프로토콜](https://github.com/wangkant/personagent/blob/main/docs/connectors.ko.md): 직접 커넥터를 만들 때 참고하십시오.
 - [도구](https://github.com/wangkant/personagent/blob/main/docs/tools.ko.md): 클론한 저장소에서 실행하는 `tools/`의 스크립트.
 - [변경 기록](https://github.com/wangkant/personagent/blob/main/CHANGELOG.md) · [기여하기](https://github.com/wangkant/personagent/blob/main/.github/CONTRIBUTING.md) · [보안 정책](https://github.com/wangkant/personagent/blob/main/.github/SECURITY.md) · [면책 조항](https://github.com/wangkant/personagent/blob/main/docs/DISCLAIMER.ko.md)
 
