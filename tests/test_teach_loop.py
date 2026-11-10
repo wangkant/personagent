@@ -843,3 +843,86 @@ async def test_a_garbled_verdict_is_asked_once_more(tmp: Path) -> None:
                               False, conv_id=CONV)
     check("two misses: nothing recorded, no third ask",
           len(calls) == 2 and b.evidence_log.all() == [], str(b.evidence_log.all()))
+
+
+# ---------------------------------------------------------------------------
+# In a DM, where the next message is the reaction
+# ---------------------------------------------------------------------------
+
+def _private(text: str, mid: str) -> dict:
+    return {"post_type": "message", "message_type": "private", "user_id": "42",
+            "message_id": mid, "sender": {"nickname": "alex"},
+            "message": [{"type": "text", "data": {"text": text}}],
+            "raw_message": text}
+
+
+async def test_a_dm_retry_accepted_while_it_is_still_going_out_promotes(
+        tmp: Path) -> None:
+    """In a DM the next message reacts to the last reply, with no @ or quote
+    to say which. A message that arrives while a turn is in flight waits in
+    line, so it is matched once that turn's reply is on record: the "thanks"
+    typed at the first line of a retry still accepts the retry, and a message
+    queued behind it reacts to nothing."""
+    a = make_agent(tmp)
+    drafts = [REPLY, RETRY, "anytime"]
+    verdicts = [REJECTION, THANKS]
+    judged: list[str] = []
+    sent: list[str] = []
+    retry_going_out, let_it_out = asyncio.Event(), asyncio.Event()
+
+    async def chat(history, is_admin=False, pkey="", proactive=False,
+                   proactive_cue=""):
+        return drafts.pop(0), ""
+
+    async def send_dm(user_id, text):
+        if text == RETRY:
+            retry_going_out.set()
+            await let_it_out.wait()
+        sent.append(text)
+        return SendResult(success=True, message_ids=[f"out-{len(sent)}"])
+
+    async def judge_in_turn(system, messages, model, **kw):
+        judged.append(messages[-1]["content"])
+        return json.dumps(verdicts.pop(0))
+
+    async def reactions_settled() -> None:
+        for _ in range(5):
+            await asyncio.gather(*list(a._bg_tasks))
+
+    a._chat_dm, a._send_dm, a._call_llm = chat, send_dm, judge_in_turn
+    await a._handle_dm(
+        "42", _private("the deploy failed again, third time today", "t1"),
+        is_admin=False)
+    complaint = asyncio.create_task(a._handle_dm(
+        "42", _private("i was just venting", "t2"), is_admin=False))
+    await retry_going_out.wait()
+    await reactions_settled()
+    check("dm: the complaint was judged against the first reply",
+          len(judged) == 1 and a.pending_reactions.awaiting("dm:42") is not None,
+          str(judged)[:200])
+
+    thanks = asyncio.create_task(a._handle_dm(
+        "42", _private("haha yeah it is, thanks Nova", "t3"), is_admin=False))
+    queued = asyncio.create_task(a._handle_dm(
+        "42", _private("ok back to work", "t4"), is_admin=False))
+    for _ in range(50):
+        await asyncio.sleep(0)
+    check("dm: nothing reacts to a retry that is not on record yet",
+          len(judged) == 1 and not complaint.done())
+
+    let_it_out.set()
+    await asyncio.gather(complaint, thanks, queued)
+    await reactions_settled()
+    check("dm: all three replies went out", sent == [REPLY, RETRY, "anytime"],
+          str(sent))
+    check("dm: the thanks was judged, and nothing else",
+          len(judged) == 2 and not verdicts, str(len(judged)))
+    check("dm: the accepted retry is what the bot keeps",
+          pairs(a) == [(REPLY, RETRY)], str(pairs(a)))
+    retry = cand(a, RETRY)
+    check("dm: the promoted pair cites the complaint and the acceptance",
+          {e["kind"] for e in a.evidence_log.many(retry["evidence"])}
+          == {"reaction", "retry_acceptance"})
+    check("dm: the last reply is still pending for a reaction of its own",
+          [e["reply"] for e in a.pending_reactions._by_conv.get("dm:42", [])]
+          == ["anytime"], str(a.pending_reactions._by_conv))

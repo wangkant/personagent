@@ -62,7 +62,7 @@ El conector reenvía cada mensaje permitido al `POST /v1/events` del agente como
 | `SATORI_PLATFORM_NAMES` | `qq=qqbot` | Renombra las plataformas tal como las ve el agente: `satori_name=name, ...` |
 | `SATORI_OUTBOX_ENABLED` | `true` | Recoger la bandeja de salida del agente. |
 | `SATORI_CONNECTOR_ID` | a partir de `SATORI_URL` | El id de este conector en el agente. Mantenlo estable. |
-| `SATORI_TIMEOUT_S` | `420` | Cuánto puede durar un turno. Mantenlo por encima de `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` del agente. |
+| `SATORI_TIMEOUT_S` | `420` | Cuánto puede durar un turno. Mantenlo por encima de 3 × `LLM_TIMEOUT_S` del agente. |
 | `SATORI_INLINE_IMAGES_ENABLED` | `false` | Descargar las URL de imágenes públicas en el conector en lugar de pasar la URL al agente. |
 | `SATORI_LOG_LEVEL` | `INFO` | |
 

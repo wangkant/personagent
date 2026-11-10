@@ -6,8 +6,10 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import threading
 import time
 
+from helpers import check
 from persona_agent import services as svc
 from persona_agent.services import Services
 from persona_agent import setup_wizard as sw
@@ -39,7 +41,17 @@ Services(home)._spawn("probe", [sys.executable, "-m", "probe_child", sys.argv[2]
 time.sleep(60)
 """
 
+# Stands in for a command that runs to its end: logs lines, then exits with a code.
+TASK = """\
+import sys
+for n in range(int(sys.argv[2])):
+    print(sys.argv[1], n, flush=True)
+sys.exit(int(sys.argv[3]))
+"""
+
 NO_SUCH_PROCESS = 2 ** 30
+# An app's number that no test process has; its command line is whatever the test says.
+GONE_APP = NO_SUCH_PROCESS + 1
 
 
 def _probe_env(tmp_path: Path) -> dict:
@@ -222,11 +234,159 @@ def test_leftovers_are_stopped_only_once_their_app_is_gone_and_while_they_are_it
         31: " ".join(direct),
     }
     monkeypatch.setattr(svc, "_command_line", lambda pid: lines.get(pid, ""))
+    # Leading a group never makes another program's command line a child's.
+    monkeypatch.setattr(svc, "_leads_group", lambda pid: True)
     ended = []
     monkeypatch.setattr(svc, "_end", lambda pid, command: ended.append(pid))
     assert svc.stop_leftovers(tmp_path) == ["agent", "direct"]
     assert ended == [11, 31]
     assert [path.name for path in desktop.iterdir()] == ["children-202.json"]
+
+
+UV_STEP = ["-m", "uv", "--no-config", "tool", "install", "--python", "3.12", "astrbot>=4.29,<5"]
+UV_ARGS = " ".join(UV_STEP[2:])
+
+
+def test_a_child_is_told_by_its_command_line_as_posix_lists_it():
+    home = "/home/kim/my agent"
+    bin_ = home + "/platforms/tools/installer/bin"
+    uv = [bin_ + "/python", *UV_STEP]
+    # As `_spawn` starts it: the guard's source and the app's number, then the module.
+    guarded = f"{bin_}/python -c import os, runpy 4242 {' '.join(UV_STEP)}"
+    # uv's module replaces itself with the uv program: same number, same group.
+    replaced = f"{bin_}/uv {UV_ARGS}"
+    check("the child as it was started", svc._still_child(guarded, uv, home, True))
+    check("the program its module replaced itself with", svc._still_child(replaced, uv, home, True))
+    check("not that command line on a process that leads no group, a later one with the number",
+          not svc._still_child(replaced, uv, home, False))
+    check("not the same program doing something else",
+          not svc._still_child(f"{bin_}/uv pip list", uv, home, True))
+    check("not another home's installer",
+          not svc._still_child(replaced.replace("my agent", "other"), uv, home, True))
+    check("not a process that is gone", not svc._still_child("", uv, home, True))
+    check("not some group leader that only names the home",
+          not svc._still_child(f"vim {home}/.env", uv, home, True))
+    # What is left of a module's arguments can be as little as "run".
+    astrbot = [home + "/platforms/tools/bin/python", "-m", "astrbot", "run"]
+    check("not an editor on a file under the home, whose path happens to hold an argument",
+          not svc._still_child(f"vim {home}/runtime/desktop/astrbot.log", astrbot, home, True)
+          and not svc._still_child(f"tail -f {home}/runtime/desktop/agent.log", astrbot, home, True))
+    direct = ["/usr/bin/python3", "-m", "persona_agent", "--home", home, "run"]
+    check("not another command given the same home",
+          not svc._still_child(f"personagent --home {home} doctor", direct, home, True))
+    check("not a program of that name somewhere else",
+          not svc._still_child(f"/usr/local/bin/uv {UV_ARGS} {home}", uv, home, True))
+    init = [home + "/platforms/tools/bin/astrbot", "init", "--yes"]
+    check("a command that is no module is matched whole",
+          svc._still_child(" ".join(init), init, home, True)
+          and not svc._still_child(f"{home}/platforms/tools/bin/astrbot --yes", init, home, True))
+    agent = ["/usr/bin/python3", "-m", "persona_agent", "--home", home, "run", "--port", "8080"]
+    check("the home may be in an argument, not the program's path",
+          svc._still_child(f"/usr/bin/python3 -c import os 4242 {' '.join(agent[1:])}", agent, home, True))
+
+
+def test_a_child_is_told_by_its_command_line_as_windows_lists_it():
+    home = r"C:\Users\Kim Lee\agent"
+    scripts = home + r"\platforms\tools\installer\Scripts"
+    uv = [scripts + r"\python.exe", *UV_STEP]
+    # Windows keeps one string, quoted where an argument has a space.
+    started = subprocess.list2cmdline(uv)
+    check("the path with a space is quoted", started.startswith('"' + uv[0] + '" -m uv '), started)
+    check("the child as it was started; there is no group to lead",
+          svc._still_child(started, uv, home, False))
+    # There the module starts uv.exe and waits, so the recorded process stays python.
+    check("not uv.exe under that number, which is a later process",
+          not svc._still_child(f'"{scripts}\\uv.exe" {UV_ARGS}', uv, home, False))
+    check("not another home's installer",
+          not svc._still_child(started.replace("Kim Lee", "Kim"), uv, home, False))
+    check("not a process that is gone", not svc._still_child("", uv, home, False))
+    agent = [r"C:\Python312\python.exe", "-m", "persona_agent", "--home", home, "run"]
+    check("the home may be in a quoted argument",
+          svc._still_child(subprocess.list2cmdline(agent), agent, home, False))
+
+
+def test_only_a_process_that_leads_its_own_group_is_taken_as_leading():
+    check("no such process leads nothing", not svc._leads_group(NO_SUCH_PROCESS))
+    if os.name == "nt":
+        check("Windows has no groups to lead", not svc._leads_group(os.getpid()))
+        return
+    sleep = [sys.executable, "-c", "import time; time.sleep(60)"]
+    # As `_spawn` starts a child, and as that child starts one of its own.
+    child, grandchild = subprocess.Popen(sleep, start_new_session=True), subprocess.Popen(sleep)
+    try:
+        check("a child started in its own session leads its group", svc._leads_group(child.pid))
+        check("a process started inside a group does not", not svc._leads_group(grandchild.pid))
+    finally:
+        for process in (child, grandchild):
+            process.kill()
+            process.wait()
+
+
+def _records(desktop: Path):
+    desktop.mkdir(parents=True)
+
+    def record(owner, command, **children):
+        (desktop / f"children-{owner}.json").write_text(
+            json.dumps({"owner": owner, "command": command, "children": children}), encoding="utf-8")
+    return record
+
+
+def test_an_installer_that_replaced_itself_is_stopped_at_the_next_start(tmp_path, monkeypatch):
+    """The app was killed while uv downloaded: on POSIX the recorded
+    `python -m uv` had become the uv program, which nothing ended."""
+    bin_ = tmp_path.resolve() / "platforms" / "tools" / "installer" / "bin"
+    uv = [str(bin_ / "python"), *UV_STEP]
+    record = _records(tmp_path / "runtime" / "desktop")
+    record(GONE_APP, "personagent start", install={"pid": 41, "argv": uv})
+    record(GONE_APP + 1, "personagent start", install={"pid": 51, "argv": uv})
+    lines = {41: f"{bin_ / 'uv'} {UV_ARGS}",    # still the installer, leading its group
+             51: f"{bin_ / 'uv'} {UV_ARGS}"}    # in someone else's group: not what was started
+    monkeypatch.setattr(svc, "_command_line", lambda pid: lines.get(pid, ""))
+    monkeypatch.setattr(svc, "_leads_group", lambda pid: pid == 41, raising=False)
+    ended = []
+    monkeypatch.setattr(svc, "_end", lambda pid, command: ended.append((pid, command)))
+    check("the installer is stopped", svc.stop_leftovers(tmp_path) == ["install"], str(ended))
+    check("by its number, which is its group's, as the line it has now", ended == [(41, lines[41])], str(ended))
+    check("and both records are done with", not list((tmp_path / "runtime" / "desktop").iterdir()))
+
+
+def test_leftovers_under_a_directory_can_be_stopped_while_the_app_runs(tmp_path, monkeypatch):
+    home = tmp_path.resolve()
+    tools = home / "platforms" / "tools"
+    desktop = home / "runtime" / "desktop"
+    uv = [str(tools / "installer" / "bin" / "python"), *UV_STEP]
+    astrbot = [str(tools / "envs" / "astrbot" / "bin" / "python"), "-m", "astrbot.cli.__main__", "run"]
+    agent = ["python", "-m", "persona_agent", "--home", str(home), "run"]
+    record = _records(desktop)
+    running_app = GONE_APP + 1
+    record(GONE_APP, "personagent start", install={"pid": 11, "argv": uv}, agent={"pid": 12, "argv": agent},
+           astrbot={"pid": 13, "argv": astrbot})
+    record(running_app, "personagent up", astrbot={"pid": 21, "argv": astrbot})
+    record(os.getpid(), "personagent start", install={"pid": 31, "argv": uv})
+    lines = {11: " ".join(uv), 12: " ".join(agent), 13: " ".join(astrbot),
+             running_app: "personagent up", 21: " ".join(astrbot), 31: " ".join(uv)}
+    monkeypatch.setattr(svc, "_command_line", lambda pid: lines.get(pid, ""))
+    monkeypatch.setattr(svc, "_leads_group", lambda pid: True)
+    ended = []
+    monkeypatch.setattr(svc, "_end", lambda pid, command: ended.append(pid))
+    stopped = svc.stop_leftovers(home, under=tools)
+    check("a dead app's children that run from the directory are stopped",
+          stopped == ["install", "astrbot"] and ended == [11, 13], f"{stopped} {ended}")
+    kept = json.loads((desktop / f"children-{GONE_APP}.json").read_text(encoding="utf-8"))
+    check("its other children stay recorded for the next start",
+          kept == {"owner": GONE_APP, "command": "personagent start",
+                   "children": {"agent": {"pid": 12, "argv": agent}}}, str(kept))
+    own = json.loads((desktop / f"children-{os.getpid()}.json").read_text(encoding="utf-8"))
+    check("a running app's record is left alone, this one's included",
+          own["children"] == {"install": {"pid": 31, "argv": uv}}
+          and sorted(path.name for path in desktop.iterdir())
+          == sorted(f"children-{owner}.json" for owner in (GONE_APP, running_app, os.getpid())))
+    ended.clear()
+    # At a start, a record under this process's number is an earlier process's.
+    check("the next start stops the rest",
+          sorted(svc.stop_leftovers(home)) == ["agent", "install"] and sorted(ended) == [12, 31], str(ended))
+    check("and keeps only the running app's record",
+          [path.name for path in desktop.iterdir()] == [f"children-{running_app}.json"])
 
 
 def test_a_leftover_child_is_stopped_with_what_it_started(tmp_path):
@@ -252,5 +412,93 @@ def test_a_leftover_child_is_stopped_with_what_it_started(tmp_path):
         assert not (desktop / "children-1.json").exists()
     finally:
         process.kill()
+        for pid in pids:
+            _kill(pid)
+
+
+def test_stopping_a_child_ends_what_it_started(tmp_path):
+    env = _probe_env(tmp_path)
+    out = tmp_path / "out.txt"
+    services = Services(tmp_path)
+    services._spawn("probe", [sys.executable, "-m", "probe_child", str(out), "60"], cwd=tmp_path, env=env)
+    pids = []
+    try:
+        said = _probe_says(out)
+        pids = [int(said[0]), int(said[2])]
+        services.stop("probe")
+        check("the child and the process it started are gone", all(_gone(pid, 5) for pid in pids))
+        check("nothing is kept for it", not services.processes and not services._jobs)
+    finally:
+        services.close()
+        for pid in pids:
+            _kill(pid)
+
+
+def _task_env(tmp_path: Path) -> dict:
+    (tmp_path / "task_child.py").write_text(TASK, encoding="utf-8")
+    return _probe_env(tmp_path)
+
+
+def test_a_command_runs_to_its_end_and_a_failure_carries_the_end_of_its_log(tmp_path, capfd):
+    env = _task_env(tmp_path)
+    services = Services(tmp_path)
+    record = tmp_path / "runtime" / "desktop" / f"children-{os.getpid()}.json"
+    services.run("task", [sys.executable, "-m", "task_child", "earlier", "3", "0"], cwd=tmp_path, env=env)
+    check("a finished command is no longer a child", not services.processes and not record.exists())
+    with pytest.raises(subprocess.CalledProcessError) as failed:
+        services.run("task", [sys.executable, "-m", "task_child", "later", "50", "3"], cwd=tmp_path, env=env)
+    tail = failed.value.output.splitlines()
+    check("the error carries its exit code", failed.value.returncode == 3, str(failed.value.returncode))
+    check("and the end of what this run logged", tail[-1] == "later 49" and len(tail) == svc.TAIL_LINES, str(tail))
+    check("not an earlier run's output", "earlier" not in failed.value.output)
+    log = (tmp_path / "runtime" / "desktop" / "task.log").read_text(encoding="utf-8")
+    check("the whole output is in its log", "earlier 0" in log and "later 0" in log)
+    shown = capfd.readouterr()
+    check("none of it reaches this window", "later" not in shown.out + shown.err, shown.out + shown.err)
+
+
+def test_a_running_command_stops_when_asked_and_when_the_app_closes(tmp_path):
+    env = _probe_env(tmp_path)
+    services = Services(tmp_path)
+    pids = []
+
+    def start(out: Path, should_stop) -> tuple[threading.Thread, list]:
+        raised = []
+
+        def body():
+            try:
+                services.run("task", [sys.executable, "-m", "probe_child", str(out), "600"],
+                             cwd=tmp_path, env=env, should_stop=should_stop)
+            except Exception as exc:
+                raised.append(exc)
+        thread = threading.Thread(target=body)
+        thread.start()
+        said = _probe_says(out)
+        pids.extend([int(said[0]), int(said[2])])
+        return thread, raised
+
+    try:
+        asked = threading.Event()
+        thread, raised = start(tmp_path / "first.txt", asked.is_set)
+        began = time.monotonic()
+        asked.set()
+        thread.join(timeout=10)
+        took = time.monotonic() - began
+        check("it stops soon after it is asked to", not thread.is_alive() and took < 3, f"{took:.1f}s")
+        check("and says it was stopped", [type(exc) for exc in raised] == [svc.Stopped], repr(raised))
+        check("with what it started", all(_gone(pid, 5) for pid in pids))
+
+        thread, raised = start(tmp_path / "second.txt", lambda: False)
+        services.shutdown()
+        check("closing the app returns with the command gone",
+              not services.processes and all(_gone(pid, 2) for pid in pids))
+        thread.join(timeout=10)
+        check("and the command says it was stopped", [type(exc) for exc in raised] == [svc.Stopped], repr(raised))
+        with pytest.raises(svc.Stopped):
+            services.run("task", [sys.executable, "-m", "probe_child", str(tmp_path / "third.txt"), "600"],
+                         cwd=tmp_path, env=env)
+        check("a closed app starts no command", not (tmp_path / "third.txt").exists())
+    finally:
+        services.close()
         for pid in pids:
             _kill(pid)

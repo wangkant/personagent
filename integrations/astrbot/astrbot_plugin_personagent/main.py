@@ -1073,7 +1073,7 @@ class PersonagentConnector(Star):
                 logger.error(
                     "personagent: timed out waiting for the agent "
                     f"(timeout_s={timeout:.0f}); that reply is lost. Keep "
-                    "LLM_TIMEOUT_S x (1 + LLM_MAX_RETRIES) under timeout_s."
+                    "3 x LLM_TIMEOUT_S under timeout_s."
                 )
                 return False, False, []
             except httpx.HTTPError as e:

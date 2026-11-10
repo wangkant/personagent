@@ -16,7 +16,9 @@ from persona_agent import __version__
 # name -> (module, function, one-line help). The function takes (argv, prog).
 COMMANDS = {
     "start": ("persona_agent.welcome", "main",
-              "open setup and chat in your browser"),
+              "open setup and chat in a window of their own"),
+    "shortcut": ("persona_agent.shortcut", "main",
+                 "put personagent on the desktop and in the Start menu (Windows)"),
     "up": ("persona_agent.services", "main",
            "start personagent and the installed chat platform together"),
     "init": ("persona_agent.setup_wizard", "main",
@@ -51,6 +53,21 @@ def _run_server(argv: list[str], prog: str) -> int:
 
     server.main(host=args.host, port=args.port)
     return 0
+
+
+def _broken_without_a_terminal() -> int:
+    """pythonw, as the shortcut starts it, has nowhere to print an install
+    that does not import: it goes to the log, and a dialog names the log."""
+    import traceback
+
+    from persona_agent import home, window
+
+    log = home.find_home() / "runtime" / "desktop" / "app.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with open(log, "a", encoding="utf-8") as out:
+        traceback.print_exc(file=out)
+    window.alert(langs.term(f"personagent could not start. The details are in {log}."))
+    return 1
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -114,7 +131,12 @@ def main(argv: list[str] | None = None) -> int:
     if chosen:
         os.environ["AGENT_HOME"] = os.path.abspath(os.path.expanduser(chosen))
     module_name, func_name, _help = COMMANDS[args.command]
-    func = getattr(importlib.import_module(module_name), func_name)
+    try:
+        func = getattr(importlib.import_module(module_name), func_name)
+    except Exception:
+        if sys.stderr is not None:
+            raise
+        return _broken_without_a_terminal()
     try:
         result = func(rest, f"personagent {args.command}")
     except SystemExit as stop:

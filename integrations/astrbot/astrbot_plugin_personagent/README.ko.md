@@ -114,7 +114,7 @@ personagent connect astrbot <AstrBot data dir>        # add --qq to route QQ (Na
 
 각 요청은 에이전트의 턴만큼 지속됩니다. 턴은 짧은 디바운스와 모든 모델 호출 및 재시도로 이루어집니다. `timeout_s`가 끝나도 에이전트는 턴을 마치고 배운 것을 유지하지만, 답장은 사라지고 AstrBot 자체 모델이 대신 그 메시지에 답합니다.
 
-에이전트의 `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`를 `timeout_s`보다 작게 유지하세요. 에이전트 기본값(`LLM_TIMEOUT_S=120`, `LLM_MAX_RETRIES=2`)에서 모델 호출이 계속 시간 초과되는 턴은 360초를 넘을 수 있으며, 기본 `timeout_s` 420이 이를 감당합니다. 에이전트에서 둘 중 하나를 올리면 `timeout_s`도 올리세요.
+에이전트의 3 × `LLM_TIMEOUT_S`를 `timeout_s`보다 작게 유지하세요. 한 턴의 모델 호출은 재시도까지 합쳐 1.5 × `LLM_TIMEOUT_S`를 나눠 쓰고, 메시지는 먼저 도착했을 때 생각 중이던 턴이 끝나기를 기다립니다. 에이전트 기본값(`LLM_TIMEOUT_S=120`)에서는 360초이며, 기본 `timeout_s` 420이 이를 감당합니다. 에이전트에서 `LLM_TIMEOUT_S`를 올리면 `timeout_s`도 올리세요.
 
 서명된 요청이 아직 유효한 동안, 플러그인은 에이전트의 429나 500을 최대 두 번 재시도하고 429에서는 `Retry-After`를 따릅니다.
 

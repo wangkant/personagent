@@ -4,7 +4,6 @@ The probes are shared with /health/details (health.py); the flags are in USAGE.
 """
 import json
 import sys
-import unicodedata
 
 from persona_agent import langs
 from persona_agent import home
@@ -58,9 +57,8 @@ def _fix() -> int:
 
 
 def _pad(text: str, width: int) -> str:
-    """`text` filled to `width` terminal columns; CJK takes two."""
-    used = sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in text)
-    return text + " " * (width - used)
+    """`text` filled to `width` terminal columns."""
+    return text + " " * (width - langs.width(text))
 
 
 def main(argv: list[str] | None = None, prog: str | None = None) -> int:

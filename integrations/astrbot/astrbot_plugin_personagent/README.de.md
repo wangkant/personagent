@@ -114,7 +114,7 @@ Der Agent lauscht standardmäßig auf `127.0.0.1:8080`. Setzt du sein `SERVER_HO
 
 Jede Anfrage dauert so lange wie der Zug des Agenten, also ein kurzer Debounce plus jeder Modellaufruf und jede Wiederholung. Läuft `timeout_s` ab, beendet der Agent den Zug trotzdem und behält, was er gelernt hat, aber die Antwort geht verloren, und das eigene Modell von AstrBot beantwortet die Nachricht.
 
-Halte `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` des Agenten unter `timeout_s`. Mit den Standardwerten des Agenten (`LLM_TIMEOUT_S=120`, `LLM_MAX_RETRIES=2`) kann ein Zug, dessen Modellaufrufe immer wieder ablaufen, über 360 s dauern, was das Standard-`timeout_s` von 420 abdeckt. Erhöhst du einen der beiden Werte beim Agenten, erhöhe auch `timeout_s`.
+Halte 3 × `LLM_TIMEOUT_S` des Agenten unter `timeout_s`. Die Modellaufrufe eines Zugs teilen sich 1,5 × `LLM_TIMEOUT_S`, Wiederholungen eingeschlossen, und eine Nachricht wartet zuerst auf den Zug, der bei ihrem Eintreffen noch nachdachte. Mit dem Standardwert des Agenten (`LLM_TIMEOUT_S=120`) sind das 360 s, was das Standard-`timeout_s` von 420 abdeckt. Erhöhst du `LLM_TIMEOUT_S` beim Agenten, erhöhe auch `timeout_s`.
 
 Das Plugin wiederholt ein 429 oder 500 vom Agenten bis zu zweimal und beachtet bei einem 429 `Retry-After`, solange die signierte Anfrage noch frisch ist.
 

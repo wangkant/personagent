@@ -114,7 +114,7 @@ O agente escuta em `127.0.0.1:8080` por padrão. Se você definir o `SERVER_HOST
 
 Cada solicitação dura o mesmo que o turno do agente, que é um debounce curto mais cada chamada ao modelo e nova tentativa. Se `timeout_s` acabar, o agente ainda termina o turno e guarda o que aprendeu, mas a resposta se perde e o modelo do próprio AstrBot responde à mensagem.
 
-Mantenha `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` do agente abaixo de `timeout_s`. Com os padrões do agente (`LLM_TIMEOUT_S=120`, `LLM_MAX_RETRIES=2`), um turno cujas chamadas ao modelo continuam estourando o tempo pode passar de 360 s, o que o `timeout_s` padrão de 420 cobre. Se você aumentar qualquer um dos dois no agente, aumente também `timeout_s`.
+Mantenha 3 × `LLM_TIMEOUT_S` do agente abaixo de `timeout_s`. As chamadas ao modelo de um turno dividem 1,5 × `LLM_TIMEOUT_S`, novas tentativas incluídas, e uma mensagem primeiro espera o turno que estava pensando quando ela chegou. Com o padrão do agente (`LLM_TIMEOUT_S=120`), isso dá 360 s, o que o `timeout_s` padrão de 420 cobre. Se você aumentar `LLM_TIMEOUT_S` no agente, aumente também `timeout_s`.
 
 O plugin tenta de novo um 429 ou 500 do agente até duas vezes, respeitando `Retry-After` em um 429, enquanto a solicitação assinada ainda estiver recente.
 

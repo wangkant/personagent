@@ -1348,3 +1348,384 @@ async def test_one_refused_request_does_not_take_a_model_out(tmp: Path) -> None:
     await agent._call_llm("sys", [{"role": "user", "content": "hi"}], **ask)
     check("a skipped model still gets a try when the fallback fails",
           posts == ["fallback", "primary"], repr(posts))
+
+
+# ---- the three single retries ------------------------------------------------
+
+class _Scripted:
+    """Fake `agent._http`: each POST takes the next scripted answer, either a
+    response body or an exception to raise; `payloads` keeps what was sent."""
+
+    def __init__(self, *answers) -> None:
+        self.answers, self.payloads = list(answers), []
+
+    def __call__(self, **kw):
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        self.payloads.append(json)
+        answer = self.answers.pop(0)
+        if isinstance(answer, BaseException):
+            raise answer
+        return httpx.Response(200, request=httpx.Request("POST", url), json=answer)
+
+
+def _answer(content: str, finish: str = "stop", *, tokens: int,
+            reasoning: str = "") -> dict:
+    return {"choices": [{"message": {"content": content,
+                                     "reasoning_content": reasoning},
+                         "finish_reason": finish}],
+            "usage": {"prompt_tokens": tokens}}
+
+
+async def _ask(agent: Agent, caplog, *answers, **call) -> tuple:
+    """(text, payloads, log lines) of one `_call_llm` against `answers`."""
+    import logging
+
+    http = _Scripted(*answers)
+    agent._http = http
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="agent"):
+        out = await agent._call_llm(
+            "sys", [{"role": "user", "content": "hi"}],
+            **{"model": "m", "max_tokens": 100, "enable_search": False, **call})
+    return out, http.payloads, [r.getMessage() for r in caplog.records]
+
+
+def _has(lines: list, *parts: str) -> bool:
+    return any(all(part in line for part in parts) for line in lines)
+
+
+async def test_the_larger_budget_retry_in_every_outcome(tmp: Path, caplog) -> None:
+    agent = isolated_agent(tmp)
+    cut_off = _answer("", "length", tokens=11)
+
+    out, sent, lines = await _ask(agent, caplog, cut_off,
+                                  _answer('{"reply":"whole"}', tokens=22))
+    check("budget: the retry's answer is returned", out == '{"reply":"whole"}', out)
+    check("budget: asked again at four times the cap",
+          [p["max_tokens"] for p in sent] == [100, 400], repr(sent))
+    check("budget: the usage line is the retry's", _has(lines, "cache:", "in=22"),
+          repr(lines))
+
+    out, sent, lines = await _ask(agent, caplog, cut_off, httpx.ReadTimeout("slow"))
+    check("budget, retry raised: blank, and nothing asked a third time",
+          out == "" and len(sent) == 2, repr((out, len(sent))))
+    check("budget, retry raised: the failure is named",
+          _has(lines, "retry at a larger budget failed: ReadTimeout: slow"),
+          repr(lines))
+    check("budget, retry raised: and the dead end said plainly",
+          _has(lines, "still empty at max_tokens=400"), repr(lines))
+    check("budget, retry raised: the usage line stays the first answer's",
+          _has(lines, "cache:", "in=11"), repr(lines))
+
+    out, sent, lines = await _ask(agent, caplog, cut_off,
+                                  _answer("", "length", tokens=22))
+    check("budget, still cut off: blank, said plainly, one retry only",
+          out == "" and len(sent) == 2
+          and _has(lines, "still empty at max_tokens=400"), repr(lines))
+
+    malformed = {"choices": "oops", "usage": {"prompt_tokens": 33}}
+    out, sent, lines = await _ask(agent, caplog, cut_off, malformed)
+    check("budget, unreadable retry: blank and named",
+          out == "" and _has(lines, "retry at a larger budget failed: AttributeError"),
+          repr(lines))
+    check("budget, unreadable retry: its usage is still the one reported",
+          _has(lines, "cache:", "in=33"), repr(lines))
+
+
+async def test_the_thinking_off_retry_in_every_outcome(tmp: Path, caplog) -> None:
+    agent = isolated_agent(tmp, base_url="https://api.deepseek.com")
+    all_thought = _answer("", tokens=11, reasoning="the whole answer, in here")
+
+    out, sent, lines = await _ask(agent, caplog, all_thought,
+                                  _answer('{"reply":"said"}', tokens=22))
+    check("thinking: the retry's answer is returned", out == '{"reply":"said"}', out)
+    check("thinking: only the retry switches it off",
+          ["thinking" in p for p in sent] == [False, True], repr(sent))
+    check("thinking: the usage line is the retry's", _has(lines, "cache:", "in=22"),
+          repr(lines))
+
+    out, sent, lines = await _ask(agent, caplog, all_thought, httpx.ReadTimeout("slow"))
+    check("thinking, retry raised: blank after one retry",
+          out == "" and len(sent) == 2, repr((out, len(sent))))
+    check("thinking, retry raised: the failure is named",
+          _has(lines, "retry with thinking disabled failed: ReadTimeout: slow"),
+          repr(lines))
+    check("thinking, retry raised: and the empty answer reported",
+          _has(lines, "LLM returned empty text; finish_reason=stop"), repr(lines))
+    check("thinking, retry raised: the usage line stays the first answer's",
+          _has(lines, "cache:", "in=11"), repr(lines))
+
+    out, sent, lines = await _ask(agent, caplog, all_thought,
+                                  _answer("", "length", tokens=22))
+    check("thinking, retry blank: reported with the retry's finish reason",
+          out == "" and _has(lines, "LLM returned empty text; finish_reason=length"),
+          repr(lines))
+
+
+async def test_the_plain_text_retry_in_every_outcome(tmp: Path, caplog) -> None:
+    agent = isolated_agent(tmp)
+    reply_call = {"json_object": True, "plain_text_fallback": True}
+    blank = _answer("", tokens=11)
+
+    out, sent, lines = await _ask(agent, caplog, blank,
+                                  _answer("just words", tokens=22), **reply_call)
+    check("plain: the prose is wrapped as the protocol object",
+          TextProcessing._parse_model_output(out)[0] == "just words", out)
+    check("plain: only the retry drops response_format",
+          ["response_format" in p for p in sent] == [True, False], repr(sent))
+    check("plain: recovery and the retry's usage are logged",
+          _has(lines, "plain-text retry recovered 10 chars")
+          and _has(lines, "cache:", "in=22"), repr(lines))
+
+    out, sent, lines = await _ask(agent, caplog, blank, httpx.ReadTimeout("slow"),
+                                  **reply_call)
+    check("plain, retry raised: blank after one retry",
+          out == "" and len(sent) == 2, repr((out, len(sent))))
+    check("plain, retry raised: the failure is named",
+          _has(lines, "plain-text retry failed: ReadTimeout: slow"), repr(lines))
+    check("plain, retry raised: the usage line stays the first answer's",
+          _has(lines, "cache:", "in=11"), repr(lines))
+
+    out, sent, lines = await _ask(agent, caplog, blank, _answer("", tokens=22),
+                                  **reply_call)
+    check("plain, retry blank: blank, with the retry's usage",
+          out == "" and _has(lines, "cache:", "in=22")
+          and not _has(lines, "recovered"), repr(lines))
+
+    # The rungs chain: a cut-off answer is retried larger, then as plain text.
+    out, sent, lines = await _ask(
+        agent, caplog, _answer("", "length", tokens=11),
+        _answer("", "length", tokens=22), _answer("words", tokens=33), **reply_call)
+    check("chained: larger budget first, plain text last",
+          [(p["max_tokens"], "response_format" in p) for p in sent]
+          == [(100, True), (400, True), (100, False)], repr(sent))
+    check("chained: the last rung's prose is the reply",
+          TextProcessing._parse_model_output(out)[0] == "words"
+          and _has(lines, "cache:", "in=33"), repr((out, lines)))
+
+
+# ---- one switch for hidden reasoning -----------------------------------------
+
+def _noise_png() -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.effect_noise((64, 64), 64).convert("RGB").save(buf, "PNG")
+    return buf.getvalue()
+
+
+async def test_the_short_calls_turn_thinking_off_the_way_a_reply_does(
+        tmp: Path, monkeypatch) -> None:
+    """Self-eval, the vision calls and the doctor's probes went through an
+    older switch keyed on the model's name. On a host that takes `thinking`
+    (DeepSeek, Zhipu, Moonshot, Ark) it left hidden reasoning on, so every
+    self-eval call paid for reasoning nobody reads."""
+    from persona_agent import health
+
+    agent = isolated_agent(tmp, base_url="https://api.deepseek.com")
+    agent.model = agent.llm_fallback_model = agent.eval_model = "chat-model"
+    agent.examples_seed_file = tmp / "examples.seed.jsonl"
+    agent.examples_file = tmp / "examples.jsonl"
+    verdict = _answer('{"score": 3, "reason": "fine", "tacky": false}', tokens=1)
+    http = _Scripted(verdict, verdict, verdict)
+    agent._http = http
+
+    await agent._call_llm("sys", [{"role": "user", "content": "hi"}],
+                          model=agent.model, max_tokens=50, enable_search=False,
+                          disable_thinking=True)
+    switch = http.payloads[-1].get("thinking")
+    check("a reply turns thinking off", switch == {"type": "disabled"}, repr(switch))
+
+    await agent._evaluate_reply("g", "called", "question", "a reply", None, "chat",
+                                ["Alice: question"])
+    check("self-eval carries the same switch",
+          len(http.payloads) == 2 and http.payloads[-1].get("thinking") == switch,
+          repr(http.payloads[-1].get("thinking")))
+
+    agent.vision_model, agent.vision_api_key = "vision-model", "vision-key"
+    agent.vision_base_url = "https://open.bigmodel.cn/api/paas/v4"
+    await agent._judge_sticker_aesthetic(_noise_png())
+    check("a vision call carries it",
+          len(http.payloads) == 3 and http.payloads[-1].get("thinking") == switch,
+          repr(http.payloads[-1].get("thinking")))
+
+    probes: list = []
+
+    def fake_post(url, payload, headers, timeout=30):
+        probes.append(payload)
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    monkeypatch.setattr(health, "_post_json", fake_post)
+    for name, value in (
+            ("LLM_API_KEY", "k"), ("LLM_BASE_URL", "https://api.deepseek.com"),
+            ("LLM_MODEL", "chat-model"), ("LLM_FALLBACK_MODEL", ""),
+            ("EVAL_MODEL", "chat-model"), ("VISION_MODEL", "vision-model"),
+            ("VISION_API_KEY", "vision-key"),
+            ("VISION_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")):
+        monkeypatch.setenv(name, value)
+    health.check_eval()
+    health.check_vision()
+    check("the eval and vision probes carry it",
+          [p.get("thinking") for p in probes] == [switch, switch], repr(probes)[:300])
+
+
+async def test_self_eval_learns_an_unknown_endpoint_like_any_reply_call(
+        tmp: Path) -> None:
+    agent = make_agent(tmp, "https://proxy.example/v1")
+    agent.eval_model = "m"
+    agent.examples_seed_file = tmp / "examples.seed.jsonl"
+    agent.examples_file = tmp / "examples.jsonl"
+    http = _Endpoint(lambda p: (400, "property 'thinking' is unsupported")
+                     if "thinking" in p else (200, ""))
+    agent._http = http
+
+    async def evaluate() -> None:
+        await agent._evaluate_reply("g", "called", "question", "a reply", None,
+                                    "chat", ["Alice: question"])
+
+    await evaluate()
+    check("self-eval asks an unknown endpoint, and resends without on a refusal",
+          http.sent == [("m", True), ("m", False)], repr(http.sent))
+    http.sent.clear()
+    await evaluate()
+    await _gate(agent)
+    check("the answer is remembered, for self-eval and for the gate alike",
+          http.sent == [("m", False), ("m", False)], repr(http.sent))
+
+
+def test_a_call_that_cannot_ask_goes_by_what_is_known_of_the_endpoint() -> None:
+    """The doctor's probes run once and keep no memory, so they cannot learn
+    from a refusal: they send `thinking` only where it is known to be taken,
+    and an unknown endpoint is left alone."""
+    from persona_agent.llm import known_to_take_thinking, thinking_off
+
+    def switched(model: str, url: str) -> dict:
+        payload = {"model": model, "temperature": 0.3}
+        return thinking_off(payload, url, known_to_take_thinking(url, model),
+                            k2_temperature=True)
+
+    check("a host that takes it gets it, for any model",
+          switched("vision-model", "https://open.bigmodel.cn/api/paas/v4")
+          == {"model": "vision-model", "temperature": 0.3,
+              "thinking": {"type": "disabled"}})
+    check("an unknown host is not asked",
+          switched("vision-model", "https://vision.example/v1")
+          == {"model": "vision-model", "temperature": 0.3})
+    check("a K2 model on its own host: thinking off at its one temperature",
+          switched("kimi-k2.6", "https://api.moonshot.cn/v1")
+          == {"model": "kimi-k2.6", "temperature": 0.6,
+              "thinking": {"type": "disabled"}})
+    check("a K2 model takes it wherever it is served, at its one temperature",
+          switched("kimi-k2.6", "https://gateway.example/v1")
+          == {"model": "kimi-k2.6", "temperature": 0.6,
+              "thinking": {"type": "disabled"}})
+    # OpenRouter ignores `thinking` rather than refusing it: a reasoning
+    # vision model there spent its whole budget thinking and captioned nothing.
+    check("OpenRouter gets its own switch, for any model",
+          switched("qwen/qwen3.7-flash", "https://openrouter.ai/api/v1")
+          == {"model": "qwen/qwen3.7-flash", "temperature": 0.3,
+              "reasoning": {"enabled": False}})
+    check("...and the endpoint wins over a K2 model's name",
+          switched("moonshotai/kimi-k2", "https://openrouter.ai/api/v1")
+          == {"model": "moonshotai/kimi-k2", "temperature": 0.3,
+              "reasoning": {"enabled": False}})
+    check("a host that refuses `thinking` is not sent it, K2 or not",
+          switched("moonshotai/kimi-k2-instruct", "https://api.groq.com/openai/v1")
+          == {"model": "moonshotai/kimi-k2-instruct", "temperature": 0.3})
+
+
+def test_k2s_one_temperature_is_given_only_to_a_caller_that_asks() -> None:
+    """One function holds the rule. `textproc.apply_k2_quirks`, the older
+    switch, had no caller left but its own tests and would have drifted."""
+    from persona_agent import textproc
+    from persona_agent.llm import thinking_off
+
+    check("the older switch is gone", not hasattr(textproc, "apply_k2_quirks"))
+    moonshot = "https://api.moonshot.cn/v1/chat/completions"
+    off = {"type": "disabled"}
+    check("unasked, a K2 call keeps the temperature it set",
+          thinking_off({"model": "kimi-k2.6", "temperature": 0.3}, moonshot, True)
+          == {"model": "kimi-k2.6", "temperature": 0.3, "thinking": off})
+    check("asked, a call that set none is given it too",
+          thinking_off({"model": "kimi-k2.6"}, moonshot, True, k2_temperature=True)
+          == {"model": "kimi-k2.6", "temperature": 0.6, "thinking": off})
+    check("it goes with the switch: K2 left thinking keeps its temperature",
+          thinking_off({"model": "kimi-k2.6", "temperature": 0.3}, moonshot, False,
+                       k2_temperature=True)
+          == {"model": "kimi-k2.6", "temperature": 0.3})
+    check("another model's temperature is its own",
+          thinking_off({"model": "chat-model", "temperature": 0}, moonshot, True,
+                       k2_temperature=True)["temperature"] == 0)
+
+
+async def test_the_gate_keeps_its_temperature_on_a_k2_model(tmp: Path) -> None:
+    """With thinking off K2 is given one temperature by self-eval, vision and
+    the doctor's probes (tests/test_deployment.py). Moving them onto the
+    replies' switch gave it to every caller, so the gate's 0.3, chosen to keep
+    the decision to speak steady, went out as 0.6."""
+    from types import SimpleNamespace
+
+    off = {"type": "disabled"}
+    verdict = _answer('{"reply": "ok", "score": 3, "reason": "fine", '
+                      '"tacky": false}', tokens=1)
+
+    def k2_agent(name: str, base_url: str, model: str) -> tuple:
+        agent = isolated_agent(tmp / name, base_url=base_url)
+        agent.model = agent.llm_fallback_model = agent.llm_judge_model = model
+        agent.eval_model = model
+        agent.examples_seed_file = tmp / name / "examples.seed.jsonl"
+        http = _Scripted(*[verdict] * 4)
+        agent._http = http
+        return agent, http
+
+    async def evaluate(agent: Agent) -> None:
+        await agent._evaluate_reply("g", "called", "question", "a reply", None,
+                                    "chat", ["Alice: question"])
+
+    moonshot = "https://api.moonshot.cn/v1"
+    agent, http = k2_agent("moonshot", moonshot, "kimi-k2.6")
+    await agent._gate(SimpleNamespace(gate_system="sys", user="hi"))
+    p = http.payloads[-1]
+    check("the gate: thinking off, at the temperature it chose",
+          len(http.payloads) == 1 and p.get("thinking") == off
+          and p["temperature"] == 0.3, repr(p))
+    await agent._call_llm("sys", [{"role": "user", "content": "hi"}],
+                          model="kimi-k2.6", max_tokens=50, enable_search=False,
+                          disable_thinking=True)
+    p = http.payloads[-1]
+    check("a thinking-off call that sets no temperature is not given one",
+          p.get("thinking") == off and "temperature" not in p, repr(p))
+
+    await evaluate(agent)
+    p = http.payloads[-1]
+    check("self-eval: thinking off at K2's temperature",
+          len(http.payloads) == 3 and p.get("thinking") == off
+          and p["temperature"] == 0.6, repr(p))
+    agent.vision_model, agent.vision_api_key = "kimi-k2.6", "vision-key"
+    agent.vision_base_url = moonshot
+    await agent._judge_sticker_aesthetic(_noise_png())
+    p = http.payloads[-1]
+    check("a vision call: thinking off at K2's temperature",
+          len(http.payloads) == 4 and p.get("thinking") == off
+          and p["temperature"] == 0.6, repr(p))
+
+    openrouter = "https://openrouter.ai/api/v1"
+    agent, http = k2_agent("openrouter", openrouter, "moonshotai/kimi-k2")
+    await evaluate(agent)
+    agent.vision_model, agent.vision_api_key = "moonshotai/kimi-k2", "vision-key"
+    agent.vision_base_url = openrouter
+    await agent._judge_sticker_aesthetic(_noise_png())
+    check("on OpenRouter both get its switch and keep their own temperature",
+          [(p.get("reasoning"), "thinking" in p, p["temperature"])
+           for p in http.payloads] == [({"enabled": False}, False, 0)] * 2,
+          repr(http.payloads)[:400])

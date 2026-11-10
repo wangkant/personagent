@@ -191,11 +191,11 @@ plus every model call and retry. If `timeout_s` runs out, the agent still
 finishes the turn and keeps what it learned, but the reply is lost and
 AstrBot's own model answers the message instead.
 
-Keep the agent's `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` below `timeout_s`.
-With the agent's defaults (`LLM_TIMEOUT_S=120`, `LLM_MAX_RETRIES=2`), a turn
-whose model calls keep timing out can take over 360 s, which the default
-`timeout_s` of 420 covers. If you raise either setting on the agent, raise
-`timeout_s` as well.
+Keep 3 × the agent's `LLM_TIMEOUT_S` below `timeout_s`. A turn's model calls
+share 1.5 × `LLM_TIMEOUT_S`, retries included, and a message first waits for
+the turn that was thinking when it arrived. With the agent's default
+(`LLM_TIMEOUT_S=120`) that is 360 s, which the default `timeout_s` of 420
+covers. If you raise `LLM_TIMEOUT_S` on the agent, raise `timeout_s` as well.
 
 The plugin retries a 429 or 500 from the agent up to twice, honouring
 `Retry-After` on a 429, as long as the signed request is still fresh.

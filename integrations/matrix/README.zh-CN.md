@@ -95,7 +95,7 @@ PERSONAGENT_URL=http://127.0.0.1:8080
 | `MATRIX_INVITE_FROM` | 机器人接受谁的邀请。`MATRIX_GROUPS` 里房间的邀请和 `MATRIX_DM_USERS` 的私聊邀请总是接受。其他邀请留着不处理。 |
 | `MATRIX_IGNORE_USERS` | 永不回应，判断私聊还是群时也不算成员。 |
 | `MATRIX_E2EE_ENABLED` | 端到端加密。见下文。 |
-| `MATRIX_TIMEOUT_S` | 一轮最长可以花多久。要大于 agent 的 `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`。 |
+| `MATRIX_TIMEOUT_S` | 一轮最长可以花多久。要大于 agent 的 3 × `LLM_TIMEOUT_S`。 |
 | `MATRIX_OUTBOX_ENABLED` | 轮询 agent 的发件箱。 |
 
 ## 桥：WhatsApp、Signal、Messenger、Instagram 等

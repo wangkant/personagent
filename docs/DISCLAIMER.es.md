@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md) · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · [한국어](DISCLAIMER.ko.md) · Español · [Français](DISCLAIMER.fr.md) · [Deutsch](DISCLAIMER.de.md) · [Português (Brasil)](DISCLAIMER.pt-BR.md) · [Русский](DISCLAIMER.ru.md)
 
-personagent es software libre bajo la [licencia MIT](../LICENSE). Pone un personaje de IA en tus chats, y quien lo ejecuta eres tú. Eres responsable de lo que dice, de dónde lo dice y de qué cuentas usa. Esta página no es asesoramiento legal.
+personagent se publica bajo la [PolyForm Noncommercial License 1.0.0](../LICENSE): su uso, modificación y distribución son gratuitos con fines no comerciales, y no se permiten con fines comerciales. Pone un personaje de IA en tus chats, y quien lo ejecuta eres tú. Eres responsable de lo que dice, de dónde lo dice y de qué cuentas usa. Esta página no es asesoramiento legal.
 
 ## Plataformas de chat y tus cuentas
 
@@ -26,7 +26,7 @@ Si usas alguno de estos, usa una cuenta dedicada que puedas permitirte perder, n
 
 ## Créditos de los retratos
 
-Los retratos de la chica ballena de DeepSeek, la chica dragón de GPT y la señorita Claude se dibujaron para personagent a partir de diseños que la comunidad ya dibuja. La chica ballena deriva de 溟月, un personaje original del creador de Bilibili 上善无形 (CC BY-NC-SA 4.0), con el traje de sirvienta que le puso ZipZipPipe. La chica dragón sigue a la dragona blanca de ZipZipPipe. La señorita Claude sigue un diseño de la comunidad cuyo primer artista se desconoce. Los retratos tienen licencia CC BY-NC-SA 4.0, no MIT como el código: conserva la atribución, no los uses con fines comerciales y comparte los cambios bajo la misma licencia. Consulta `persona_agent/static/characters/LICENSE.md`.
+Los retratos de la chica ballena de DeepSeek, la chica dragón de GPT y la señorita Claude se dibujaron para personagent a partir de diseños que la comunidad ya dibuja. La chica ballena deriva de 溟月, un personaje original del creador de Bilibili 上善无形 (CC BY-NC-SA 4.0), con el traje de sirvienta que le puso ZipZipPipe. La chica dragón sigue a la dragona blanca de ZipZipPipe. La señorita Claude sigue un diseño de la comunidad cuyo primer artista se desconoce. Los retratos tienen su propia licencia, CC BY-NC-SA 4.0: conserva la atribución, no los uses con fines comerciales y comparte los cambios bajo la misma licencia. Consulta `persona_agent/static/characters/LICENSE.md`.
 
 ## Qué ve tu proveedor de modelos
 

@@ -326,9 +326,9 @@ def _config_dir(target: str) -> Path:
 
 
 def _launcher() -> list[str]:
-    """How a coding agent starts this installation. uvx runs from a throwaway
-    environment in uv's cache, under archive-v<N>, so it has to name uvx instead."""
-    if "/archive-v" in sys.prefix.replace("\\", "/").lower():
+    """How a coding agent starts this installation. uvx's own environment is
+    thrown away, so there it has to name uvx instead."""
+    if langs.under_uvx():
         return ["uvx", "personagent"]
     return [sys.executable, "-m", "persona_agent"]
 

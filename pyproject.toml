@@ -8,9 +8,10 @@ version = "1.4.0"
 description = "A character for your group chats that knows when to stay quiet, and learns from being corrected."
 readme = "README.md"
 requires-python = ">=3.10"
-# The code is MIT; the three character portraits are CC BY-NC-SA 4.0.
-license = "MIT AND CC-BY-NC-SA-4.0"
-license-files = ["LICENSE", "persona_agent/static/characters/LICENSE.md"]
+# Noncommercial use only. The bundled AstrBot plugin and connector SDK are MIT,
+# and the three character portraits are CC BY-NC-SA 4.0.
+license = "PolyForm-Noncommercial-1.0.0 AND MIT AND CC-BY-NC-SA-4.0"
+license-files = ["LICENSE", "integrations/astrbot/astrbot_plugin_personagent/LICENSE", "persona_agent/static/characters/LICENSE.md"]
 authors = [{ name = "Qiankang Wang" }]
 keywords = [
     "llm", "agent", "persona", "chatbot", "group-chat", "astrbot", "onebot",
@@ -53,11 +54,17 @@ dependencies = [
     "qrcode>=7.4,<9",
     # Unseals the bot secret QQ's scan-to-bind flow returns (AES-GCM).
     "cryptography>=44,<52",
+    # Opens the local page in a window of its own. Windows has WebView2 for it;
+    # elsewhere it needs a system toolkit, so it is the `app` extra there.
+    "pywebview>=6,<7; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
 # Only for `evolution_benchmark.py --judge anthropic`, which scores with another vendor.
 judge = ["anthropic>=0.103,<1"]
+# The window of its own on macOS and Linux; without it the page opens in the browser.
+# pywebview alone brings no toolkit on Linux, so Qt comes with it there.
+app = ["pywebview>=6,<7; sys_platform != 'linux'", "pywebview[qt]>=6,<7; sys_platform == 'linux'"]
 # What CI installs on top of the runtime dependencies.
 dev = ["pytest>=8,<10", "ruff>=0.6,<1"]
 

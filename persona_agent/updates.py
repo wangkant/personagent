@@ -11,7 +11,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import __version__, home as homes
+from . import __version__, home as homes, langs
 from .config_env import env_bool
 from .storage import atomic_write_text
 
@@ -135,10 +135,10 @@ def how_to_update() -> tuple[str, bool]:
             return "", False
         root = _quote(str(homes.CHECKOUT))
         # A pull can bring new dependencies.
-        return f"git -C {root} pull\n{_program(sys.executable)} -m pip install -e {root}", False
+        return f"git -C {root} pull\n{_program(_python())} -m pip install -e {root}", False
     prefix = Path(sys.prefix)
-    if re.search(r"/archive-v\d+/", sys.prefix.replace("\\", "/").lower() + "/"):
-        return "uvx personagent@latest", True  # a throwaway environment in uv's cache
+    if langs.under_uvx():
+        return "uvx personagent@latest", True
     if (prefix / "uv-receipt.toml").is_file():
         return "uv tool upgrade personagent", False
     if (prefix / "pipx_metadata.json").is_file():
@@ -148,8 +148,16 @@ def how_to_update() -> tuple[str, bool]:
     except OSError:
         config = ""
     if re.search(r"^uv\s*=", config, re.MULTILINE):  # uv's venvs have no pip
-        return f"uv pip install -U personagent --python {_quote(sys.executable)}", False
-    return f"{_program(sys.executable)} -m pip install -U personagent", False
+        return f"uv pip install -U personagent --python {_quote(_python())}", False
+    return f"{_program(_python())} -m pip install -U personagent", False
+
+
+def _python() -> str:
+    """This interpreter as someone would type it. The desktop icon starts
+    pythonw.exe, which prints nothing in a terminal."""
+    here = Path(sys.executable)
+    console = here.with_name("python.exe")
+    return str(console if here.name.lower() == "pythonw.exe" and console.is_file() else here)
 
 
 def notice(home: Path, latest: str | None = None) -> dict | None:

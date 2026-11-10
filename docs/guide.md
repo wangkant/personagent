@@ -27,7 +27,7 @@ python -m pip install personagent
 personagent
 ```
 
-`personagent` opens [the local page](#the-local-page) in your browser. You can also install or run it these ways:
+`personagent` opens [the local page](#the-local-page). You can also install or run it these ways:
 
 | Route | Command |
 |---|---|
@@ -36,7 +36,7 @@ personagent
 | Windows, from the source ZIP | unpack it and double-click `start.bat` |
 | From a clone | `git clone https://github.com/wangkant/personagent.git`, `cd personagent`, `python -m venv .venv`, then `.venv/bin/python -m pip install -e .` and `.venv/bin/python -m persona_agent` (on Windows, `.venv\Scripts\python.exe`) |
 
-personagent runs on Python 3.10–3.14. `start.bat` creates `.venv`, installs the dependencies and opens the same page. It installs them again whenever the dependency list in `pyproject.toml` changes.
+personagent runs on Python 3.10–3.14. `start.bat` creates `.venv`, installs the dependencies and opens the same page; the first time, it also puts a personagent icon on the desktop and in the Start menu. It installs them again whenever the dependency list in `pyproject.toml` changes.
 
 The **home folder** holds the settings (`.env`), the character (`persona.txt`), what it learns (`runtime/`) and the chat platforms (`platforms/`). `platforms/` contains the managed AstrBot and `direct.json`, which stores the credentials of the platforms personagent connects itself. personagent uses the first of these folders:
 
@@ -51,20 +51,20 @@ This guide writes commands as `personagent ...`. If you did not install it, put 
 
 ## The local page
 
-`personagent` (or `personagent start`) serves a page that only this computer can reach and opens it in the browser. The page has four views:
+`personagent` (or `personagent start`) serves a page that only this computer can reach. On Windows it opens in a window of its own. On macOS and Linux it opens in the browser, or in a window too once `pip install "personagent[app]"` has added [pywebview](https://pywebview.flowrl.com/), with Qt on Linux. The page has four views:
 
-- **Chat** is a one-to-one chat with the character in the browser. The same agent that serves your chat platforms answers it.
+- **Chat** is a one-to-one chat with the character on the page. The same agent that serves your chat platforms answers it.
 - **Activity** shows the chats the character is in, what it said lately, what it learned and what waits for your decision. See [Activity](#activity).
 - **Connect apps** puts the character in QQ, WeChat, Telegram, Discord and other platforms. See [Put it in a chat](#put-it-in-a-chat).
 - **Character & settings** is where you pick a model service (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama, or any other OpenAI-compatible service), paste the API key, and choose a name and a ready personality. **Verify & start chatting** tests the key with one small request and saves it only if the request succeeds. After setup, the **Persona** box shows `persona.txt`. **Save persona** restarts the agent with the new text and keeps what it has learned. **More features** turns on web search through Tavily (DuckDuckGo is the free default), image understanding, and speaking first on the apps you choose.
 
 Until you connect an app, the Chat view shows a short **Getting started** bar.
 
-Running `personagent` again reuses the page that is already open. `--no-browser` prints the link instead of opening a browser.
+Running `personagent` again brings back the page that is already open. `--browser` opens the page in the browser instead of a window, and `--no-browser` prints the link and opens nothing. On Windows, `personagent shortcut` puts an icon on the desktop and in the Start menu that opens the window with no terminal behind it, and `personagent shortcut --remove` takes it away.
 
 When a newer personagent is on PyPI, the Chat view shows a notice with the command that updates your installation, whether it came from pip, uvx, uv tool, pipx or a Git clone. For an unpacked source ZIP, the notice links to the release page instead. The terminal prints the same command. Closing the notice hides it for that version, and **N available** under the version number brings it back. `personagent up` and `personagent doctor` report a new version too. The page and `up` ask pypi.org at most once a day, in the background. `doctor` asks right away when the last answer is more than a day old. Set `UPDATE_CHECK_ENABLED=false` to turn the check off.
 
-The page starts the agent and the connected platforms in the background, so keep its window open while you use them. Everything it started stops with it, whether you click **Quit**, press Ctrl+C or close the window. If an earlier run crashed and left processes behind, the next start stops them first.
+The page starts the agent and the connected platforms in the background, so keep its window open while you use them. Everything it started stops with it, whether you click **Quit**, press Ctrl+C or close the window. While an app is connected, closing the window asks first. If an earlier run crashed and left processes behind, the next start stops them first.
 
 ## See it first: the demo
 

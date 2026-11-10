@@ -196,7 +196,7 @@
     "keySaved": "Deixe em branco para manter a chave salva",
     "firstConfigure": "Conecte um modelo primeiro e depois leve o personagem para outros apps.",
     "working": "Uma operação ainda está em andamento. Aguarde.",
-    "offline": "O app se desconectou. Confira se a janela de inicialização ainda está aberta.",
+    "offline": "O app se desconectou. Feche o personagent e abra de novo.",
     "auth": "Abra esta página pelo link local da janela de inicialização.",
     "key_required": "Digite sua chave de API.",
     "key_rejected": "A chave não foi aceita. Confira se está completa e se é deste serviço.",

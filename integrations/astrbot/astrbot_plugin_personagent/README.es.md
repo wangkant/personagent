@@ -114,7 +114,7 @@ El agente escucha en `127.0.0.1:8080` por defecto. Si defines su `SERVER_HOST` a
 
 Cada solicitud dura lo que el turno del agente, que es un breve debounce más cada llamada al modelo y reintento. Si `timeout_s` se agota, el agente termina igualmente el turno y conserva lo aprendido, pero la respuesta se pierde y el modelo propio de AstrBot responde al mensaje.
 
-Mantén `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` del agente por debajo de `timeout_s`. Con los valores predeterminados del agente (`LLM_TIMEOUT_S=120`, `LLM_MAX_RETRIES=2`), un turno cuyas llamadas al modelo siguen agotando el tiempo puede superar los 360 s, que el `timeout_s` predeterminado de 420 cubre. Si subes cualquiera de los dos en el agente, sube también `timeout_s`.
+Mantén 3 × `LLM_TIMEOUT_S` del agente por debajo de `timeout_s`. Las llamadas al modelo de un turno comparten 1,5 × `LLM_TIMEOUT_S`, reintentos incluidos, y un mensaje primero espera al turno que estaba pensando cuando llegó. Con el valor predeterminado del agente (`LLM_TIMEOUT_S=120`) son 360 s, que el `timeout_s` predeterminado de 420 cubre. Si subes `LLM_TIMEOUT_S` en el agente, sube también `timeout_s`.
 
 El plugin reintenta un 429 o 500 del agente hasta dos veces, respetando `Retry-After` en un 429, mientras la solicitud firmada siga siendo reciente.
 

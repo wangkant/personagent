@@ -5,6 +5,7 @@ import asyncio
 import logging
 import re
 import time
+from contextlib import asynccontextmanager
 
 from .access import ADMIN_MODE
 from . import channels
@@ -40,137 +41,217 @@ class DirectMessages:
     async def _handle_dm(self, user_id: str, payload: dict,
                               is_admin: bool = True,
                               proactive: bool = False) -> bool:
-        """Run one DM turn in send/commit order without blocking intake. A
-        `proactive` text is the caller's cue: never history, never the reader's."""
+        """One DM, in arrival order: a memory command, a caller's `proactive`
+        cue (never history, never the reader's), or the reader's words, which
+        take the next turn unless a newer message of theirs is waiting to."""
         pkey = channels.dm_routing_key(user_id)
+        # Its place is taken before the first await: DMs are answered in the
+        # order they came, however long each takes to read.
+        gate, item = self._enter_line(pkey)
+        # Whatever goes wrong before it is read gives the place back: an
+        # unread place would hold up every later DM of theirs.
+        try:
+            text = await self._extract_text(payload)
+            ctrl_text = _strip_web_desc(text) if text else ""
+            # A cue is the caller's text: it cannot run a memory command.
+            is_command = (bool(text) and not proactive
+                          and self._is_memory_command(ctrl_text))
+        except BaseException:
+            self._leave_line(pkey, gate, item)
+            raise
+        if not text:
+            self._leave_line(pkey, gate, item)
+            return False
+
+        def run_command() -> str:
+            """Answered like a room's: no model call, no history, and it does
+            not consume the pending reply."""
+            sender = payload.get("sender") or {}
+            nickname = (_clean_prompt_source(
+                sender.get("card") or sender.get("nickname")) or "?")[:8]
+            self.last_dm_activity_at[user_id] = time.time()
+            return self._handle_memory_command(
+                pkey, ctrl_text, user_id, nickname)
+
+        async def say(answer: str, *, background: bool = False) -> bool:
+            return await self._say_dm_memory_answer(
+                user_id, answer, background=background)
+
+        def take_in() -> bool:
+            """The reader's words wait for their next turn. Run in line, so a
+            reaction is matched against the replies committed before it."""
+            self.last_dm_activity_at[user_id] = time.time()
+            if self.react_learn_enabled:
+                entry = self.pending_reactions.match(
+                    channels.dm_learning_key(user_id),
+                    sender_uid=user_id, is_dm=True, now=time.time())
+                if entry:
+                    self._spawn(self._process_reaction(
+                        entry, text, "owner" if is_admin else "friend",
+                        user_id, is_admin,
+                        conv_id=channels.dm_learning_key(user_id),
+                        is_dm=True))
+            self._dm_unanswered.setdefault(user_id, []).append(text)
+            return True
+
+        if is_command:
+            self._ready(pkey, gate, item, run_command, message=False, say=say)
+        elif proactive:
+            # A cue is not a reaction from the reader, and joins no user turn.
+            self._ready(pkey, gate, item, lambda: True, message=False, turn=True)
+        else:
+            self._ready(pkey, gate, item, take_in, message=True, turn=True)
+        try:
+            outcome = await item.waiter
+        except BaseException:
+            # Cancelled (only at shutdown) with the turn already its own.
+            if item.granted:
+                self._end_turn(pkey, gate)
+            raise
+        if outcome is None:
+            # Overtaken by a newer message, whose turn answers this one too,
+            # or a command that is answered once the turn in flight is over.
+            return False
+        if is_command:
+            try:
+                handled = await say(outcome)
+            except Exception as e:
+                if not item.carried:
+                    raise
+                # The response must still be given: others' answers ride in it.
+                logger.warning("[Agent] memory command answer failed "
+                               "(conversation=%s): %s", pkey, e)
+                handled = False
+            # Later commands whose answers had no way out but this response.
+            await self._say_carried(pkey, item.carried)
+            return handled
+        try:
+            return await self._dm_turn(user_id, pkey, text, is_admin, proactive)
+        finally:
+            self._end_turn(pkey, gate)
+
+    @asynccontextmanager
+    async def _dm_sending(self, pkey: str):
+        """The DM's send lock, which `_send_dm` inside it does not take again."""
         async with self.send_locks[pkey]:
             self._dm_send_tasks[pkey] = asyncio.current_task()
-            # The reader's words this turn; kept for their next turn unless committed.
-            said: list[str] = []
-            committed = False
             try:
-                text = await self._extract_text(payload)
-                if not text:
-                    return False
-
-                # Answered at once, like a room's: no model call, no history,
-                # and it must not consume the pending reply.
-                if not proactive:
-                    sender = payload.get("sender") or {}
-                    nickname = (_clean_prompt_source(
-                        sender.get("card") or sender.get("nickname")) or "?")[:8]
-                    async with self.locks[pkey]:
-                        mem_reply = self._handle_memory_command(
-                            pkey, _strip_web_desc(text), user_id, nickname)
-                    if mem_reply is not None:
-                        self.last_dm_activity_at[user_id] = time.time()
-                        send_result = await self._send_dm(user_id, mem_reply)
-                        if not send_result.success:
-                            logger.warning(
-                                "[Agent] memory command delivery failed (user=%s)",
-                                user_id)
-                            return send_result.partial
-                        logger.info("[Agent] memory command (user=%s): %s",
-                                    user_id, mem_reply[:60])
-                        return True
-
-                # A proactive cue is not a reaction from the reader.
-                if self.react_learn_enabled and not proactive:
-                    entry = self.pending_reactions.match(
-                        channels.dm_learning_key(user_id),
-                        sender_uid=user_id, is_dm=True, now=time.time())
-                    if entry:
-                        self._spawn(self._process_reaction(
-                            entry, text, "owner" if is_admin else "friend",
-                            user_id, is_admin,
-                            conv_id=channels.dm_learning_key(user_id),
-                            is_dm=True))
-
-                async with self.locks[pkey]:
-                    if proactive:
-                        # Shared with the agent's own proactive loop.
-                        self.last_proactive_at[
-                            channels.dm_learning_key(user_id)] = time.time()
-                    else:
-                        self.last_dm_activity_at[user_id] = time.time()
-                    history = list(self.dm_history.get(user_id, []))
-                    # A proactive turn leaves the history ending on the bot,
-                    # which is what lets _build_dm_prompt add its internal cue.
-                    if not proactive:
-                        # Earlier uncommitted messages join this user turn,
-                        # so two user turns never sit in a row.
-                        said = self._dm_unanswered.get(user_id, []) + [text]
-                        history.append({"role": "user",
-                                        "content": "\n".join(said)})
-                    history = _trimmed_history(history)
-
-                cue = ({"proactive": True, "proactive_cue": text}
-                       if proactive else {})
-                try:
-                    reply, auto_mem = await self._chat_dm(
-                        history, is_admin=is_admin, pkey=pkey, **cue)
-                except Exception as e:
-                    logger.warning("[Agent] DM model call failed: %s", e)
-                    # Tell the waiting reader; not committed to the history.
-                    if not proactive and self._excuse_begin(pkey):
-                        delivered = False
-                        try:
-                            delivered = (await self._send_dm(
-                                user_id, self._model_failure_excuse(text))).success
-                        finally:
-                            self._excuse_end(pkey, delivered)
-                    return False
-                if not reply:
-                    return False
-
-                final = self._final_reply(reply, log_ctx=f"DM user={user_id}")
-                if final.verdict == PASS:
-                    logger.info("[Agent] PASS (DM user=%s)", user_id)
-                if final.verdict != SEND:
-                    return False
-                reply, pending_core = final.text, final.core_note
-
-                send_result = await self._send_dm(user_id, reply)
-                if not send_result.success:
-                    logger.warning(
-                        "[Agent] DM delivery failed (user=%s, partial=%s)",
-                        user_id, send_result.partial)
-                    # Commit the delivered prefix; the core note and memory are withheld.
-                    if send_result.partial and send_result.delivered:
-                        async with self.locks[pkey]:
-                            history.append({"role": "assistant",
-                                            "content": send_result.delivered})
-                            self.dm_history[user_id] = _trimmed_history(history)
-                            if not proactive:
-                                self._dm_unanswered.pop(user_id, None)
-                            committed = True
-                    return send_result.partial
-
-                async with self.locks[pkey]:
-                    history.append({"role": "assistant", "content": reply})
-                    self.dm_history[user_id] = _trimmed_history(history)
-                    if not proactive:
-                        self._dm_unanswered.pop(user_id, None)
-                    committed = True
-                    self._commit_core_memory(pkey, pending_core)
-                    if auto_mem:
-                        self._save_auto_memory(pkey, auto_mem)
-                    # A proactive reply answers no message of the reader's.
-                    if self.react_learn_enabled and not proactive:
-                        self.pending_reactions.record(
-                            channels.dm_learning_key(user_id), reply=reply,
-                            ctx_lines=[f"user: {_truncate_framed(text, 100)}"],
-                            mode=ADMIN_MODE if is_admin else "called",
-                            target_uid=user_id, mids=send_result.message_ids,
-                            ts=time.time())
-                logger.info("[Agent] DM reply (%s): %s", user_id, reply[:80])
-                return True
+                yield
             finally:
                 if self._dm_send_tasks.get(pkey) is asyncio.current_task():
                     self._dm_send_tasks.pop(pkey, None)
-                if said and not committed:
+
+    async def _say_dm_memory_answer(self, user_id: str, answer: str, *,
+                                    background: bool = False) -> bool:
+        """Send a memory command's answer to a DM. `background`: no request
+        of the conversation is open to carry it."""
+        pkey = channels.dm_routing_key(user_id)
+        async with self._dm_sending(pkey):
+            if background:
+                send_result = await self._send_background(
+                    pkey, lambda: self._send_dm(user_id, answer),
+                    reason="follow_up")
+            else:
+                send_result = await self._send_dm(user_id, answer)
+        if not send_result.success:
+            logger.warning("[Agent] memory command delivery failed (user=%s)",
+                           user_id)
+            return send_result.partial
+        logger.info("[Agent] memory command (user=%s): %s", user_id, answer[:60])
+        return True
+
+    async def _dm_turn(self, user_id: str, pkey: str, text: str,
+                       is_admin: bool, proactive: bool) -> bool:
+        """The turn the line gave this handler: one model call under the turn
+        budget, the send, the commit. Nothing of this user's enters meanwhile."""
+        # The reader's words this turn; kept for their next turn unless committed.
+        said: list[str] = []
+        committed = False
+        try:
+            async with self.locks[pkey]:
+                if proactive:
+                    # Shared with the agent's own proactive loop.
+                    self.last_proactive_at[
+                        channels.dm_learning_key(user_id)] = time.time()
+                history = list(self.dm_history.get(user_id, []))
+                # A proactive turn leaves the history ending on the bot,
+                # which is what lets _build_dm_prompt add its internal cue.
+                if not proactive:
+                    # Everything let in since the last committed reply is one
+                    # user turn, so two user turns never sit in a row.
+                    said = list(self._dm_unanswered.get(user_id) or [text])
+                    history.append({"role": "user",
+                                    "content": "\n".join(said)})
+                history = _trimmed_history(history)
+
+            cue = ({"proactive": True, "proactive_cue": text}
+                   if proactive else {})
+            try:
+                reply, auto_mem = await self._within_turn_budget(self._chat_dm(
+                    history, is_admin=is_admin, pkey=pkey, **cue))
+            except Exception as e:
+                logger.warning("[Agent] DM model call failed: %s", e)
+                # Tell the waiting reader; not committed to the history.
+                if not proactive and self._excuse_begin(pkey):
+                    delivered = False
+                    try:
+                        async with self._dm_sending(pkey):
+                            delivered = (await self._send_dm(
+                                user_id, self._model_failure_excuse(text))).success
+                    finally:
+                        self._excuse_end(pkey, delivered)
+                return False
+            if not reply:
+                return False
+
+            final = self._final_reply(reply, log_ctx=f"DM user={user_id}")
+            if final.verdict == PASS:
+                logger.info("[Agent] PASS (DM user=%s)", user_id)
+            if final.verdict != SEND:
+                return False
+            reply, pending_core = final.text, final.core_note
+
+            async with self._dm_sending(pkey):
+                send_result = await self._send_dm(user_id, reply)
+            if not send_result.success:
+                logger.warning(
+                    "[Agent] DM delivery failed (user=%s, partial=%s)",
+                    user_id, send_result.partial)
+                # Commit the delivered prefix; the core note and memory are withheld.
+                if send_result.partial and send_result.delivered:
                     async with self.locks[pkey]:
-                        self._dm_unanswered[user_id] = said[-3:]
+                        history.append({"role": "assistant",
+                                        "content": send_result.delivered})
+                        self.dm_history[user_id] = _trimmed_history(history)
+                        if not proactive:
+                            self._dm_unanswered.pop(user_id, None)
+                        committed = True
+                return send_result.partial
+
+            async with self.locks[pkey]:
+                history.append({"role": "assistant", "content": reply})
+                self.dm_history[user_id] = _trimmed_history(history)
+                if not proactive:
+                    self._dm_unanswered.pop(user_id, None)
+                committed = True
+                self._commit_core_memory(pkey, pending_core)
+                if auto_mem:
+                    self._save_auto_memory(pkey, auto_mem)
+                # A proactive reply answers no message of the reader's. On
+                # record before the line moves: the next message may react.
+                if self.react_learn_enabled and not proactive:
+                    self.pending_reactions.record(
+                        channels.dm_learning_key(user_id), reply=reply,
+                        ctx_lines=[f"user: {_truncate_framed(text, 100)}"],
+                        mode=ADMIN_MODE if is_admin else "called",
+                        target_uid=user_id, mids=send_result.message_ids,
+                        ts=time.time())
+            logger.info("[Agent] DM reply (%s): %s", user_id, reply[:80])
+            return True
+        finally:
+            # No await: this also runs when the turn is cancelled.
+            if said and not committed:
+                self._dm_unanswered[user_id] = said[-3:]
 
     async def _chat_dm(self, history: list[dict], is_admin: bool = True, proactive: bool = False, pkey: str = "", proactive_cue: str = "") -> tuple[str, str]:
         """One DM model turn (LLM_DM_MODEL): `is_admin` picks the close or

@@ -265,23 +265,21 @@ _bg_tasks: set[asyncio.Task] = set()
 
 
 class AdmissionLimiter:
-    """Small non-blocking admission counter for expensive webhook work."""
+    """Small non-blocking admission counter for expensive webhook work.
+    Lock-free: nothing awaits between the check and the count."""
 
     def __init__(self, limit: int) -> None:
         self.limit = limit
         self.inflight = 0
-        self._lock = asyncio.Lock()
 
-    async def try_acquire(self) -> bool:
-        async with self._lock:
-            if self.inflight >= self.limit:
-                return False
-            self.inflight += 1
-            return True
+    def try_acquire(self) -> bool:
+        if self.inflight >= self.limit:
+            return False
+        self.inflight += 1
+        return True
 
-    async def release(self) -> None:
-        async with self._lock:
-            self.inflight -= 1
+    def release(self) -> None:
+        self.inflight -= 1
 
 
 class ReplayGuard:
@@ -796,7 +794,7 @@ async def onebot_webhook(request: Request):
     refused = _refuse_caller(request, QQ_ONEBOT_SECRET)
     if refused is not None:
         return _mark_deprecated(refused)
-    if not await _onebot_admission.try_acquire():
+    if not _onebot_admission.try_acquire():
         return _mark_deprecated(_error(
             429, "capacity_exceeded", "webhook capacity exceeded",
             retry_after=1))
@@ -805,7 +803,7 @@ async def onebot_webhook(request: Request):
         return _mark_deprecated(await _onebot_webhook_admitted(request))
     finally:
         if not request.state.admission_handed_off:
-            await _onebot_admission.release()
+            _onebot_admission.release()
 
 
 async def _onebot_webhook_admitted(request: Request):
@@ -841,7 +839,7 @@ async def _onebot_webhook_admitted(request: Request):
             try:
                 await agent.handle_onebot(payload)
             finally:
-                await _onebot_admission.release()
+                _onebot_admission.release()
         request.state.admission_handed_off = True
         _spawn(_safe_handle())
     # A JSONResponse, not a dict, so _mark_deprecated can stamp it.
@@ -915,13 +913,13 @@ async def connector_events(request: Request):
     if refused is not None:
         return refused
     _warn_ignored_connector_token_once(request)
-    if not await _connector_admission.try_acquire():
+    if not _connector_admission.try_acquire():
         return _error(429, "capacity_exceeded", "webhook capacity exceeded",
                       retry_after=3)
     try:
         return await _connector_events_admitted(request)
     finally:
-        await _connector_admission.release()
+        _connector_admission.release()
 
 
 async def _connector_events_admitted(request: Request):
@@ -969,13 +967,13 @@ async def connector_outbox(request: Request):
     refused = _refuse_caller(request, CONNECTOR_TOKEN, token=True)
     if refused is not None:
         return refused
-    if not await _outbox_admission.try_acquire():
+    if not _outbox_admission.try_acquire():
         return _error(429, "capacity_exceeded", "outbox capacity exceeded",
                       retry_after=5)
     try:
         return await _connector_outbox_admitted(request)
     finally:
-        await _outbox_admission.release()
+        _outbox_admission.release()
 
 
 async def _connector_outbox_admitted(request: Request):

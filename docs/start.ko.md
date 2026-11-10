@@ -13,9 +13,11 @@ personagent
 
 [uv](https://docs.astral.sh/uv/)가 있으면 `uvx personagent`로 따로 설치하지 않고 실행할 수 있어요.
 
+Windows에서는 페이지가 전용 창에서 열려요. macOS와 Linux에서는 브라우저에서 열리고, `pip install "personagent[app]"`을 설치하면 거기서도 창으로 열 수 있어요.
+
 코딩 에이전트에게 설정을 맡길 수도 있어요. [setup-for-agents.md](setup-for-agents.md)를 읽고 personagent를 설정해 달라고 요청하세요.
 
-Windows에서는 소스 ZIP을 내려받아 압축을 풀고 `start.bat`을 더블 클릭해도 돼요. 폴더 안에 전용 Python 환경을 만들고 같은 페이지를 엽니다.
+Windows에서는 소스 ZIP을 내려받아 압축을 풀고 `start.bat`을 더블 클릭해도 돼요. 폴더 안에 전용 Python 환경을 만들고 같은 페이지를 엽니다. 처음 실행할 때는 바탕 화면과 시작 메뉴에 personagent 아이콘도 만들어요.
 
 클론에서 실행하려면 전용 venv를 만드세요. `python -m venv .venv`를 실행한 다음 `.venv/bin/python -m pip install -e .`와 `.venv/bin/python -m persona_agent`를 실행합니다. Windows의 인터프리터는 `.venv\Scripts\python.exe`이고, `start.bat`을 더블 클릭해도 돼요.
 
@@ -49,7 +51,7 @@ QR 코드가 만료되면 새로 요청하세요. 다운로드가 실패하면 �
 
 ## 다음에 쓸 때
 
-personagent를 다시 여세요. 설정은 그대로 있고, 연결된 앱은 자동으로 다시 시작돼요. 이미 실행 중이면 다시 열어도 실행 중인 페이지를 다시 사용해요. 쓰는 동안에는 실행 창을 열어 두세요. **종료**를 클릭하든 창을 닫든 시작한 프로세스는 함께 멈추고, 충돌로 남은 것은 다음 시작 때 정리돼요.
+personagent를 다시 여세요. 설정은 그대로 있고, 연결된 앱은 자동으로 다시 시작돼요. 이미 실행 중이면 다시 열면 그 창이 다시 앞으로 나와요. 쓰는 동안에는 열어 두세요. **종료**를 클릭하든 창을 닫든 시작한 프로세스는 함께 멈추고, 충돌로 남은 것은 다음 시작 때 정리돼요. Windows에서는 `personagent shortcut`으로 바탕 화면과 시작 메뉴에 아이콘을 만들 수 있고, 그 아이콘으로 터미널 없이 열 수 있어요.
 
 PyPI에 새 버전이 나오면 **채팅** 화면에 릴리스 노트 링크와, 이 사본을 설치한 방식에 맞는 업데이트 명령이 표시돼요. 소스 ZIP에서 푼 사본에는 대신 릴리스 페이지에서 새 소스를 내려받는 링크가 나와요. personagent는 pypi.org에 많아야 하루 한 번 물어보고, 요청에는 버전 번호만 담겨요. 확인을 끄려면 `.env`에 `UPDATE_CHECK_ENABLED=false`를 설정하세요.
 

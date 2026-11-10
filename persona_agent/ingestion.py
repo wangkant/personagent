@@ -19,6 +19,7 @@ import ssl
 import time
 import warnings
 import zlib
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -29,15 +30,19 @@ import httpx
 from httpcore._backends.auto import AutoBackend
 
 from .config_env import env_int
-from .endpoints import adapt_rejected_payload
 from .connector import current_sink
-from .textproc import (_detect_image_mime, _truncate_framed, apply_k2_quirks,
+from .textproc import (_detect_image_mime, _truncate_framed,
                        salvage_json_object, strip_json_fences)
 
 logger = logging.getLogger("agent")
 
 # Hard ceiling on any image the bot decodes or forwards.
 VISION_MAX_IMAGE_BYTES = env_int("VISION_MAX_IMAGE_BYTES", 5_000_000, minimum=1)
+
+# Where a caption call leaves the image it downloaded, for a caller that asked
+# (`_describe_image_keeping`); unset, nothing outlives the call.
+_kept_download: ContextVar[Optional[list]] = ContextVar(
+    "kept_download", default=None)
 
 MAX_URL_LENGTH = 4096
 MAX_HTML_WIRE_BYTES = 128 * 1024
@@ -560,9 +565,11 @@ class ContentIngestion:
         url: str,
         sender_uid: str,
         group_id: str,
+        downloaded: bytes | None = None,
     ) -> None:
-        """Background download + steal + maybe-tag. Fire-and-forget."""
-        img_bytes = await self._fetch_image_bytes(url)
+        """Background download + steal + maybe-tag. Fire-and-forget.
+        `downloaded`: the image, when the caption call already fetched it."""
+        img_bytes = downloaded or await self._fetch_image_bytes(url)
         if not img_bytes:
             return
         ctx_lines = self._sticker_context_lines(group_id)
@@ -1134,8 +1141,8 @@ class ContentIngestion:
         """POST one image prompt, retrying `retryable` statuses (and transport
         errors when `retry_errors`, else they raise) with exponential backoff.
         A 400 refusing a field is resent at once in the spelling the endpoint
-        takes. Returns the last response (None if every try raised) and the
-        last error."""
+        takes, which `_post_chat` remembers as it does for a reply. Returns
+        the last response (None if every try raised) and the last error."""
         payload = {
             "model": self.vision_model,
             "messages": [{
@@ -1148,31 +1155,24 @@ class ContentIngestion:
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
-        apply_k2_quirks(payload, self.vision_model, self.vision_base_url)
+        url = f"{self.vision_base_url}/chat/completions"
+        # Hidden reasoning off, and K2 at the one temperature it takes that way.
+        self._thinking_off(payload, url, k2_temperature=True)
         r = None
         last_exc = None
-        async with self._http(timeout=30) as c:
-            async def send() -> httpx.Response:
-                return await c.post(
-                    f"{self.vision_base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {self.vision_api_key}"},
-                    json=dict(payload),
-                )
-            for attempt in range(attempts):
-                try:
-                    r = await send()
-                    if (r.status_code in (400, 422)
-                            and adapt_rejected_payload(payload, r.text)):
-                        r = await send()
-                except Exception as e:
-                    if not retry_errors:
-                        raise
-                    r, last_exc = None, e
-                else:
-                    if r.status_code not in retryable:
-                        break
-                if attempt < attempts - 1:
-                    await asyncio.sleep(backoff * 2 ** attempt)
+        for attempt in range(attempts):
+            try:
+                r = await self._post_chat(url, self.vision_api_key, payload,
+                                          timeout=30)
+            except Exception as e:
+                if not retry_errors:
+                    raise
+                r, last_exc = None, e
+            else:
+                if r.status_code not in retryable:
+                    break
+            if attempt < attempts - 1:
+                await asyncio.sleep(backoff * 2 ** attempt)
         return r, last_exc
 
     @staticmethod
@@ -1255,6 +1255,9 @@ class ContentIngestion:
             img_bytes = await self._fetch_image_bytes(url)
             if not img_bytes:
                 return None
+            kept = _kept_download.get()
+            if kept is not None:
+                kept.append(img_bytes)
             if len(img_bytes) < 200:
                 logger.debug("[Agent] vision: image too small (%d bytes), skipping", len(img_bytes))
                 return ""
@@ -1293,6 +1296,17 @@ class ContentIngestion:
             logger.debug("[Agent] vision failed: %s: %s",
                          type(e).__name__, e)
             return None
+
+    async def _describe_image_keeping(self, url: str) -> tuple[str, bytes | None]:
+        """`_describe_image`, plus the image itself when captioning downloaded
+        it, so the sticker path does not fetch it a second time."""
+        kept: list = []
+        token = _kept_download.set(kept)
+        try:
+            desc = await self._describe_image(url)
+        finally:
+            _kept_download.reset(token)
+        return desc, kept[0] if kept else None
 
     async def _describe_image(self, url: str) -> str:
         """Vision caption, else OCR; garbage OCR (short fragments) is dropped."""

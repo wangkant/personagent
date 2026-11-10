@@ -41,7 +41,7 @@ def sdk():
     from ..setup_wizard import PLUGIN_NAME
 
     source = homes.resource("integrations", "astrbot", PLUGIN_NAME, "personagent_connector.py")
-    spec = importlib.util.spec_from_file_location("_personagent_direct_sdk", source)
+    spec = importlib.util.spec_from_file_location("_personagent_connector_sdk", source)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

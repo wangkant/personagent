@@ -27,7 +27,7 @@ python -m pip install personagent
 personagent
 ```
 
-`personagent`는 브라우저에서 [로컬 페이지](#로컬-페이지)를 열어요. 다음 방법으로도 설치하거나 실행할 수 있어요.
+`personagent`는 [로컬 페이지](#로컬-페이지)를 열어요. 다음 방법으로도 설치하거나 실행할 수 있어요.
 
 | 방법 | 명령 |
 |---|---|
@@ -36,7 +36,7 @@ personagent
 | Windows, 소스 ZIP에서 | 압축을 풀고 `start.bat`을 더블클릭 |
 | 클론에서 | `git clone https://github.com/wangkant/personagent.git`, `cd personagent`, `python -m venv .venv`, 그다음 `.venv/bin/python -m pip install -e .`와 `.venv/bin/python -m persona_agent`(Windows에서는 `.venv\Scripts\python.exe`) |
 
-personagent는 Python 3.10–3.14에서 실행돼요. `start.bat`은 `.venv`를 만들고 의존성을 설치한 뒤 같은 페이지를 열어요. `pyproject.toml`의 의존성 목록이 바뀔 때마다 다시 설치해요.
+personagent는 Python 3.10–3.14에서 실행돼요. `start.bat`은 `.venv`를 만들고 의존성을 설치한 뒤 같은 페이지를 열어요. 처음 실행할 때는 바탕 화면과 시작 메뉴에 personagent 아이콘도 만들어요. `pyproject.toml`의 의존성 목록이 바뀔 때마다 다시 설치해요.
 
 **홈 폴더**에는 설정(`.env`), 캐릭터(`persona.txt`), 학습 내용(`runtime/`), 채팅 플랫폼(`platforms/`)이 들어 있어요. `platforms/`에는 관리형 AstrBot과, personagent가 직접 연결하는 플랫폼의 자격 증명을 저장하는 `direct.json`이 있어요. personagent는 다음 중 처음 해당하는 폴더를 사용해요.
 
@@ -51,20 +51,20 @@ personagent는 Python 3.10–3.14에서 실행돼요. `start.bat`은 `.venv`를 
 
 ## 로컬 페이지
 
-`personagent`(또는 `personagent start`)는 이 컴퓨터에서만 접속할 수 있는 페이지를 제공하고 브라우저에서 열어요. 페이지에는 보기가 네 개 있어요.
+`personagent`(또는 `personagent start`)는 이 컴퓨터에서만 접속할 수 있는 페이지를 제공해요. Windows에서는 전용 창에서 열려요. macOS와 Linux에서는 브라우저에서 열리고, `pip install "personagent[app]"`으로 [pywebview](https://pywebview.flowrl.com/)를 설치하면 창으로도 열 수 있어요(Linux에서는 Qt도 함께 설치돼요). 페이지에는 보기가 네 개 있어요.
 
-- **채팅**은 브라우저에서 캐릭터와 일대일로 나누는 채팅이에요. 채팅 플랫폼을 담당하는 것과 같은 에이전트가 답해요.
+- **채팅**은 페이지에서 캐릭터와 일대일로 나누는 채팅이에요. 채팅 플랫폼을 담당하는 것과 같은 에이전트가 답해요.
 - **활동**는 캐릭터가 있는 채팅, 최근에 한 말, 배운 것, 내 결정을 기다리는 것을 보여 줘요. [활동](#활동)를 참고하세요.
 - **앱 연결**는 캐릭터를 QQ, WeChat, Telegram, Discord와 다른 플랫폼에 넣어요. [채팅에 넣기](#채팅에-넣기)를 참고하세요.
 - **캐릭터 및 설정**에서는 모델 서비스(OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama, 그 밖의 OpenAI 호환 서비스)를 고르고, API 키를 붙여 넣고, 이름과 준비된 성격을 골라요. **확인하고 채팅 시작**은 작은 요청 한 번으로 키를 시험하고 성공할 때만 저장해요. 설정 후에는 **페르소나** 칸에 `persona.txt`가 표시돼요. **페르소나 저장**는 새 내용으로 에이전트를 다시 시작하고 배운 것은 유지해요. **추가 기능**는 Tavily 웹 검색(무료 기본값은 DuckDuckGo), 이미지 이해, 선택한 앱에서 먼저 말하기를 켜요.
 
 앱을 연결하기 전까지 채팅 보기에는 짧은 **시작하기** 막대가 표시돼요.
 
-`personagent`를 다시 실행하면 이미 열려 있는 페이지를 재사용해요. `--no-browser`는 브라우저를 여는 대신 링크를 출력해요.
+`personagent`를 다시 실행하면 이미 열려 있는 페이지가 다시 앞으로 나와요. `--browser`는 창 대신 브라우저에서 페이지를 열고, `--no-browser`는 링크만 출력하고 아무것도 열지 않아요. Windows에서는 `personagent shortcut`이 바탕 화면과 시작 메뉴에 아이콘을 만들어 주고, 그 아이콘으로 터미널 없이 창을 열 수 있어요. `personagent shortcut --remove`로 아이콘을 없앨 수 있어요.
 
 PyPI에 새 personagent가 있으면 채팅 보기에 pip, uvx, uv tool, pipx, Git 클론 중 설치 방식에 맞는 업데이트 명령을 담은 알림이 표시돼요. 압축을 푼 소스 ZIP이라면 알림은 릴리스 페이지로 연결돼요. 터미널에도 같은 명령이 출력돼요. 알림을 닫으면 그 버전에서는 숨겨지고, 버전 번호 아래의 **N 업데이트 가능**으로 다시 볼 수 있어요. `personagent up`과 `personagent doctor`도 새 버전을 알려 줘요. 페이지와 `up`은 하루에 많아야 한 번 백그라운드에서 pypi.org에 물어봐요. `doctor`는 마지막 응답이 하루를 넘었으면 바로 물어봐요. 확인을 끄려면 `UPDATE_CHECK_ENABLED=false`를 설정하세요.
 
-페이지는 에이전트와 연결된 플랫폼을 백그라운드에서 시작하므로, 사용하는 동안 창을 열어 두세요. **종료**을 클릭하든, Ctrl+C를 누르든, 창을 닫든 시작한 것은 모두 함께 멈춰요. 이전 실행이 충돌해 프로세스가 남았다면 다음 시작 때 먼저 멈춰요.
+페이지는 에이전트와 연결된 플랫폼을 백그라운드에서 시작하므로, 사용하는 동안 창을 열어 두세요. **종료**을 클릭하든, Ctrl+C를 누르든, 창을 닫든 시작한 것은 모두 함께 멈춰요. 앱이 연결되어 있는 동안에는 창을 닫기 전에 먼저 물어봐요. 이전 실행이 충돌해 프로세스가 남았다면 다음 시작 때 먼저 멈춰요.
 
 ## 먼저 보기: 데모
 

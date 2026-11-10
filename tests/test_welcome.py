@@ -2,14 +2,23 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 import re
+import signal
+import sys
+import time
+import types
 
 from fastapi.testclient import TestClient
 import httpx
 import pytest
 
+from helpers import check
+from persona_agent import astrbot_install as installer
 from persona_agent import connections as conn
 from persona_agent.direct import base as direct_base
+from persona_agent import services as svc
 from persona_agent import setup_wizard as sw
 from persona_agent import welcome
 
@@ -215,7 +224,7 @@ def _managed(workspace, monkeypatch, template=None):
     data.mkdir(parents=True)
     sw._write_json(data / "cmd_config.json", {"platform": []})
     sw.write_env(workspace.env, {"LLM_API_KEY": "key", "CONNECTOR_TOKEN": "existing-token"})
-    monkeypatch.setattr(welcome, "install_astrbot", lambda home: data)
+    monkeypatch.setattr(welcome, "install_astrbot", lambda home, **kw: data)
     monkeypatch.setattr(conn, "astrbot_template", lambda installation, kind: dict(template or {}))
     return data
 
@@ -420,6 +429,148 @@ def test_a_failed_background_job_returns_to_a_retryable_state(workspace, monkeyp
     assert workspace.config()["LLM_API_KEY"] == "still-kept"
 
 
+# Stands in for pip or uv: half-makes the environment, starts a process of its
+# own, and would take ten minutes.
+SLOW_INSTALLER = """\
+import os, subprocess, sys, time
+from pathlib import Path
+out, envs = sys.argv[1], Path(sys.argv[2])
+(envs / "astrbot").mkdir(parents=True, exist_ok=True)
+(envs / "astrbot" / "half-made").write_text("x", encoding="utf-8")
+grand = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)", "fake_installer-grandchild"])
+print("downloading", flush=True)
+with open(out + ".tmp", "w") as started:
+    started.write(f"{os.getpid()} {grand.pid}")
+os.replace(out + ".tmp", out)
+time.sleep(600)
+"""
+
+# Stands in for a download that fails: says why, then exits with an error.
+FAILING_INSTALLER = """\
+import sys
+print("resolver: no route to the package index", flush=True)
+sys.exit(1)
+"""
+
+
+def _installer(workspace, monkeypatch, tmp_path_factory, source: str) -> Path:
+    """Run `source` as a real child in place of each installer step; returns
+    the file a started one writes its process numbers to."""
+    modules = tmp_path_factory.mktemp("installer")
+    (modules / "fake_installer.py").write_text(source, encoding="utf-8")
+    out = modules / "started.txt"
+    envs = welcome.AstrBotInstallation(workspace.home).tools / "envs"
+    sw.write_env(workspace.env, {"LLM_API_KEY": "key"})
+    monkeypatch.setattr(installer.venv.EnvBuilder, "create", lambda self, path: None)
+    real = workspace.services.run
+
+    def run(name, argv, **kw):
+        kw["env"] = dict(os.environ, PYTHONPATH=str(modules))
+        return real(name, [sys.executable, "-m", "fake_installer", str(out), str(envs)], **kw)
+    monkeypatch.setattr(workspace.services, "run", run)
+    return out
+
+
+def _installer_started(out: Path, seconds: float = 30) -> list[int]:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if out.is_file():
+            return [int(pid) for pid in out.read_text(encoding="utf-8").split()]
+        time.sleep(0.05)
+    raise AssertionError("the installer never started")
+
+
+def _installer_gone(pid: int, seconds: float = 5) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if "fake_installer" not in svc._command_line(pid):
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _end_installer(pids: list[int]) -> None:
+    for pid in pids:
+        if "fake_installer" in svc._command_line(pid):
+            os.kill(pid, signal.SIGTERM if os.name == "nt" else signal.SIGKILL)
+
+
+def test_cancelling_the_first_download_stops_the_installer_and_a_later_one_works(workspace, monkeypatch,
+                                                                                 tmp_path_factory, capfd):
+    out = _installer(workspace, monkeypatch, tmp_path_factory, SLOW_INSTALLER)
+    installation = welcome.AstrBotInstallation(workspace.home)
+    pids = []
+    try:
+        workspace.start_job("connect", "kook", {"kook_bot_token": "kook-token"})
+        pids = _installer_started(out)
+        check("the page shows the download", workspace.summary()["job"]["stage"] == "install")
+        began = time.monotonic()
+        workspace.cancel()
+        workspace._future.result(timeout=15)
+        took = time.monotonic() - began
+        check("cancelling ends the job in about a second", took < 3, f"{took:.1f}s")
+        check("the installer and what it started are gone", all(_installer_gone(pid) for pid in pids))
+    finally:
+        _end_installer(pids)
+    check("the job is back where the page offers the platform again",
+          workspace.job == {"state": "idle", "stage": "", "error": ""}, str(workspace.job))
+    check("nothing half-made is left", not (installation.tools / "envs").exists())
+    check("and nothing was connected", workspace.summary()["platforms"] == [])
+    log = (workspace.home / "runtime" / "desktop" / "install.log").read_text(encoding="utf-8")
+    shown = capfd.readouterr()
+    check("the installer's output is in its log, not in the launch window",
+          "downloading" in log and "downloading" not in shown.out + shown.err, shown.out + shown.err)
+
+    def finish(name, argv, **kw):
+        if "tool" in argv:
+            for path in (installation.executable, installation.python):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("", encoding="utf-8")
+        elif "init" in argv:
+            (installation.root / ".astrbot").write_text("", encoding="utf-8")
+        elif "-c" in argv:
+            (installation.root / "data").mkdir()
+            sw._write_json(installation.root / "data" / "cmd_config.json", {"platform": []})
+    monkeypatch.setattr(workspace.services, "run", finish)
+    monkeypatch.setattr(conn, "astrbot_template", lambda installation, kind: {})
+    monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
+    monkeypatch.setattr(workspace.services, "restart_astrbot", lambda: 0)
+    monkeypatch.setattr(workspace.services, "logged", lambda *a: False)
+    workspace.start_job("connect", "kook", {"kook_bot_token": "kook-token"})
+    workspace._future.result(timeout=15)
+    check("a later install finishes and connects",
+          workspace.job["state"] == "ready" and workspace.summary()["platforms"] == ["kook"], str(workspace.job))
+
+
+def test_quitting_during_the_first_download_stops_the_installer(workspace, monkeypatch, tmp_path_factory):
+    out = _installer(workspace, monkeypatch, tmp_path_factory, SLOW_INSTALLER)
+    pids = []
+    try:
+        workspace.start_job("connect", "kook", {"kook_bot_token": "kook-token"})
+        pids = _installer_started(out)
+        workspace.close()
+        check("closing returns with the installer and what it started gone",
+              not workspace.services.processes and all(_installer_gone(pid, 2) for pid in pids))
+        workspace._future.result(timeout=15)
+    finally:
+        _end_installer(pids)
+    check("and nothing half-made is left",
+          not (welcome.AstrBotInstallation(workspace.home).tools / "envs").exists())
+
+
+def test_a_failed_download_says_why_in_the_launch_window_and_only_there(workspace, monkeypatch,
+                                                                         tmp_path_factory, capfd):
+    _installer(workspace, monkeypatch, tmp_path_factory, FAILING_INSTALLER)
+    workspace.start_job("connect", "kook", {"kook_bot_token": "kook-token"})
+    workspace._future.result(timeout=30)
+    check("the page says the download failed",
+          workspace.job["state"] == "error" and workspace.job["error"] == "download_failed", str(workspace.job))
+    shown = capfd.readouterr()
+    check("the launch window shows the end of the installer's output and where the rest is",
+          "no route to the package index" in shown.err and "install.log" in shown.err, shown.err)
+    check("the page never does", "package index" not in json.dumps(workspace.summary()))
+
+
 def test_chat_posts_to_the_real_character_connector_and_is_serialised(workspace, monkeypatch):
     sw.write_env(workspace.env, {"LLM_API_KEY": "key", "CONNECTOR_TOKEN": "token"})
     monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
@@ -558,6 +709,45 @@ def test_features_keep_keys_out_of_state_and_never_forward_one(client, workspace
     cleared = client.post(url, headers=HEADERS, json={"search": {"clear": True}}).json()
     assert cleared["features"]["search"] == "free" and not cleared["features"]["vision"]["enabled"]
     assert workspace.config()["VISION_API_KEY"] == "chat-key"   # off keeps the key for next time
+
+
+def test_both_saves_judge_a_base_url_in_one_place(client, workspace, monkeypatch):
+    judged = []
+    real = welcome._endpoint
+    monkeypatch.setattr(welcome, "_endpoint", lambda value: judged.append(value) or real(value))
+    monkeypatch.setattr(workspace, "_restart_agent", lambda: None)
+
+    def chat(base):
+        return client.post("/api/config", headers=HEADERS, json={"apiKey": "k", "baseUrl": base})
+
+    def vision(base):
+        return client.post("/api/features", headers=HEADERS, json={
+            "vision": {"enabled": True, "model": "vl", "baseUrl": base, "apiKey": "vk"}})
+    saved = [chat(" https://api.example.com/v1/ "), vision("https://vision.example.com/v1/")]
+    check("both addresses are accepted", [r.status_code for r in saved] == [200, 200], saved[0].text + saved[1].text)
+    check("and each save asked the one judge",
+          judged == ["https://api.example.com/v1/", "https://vision.example.com/v1/"], str(judged))
+    values = workspace.config()
+    check("the chat address is kept as typed", values["LLM_BASE_URL"] == "https://api.example.com/v1/",
+          values["LLM_BASE_URL"])
+    check("the vision address loses its last slash", values["VISION_BASE_URL"] == "https://vision.example.com/v1",
+          values["VISION_BASE_URL"])
+    for bad, error in (("ftp://files.example/v1", "invalid_url"), ("https://user:pw@api.example/v1", "invalid_url"),
+                       ("https://api.example/${LLM_API_KEY}", "invalid_url"),
+                       ("http://remote.example/v1", "https_required")):
+        answers = [save(bad).json().get("error") for save in (chat, vision)]
+        check(f"both saves refuse {bad} the same way", answers == [error, error], str(answers))
+    check("a model on this computer may use http", chat("http://localhost:11434/v1").status_code == 200
+          and vision("http://127.0.0.1:11434/v1").status_code == 200)
+
+
+def test_the_page_and_the_direct_connectors_load_one_sdk(monkeypatch):
+    check("the page talks through the bundled connector", welcome._connector_type().__name__ == "Connector")
+
+    class Marker:
+        pass
+    monkeypatch.setattr(direct_base, "sdk", lambda: types.SimpleNamespace(Connector=Marker))
+    check("which it gets from the loader the direct connectors use", welcome._connector_type() is Marker)
 
 
 def _activity_service(workspace, monkeypatch, handler):

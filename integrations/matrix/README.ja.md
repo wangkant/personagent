@@ -95,7 +95,7 @@ PERSONAGENT_URL=http://127.0.0.1:8080
 | `MATRIX_INVITE_FROM` | ボットが招待を受ける相手。`MATRIX_GROUPS` のルームへの招待と `MATRIX_DM_USERS` からのダイレクトチャットの招待は常に受けます。ほかの招待は保留のままです。 |
 | `MATRIX_IGNORE_USERS` | 決して答えず、ダイレクトチャットとグループを見分けるときのメンバーにも数えません。 |
 | `MATRIX_E2EE_ENABLED` | エンドツーエンド暗号化。下記を参照してください。 |
-| `MATRIX_TIMEOUT_S` | 1 ターンにかけられる時間。エージェントの `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` より大きくしてください。 |
+| `MATRIX_TIMEOUT_S` | 1 ターンにかけられる時間。エージェントの 3 × `LLM_TIMEOUT_S` より大きくしてください。 |
 | `MATRIX_OUTBOX_ENABLED` | エージェントのアウトボックスをポーリングします。 |
 
 ## ブリッジ：WhatsApp、Signal、Messenger、Instagram など

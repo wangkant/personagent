@@ -220,6 +220,35 @@ def test_one_source_of_defaults(monkeypatch) -> None:
            "REACT_TTL_S"} <= set(template), repr(sorted(template)[:8]))
 
 
+def test_from_env_takes_each_default_from_its_field(monkeypatch) -> None:
+    """`from_env()` restated the literal default beside every setting it
+    read, so a default lived in two places that only a test kept equal. It
+    reads the field's own now: change one there and both paths follow."""
+    declared = AgentSettings.__dataclass_fields__
+    moved = {
+        "base_url": "https://moved.example/v1", "model": "moved-model",
+        "chat_trigger_count": 31, "chat_context_messages": 121,
+        "chat_followup_window_s": 122, "memory_file": "moved.json",
+        "memory_max_per_conversation": 51, "memory_tidy_every": 9,
+        "memory_share_rooms": True, "llm_fallback_thinking": True,
+        "llm_rate_window_s": 123, "llm_rate_threshold": 32,
+        "llm_fallback_duration_s": 181, "llm_rate_limit_cooldown_s": 21,
+        "eval_enabled": True, "eval_file": "moved.jsonl",
+    }
+    for name, value in moved.items():
+        check(f"{name} starts from another default",
+              declared[name].default != value, repr(declared[name].default))
+        monkeypatch.setattr(declared[name], "default", value)
+    s = AgentSettings.from_env(env={"LLM_API_KEY": "k"})
+    for name, value in moved.items():
+        check(f"from_env: an unset {name} is the field's default",
+              getattr(s, name) == value, repr(getattr(s, name)))
+    s = AgentSettings.from_env(env=FULL_ENV)
+    check("from_env: a set value still wins over it",
+          (s.chat_trigger_count, s.memory_file, s.eval_enabled, s.model)
+          == (7, "m.json", True, "live-model"), repr(s.chat_trigger_count))
+
+
 def test_agent_lang_spellings_are_normalised() -> None:
     from persona_agent.settings import normalize_lang
 

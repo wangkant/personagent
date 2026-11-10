@@ -12,13 +12,15 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, TypeVar
 
 logger = logging.getLogger("agent.storage")
 
 PRIVATE_FILE_MODE = 0o600
 DEFAULT_LOCK_TIMEOUT_SEC = 30.0
 DEFAULT_WARNING_BYTES = 50_000_000
+
+_T = TypeVar("_T")
 
 
 def file_stamp(path: str | Path) -> tuple[int, int]:
@@ -260,6 +262,40 @@ def atomic_write_text(path: str | Path, text: str, *,
         except OSError:
             pass
         raise
+
+
+def load_rebuildable_json(path: str | Path,
+                          parse: Callable[[object], _T]) -> _T | None:
+    """``parse(data)`` for a JSON state file written with ``fsync=False``;
+    None when the file is absent or does not load.
+
+    Only for pending_reactions.json and connector_handles.json: both skip
+    fsync, so a power cut can leave them empty or cut off, and the next
+    messages rebuild what they held. A file that is not JSON, or whose shape
+    ``parse`` rejects (ValueError, LookupError, TypeError, AttributeError),
+    is moved aside as ``<name>.corrupt``, replacing an older one, with one
+    warning, and the caller starts empty. Never for a file written with
+    fsync (ledger, evidence, memory, settings): damage there must stop with
+    an error, not be started over.
+    """
+    path = Path(path)
+    try:
+        blob = path.read_bytes()
+    except FileNotFoundError:
+        return None
+    try:
+        return parse(json.loads(blob.decode("utf-8")))
+    except (ValueError, LookupError, TypeError, AttributeError) as exc:
+        reason = type(exc).__name__
+    aside = path.with_name(path.name + ".corrupt")
+    try:
+        os.replace(path, aside)
+        kept = f"moved aside as {aside.name}"
+    except OSError as exc:
+        kept = f"could not be moved aside ({exc})"
+    logger.warning("%s does not load (%s): %s, starting empty",
+                   path, reason, kept)
+    return None
 
 
 @dataclass(frozen=True)

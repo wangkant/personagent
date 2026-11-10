@@ -8,11 +8,15 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import gc
 import gzip
 import io
+import logging
 import os
 import re
 import socket
+import sys
+import threading
 import time
 from pathlib import Path
 from unittest.mock import patch
@@ -21,6 +25,7 @@ import pytest
 
 from persona_agent.agent import Agent
 from persona_agent.ingestion import ContentIngestion, safe_fetch_url
+from persona_agent.llm import ModelCalls
 from tools.bootstrap_from_history import download_sticker
 
 from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
@@ -245,24 +250,35 @@ async def test_dns_resolution_is_pinned_once() -> None:
     check("dns: validated address is pinned", pinned_ip == "93.184.216.34", pinned_ip)
 
 
-async def test_dns_resolution_obeys_timeout() -> None:
-    def slow_getaddrinfo(*args, **kwargs):
-        time.sleep(0.15)
+async def test_dns_resolution_obeys_timeout(caplog) -> None:
+    """The fetch gives up while the lookup is still running. Asserted on that
+    rather than on a stopwatch, which a loaded machine fails."""
+    release, returned = threading.Event(), threading.Event()
+
+    def stuck_getaddrinfo(*args, **kwargs):
+        release.wait(30)
+        returned.set()
         return [
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
         ]
 
-    started = time.monotonic()
-    with patch("persona_agent.ingestion.socket.getaddrinfo", slow_getaddrinfo):
-        result = await safe_fetch_url(
-            "https://slow-dns.example/image",
-            timeout=0.02,
-            max_wire_bytes=1024,
-            max_decoded_bytes=1024,
-        )
-    elapsed = time.monotonic() - started
-    check("dns: resolution timeout fails closed", result is None, repr(result))
-    check("dns: resolution timeout is prompt", elapsed < 0.12, f"{elapsed:.3f}s")
+    try:
+        with patch("persona_agent.ingestion.socket.getaddrinfo", stuck_getaddrinfo), \
+                caplog.at_level(logging.WARNING, logger="agent"):
+            result = await safe_fetch_url(
+                "https://slow-dns.example/image",
+                timeout=0.02,
+                max_wire_bytes=1024,
+                max_decoded_bytes=1024,
+            )
+        check("dns: resolution timeout fails closed", result is None, repr(result))
+        check("dns: the fetch did not wait for the lookup to return",
+              not returned.is_set())
+        check("dns: it gave up on the clock, not on an unresolvable host",
+              "DNS resolution timed out" in caplog.text, caplog.text)
+    finally:
+        # The loop joins its worker threads when the test ends.
+        release.set()
 
 
 def test_url_fanout_is_capped() -> None:
@@ -463,16 +479,23 @@ class ScriptedVision:
         return outcome
 
 
-class VisionHarness(Harness):
+class VisionHarness(Harness, ModelCalls):
     vision_model = "vision-model"
     vision_api_key = "vision-key"
     vision_base_url = VISION_BASE
+    # What ModelCalls reads to tell whether an endpoint takes `thinking`.
+    base_url = llm_fallback_base_url = ""
+    llm_fallback_thinking = False
 
     def __init__(self, image: bytes | None = PNG, *outcomes) -> None:
         super().__init__()
         self.image = image
         self.vision = ScriptedVision(*outcomes)
         self._http = self.vision
+        # Already known to refuse `thinking`, so these tests see the vision
+        # call alone; an endpoint still to be asked has its own tests below.
+        self._api_quirks[("thinking", f"{VISION_BASE}/chat/completions",
+                          "vision-model")] = False
 
     async def _fetch_image_bytes(self, url: str) -> bytes | None:
         return self.image
@@ -519,7 +542,8 @@ async def test_vision_caption_request_shape(sleeps) -> None:
     check("caption: posts to chat/completions",
           post["url"] == f"{VISION_BASE}/chat/completions", post["url"])
     check("caption: bearer key", post["headers"] == {
-        "Authorization": "Bearer vision-key"}, repr(post["headers"]))
+        "Authorization": "Bearer vision-key",
+        "Content-Type": "application/json"}, repr(post["headers"]))
     expected = _expected_payload(ContentIngestion.VISION_PROMPT,
                                  _data_url("image/png", PNG), 120, 0.3)
     check("caption: payload shape", post["json"] == expected, repr(post["json"])[:300])
@@ -629,7 +653,8 @@ async def test_vision_aesthetic_request_shape(sleeps) -> None:
     check("aesthetic: posts to chat/completions",
           post["url"] == f"{VISION_BASE}/chat/completions", post["url"])
     check("aesthetic: bearer key", post["headers"] == {
-        "Authorization": "Bearer vision-key"}, repr(post["headers"]))
+        "Authorization": "Bearer vision-key",
+        "Content-Type": "application/json"}, repr(post["headers"]))
     expected = _expected_payload(ContentIngestion.VISION_AESTHETIC_PROMPT,
                                  _data_url("image/png", PNG), 60, 0)
     check("aesthetic: payload shape", post["json"] == expected, repr(post["json"])[:300])
@@ -742,16 +767,111 @@ async def test_vision_requests_apply_the_reasoning_quirks(path, sleeps) -> None:
     check(f"{path}: OpenRouter reasoning switched off",
           payload.get("reasoning") == {"enabled": False}, repr(payload.get("reasoning")))
 
-    agent = VisionHarness(PNG, VisionResponse(200, '{"tacky": false}'))
-    agent.vision_model = "kimi-k2.6"
-    if path == "caption":
-        await agent._describe_image_vision(IMAGE_URL)
-    else:
-        await agent._judge_sticker_aesthetic(PNG)
-    payload = agent.vision.posts[0]["json"]
-    check(f"{path}: K2 thinking off at its fixed temperature",
-          payload.get("thinking") == {"type": "disabled"}
-          and payload.get("temperature") == 0.6, repr(payload)[:200])
+    asked = 0.3 if path == "caption" else 0
+    for base, model, thinking, temperature in (
+            (VISION_BASE, "kimi-k2.6", {"type": "disabled"}, 0.6),
+            ("https://openrouter.ai/api/v1", "moonshotai/kimi-k2", None, asked),
+            ("https://open.bigmodel.cn/api/paas/v4", "glm-4.6v",
+             {"type": "disabled"}, asked)):
+        agent = VisionHarness(PNG, VisionResponse(200, '{"tacky": false}'))
+        agent.vision_base_url, agent.vision_model = base, model
+        if path == "caption":
+            await agent._describe_image_vision(IMAGE_URL)
+        else:
+            await agent._judge_sticker_aesthetic(PNG)
+        payload = agent.vision.posts[0]["json"]
+        check(f"{path}: {model}: thinking off where it is taken, and only K2 "
+              "with it off is moved to its one temperature",
+              payload.get("thinking") == thinking
+              and payload.get("temperature") == temperature, repr(payload)[:200])
+
+
+class RefusesThinking:
+    """Stands in for `agent._http`: a 400 saying `words` to any POST that
+    carries `thinking`, a caption to any other. `posts` keeps which did."""
+
+    def __init__(self, words: str) -> None:
+        self.words = words
+        self.posts: list[bool] = []
+
+    def __call__(self, **kwargs):
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        self.posts.append("thinking" in json)
+        if "thinking" in json:
+            refusal = VisionResponse(400)
+            refusal.text = self.words
+            return refusal
+        return VisionResponse(200, "a cat on a mat")
+
+
+@pytest.mark.parametrize("base, model, words", [
+    ("https://open.bigmodel.cn/api/paas/v4", "vision-model",
+     "property 'thinking' is unsupported"),
+    (VISION_BASE, "kimi-k2.6", "bad request"),
+    (VISION_BASE, "vision-model", "bad request"),
+], ids=["a-listed-host-names-the-field", "k2-refused-in-other-words",
+        "an-unknown-host-is-asked-once"])
+async def test_vision_remembers_an_endpoint_that_refuses_thinking(
+        base, model, words, tmp: Path, sleeps) -> None:
+    """Replies learn per endpoint when `thinking` is refused. The vision call
+    kept no memory, so a vision model that refused it cost a second round
+    trip on every image, and every image failed when the 400 did not name
+    the field. It goes through the replies' own call now."""
+    agent = isolated_agent(tmp)
+    agent.vision_model, agent.vision_api_key, agent.vision_base_url = (
+        model, "vision-key", base)
+    http = RefusesThinking(words)
+    agent._http = http
+
+    async def fetch(url):
+        return PNG
+
+    agent._fetch_image_bytes = fetch
+    got = await agent._describe_image_vision(IMAGE_URL)
+    check("first image: refused, resent at once without the switch, captioned",
+          got == "a cat on a mat" and http.posts == [True, False],
+          repr((got, http.posts)))
+    http.posts.clear()
+    got = await agent._describe_image_vision("https://img.example/b.png")
+    check("second image: no switch, and answered on the first try",
+          got == "a cat on a mat" and http.posts == [False],
+          repr((got, http.posts)))
+    http.posts.clear()
+    await agent._judge_sticker_aesthetic(PNG)
+    check("the sticker judge goes by what the caption call learned",
+          http.posts == [False], repr(http.posts))
+    check("none of it waited on a backoff", sleeps == [], repr(sleeps))
+
+
+async def test_a_vision_400_from_an_endpoint_still_to_be_asked(sleeps) -> None:
+    """A 400 or 422 to the first call may be about `thinking` in words that
+    do not name it, so it is resent once without. A second refusal teaches
+    nothing: the image may have been the reason."""
+    agent = VisionHarness(PNG, *[VisionResponse(400)] * 4)
+    agent._api_quirks.clear()
+    got = await agent._describe_image_vision(IMAGE_URL)
+    sent = ["thinking" in p["json"] for p in agent.vision.posts]
+    check("caption 400: three tries, the first resent without the switch",
+          got is None and sent == [True, False, False, False], repr((got, sent)))
+    check("caption 400: 1 s then 2 s backoff", sleeps == [1, 2], repr(sleeps))
+    check("caption 400: the endpoint is still to be asked",
+          agent._api_quirks == {}, repr(agent._api_quirks))
+
+    agent = VisionHarness(PNG, VisionResponse(422), VisionResponse(422))
+    agent._api_quirks.clear()
+    sleeps.clear()
+    got = await agent._describe_image_vision(IMAGE_URL)
+    check("caption 422: resent once without the switch, then given up",
+          got is None and len(agent.vision.posts) == 2 and sleeps == [],
+          repr((got, len(agent.vision.posts), sleeps)))
 
 
 # ---------------------------------------------------------------------------
@@ -1175,6 +1295,88 @@ async def test_a_failed_vision_call_is_not_cached_as_a_miss(tmp: Path) -> None:
     await agent._describe_image(url)
     check("vision cache: a miss both channels answered is cached",
           agent.image_caption_cache.get(key) == "", repr(agent.image_caption_cache.get(key)))
+
+
+async def _read_one_image(agent: Agent, *, vision: bool) -> dict:
+    """Pass one group message with a new image through `_extract_text` and the
+    background sticker path; report the downloads, what the sticker path was
+    handed, and whether anything still holds a download afterwards."""
+    if vision:
+        agent.vision_model, agent.vision_api_key, agent.vision_base_url = "v", "k", "http://v"
+    fetched: list = []
+    seen: dict = {"stolen": [], "text": ""}
+
+    async def fetch(url):
+        fetched.append(bytes(bytearray(PNG)))  # a new object per download
+        return fetched[-1]
+
+    async def vision_post(prompt, data_url, **kwargs):
+        return VisionResponse(200, "a cat on a mat"), None
+
+    async def ocr(url):
+        return ""
+
+    async def steal(image_bytes, url, src_user, src_group, context_before):
+        seen["stolen"].append(image_bytes == PNG)
+        return None
+
+    agent._fetch_image_bytes, agent._vision_post, agent._ocr_image = fetch, vision_post, ocr
+    agent.stickers.steal = steal
+    seen["text"] = await agent._extract_text({
+        "post_type": "message", "message_type": "group", "group_id": "555",
+        "user_id": "7", "message": [
+            {"type": "image", "data": {"url": IMAGE_URL, "file": "a.png"}}]})
+    await asyncio.gather(*agent._bg_tasks)
+    gc.collect()
+    # References beyond the ones this function and the count itself hold.
+    unheld = [sys.getrefcount(b) for b in [bytes(bytearray(PNG))]][0]
+    seen["fetches"] = len(fetched)
+    seen["held"] = [sys.getrefcount(b) - unheld for b in fetched]
+    return seen
+
+
+async def test_a_new_image_is_downloaded_once(tmp: Path) -> None:
+    """With vision on, the caption call downloaded a new image and the
+    background sticker path downloaded it again."""
+    seen = await _read_one_image(make_agent(tmp / "vision"), vision=True)
+    check("image: captioned", "a cat on a mat" in seen["text"], seen["text"])
+    check("image: one download serves the caption and the sticker path",
+          seen["fetches"] == 1, repr(seen["fetches"]))
+    check("image: the sticker path is handed those bytes",
+          seen["stolen"] == [True], repr(seen["stolen"]))
+    check("image: nothing holds them once the message is read",
+          seen["held"] == [0], repr(seen["held"]))
+
+    seen = await _read_one_image(make_agent(tmp / "plain"), vision=False)
+    check("image, no vision: the sticker path still downloads it itself",
+          seen["fetches"] == 1 and seen["stolen"] == [True], repr(seen))
+
+
+async def test_a_failed_caption_download_is_tried_again_by_the_sticker_path(
+        tmp: Path) -> None:
+    agent = make_agent(tmp)
+    agent.vision_model, agent.vision_api_key, agent.vision_base_url = "v", "k", "http://v"
+    outcomes = [None, PNG]
+    stolen: list = []
+
+    async def fetch(url):
+        return outcomes.pop(0)
+
+    async def ocr(url):
+        return ""
+
+    async def steal(image_bytes, url, src_user, src_group, context_before):
+        stolen.append(image_bytes)
+        return None
+
+    agent._fetch_image_bytes, agent._ocr_image, agent.stickers.steal = fetch, ocr, steal
+    await agent._extract_text({
+        "post_type": "message", "message_type": "group", "group_id": "555",
+        "user_id": "7", "message": [
+            {"type": "image", "data": {"url": IMAGE_URL, "file": "a.png"}}]})
+    await asyncio.gather(*agent._bg_tasks)
+    check("image: a download that failed for the caption gets its second try",
+          outcomes == [] and stolen == [PNG], repr((outcomes, stolen)))
 
 
 async def test_ssrf_redirect_hops(tmp: Path) -> None:

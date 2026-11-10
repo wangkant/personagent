@@ -95,7 +95,7 @@ PERSONAGENT_URL=http://127.0.0.1:8080
 | `MATRIX_INVITE_FROM` | 봇이 초대를 받아들이는 사용자. `MATRIX_GROUPS`의 방 초대와 `MATRIX_DM_USERS`의 다이렉트 채팅 초대는 항상 받아들입니다. 다른 초대는 보류됩니다. |
 | `MATRIX_IGNORE_USERS` | 절대 답하지 않으며, 다이렉트 채팅과 그룹을 구분할 때 멤버로 세지 않습니다. |
 | `MATRIX_E2EE_ENABLED` | 종단 간 암호화. 아래를 참고하세요. |
-| `MATRIX_TIMEOUT_S` | 한 턴에 걸릴 수 있는 시간. 에이전트의 `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)`보다 크게 두세요. |
+| `MATRIX_TIMEOUT_S` | 한 턴에 걸릴 수 있는 시간. 에이전트의 3 × `LLM_TIMEOUT_S`보다 크게 두세요. |
 | `MATRIX_OUTBOX_ENABLED` | 에이전트의 아웃박스를 폴링합니다. |
 
 ## 브리지: WhatsApp, Signal, Messenger, Instagram 등

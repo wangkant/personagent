@@ -1399,6 +1399,36 @@ label.check input:checked {
   color: var(--muted);
   margin: 0;
 }
+.ask {
+  width: min(380px, calc(100vw - 48px));
+  padding: 22px 22px 16px;
+  border: 0;
+  border-radius: 14px;
+  color: var(--text);
+  background: var(--lift);
+  box-shadow: var(--shadow);
+}
+.ask::backdrop {
+  background: var(--veil);
+}
+.ask p {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.ask-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+.ask-actions .quiet {
+  height: 34px;
+  padding: 0 14px;
+}
+.ask-actions .primary {
+  height: 34px;
+}
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1673,6 +1703,29 @@ label.check input:checked {
 .activity-empty p {
   margin: 0 auto 14px;
   max-width: 460px;
+}
+/* Pressed: a button answers the click itself, before its result shows.
+   After every :hover rule, so the pressed look wins while the pointer is on it. */
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.nav:active,
+.quiet:active:not(:disabled),
+.secondary:active:not(:disabled),
+.tile:active,
+.gs-step:active,
+.suggestions button:active,
+.activity-row:active {
+  background: var(--deep);
+}
+.primary:active:not(:disabled),
+.composer button:active:not(:disabled) {
+  background: var(--ink);
+}
+.trio-pick:active {
+  box-shadow:
+    0 0 0 2px var(--side),
+    0 0 0 3px var(--ink);
 }
 @media (max-width: 800px) {
   .activity {

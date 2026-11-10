@@ -6,6 +6,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Licence
+
+- **personagent is now licensed for noncommercial use only**, under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0). The connectors under `integrations/` (the AstrBot plugin, the connector SDK, Matrix and Satori) stay under the MIT License, and the portraits stay under CC BY-NC-SA 4.0. Versions 1.4.0 and earlier were released under the MIT License and remain so.
+
+### Added
+
+- **personagent opens in a window of its own.** On Windows `personagent` shows the local page in an app window (WebView2 through [pywebview](https://pywebview.flowrl.com/)) with its own taskbar icon, where it used to open a browser tab. Closing the window stops personagent, and asks first while an app is connected. Starting it a second time brings the window back. On macOS and Linux the page still opens in the browser; `pip install "personagent[app]"` gives it the window there too, with Qt on Linux. `--browser` keeps the browser, and where no window can open the page falls back to it. In the window, right-click works where there is text to paste into or to copy, and nowhere else.
+- **`personagent shortcut`** puts an icon on the Windows desktop and in the Start menu that opens the window with no terminal behind it; `--remove` takes it away. `start.bat` makes the icon the first time it runs, then opens the window and closes its console. Started this way, personagent writes what it would print to `runtime/desktop/app.log` and says a refusal in a dialog.
+
+### Changed
+
+- **Every button on the local page shows that it was pressed**: it moves a pixel and darkens while the pointer is down, where only hovering used to show.
+- **Disconnecting an app asks in the page's own dialog**, where the browser's one named `127.0.0.1` in its title. Esc and Cancel keep the app connected.
+- **The name at the top left of the local page goes to the chat.** It was a link that led nowhere.
+- **A turn has one time budget.** A reply gets 1.5 × `LLM_TIMEOUT_S` in all, in a group, in a DM and when the character speaks first, where it used to get the timeout again for every retry and every model. A connector should allow 3 × `LLM_TIMEOUT_S` for a request, since a message first waits for the turn that was thinking when it arrived; the defaults (420 s against 360 s) already do. `LLM_MAX_RETRIES` no longer enters that sum.
+- **DMs sent while a reply is on the way are answered together.** Someone who sends three more messages while the model is thinking gets one reply to all three, as a group already did, where each used to queue a reply of its own.
+- **A memory command sent while a reply is on the way is answered after it** without holding its request open: through the outbox as `follow_up` where the connector pulls one, and otherwise in a response of the same conversation.
+- **The Activity API sends what the page shows.** `GET /api/dashboard/conversation` no longer carries the checklists, history, full evidence, past proposals and totals that `personagent learned` prints; on a busy chat that is 0.7 ms and 30 KB in place of 4.3 ms and 197 KB, every 8 seconds. `GET /api/dashboard/status`, which nothing read, is removed.
+- **The README has a product cover.** The wordmark and two real screens of the local page replace the hand-drawn scene, and the feature table reads as two plain columns.
+- **A shorter README.** The measured results and the comparison with other projects are no longer on it, and the cost notes moved into Start here. The results stay in `docs/evals/2026-10-18`, and the user guide covers `personagent eval`.
+- **`start.ps1` finds Python through `py -3`** and names a Python older than 3.10, or a `.venv` whose Python is gone, where it used to fail inside pip.
+- **`init` flags typed at a terminal carry into the questions.** `--provider`, `--model`, `--name` and the rest answer their question; only `--lang` used to.
+
+### Fixed
+
+- **A stuck model no longer blocks everyone.** While one group waited for a reply, each later message of that group held one of the 64 request slots until the model answered, so one busy group and a hanging model could turn every chat's requests into 429s. Messages that arrive during a turn are now set aside at once and enter the chat behind the reply, in the order they came. The same holds for DMs, for memory commands and for the character's own openers, which used to hold a conversation's lock for as long as the model took.
+- **The follow-up question after a complaint waits for the reply in flight.** In a group it could land in the middle of a turn, ahead of a reply that had not seen it.
+- **A connector conversation is not forgotten while the character's opener for it is being written.** With more than 256 connector conversations open, the room could be dropped mid-turn.
+- **A power cut no longer keeps the service from starting.** `pending_reactions.json` and `connector_handles.json` are written without waiting for the disk; a cut-off copy of the first stopped the start, and of the second failed every turn after the model was paid. A damaged one is now moved aside as `<name>.corrupt` and the store starts empty. Every other state file still stops with an error.
+- **The first AstrBot download can be cancelled**, and stops when the page quits; a half-made environment is removed so the next attempt starts clean. On Linux and macOS a download left running by a killed app is stopped at the next start or the next install.
+- **A new image is downloaded once**, not once for the caption and again for the sticker library.
+- **Self-evaluation, vision and the health probes turn hidden reasoning off** the way replies do, so they no longer pay for it on DeepSeek, Zhipu and Moonshot. An endpoint that rejects the switch is asked once, not on every image.
+
 ## [1.4.0] — 2026-11-10
 
 Three characters the community already draws, with animated portraits; the character inside your coding agent; memory that stays current and can be forgotten; the local page, the terminal and the guides in ten languages; and a calmer local page.

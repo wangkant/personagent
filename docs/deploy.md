@@ -89,8 +89,8 @@ and `personagent doctor` prints `activity: off (...)`.
 
 The API lives under `/api/dashboard/` on the agent service:
 
-- `GET status`, `GET conversations` and `GET conversation?id=<chat id>` read
-  the service's state, the chats it knows and one chat in detail.
+- `GET conversations` and `GET conversation?id=<chat id>` read the chats the
+  service knows and one chat in detail.
 - `POST candidates/<id>/promote`, `replace`, `reject` and `rollback` change
   what it has learned. Each change goes into the same ledger as
   `personagent learned`, with the actor `dashboard`.
@@ -436,10 +436,11 @@ and why it stayed quiet. On a server, read the service log, and use
    agent is off (item 2). AstrBot's log shows `refusing unsafe
    personagent_url`, `agent refused the request (403): <message>` (or another
    status, see the table below), or `timed out waiting for the agent`.
-   `timeout_s` must cover the debounce and every model call in the turn, so
-   keep `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` under it. Its default (420)
-   covers the agent's defaults (120 × 3 = 360 s). Raise it when you raise
-   those two.
+   `timeout_s` must cover the debounce and the turn's model calls, and also
+   the turn that was thinking when the message arrived. A turn's model calls
+   share 1.5 × `LLM_TIMEOUT_S`, in a group and in a DM alike, so keep
+   3 × `LLM_TIMEOUT_S` under it. Its default (420) covers the agent's
+   default (3 × 120 = 360 s). Raise it when you raise `LLM_TIMEOUT_S`.
 4. **It was not called.** In a group it answers its name (`PERSONA_NAME`) or
    an @. Otherwise it waits for enough conversation (`CHAT_TRIGGER_COUNT`, 30
    messages by default) and may still pass. From 02:00 to 07:00 in its time

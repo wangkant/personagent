@@ -196,7 +196,7 @@
     "keySaved": "Leer lassen, um den gespeicherten Schlüssel zu behalten",
     "firstConfigure": "Verbinde zuerst ein Modell, dann bring den Charakter in andere Apps.",
     "working": "Ein Vorgang läuft noch. Bitte warte.",
-    "offline": "Die Verbindung zur App ist weg. Prüfe, ob ihr Startfenster noch läuft.",
+    "offline": "Die Verbindung zur App ist weg. Schließe personagent und öffne es erneut.",
     "auth": "Öffne diese Seite über den lokalen Link im Startfenster.",
     "key_required": "Gib deinen API-Schlüssel ein.",
     "key_rejected": "Der Schlüssel wurde nicht angenommen. Prüfe, ob er vollständig ist und zu diesem Dienst gehört.",

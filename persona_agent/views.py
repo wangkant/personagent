@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import time
+from functools import partial
 from pathlib import Path
 
 from . import candidates as candidates_mod
@@ -64,34 +65,48 @@ class DataViews:
         except OSError as e:
             logger.warning("[Agent] %s save failed: %s", label, e)
 
+    def _reload_if_stale(self, paths, stamp_attr: str, load) -> None:
+        """Run `load()` when a file in `paths` changed since the stamp kept in
+        `stamp_attr`. An error from `load` is the caller's: the stamp stays,
+        so the next turn loads again."""
+        stamp = self._pool_stamp(paths)
+        if stamp == getattr(self, stamp_attr):
+            return
+        load()
+        setattr(self, stamp_attr, stamp)
+
+    def _reload_pool_if_stale(self, files, stamp_attr: str, load, name: str) -> None:
+        """`_reload_if_stale` for a retrieval pool, which keeps its cache
+        through a read error. The promoted views must not: see there."""
+        try:
+            self._reload_if_stale(files, stamp_attr, load)
+        except OSError as e:
+            logger.warning("[Agent] %s reload failed: %s", name, e)
+
     def _reload_examples_if_stale(self) -> None:
         """Hot-reload the seed + runtime example pools when either file changes."""
-        stamp = self._pool_stamp((self.examples_seed_file, self.examples_file))
-        if stamp == self._examples_mtime:
-            return
-        try:
-            records = self._read_pool(self.examples_seed_file, self.examples_file)
+        files = (self.examples_seed_file, self.examples_file)
+
+        def load() -> None:
+            records = self._read_pool(*files)
             self._examples_cache = records
             # Rebuilt from disk so a restart remembers which replies are pooled.
             self._auto_examples_seen = {
                 r.get("reply", "").strip() for r in records
                 if isinstance(r.get("reply"), str) and r.get("reply", "").strip()
             }
-            self._examples_mtime = stamp
-        except OSError as e:
-            logger.warning("[Agent] examples.jsonl reload failed: %s", e)
+
+        self._reload_pool_if_stale(files, "_examples_mtime", load, "examples.jsonl")
 
     def _reload_pairs_if_stale(self) -> None:
         """Hot-reload the seed + runtime preference pairs (rating=better only)."""
-        stamp = self._pool_stamp((self.feedback_seed_file, self.feedback_file))
-        if stamp == self._pairs_mtime:
-            return
-        try:
-            records = self._read_pool(self.feedback_seed_file, self.feedback_file)
-            self._pairs_cache = [r for r in records if self._is_better_pair(r)]
-            self._pairs_mtime = stamp
-        except OSError as e:
-            logger.warning("[Agent] feedback.jsonl reload failed: %s", e)
+        files = (self.feedback_seed_file, self.feedback_file)
+
+        def load() -> None:
+            self._pairs_cache = [r for r in self._read_pool(*files)
+                                 if self._is_better_pair(r)]
+
+        self._reload_pool_if_stale(files, "_pairs_mtime", load, "feedback.jsonl")
 
     def _live_scope(self, conv_id: str) -> dict:
         """This turn's scope, normalised the way the ledger stores one."""
@@ -263,19 +278,20 @@ class DataViews:
 
     def _reload_views_if_stale(self) -> None:
         """Hot-reload the promoted views, the only rows automatic learning can
-        put in a prompt; a rollback takes effect on the next turn."""
-        for path, attr, pairs_only in (
-            (self.promoted_examples_file, "_view_examples", False),
-            (self.promoted_feedback_file, "_view_pairs", True),
-        ):
-            stamp = self._pool_stamp((path,))
-            if stamp == getattr(self, attr + "_stamp"):
-                continue
+        put in a prompt; a rollback takes effect on the next turn. A read
+        error is raised, never met by keeping rows that may be rolled back."""
+        def load(path: Path, attr: str, pairs_only: bool) -> None:
             rows = read_jsonl((path,))
             if pairs_only:
                 rows = [r for r in rows if self._is_better_pair(r)]
             setattr(self, attr + "_cache", self._tag_rows(rows))
-            setattr(self, attr + "_stamp", stamp)
+
+        for path, attr, pairs_only in (
+            (self.promoted_examples_file, "_view_examples", False),
+            (self.promoted_feedback_file, "_view_pairs", True),
+        ):
+            self._reload_if_stale(
+                (path,), attr + "_stamp", partial(load, path, attr, pairs_only))
 
     @staticmethod
     def _is_better_pair(r: dict) -> bool:

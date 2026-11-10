@@ -1,7 +1,7 @@
 # Portraits
 
 `chatgpt.webp`, `deepseek.webp` and `claude.webp` were drawn for
-personagent. They are not covered by the MIT licence of the code. They are
+personagent. They are not covered by the licence of the code. They are
 licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/):
 keep this credit, do not use them commercially, and share changes under the
 same licence.

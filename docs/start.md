@@ -13,9 +13,11 @@ personagent
 
 With [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separate install step.
 
+On Windows the page opens in a window of its own. On macOS and Linux it opens in your browser; `pip install "personagent[app]"` gives it a window there too.
+
 A coding agent can do the setup for you: ask it to read [setup-for-agents.md](setup-for-agents.md) and set up personagent.
 
-On Windows you can also download the source ZIP, unpack it and double-click `start.bat`. It creates its own Python environment in the folder and opens the same page.
+On Windows you can also download the source ZIP, unpack it and double-click `start.bat`. It creates its own Python environment in the folder and opens the same page. The first time, it also puts a personagent icon on your desktop and in the Start menu.
 
 To run it from a clone, give it a venv of its own: `python -m venv .venv`, then `.venv/bin/python -m pip install -e .` and `.venv/bin/python -m persona_agent`. On Windows the interpreter is `.venv\Scripts\python.exe`, or you can double-click `start.bat`.
 
@@ -49,7 +51,7 @@ If a QR code expires, request a new one. If a download fails, retry it without r
 
 ## Next time
 
-Open personagent again. Your settings are kept, and connected apps resume on their own. If it is already running, opening it again reuses the running page. Keep its launch window open while you use it. The processes it started stop with it, whether you click **Quit** or close the window, and anything a crash left behind is stopped at the next start.
+Open personagent again. Your settings are kept, and connected apps resume on their own. If it is already running, opening it again brings its window back. Keep it open while you use it: the processes it started stop with it, whether you click **Quit** or close the window, and anything a crash left behind is stopped at the next start. On Windows, `personagent shortcut` puts an icon on your desktop and in the Start menu that opens it without a terminal.
 
 When a newer version is on PyPI, the Chat view shows a notice with a link to the release notes and the update command for the way this copy was installed. A copy unpacked from the source ZIP gets a link to download the new source from the release page instead. personagent asks pypi.org at most once a day, and the request carries only its version number. Set `UPDATE_CHECK_ENABLED=false` in `.env` to turn the check off.
 

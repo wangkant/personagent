@@ -62,7 +62,7 @@ Le connecteur transmet chaque message autorisé au `POST /v1/events` de l'agent 
 | `SATORI_PLATFORM_NAMES` | `qq=qqbot` | Renomme les plateformes telles que l'agent les voit : `satori_name=name, ...` |
 | `SATORI_OUTBOX_ENABLED` | `true` | Récupérer la boîte d'envoi de l'agent. |
 | `SATORI_CONNECTOR_ID` | d'après `SATORI_URL` | L'id de ce connecteur chez l'agent. Gardez-le stable. |
-| `SATORI_TIMEOUT_S` | `420` | Durée maximale d'un tour. Gardez-la au-dessus de `LLM_TIMEOUT_S × (1 + LLM_MAX_RETRIES)` de l'agent. |
+| `SATORI_TIMEOUT_S` | `420` | Durée maximale d'un tour. Gardez-la au-dessus de 3 × `LLM_TIMEOUT_S` de l'agent. |
 | `SATORI_INLINE_IMAGES_ENABLED` | `false` | Télécharger les URL d'images publiques dans le connecteur au lieu de passer l'URL à l'agent. |
 | `SATORI_LOG_LEVEL` | `INFO` | |
 

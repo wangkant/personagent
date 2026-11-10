@@ -66,41 +66,54 @@ class Proactive:
                 continue
             if random.random() > self.proactive_prob:
                 continue
+            # A turn in flight, or a message still being read: not quiet.
+            if gid in self._pending_outbound:
+                continue
+            # A turn like any other: what arrives meanwhile waits behind it.
+            gate = self._begin_turn(gid)
             try:
-                reply, intent, mem = await self._think(gid, mode="proactive")
-            except Exception as e:
-                logger.warning("[Agent] proactive group think failed (%s): %s", gid, e)
-                continue
-            # Mark the attempt either way so a PASS doesn't re-roll every tick.
-            self.last_proactive_at[gid] = now
-            final = self._final_reply(reply, log_ctx=f"mode=proactive, group={gid}")
-            if final.verdict != SEND:
-                continue
-            reply, at_uid = final.text, final.at_uid
-            # Buffered below: NapCat does not echo the bot's own messages.
-            async with self.send_locks[gid]:
-                result = await self._send_background(
-                    gid, lambda: self._send_group(gid, reply, at_uid),
-                    reason="proactive")
-            if not result.success:
-                logger.warning(
-                    "[Agent] proactive group delivery failed (%s, partial=%s)",
-                    gid, result.partial)
-                if result.partial:
-                    # The room read the delivered part, so it is on record.
-                    if result.delivered:
-                        self.last_reply_at[gid] = now
-                        self._append_buffer(gid, self.persona_name, result.delivered)
+                if await self._proactive_group_turn(gid, now):
                     return True
-                continue
-            self.last_reply_at[gid] = now
-            self._append_buffer(gid, self.persona_name, reply)
-            self._commit_core_memory(gid, final.core_note)
-            if mem:
-                self._save_auto_memory(gid, mem)
-            logger.info("[Agent] proactive group message (%s): %r", gid, reply[:60])
-            return True
+            finally:
+                self._end_turn(gid, gate)
         return False
+
+    async def _proactive_group_turn(self, gid: str, now: float) -> bool:
+        """Ask the model for an opener and send it. True if the room read
+        any of it."""
+        try:
+            reply, intent, mem = await self._within_turn_budget(
+                self._think(gid, mode="proactive"))
+        except Exception as e:
+            logger.warning("[Agent] proactive group think failed (%s): %s", gid, e)
+            return False
+        # Mark the attempt either way so a PASS doesn't re-roll every tick.
+        self.last_proactive_at[gid] = now
+        final = self._final_reply(reply, log_ctx=f"mode=proactive, group={gid}")
+        if final.verdict != SEND:
+            return False
+        reply, at_uid = final.text, final.at_uid
+        # Buffered below: NapCat does not echo the bot's own messages.
+        async with self.send_locks[gid]:
+            result = await self._send_background(
+                gid, lambda: self._send_group(gid, reply, at_uid),
+                reason="proactive")
+        if not result.success:
+            logger.warning(
+                "[Agent] proactive group delivery failed (%s, partial=%s)",
+                gid, result.partial)
+            # The room read the delivered part, so it is on record.
+            if result.partial and result.delivered:
+                self.last_reply_at[gid] = now
+                self._append_buffer(gid, self.persona_name, result.delivered)
+            return result.partial
+        self.last_reply_at[gid] = now
+        self._append_buffer(gid, self.persona_name, reply)
+        self._commit_core_memory(gid, final.core_note)
+        if mem:
+            self._save_auto_memory(gid, mem)
+        logger.info("[Agent] proactive group message (%s): %r", gid, reply[:60])
+        return True
 
     async def _maybe_proactive_dms(self) -> bool:
         """At most one proactive DM per tick, to someone who DMed the bot this
@@ -113,7 +126,9 @@ class Proactive:
         targets = {uid for uid in allowed | admins if channels.is_native(uid)}
         targets.update(uid for uid in list(self.last_dm_activity_at)
                        if not channels.is_native(uid))
-        targets = [uid for uid in targets if self._proactive_platform_ok(uid)]
+        # Sorted before the shuffle: a set's order differs from run to run,
+        # and a seeded test must be able to replay the pick.
+        targets = sorted(uid for uid in targets if self._proactive_platform_ok(uid))
         random.shuffle(targets)
         for uid in targets:
             pkey = channels.dm_routing_key(uid)
@@ -134,50 +149,55 @@ class Proactive:
                 continue
             if random.random() > self.proactive_dm_prob:
                 continue
-            is_admin = access.is_admin(uid, admins)
+            # Their own message is being read or answered: not the moment.
+            if pkey in self._pending_outbound:
+                continue
+            # A turn like any other: what they write meanwhile waits behind
+            # it, and no lock is held while the model is asked.
+            gate = self._begin_turn(pkey)
             try:
-                async with self.locks[pkey]:
-                    history = list(self.dm_history.get(uid, []))[-10:]
-                    reply, mem = await self._chat_dm(
-                        history, is_admin=is_admin, proactive=True, pkey=pkey)
-            except Exception as e:
-                logger.warning("[Agent] proactive DM failed (%s): %s", uid, e)
-                continue
-            # Marked either way so a PASS doesn't re-roll every tick.
-            self.last_proactive_at[key] = now
-
-            final = self._final_reply(reply, log_ctx=f"proactive DM user={uid}")
-            if final.verdict != SEND:
-                continue
-            reply = final.text
-
-            async with self.send_locks[pkey]:
-                self._dm_send_tasks[pkey] = asyncio.current_task()
-                try:
-                    result = await self._send_background(
-                        pkey, lambda: self._send_dm(uid, reply),
-                        reason="proactive")
-                    if not result.success:
-                        logger.warning("[Agent] proactive DM delivery failed (%s, partial=%s)",
-                                       uid, result.partial)
-                        if result.partial:
-                            # They read the delivered part; keep it on record.
-                            if result.delivered:
-                                async with self.locks[pkey]:
-                                    self.dm_history.setdefault(uid, []).append(
-                                        {"role": "assistant",
-                                         "content": result.delivered})
-                            return True
-                        continue
-                    async with self.locks[pkey]:
-                        self.dm_history.setdefault(uid, []).append(
-                            {"role": "assistant", "content": reply})
-                        self._commit_core_memory(pkey, final.core_note)
-                        if mem:
-                            self._save_auto_memory(pkey, mem)
-                finally:
-                    if self._dm_send_tasks.get(pkey) is asyncio.current_task():
-                        self._dm_send_tasks.pop(pkey, None)
-            logger.info("[Agent] proactive DM (%s): %r", uid, reply[:60])
-            return True
+                if await self._proactive_dm_turn(
+                        uid, pkey, access.is_admin(uid, admins), now):
+                    return True
+            finally:
+                self._end_turn(pkey, gate)
         return False
+
+    async def _proactive_dm_turn(self, uid: str, pkey: str, is_admin: bool,
+                                 now: float) -> bool:
+        """Ask the model for an opener and send it. True if they read any
+        of it."""
+        history = list(self.dm_history.get(uid, []))[-10:]
+        try:
+            reply, mem = await self._within_turn_budget(self._chat_dm(
+                history, is_admin=is_admin, proactive=True, pkey=pkey))
+        except Exception as e:
+            logger.warning("[Agent] proactive DM failed (%s): %s", uid, e)
+            return False
+        # Marked either way so a PASS doesn't re-roll every tick; the
+        # learning key, which eviction also pops.
+        self.last_proactive_at[channels.dm_learning_key(uid)] = now
+
+        final = self._final_reply(reply, log_ctx=f"proactive DM user={uid}")
+        if final.verdict != SEND:
+            return False
+        reply = final.text
+
+        async with self._dm_sending(pkey):
+            result = await self._send_background(
+                pkey, lambda: self._send_dm(uid, reply), reason="proactive")
+        if not result.success:
+            logger.warning("[Agent] proactive DM delivery failed (%s, partial=%s)",
+                           uid, result.partial)
+            # They read the delivered part; keep it on record.
+            if result.partial and result.delivered:
+                self.dm_history.setdefault(uid, []).append(
+                    {"role": "assistant", "content": result.delivered})
+            return result.partial
+        self.dm_history.setdefault(uid, []).append(
+            {"role": "assistant", "content": reply})
+        self._commit_core_memory(pkey, final.core_note)
+        if mem:
+            self._save_auto_memory(pkey, mem)
+        logger.info("[Agent] proactive DM (%s): %r", uid, reply[:60])
+        return True
