@@ -35,7 +35,8 @@ _LEARNED_EN = {
     "corrected": "{who} corrected it",
     "missed": "{who} said it missed",
     "liked": "{who} liked it",
-    "by_admin": "promoted by the admin",
+    "by_me": "decided by me",
+    "by_person": "put in use by hand",
     "passed": "passed with {events} events, {strong} strong",
     "why": "why: {steps}",
     "sep": ", ",
@@ -132,7 +133,7 @@ class DataViews:
                 and evidence_mod.persona_identity(scope) == identity)
 
     def _learned_summary(self, group_id: str, lang: str = "") -> str:
-        """What this room has taught the bot, chat-sized: counts, what waits,
+        """What this room has taught the bot, chat-sized: counts, what it still observes,
         the latest promotion and why, in chat language `lang` (default: the
         agent's). Reads state only."""
         code = lang or self.chat_lang
@@ -228,7 +229,8 @@ class DataViews:
                     peers=index.peers(c), now=now,
                     policy=self.promotion_policy, admin_ids=admins)
                 if promotion_mod.needs_character(decision, c):
-                    admin += 1
+                    # With its own decisions switched off the character reviews nothing.
+                    admin += 1 if self._judging_on() else 0
                 elif strong:
                     voice += 1
         active = [c for c in cands
@@ -277,11 +279,10 @@ class DataViews:
         history = [h for h in cand.get("history") or ()
                    if h.get("state") == candidates_mod.STATE_PROMOTED]
         last = history[-1].get("actor") if history else "auto"
-        # The character's own judgement: neither a person nor the count passed it.
         if last == candidates_mod.ACTOR_CHARACTER:
-            pass
+            steps.append(say["by_me"])
         elif last != "auto":
-            steps.append(say["by_admin"])
+            steps.append(say["by_person"])
         else:
             steps.append(say["passed"].format(events=len(supporting), strong=strong))
         return say["why"].format(steps=say["sep"].join(steps))

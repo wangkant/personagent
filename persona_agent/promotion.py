@@ -409,14 +409,14 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
     conflicting = find_conflicts(cand, peers, policy=policy,
                                  related_events=related_events)
     if against:
-        return Decision(False, "compatible evidence disagrees — left for review",
+        return Decision(False, "compatible evidence disagrees — the character decides",
                         blocked_by=",".join(against[:3]), gate=GATE_AGAINST,
                         otherwise_ready=ready,
                         refused=_refused(cand, related_events, against,
                                          supporting, admins),
                         **counts)
     if conflicting:
-        return Decision(False, "a conflicting candidate exists — left for review",
+        return Decision(False, "a conflicting candidate exists — the character decides",
                         blocked_by=",".join(conflicting[:3]), gate=GATE_CONFLICT,
                         otherwise_ready=ready, **counts)
     if not strong_ok:
@@ -424,7 +424,7 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
         if not evidence.can_be_strong(ctype):
             return Decision(
                 False,
-                f"{ctype} is promotable only by a person: nothing that "
+                f"{ctype} is decided by the character: nothing that "
                 f"supports one classifies strong ({len(supporting)} "
                 f"supporting)",
                 gate=GATE_PERSON, otherwise_ready=ready, **counts)

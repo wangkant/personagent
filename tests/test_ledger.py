@@ -1070,7 +1070,7 @@ def test_a_rejected_rewrite_is_not_promoted_later() -> None:
 
     after = promotion.decide(cand, linked_events=linked,
                              related_events=related, peers=[], now=NOW)
-    check("rewrite: and the pair is then left for review, not promoted",
+    check("rewrite: and the pair is then the character's to decide, not promoted",
           after.promote is False and "disagrees" in after.reason, after.reason)
 
     # AND THE PROTECTION MUST NOT EXPIRE. The first cut of this fix applied
@@ -1402,13 +1402,13 @@ def test_stale_evidence_is_refused() -> None:
                 promotion.epoch(None)]))
 
 
-def test_a_positive_example_waits_for_a_person_and_says_so() -> None:
+def test_a_positive_example_is_the_characters_to_decide_and_says_so() -> None:
     """`positive_example` cannot auto-promote, and that is the policy.
 
     `supports` accepts a self-eval or a positive reaction there, and
     `classify_strength` calls both WEAK — "laughter, agreement, banter, the
     agent's own score. Never sufficient to promote anything, at any
-    quantity." So the type is human-review-only BY CONSTRUCTION, not by
+    quantity." So the type is the character's to decide BY CONSTRUCTION, not by
     threshold, and promotion has to say which of the two it is: the reason
     used to read "0/1 strong events (4 supporting)", which describes a bar
     the next reaction might clear. No reaction ever clears it.
@@ -1465,8 +1465,8 @@ def test_a_positive_example_waits_for_a_person_and_says_so() -> None:
                                 peers=[], now=NOW)
     check("four positive reactions still promote nothing",
           decision.promote is False, decision.reason)
-    check("and the reason names a person, not a count",
-          "person" in decision.reason and "/1 strong" not in decision.reason,
+    check("and the reason names the character's decision, not a count",
+          "character" in decision.reason and "/1 strong" not in decision.reason,
           decision.reason)
 
 

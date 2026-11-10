@@ -63,6 +63,9 @@ ACTOR_AUTO = "auto"
 ACTOR_CHARACTER = "character"
 # Discards a person may reverse with `restore`; a person's own stays final.
 RESTORABLE_ACTORS = frozenset({ACTOR_CHARACTER})
+# The time limit's set-aside: a rule's, yet about time, not content.
+JUDGE_EXPIRY = "observe-expiry/1"
+RESTORABLE_JUDGES = frozenset({JUDGE_EXPIRY})
 
 _SUPPORTED_SCHEMAS = (1, SCHEMA)
 _WARN_BYTES_ENV = "LEDGER_CANDIDATES_WARN_BYTES"
@@ -223,13 +226,17 @@ def _review_entry(row: dict) -> dict:
 
 
 def restorable(cand: dict | None) -> bool:
-    """Was this candidate discarded by the character, so a person may bring
-    it back; a person's discard stays final."""
+    """Was this candidate set aside by the character or by the time limit,
+    so a person may bring it back; a person's discard stays final."""
     if not cand or cand.get("state") != STATE_REJECTED:
         return False
     history = cand.get("history") or []
-    return (bool(history) and history[-1].get("state") == STATE_REJECTED
-            and history[-1].get("actor") in RESTORABLE_ACTORS)
+    if not history or history[-1].get("state") != STATE_REJECTED:
+        return False
+    last = history[-1]
+    return (last.get("actor") in RESTORABLE_ACTORS
+            or (last.get("actor") == ACTOR_AUTO
+                and last.get("judge") in RESTORABLE_JUDGES))
 
 
 class CandidateLedger:
@@ -460,7 +467,8 @@ class CandidateLedger:
 
     def restore(self, cid: str, *, ts: str, actor: str,
                 reason: str = "") -> bool:
-        """A person puts back in use what the character discarded. Not a wider
+        """A person puts back in use what the character or the time limit set
+        aside. Not a wider
         transition table: a person's discard stays final, and no automatic
         actor may restore anything."""
         if actor in (ACTOR_AUTO, ACTOR_CHARACTER) or not str(actor or "").strip():

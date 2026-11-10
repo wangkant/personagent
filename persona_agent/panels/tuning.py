@@ -56,6 +56,8 @@ FIELDS: tuple[Field, ...] = (
     Field("REACT_ELICIT_ENABLED", "learning", "bool", True),
     Field("PROMOTE_AUTO_ENABLED", "learning", "bool", True),
     Field("PROMOTE_MIN_SPEAKERS", "learning", "choice", "1", options=("1", "2")),
+    Field("PROMOTE_JUDGE_ENABLED", "learning", "bool", True),
+    Field("PROMOTE_OBSERVE_MAX_DAYS", "learning", "float", 30, 0, 3650),
     Field("AGENT_ENABLED", "more", "bool", True),
     Field("DASHBOARD_ENABLED", "more", "bool", True),
     Field("UPDATE_CHECK_ENABLED", "more", "bool", True, live=True),
@@ -80,6 +82,9 @@ FIELDS: tuple[Field, ...] = (
     Field("PROMOTE_REQUIRE_SAME_CONVERSATION", "more", "bool", True),
     Field("PROMOTE_MAX_EXAMPLES", "more", "int", 500, 0, 100_000),
     Field("PROMOTE_MAX_FEEDBACK", "more", "int", 500, 0, 100_000),
+    Field("PROMOTE_JUDGE_MODEL", "more", "model"),
+    Field("PROMOTE_JUDGE_INTERVAL_S", "more", "float", 900, 60, DAY),
+    Field("PROMOTE_JUDGE_BATCH", "more", "int", 5, 1, 100),
     Field("PERSONA_VERSION", "more", "text", "", high=64),
 )
 BY_KEY = {f.key: f for f in FIELDS}

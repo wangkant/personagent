@@ -282,8 +282,8 @@ def test_promote_and_roll_back_round_trip_through_the_ledger_and_views(live) -> 
     learned = c.get("/api/dashboard/conversation",
                     params={"id": "telegram:c1"}).json()["learned"]
     check("promote: listed as learned, with who asked for it and its way back",
-          [(v["id"], v["actions"], v["evidence"]) for v in learned]
-          == [(cid, ["rollback"], [{"speaker": "Alex"}])], repr(learned))
+          [(v["id"], v["actions"], v["evidence"], v["by"]) for v in learned]
+          == [(cid, ["rollback"], [{"speaker": "Alex"}], {"by": "person", "why": ""})], repr(learned))
 
     r = c.post(f"/api/dashboard/candidates/{cid}/rollback",
                json={"reason": "too pushy"}, headers=WRITE)
@@ -298,6 +298,9 @@ def test_promote_and_roll_back_round_trip_through_the_ledger_and_views(live) -> 
     again = c.post(f"/api/dashboard/candidates/{cid}/rollback", json={}, headers=WRITE)
     check("rollback: an illegal transition is a 409",
           again.status_code == 409 and again.json()["code"] == "illegal_transition", again.text)
+    back = c.post(f"/api/dashboard/candidates/{cid}/promote", json={}, headers=WRITE)
+    check("a person's undo is not brought back by promote",
+          back.status_code == 409 and live.candidate_ledger.get(cid)["state"] == "rolled_back", back.text)
     missing = c.post("/api/dashboard/candidates/feedfacefeedface/promote", json={}, headers=WRITE)
     check("unknown candidate: 404", missing.status_code == 404, missing.text)
     unknown = c.post(f"/api/dashboard/candidates/{cid}/delete", json={}, headers=WRITE)
@@ -305,10 +308,10 @@ def test_promote_and_roll_back_round_trip_through_the_ledger_and_views(live) -> 
 
     detail = c.get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
     check("detail: a rolled-back candidate is no longer listed",
-          detail["pending"] == [] and detail["learned"] == [], repr(detail))
+          detail["observing"] == [] and detail["learned"] == [], repr(detail))
 
 
-def test_a_pending_proposal_carries_what_the_page_shows(live) -> None:
+def test_an_observed_proposal_carries_what_the_page_shows(live) -> None:
     ev = seed_event(live)
     pair = seed_candidate(live, ev)
     positive = seed_event(live, reply="ugh, that sounds rough",
@@ -316,15 +319,20 @@ def test_a_pending_proposal_carries_what_the_page_shows(live) -> None:
     example = seed_candidate(live, positive, ctype=candidates.TYPE_EXAMPLE)
     detail = client().get("/api/dashboard/conversation",
                           params={"id": "telegram:c1"}).json()
-    by_id = {c["id"]: c for c in detail["pending"]}
-    check("pending: both proposals listed", set(by_id) == {pair, example}, repr(list(by_id)))
+    by_id = {c["id"]: c for c in detail["observing"]}
+    check("observing: both proposals listed", set(by_id) == {pair, example}, repr(list(by_id)))
     view = by_id[pair]
-    check("pending: the reply, its rewrite and who asked for it",
+    check("observing: the reply, its rewrite and who asked for it",
           view["type"] == candidates.TYPE_PAIR and view["reply"] == ev["reply"]
           and view["better"] == "ugh, that sounds rough" and view["created"] > 0
           and view["evidence"] == [{"speaker": "Alex"}], repr(view))
-    check("pending: actions offered", view["actions"] == ["promote", "reject"])
-    check("pending: an example has no rewrite",
+    check("observing: a person's optional actions", view["actions"] == ["promote", "reject"])
+    check("observing: where it stands, from the policy's own decision",
+          view["standing"]["stage"] == "reactions" and view["standing"]["missing"] == "strong"
+          and (view["standing"]["strong"], view["standing"]["needStrong"]) == (0, 1)
+          and set(view["standing"]) == set(dashboard.STANDING_SENT)
+          and view["by"] is None, repr(view["standing"]))
+    check("observing: an example has no rewrite",
           by_id[example]["type"] == candidates.TYPE_EXAMPLE
           and by_id[example]["better"] == "", repr(by_id[example]))
 
@@ -372,7 +380,9 @@ def test_the_api_sends_what_the_local_page_reads_and_nothing_else(live) -> None:
     chat = _seen(c.get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json())
     shown = welcome._activity_chat(chat)
     check("chat: a proposal, a kept change, a note and a decision were sent",
-          all(shown[part] for part in ("review", "learned", "notes", "recent")), repr(shown))
+          all(shown[part] for part in ("observing", "learned", "notes", "recent")), repr(shown))
+    check("chat: nothing observed offers a decision, and nothing is called review",
+          shown["observing"][0]["actions"] == [] and "review" not in shown, repr(shown))
     check("chat: who asked for a change reaches the page",
           shown["learned"][0]["from"] == ["Alex"], repr(shown["learned"]))
     check("chat: every field sent is one the page reads", _mismatch(chat) == [],
@@ -385,8 +395,9 @@ def test_the_api_sends_what_the_local_page_reads_and_nothing_else(live) -> None:
 
     listed = asyncio.run(welcome.Workspace.activity(SimpleNamespace(_activity_call=served)))
     check("list: the chat is there, with its counts",
-          [(row["id"], row["review"], row["learned"], row["notes"]) for row in listed["chats"]]
+          [(row["id"], row["observing"], row["learned"], row["notes"]) for row in listed["chats"]]
           == [("telegram:c1", 1, 1, 1)], repr(listed))
+    check("list: when something last came into use here", listed["chats"][0]["latest"] > 0)
     rows = listing["conversations"]
     check("list: every field sent is one the page reads", _mismatch(rows) == [],
           repr(_mismatch(rows)))
@@ -432,7 +443,7 @@ def test_promote_never_leaves_one_reply_two_active_rewrites(live) -> None:
 
     def offered() -> list[str]:
         detail = c.get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
-        return {cand["id"]: cand for cand in detail["pending"]}[other]["actions"]
+        return {cand["id"]: cand for cand in detail["observing"]}[other]["actions"]
 
     check("with no rewrite in use, the page offers Promote",
           offered() == ["promote", "reject"], repr(offered()))
@@ -461,11 +472,6 @@ def test_promote_never_leaves_one_reply_two_active_rewrites(live) -> None:
 
     r = c.post(f"/api/dashboard/candidates/{other}/rollback", json={}, headers=WRITE)
     check("rollback: accepted", r.status_code == 200, r.text)
-    third = _pair(live, "that sounds like a long day", state=candidates.STATE_PROMOTED,
-                  speaker="u3")
-    r = c.post(f"/api/dashboard/candidates/{other}/promote", json={}, headers=WRITE)
-    check("re-promoting a rolled-back rewrite is held to the same rule",
-          r.status_code == 409 and r.json()["rivals"] == [third], r.text)
 
 
 def test_a_dashboard_promote_retires_the_drafts_it_answered(live) -> None:
@@ -484,9 +490,71 @@ def test_a_dashboard_promote_retires_the_drafts_it_answered(live) -> None:
           and cand["history"][-1]["actor"] == "dashboard", repr(cand["history"]))
 
 
+def test_a_person_puts_in_use_through_the_one_shared_function(live, monkeypatch) -> None:
+    from persona_agent import learning
+    cid = _pair(live, "ugh, that sounds rough")
+    seen = []
+    real = learning.put_in_use
+
+    def spy(ledger, cid, **kwargs):
+        seen.append((cid, kwargs["actor"]))
+        return real(ledger, cid, **kwargs)
+
+    monkeypatch.setattr(learning, "put_in_use", spy)
+    r = client().post(f"/api/dashboard/candidates/{cid}/promote", json={}, headers=WRITE)
+    check("promote: through learning.put_in_use, as the dashboard",
+          r.status_code == 200 and seen == [(cid, "dashboard")], repr(seen))
+
+
+def test_bring_back_is_only_for_what_the_character_set_aside(live) -> None:
+    ledger = live.candidate_ledger
+    by_character = _pair(live, "want me to look at it?", speaker="u2")
+    ledger.reject(by_character, ts=now_iso(), actor="character", reason="It sounds pushy.")
+    in_use = _pair(live, "ugh, that sounds rough", state=candidates.STATE_PROMOTED)
+    by_person = _pair(live, "that sounds like a long day", speaker="u3")
+    ledger.reject(by_person, ts=now_iso(), actor="dashboard", reason="local page")
+    c = client()
+    refused = c.post(f"/api/dashboard/candidates/{by_person}/restore", json={}, headers=WRITE)
+    check("restore: a person's discard stays final",
+          refused.status_code == 409 and ledger.get(by_person)["state"] == "rejected", refused.text)
+    r = c.post(f"/api/dashboard/candidates/{by_character}/restore", json={}, headers=WRITE)
+    check("restore: what the character set aside comes back",
+          r.status_code == 200 and r.json()["after"] == "promoted", r.text)
+    check("restore: written as the dashboard",
+          ledger.get(by_character)["history"][-1]["actor"] == "dashboard")
+    check("restore: the rewrite in use steps aside for it",
+          ledger.get(in_use)["state"] == candidates.STATE_ROLLED_BACK
+          and ledger.get(in_use)["history"][-1]["reason"] == f"replaced by {by_character}")
+
+
+def test_learned_items_say_who_put_them_in_use(live) -> None:
+    ledger = live.candidate_ledger
+    adopted = _pair(live, "want me to look at it?", speaker="u2")
+    ledger.promote(adopted, ts=now_iso(), actor="character", reason="It offers help kindly.")
+    agreed = seed_candidate(live, seed_event(live, reply="lol nice", reaction_type="positive",
+                                             text="haha"), ctype=candidates.TYPE_EXAMPLE)
+    ledger.promote(agreed, ts=now_iso(), actor="auto", reason="2 compatible events, 0 strong")
+    learned = client().get("/api/dashboard/conversation",
+                           params={"id": "telegram:c1"}).json()["learned"]
+    by = {v["id"]: v["by"] for v in learned}
+    check("by the character, with its reason",
+          by[adopted] == {"by": "character", "why": "It offers help kindly."}, repr(by))
+    check("by the reactions", by[agreed] == {"by": "reactions", "why": ""}, repr(by))
+
+
+def test_expiry_and_rules_are_named_from_the_ledger_reasons() -> None:
+    from persona_agent import learning
+    entry = {"actor": "auto", "reason": learning.REASON_EXPIRED.format(days="30")}
+    check("time limit", dashboard.decided_by(entry) == {"by": "time", "why": "", "days": "30"})
+    check("rule", dashboard.decided_by({"actor": "auto", "reason": learning.REASON_LESSON})
+          == {"by": "rule", "why": "lesson"})
+    check("a person", dashboard.decided_by({"actor": "admin", "reason": learning.REASON_LESSON})
+          == {"by": "person", "why": ""})
+
+
 # ------------------------------------------------------------- big chats ----
 
-def test_a_busy_chat_sends_the_newest_and_judges_nothing(live, monkeypatch) -> None:
+def test_a_busy_chat_sends_the_newest_and_judges_only_what_it_shows(live, monkeypatch) -> None:
     n = dashboard.LIST_LIMIT + 30
     for i in range(n):
         seed_candidate(live, seed_event(live, reply=f"reply {i}", reaction_type="correction",
@@ -510,16 +578,17 @@ def test_a_busy_chat_sends_the_newest_and_judges_nothing(live, monkeypatch) -> N
     c = client()
     detail = c.get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
     check("newest first, cut to the limit",
-          len(detail["pending"]) == dashboard.LIST_LIMIT
-          and detail["pending"][0]["created"] >= detail["pending"][-1]["created"],
-          str(len(detail["pending"])))
-    check("a poll applies no promotion rule", not set(calls) & set(rules),
-          repr(sorted(set(calls))))
+          len(detail["observing"]) == dashboard.LIST_LIMIT
+          and detail["observing"][0]["created"] >= detail["observing"][-1]["created"],
+          str(len(detail["observing"])))
+    # Each shown item says where it stands; nothing more is judged.
+    check("a poll decides each shown item once", calls.count("decide") == dashboard.LIST_LIMIT,
+          repr(calls.count("decide")))
     check("and reads the evidence log once",
           calls.count("all") + calls.count("many") == 1, repr(calls))
     listed = c.get(PROBE).json()["conversations"]
     check("the list of chats carries the full count",
-          [(row["id"], row["pending"]) for row in listed] == [("telegram:c1", n)], repr(listed))
+          [(row["id"], row["observing"]) for row in listed] == [("telegram:c1", n)], repr(listed))
 
 
 def test_a_fresh_install_has_empty_lists_not_errors(live, tmp) -> None:
@@ -527,7 +596,7 @@ def test_a_fresh_install_has_empty_lists_not_errors(live, tmp) -> None:
     check("fresh: no conversations", c.get(PROBE).json() == {"conversations": []})
     detail = c.get("/api/dashboard/conversation", params={"id": "g1"}).json()
     check("fresh: an unknown conversation is empty, not missing",
-          all(detail[k] == [] for k in ("decisions", "memories", "pending", "learned")),
+          all(detail[k] == [] for k in ("decisions", "memories", "observing", "learned")),
           repr(detail))
     check("fresh: a missing id is a 400",
           c.get("/api/dashboard/conversation").status_code == 400)

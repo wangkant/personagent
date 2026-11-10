@@ -133,11 +133,15 @@ _TEXT = {
         "rolled_back": "stopped using {n} learned {rows} about that reply",
         "armed": "waiting for your reaction to its retry",
         "nothing": "nothing to learn",
-        "why_off": "automatic promotion is off",
-        "why_against": "other reactions disagree; left for the admin",
-        "why_conflict": "a different fix for the same reply exists; left for the admin",
-        "why_person": "only the admin can approve this kind; to see what is waiting: {learned}",
+        "why_off": "automatic learning is switched off, so nothing new is put in use",
+        "why_deciding": "the character is deciding it itself",
+        "why_observing": "the character looked at it and keeps observing: {reason}",
+        "why_judge_off": ("no further reaction can settle it, and the character's own "
+                          "decisions are switched off (PROMOTE_JUDGE_ENABLED)"),
+        "why_liked": "waiting for an approving reaction from someone in the chat",
         "why_other": "",
+        "by_character": "the character decided: {reason}",
+        "by_time": "set aside after a long time without a new reaction",
         "why_strong": "{strong} of {need} strong reactions so far",
         "why_events": "{events} of {need} agreeing reactions so far",
         "why_speakers": "{speakers} of {need} different people so far",
@@ -156,7 +160,7 @@ _TEXT = {
         "why_ledger": "  the ledger:",
         "kind_pair": "fix",
         "kind_example": "example",
-        "states": {"proposed": "proposed", "promoted": "promoted", "rejected": "rejected",
+        "states": {"proposed": "observing", "promoted": "promoted", "rejected": "rejected",
                    "rolled_back": "rolled back", "superseded": "superseded"},
         "reactions": {"correction": "correction", "rejection": "rejection",
                       "positive": "positive", "neutral": "neutral"},
@@ -234,11 +238,14 @@ _TEXT = {
         "rolled_back": "已停用 {n} 条与该回复相关的学习结果",
         "armed": "正在等待你对重试回复作出反应",
         "nothing": "无可学习的内容",
-        "why_off": "自动生效已关闭",
-        "why_against": "存在相反的反应，已交由管理员处理",
-        "why_conflict": "同一条回复已存在另一种改写，已交由管理员处理",
-        "why_person": "此类改动只能由管理员批准；查看待批准的内容：{learned}",
+        "why_off": "自动学习已关闭，不会启用任何新内容",
+        "why_deciding": "角色正在自行判断此项",
+        "why_observing": "角色已审视此项，决定继续观察：{reason}",
+        "why_judge_off": "后续反应已无法决定此项，且角色自行判断的功能已关闭（PROMOTE_JUDGE_ENABLED）",
+        "why_liked": "等待聊天中有成员对其作出认可的反应",
         "why_other": "尚未满足自动生效的条件",
+        "by_character": "角色已自行决定：{reason}",
+        "by_time": "因长时间未收到新的反应，已按时限搁置",
         "why_strong": "强反应目前为 {strong}/{need} 条",
         "why_events": "一致的反应目前为 {events}/{need} 条",
         "why_speakers": "不同成员目前为 {speakers}/{need} 人",
@@ -256,7 +263,7 @@ _TEXT = {
         "why_ledger": "  学习记录：",
         "kind_pair": "改写",
         "kind_example": "范例",
-        "states": {"proposed": "待生效", "promoted": "已生效", "rejected": "已驳回",
+        "states": {"proposed": "观察中", "promoted": "已生效", "rejected": "已驳回",
                    "rolled_back": "已撤销", "superseded": "已替换"},
         "reactions": {"correction": "纠正", "rejection": "否定",
                       "positive": "正面", "neutral": "中性"},
@@ -348,21 +355,30 @@ class Checklist:
     conflicts: list
     auto: bool
     decision: promotion.Decision
+    #: No further reaction can settle it: the character's own decision.
+    character: bool = False
+    #: PROMOTE_JUDGE_ENABLED.
+    judging: bool = True
+    #: The character's reason, when it already looked at this very evidence.
+    observed: str = ""
 
     def waiting_for(self) -> str:
-        """The first rule that holds it back, in the order the policy checks."""
+        """Where it stands: the character's decision, or the first count
+        more reactions must reach."""
         if not self.auto:
             return "why_off"
-        if self.against:
-            return "why_against"
-        if self.conflicts:
-            return "why_conflict"
-        if self.strong < self.need_strong:
-            return "why_strong" if self.can_be_strong else "why_person"
+        if self.character:
+            if not self.judging:
+                return "why_judge_off"
+            return "why_observing" if self.observed else "why_deciding"
+        if self.can_be_strong and self.strong < self.need_strong:
+            return "why_strong"
         if self.events < self.need_events:
             return "why_events"
         if not self.speakers_ok:
             return "why_speakers"
+        if self.decision.gate == promotion.GATE_PERSON:
+            return "why_liked"
         return ""
 
 
@@ -379,8 +395,14 @@ def checklist(agent: Agent, cand: dict) -> Checklist:
     speakers = {str(e.get("speaker_id") or "") for e in supporting} - {""}
     admins = {str(a).strip()[:64] for a in agent._admins()} - {""}
     related = promotion.related_events(cand, log.all())
+    character, observed = False, ""
     if cand.get("state") == candidates.STATE_PROPOSED:
         decision = agent._decide_promotion(cand["candidate_id"])
+        character = promotion.needs_character(decision, cand)
+        if character:
+            basis = agent._basis(cand["candidate_id"])
+            if basis is not None and agent._judged_on(basis.cand, basis.seen, basis.peers):
+                observed = str((basis.cand.get("review") or {}).get("reason") or "")
     else:
         history = cand.get("history") or [{}]
         decision = promotion.Decision(
@@ -397,7 +419,8 @@ def checklist(agent: Agent, cand: dict) -> Checklist:
         against=promotion.counter_evidence(cand, related, now=now, policy=policy),
         conflicts=promotion.find_conflicts(cand, agent.candidate_ledger.all(),
                                            policy=policy, related_events=related),
-        auto=policy.auto_promote, decision=decision)
+        auto=policy.auto_promote, decision=decision, character=character,
+        judging=bool(getattr(agent, "promote_judge_enabled", True)), observed=observed)
 
 
 @dataclass
@@ -882,7 +905,20 @@ def held_reason(lang: str, check: Checklist) -> str:
     need = {"why_strong": check.need_strong, "why_events": check.need_events,
             "why_speakers": check.need_speakers}.get(key, 0)
     return t[key].format(strong=check.strong, need=need, events=check.events,
-                         speakers=check.speakers, learned=hint("learned list", lang))
+                         speakers=check.speakers, reason=check.observed)
+
+
+def decided_reason(lang: str, cand: dict) -> str:
+    """Who settled a decided item, when it was not a person or the counts:
+    the character with its reason, or the time limit."""
+    t = text_for(lang)
+    last = (cand.get("history") or [{}])[-1]
+    if last.get("actor") == candidates.ACTOR_CHARACTER and last.get("reason"):
+        return t["by_character"].format(reason=last["reason"])
+    if (last.get("actor") == candidates.ACTOR_AUTO
+            and last.get("judge") == candidates.JUDGE_EXPIRY):
+        return t["by_time"]
+    return ""
 
 
 def promoted_line(lang: str, check: Checklist) -> str:
@@ -954,6 +990,8 @@ def candidate_line(lang: str, agent: Agent, cand: dict) -> str:
     line = f"{kind} {cand['candidate_id'][:8]} {what}: {state_label(lang, state)}"
     if state == candidates.STATE_PROPOSED:
         line += f" ({held_reason(lang, checklist(agent, cand))})"
+    elif decided_reason(lang, cand):
+        line += f" ({decided_reason(lang, cand)})"
     return line
 
 

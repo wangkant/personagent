@@ -1251,7 +1251,7 @@ class Learning:
             newest = max(stamps)
             if newest and now - newest > days * 86400.0 and ledger.reject(
                     cand["candidate_id"], ts=ts, actor=candidates.ACTOR_AUTO,
-                    reason=reason, judge=RULES_VERSION):
+                    reason=reason, judge=candidates.JUDGE_EXPIRY):
                 expired += 1
         if expired:
             logger.info("[Agent] %d waiting candidate(s) set aside after %s days "

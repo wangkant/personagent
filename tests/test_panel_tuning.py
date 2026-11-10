@@ -84,6 +84,25 @@ def test_saving_writes_only_what_changed_and_restarts(client, workspace):
     assert body["values"]["CHAT_TRIGGER_COUNT"] == "12"
 
 
+def test_the_character_decision_settings_save_and_read_back(client, workspace):
+    body = post(client, {"values": {"PROMOTE_JUDGE_ENABLED": False, "PROMOTE_OBSERVE_MAX_DAYS": "14",
+                                    "PROMOTE_JUDGE_MODEL": "judge-mini", "PROMOTE_JUDGE_INTERVAL_S": "600",
+                                    "PROMOTE_JUDGE_BATCH": "3"}}).json()
+    assert body["changed"] and workspace.restarts == [True]
+    values = workspace.config()
+    assert (values["PROMOTE_JUDGE_ENABLED"], values["PROMOTE_OBSERVE_MAX_DAYS"], values["PROMOTE_JUDGE_MODEL"],
+            values["PROMOTE_JUDGE_INTERVAL_S"], values["PROMOTE_JUDGE_BATCH"]) == ("false", "14", "judge-mini",
+                                                                                   "600", "3")
+    again = client.get("/api/tuning", headers=HEADERS).json()["values"]
+    assert again["PROMOTE_OBSERVE_MAX_DAYS"] == "14" and again["PROMOTE_JUDGE_ENABLED"] == "false"
+    # Under the floor the character itself keeps (settings.py): refused, naming the field.
+    for key, value in (("PROMOTE_JUDGE_INTERVAL_S", "30"), ("PROMOTE_JUDGE_BATCH", "0"),
+                       ("PROMOTE_OBSERVE_MAX_DAYS", "-1")):
+        response = post(client, {"values": {key: value}})
+        assert response.status_code == 400 and key in response.json()["error"], (key, response.text)
+    assert tuning.BY_KEY["PROMOTE_JUDGE_ENABLED"].section == "learning"
+
+
 def test_nothing_changed_writes_nothing(client, workspace):
     before = workspace.env.read_bytes()
     body = post(client, {"values": {"CHAT_TRIGGER_COUNT": "30"}}).json()

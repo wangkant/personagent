@@ -1,20 +1,24 @@
-"""Inspect and control what the agent is allowed to learn.
+"""Inspect what the character has learned, and step in when you choose.
 
-Candidates the promotion policy will not promote on its own (a single
-correction, laughter only, contradicting suggestions) wait here for a human.
+Nothing here waits for anyone. An item is put in use once enough agreeing
+reactions arrive; where no further reaction can settle it, the character
+decides itself; an item with no new reaction for PROMOTE_OBSERVE_MAX_DAYS is
+set aside. These commands only show that record, or step in.
 
     personagent learned                       # the same as `list`
-    personagent learned list                  # pending proposals
-    personagent learned list --state promoted # what is live now
-    personagent learned show <id>             # with its evidence
-    personagent learned promote <id>          # grant authority
-    personagent learned reject <id>           # refuse it
-    personagent learned rollback <id>         # revoke authority
-    personagent learned supersede <old> <new> # replace a live rewrite
+    personagent learned list                  # what the character is observing
+    personagent learned list --state promoted # what is in use now
+    personagent learned show <id>             # with its evidence and the character's record
+    personagent learned promote <id>          # put an observing item in use now
+    personagent learned reject <id>           # set an observing item aside
+    personagent learned rollback <id>         # stop using an item in use
+    personagent learned restore <id>          # bring back what the character or the time limit set aside
+    personagent learned supersede <old> <new> # replace a rewrite in use
     personagent learned rebuild               # re-derive the views
 
 Ids may be abbreviated to any unique prefix. A reply has at most one live
 rewrite: `promote` refuses a second one and names the `supersede` to run.
+What a person set aside stays set aside.
 
 Every action appends a lifecycle event and re-derives the retrieval views, so
 the running agent picks the change up on its next turn.
@@ -34,7 +38,7 @@ from persona_agent import home
 home.load_env()
 
 from persona_agent import access, candidates, evidence, lineage, promotion  # noqa: E402
-from persona_agent.config_env import env_int  # noqa: E402
+from persona_agent.config_env import env_bool, env_float, env_int  # noqa: E402
 from persona_agent.paths import resolve_runtime_lang_file  # noqa: E402
 from persona_agent.settings import content_lang  # noqa: E402
 
@@ -109,6 +113,113 @@ def _field(label: str, value) -> None:
     print(f"{_pad(langs.term(label), 11)}{value}")
 
 
+def _when(ts) -> str:
+    return str(ts or "?")[:16].replace("T", " ")
+
+
+def _judged_on_now(index: promotion.EvidenceIndex, cand: dict, policy) -> bool:
+    """Did the character look at exactly the evidence and rivals there are now."""
+    review = cand.get("review") or {}
+    if not review:
+        return False
+    related = index.related(cand)
+    seen = sorted({str(e.get("event_id") or "") for e in index.linked(cand) + related} - {""})
+    group = promotion.conflict_group(cand, index.peers(cand), policy=policy,
+                                     related_events=related)
+    peers = sorted(str(c.get("candidate_id") or "") for c in group[1:])
+    return (sorted(review.get("seen") or []) == seen
+            and sorted(review.get("peers") or []) == peers)
+
+
+def _standing(index: promotion.EvidenceIndex, cand: dict, decision, policy) -> list[str]:
+    """Where an observing item stands, in sentences for langs.term."""
+    if not policy.auto_promote:
+        return ["Not in use. Automatic learning is switched off (PROMOTE_AUTO_ENABLED), "
+                "so nothing new is put in use."]
+    judging = env_bool("PROMOTE_JUDGE_ENABLED", True)
+    if promotion.needs_character(decision, cand):
+        if not judging:
+            out = ["Observing. No further reaction can settle it, and the character's own "
+                   "decisions are switched off (PROMOTE_JUDGE_ENABLED)."]
+        elif _judged_on_now(index, cand, policy):
+            review = cand["review"]
+            out = [f"Observing. The character looked at it on {_when(review.get('ts'))} "
+                   f"and keeps observing: {review.get('reason')}"]
+        else:
+            out = ["Observing. The character is deciding it itself."]
+    elif decision.promote:
+        out = ["Every condition for use is met."]
+    else:
+        out = [_count(index, cand, decision, policy)]
+    days = env_float("PROMOTE_OBSERVE_MAX_DAYS", 30.0, minimum=0.0)
+    if judging and days > 0:
+        stamps = [promotion.epoch(e.get("ts"))
+                  for e in index.linked(cand) + index.related(cand)]
+        stamps.append(promotion.epoch(cand.get("created_at")))
+        newest = max(stamps)
+        if newest:
+            on = datetime.fromtimestamp(newest + days * 86400.0).strftime("%Y-%m-%d")
+            out.append(f"If no new reaction arrives, it will be set aside on {on}.")
+    return out
+
+
+def _count(index: promotion.EvidenceIndex, cand: dict, decision, policy) -> str:
+    """The first count more reactions must reach, in the policy's order."""
+    if (evidence.can_be_strong(str(cand.get("type") or ""))
+            and decision.strong < policy.min_strong):
+        return (f"Observing. Strong reactions: {decision.strong} of "
+                f"{policy.min_strong} needed.")
+    if decision.supporting < policy.min_events:
+        return (f"Observing. Agreeing reactions: {decision.supporting} of "
+                f"{policy.min_events} needed.")
+    if decision.gate == promotion.GATE_PERSON:
+        return "Observing. An approving reaction from someone in the chat is still needed."
+    speakers = {str(e.get("speaker_id") or "") for e in index.linked(cand)
+                if promotion.supports_candidate(e, cand, policy=policy)} - {""}
+    return (f"Observing. Different people: {len(speakers)} of "
+            f"{policy.min_speakers} needed.")
+
+
+def _settled(cand: dict, *, objection: bool = True) -> list[str]:
+    """Who decided an item that is no longer observing, and why."""
+    history = cand.get("history") or []
+    if not history:
+        return []
+    last = history[-1]
+    actor, when = str(last.get("actor") or ""), _when(last.get("ts"))
+    reason = str(last.get("reason") or "")
+    state = cand.get("state")
+    out: list[str] = []
+    if actor == candidates.ACTOR_CHARACTER:
+        out.append({candidates.STATE_PROMOTED: f"Put in use by the character on {when}: {reason}",
+                    candidates.STATE_REJECTED: f"Set aside by the character on {when}: {reason}",
+                    candidates.STATE_ROLLED_BACK:
+                        f"Taken out of use by the character on {when}: {reason}",
+                    candidates.STATE_SUPERSEDED:
+                        f"Replaced by the character's choice on {when}: {reason}",
+                    }.get(state, ""))
+    elif state == candidates.STATE_PROMOTED and actor == candidates.ACTOR_AUTO:
+        out.append(f"Put in use by agreeing reactions on {when}.")
+    elif state == candidates.STATE_PROMOTED and actor:
+        out.append(f"Put in use by a person ({actor}) on {when}: {reason}")
+    elif state == candidates.STATE_REJECTED and actor == candidates.ACTOR_AUTO:
+        if last.get("judge") == candidates.JUDGE_EXPIRY:
+            out.append(f"Set aside by the time limit on {when} "
+                       f"(PROMOTE_OBSERVE_MAX_DAYS).")
+        else:
+            out.append(f"Set aside by rule on {when}: {reason}")
+    elif state == candidates.STATE_REJECTED and actor:
+        out.append(f"Set aside by a person ({actor}) on {when}: {reason}")
+        out.append("A person set it aside, and a person's decision stays final.")
+    if candidates.restorable(cand):
+        out.append(f"To bring it back, run: {_command('restore ' + cand['candidate_id'][:12])}")
+    review = cand.get("review") or {}
+    if objection and state == candidates.STATE_PROMOTED and review:
+        out.append(f"Kept in use after an objection, decided on {_when(review.get('ts'))}: "
+                   f"{review.get('reason')}")
+    return [line for line in out if line]
+
+
 def cmd_list(args, ledger, log, policy) -> int:
     rows = [c for c in ledger.all()
             if (not args.state or c.get("state") == args.state)
@@ -121,6 +232,7 @@ def cmd_list(args, ledger, log, policy) -> int:
         return 0
     print(f"{_pad(langs.term('id'), 14)}{_pad(langs.term('type'), 18)}{_pad(langs.term('state'), 12)}"
           f"{_pad(langs.term('ev'), 4)}{langs.term('reply -> better')}")
+    index = promotion.EvidenceIndex(log.all(), ledger.all())
     for cand in rows:
         line = _short(cand.get("reply"), 40)
         if cand.get("better"):
@@ -129,8 +241,11 @@ def cmd_list(args, ledger, log, policy) -> int:
               f"{str(cand.get('state') or '?'):11} "
               f"{len(cand.get('evidence') or []):<3} {line}")
         if cand.get("state") == candidates.STATE_PROPOSED:
-            decision = _decide(ledger, log, cand, policy)
-            print(f"{'':14}{langs.term(f'Not promoted yet: {decision.reason}')}")
+            notes = _standing(index, cand, _decide(ledger, log, cand, policy), policy)
+        else:
+            notes = _settled(cand)
+        for note in notes:
+            print(f"{'':14}{langs.term(note)}")
     print()
     _say(f"Candidates shown: {len(rows)}. Run `{_command('show <id>')}` to see the evidence behind one.")
     return 0
@@ -212,8 +327,25 @@ def cmd_show(args, ledger, log, policy) -> int:
         print()
         _say("lifecycle")
         for h in cand["history"]:
+            stamp = " ".join(str(h.get(k)) for k in ("judge", "model") if h.get(k))
             print(f"  {h.get('ts') or '?':20} {h.get('state'):11} "
-                  f"{h.get('actor') or '?':6} {_short(h.get('reason'), 70)}")
+                  f"{h.get('actor') or '?':9} {_short(h.get('reason'), 70)}"
+                  + (f"  [{stamp}]" if stamp else ""))
+    review = cand.get("review") or {}
+    if review:
+        print()
+        _say("the character's record")
+        _say(f"The character last looked on {_when(review.get('ts'))} and kept "
+             f"observing: {review.get('reason')}"
+             if cand.get("state") == candidates.STATE_PROPOSED else
+             f"Kept in use after an objection, decided on {_when(review.get('ts'))}: "
+             f"{review.get('reason')}")
+        _say(f"Reactions it judged: {len(review.get('seen') or [])}; "
+             f"rival rewrites: {len(review.get('peers') or [])}.")
+        if review.get("judge"):
+            _say(f"Judgement: {review['judge']}")
+        if review.get("model"):
+            _say(f"Model: {review['model']}")
     if cand.get("superseded_by"):
         print()
         _field("superseded by", cand["superseded_by"])
@@ -221,13 +353,18 @@ def cmd_show(args, ledger, log, policy) -> int:
         print()
         _field("supersedes", cand["supersedes"])
 
+    print()
     if cand.get("state") == candidates.STATE_PROPOSED:
         decision = _decide(ledger, log, cand, policy)
-        print()
-        _say(f"Policy: would promote: {decision.reason}" if decision.promote
-             else f"Policy: holding: {decision.reason}")
+        index = promotion.EvidenceIndex(log.all(), ledger.all())
+        for note in _standing(index, cand, decision, policy):
+            _say(note)
         if decision.blocked_by:
-            _say(f"Blocked by {decision.blocked_by}")
+            _say(f"Disagreeing reactions or rival rewrites: {decision.blocked_by}")
+    else:
+        # The objection review is already printed with the record above.
+        for note in _settled(cand, objection=False):
+            _say(note)
     return 0
 
 
@@ -274,6 +411,45 @@ def cmd_transition(args, ledger, log, policy, paths, action: str) -> int:
     return 0
 
 
+def cmd_restore(args, ledger, log, policy, paths) -> int:
+    """Bring back what the character or the time limit set aside, through the
+    ledger's own restore; a person's or a content rule's discard stays."""
+    cid = _resolve_id(ledger, args.candidate_id)
+    if cid is None:
+        return 1
+    cand = ledger.get(cid)
+    before = cand.get("state")
+    if not candidates.restorable(cand):
+        last = (cand.get("history") or [{}])[-1]
+        actor = str(last.get("actor") or "")
+        if before != candidates.STATE_REJECTED:
+            _say(f"Refused: a candidate in the state {before} cannot be brought back.")
+        elif actor in (candidates.ACTOR_AUTO, candidates.ACTOR_CHARACTER, ""):
+            _say(f"Refused: {cid[:12]} was set aside by rule, so it cannot be brought back.")
+        else:
+            _say(f"Refused: {cid[:12]} was set aside by a person ({actor}), "
+                 f"and a person's decision stays final.")
+        return 1
+    rivals = promotion.active_rivals(cand, ledger.all(), policy=policy)
+    if rivals:
+        rival = rivals[0]["candidate_id"]
+        _say(f"Refused: {rival[:12]} already rewrites this reply, as "
+             f"{_short(rivals[0].get('better'), 50)!r}. A reply keeps one rewrite; to replace it, run:")
+        print(f"  {_command(f'supersede {rival[:12]} {cid[:12]}')}")
+        return 1
+    now = datetime.now().isoformat(timespec="seconds")
+    if not ledger.restore(cid, ts=now, actor=args.actor,
+                          reason=args.reason or "restore by operator"):
+        _say(f"Refused: a candidate in the state {before} cannot be brought back.")
+        return 1
+    print(f"{cid}: {before} -> {ledger.get(cid).get('state')}")
+    for other in promotion.answered_drafts(ledger.get(cid), ledger.all(), policy=policy):
+        if ledger.reject(other, ts=now, actor=args.actor, reason=f"answered by {cid}"):
+            print(f"{other}: proposed -> rejected " + langs.term(f"(answered by {cid[:12]})"))
+    _rebuild(paths, ledger)
+    return 0
+
+
 def cmd_supersede(args, ledger, log, policy, paths) -> int:
     old = _resolve_id(ledger, args.old_id)
     new = _resolve_id(ledger, args.new_id)
@@ -306,7 +482,7 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
                    help=langs.term("recorded as the actor on lifecycle events"))
     sub = p.add_subparsers(dest="cmd")
 
-    lst = sub.add_parser("list", help=langs.term("list candidates (default: pending)"))
+    lst = sub.add_parser("list", help=langs.term("list candidates (default: observing)"))
     lst.add_argument("--state", default=candidates.STATE_PROPOSED,
                      choices=("",) + candidates.STATES)
     lst.add_argument("--type", default="", choices=("",) + candidates.TYPES)
@@ -315,9 +491,10 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     show = sub.add_parser("show", help=langs.term("one candidate with its evidence"))
     show.add_argument("candidate_id")
 
-    for name, helptext in (("promote", "grant authority to affect replies"),
-                           ("reject", "refuse a proposal"),
-                           ("rollback", "revoke a promoted candidate")):
+    for name, helptext in (("promote", "put an observing item in use now"),
+                           ("reject", "set an observing item aside"),
+                           ("rollback", "stop using an item in use"),
+                           ("restore", "bring back an item the character or the time limit set aside")):
         sp = sub.add_parser(name, help=langs.term(helptext))
         sp.add_argument("candidate_id")
         sp.add_argument("--reason", default="")
@@ -357,6 +534,8 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
         return cmd_show(args, ledger, log, policy)
     if args.cmd in ("promote", "reject", "rollback"):
         return cmd_transition(args, ledger, log, policy, paths, args.cmd)
+    if args.cmd == "restore":
+        return cmd_restore(args, ledger, log, policy, paths)
     if args.cmd == "supersede":
         return cmd_supersede(args, ledger, log, policy, paths)
     return cmd_rebuild(args, ledger, log, policy, paths)

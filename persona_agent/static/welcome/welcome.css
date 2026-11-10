@@ -1517,9 +1517,6 @@ label.check input:checked {
 .activity-page {
   max-width: 1040px;
 }
-.dot.review {
-  background: var(--warn);
-}
 .activity {
   display: grid;
   grid-template-columns: 250px minmax(0, 1fr);
@@ -1585,10 +1582,6 @@ label.check input:checked {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
-.count.review {
-  background: var(--warn-bg);
-  color: var(--warn-text);
-}
 .activity-chat {
   min-width: 0;
 }
@@ -1637,8 +1630,15 @@ label.check input:checked {
   padding: 12px 14px;
   margin-bottom: 8px;
 }
-.change.waiting {
-  background: var(--warn-soft);
+.change-status {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.change-status + .change-status {
+  margin-top: 2px;
 }
 .change-top {
   display: flex;

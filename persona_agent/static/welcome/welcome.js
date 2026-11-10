@@ -23,8 +23,22 @@ const translations = {
     activityHere: "本页面",
     activityGroup: "群聊",
     activityDm: "私聊",
-    activityReview: "待你确认",
-    activityReviewHint: "以下改动将在收到足够的反馈后自动生效，你也可以现在直接决定。",
+    activityObserving: "仍在观察",
+    activityObservingHint: "角色会随着新的反应自行决定这些内容，此处无需你进行任何操作。",
+    activityStageEvents: "目前已有 {have} 次认同的反应，共需 {need} 次。",
+    activityStageStrong: "目前已有回复对象本人的 {have} 次明确纠正，共需 {need} 次。",
+    activityStageSpeakers: "目前已有 {have} 位不同的人认同，共需 {need} 位。",
+    activityStageApproval: "仍需要一位参与者给出正面反应。",
+    activityStageDeciding: "仅凭反应无法确定此条内容，角色正在自行判断。",
+    activityStageObserving: "角色已审视此条内容，决定继续观察。理由：“{reason}”",
+    activityStageHeld: "仅凭反应无法确定此条内容，且高级设置中已关闭角色自行判断，因此它将继续处于观察状态。",
+    activityStageOff: "高级设置中已关闭自动学习，因此此条内容不会投入使用。",
+    activityStageReady: "已满足全部条件，将在角色收到下一次反应时投入使用。",
+    activityExpires: "如果此后没有新的反应，它将于 {date} 被搁置。",
+    activityByReactions: "因反应一致而投入使用。",
+    activityByCharacter: "由角色自行决定投入使用。理由：“{reason}”",
+    activityByPerson: "由人工操作投入使用。",
+    activityFresh: "自你上次查看以来，角色有新学到的内容",
     activityLearned: "学习记录",
     activityNotes: "记忆",
     activityRecent: "近期动态",
@@ -41,11 +55,7 @@ const translations = {
     activityForget: "删除",
     activityForgotten: "已删除。",
     listSep: "、",
-    activityKeep: "保留",
-    activityDiscard: "放弃",
     activityUndo: "撤销",
-    activityKept: "已保留，之后的回复将采用此改动。",
-    activityDiscarded: "已放弃此改动。",
     activityUndone: "已撤销，角色不会再使用这一说法。",
     activityQuiet: "未发言",
     activityCount: "×{n}",
@@ -320,8 +330,25 @@ const translations = {
     activityHere: "This page",
     activityGroup: "group",
     activityDm: "DM",
-    activityReview: "Waiting for you",
-    activityReviewHint: "These changes are waiting for more reactions before they apply on their own. You can decide now.",
+    activityObserving: "Still under observation",
+    activityObservingHint:
+      "The character decides these items by itself as reactions arrive. Nothing here requires any action from you.",
+    activityStageEvents: "Agreeing reactions so far: {have} of the {need} required.",
+    activityStageStrong:
+      "Clear corrections from the person the reply was addressed to so far: {have} of the {need} required.",
+    activityStageSpeakers: "Different people in agreement so far: {have} of the {need} required.",
+    activityStageApproval: "A positive reaction from a participant is still required.",
+    activityStageDeciding: "Reactions alone cannot settle this item, so the character is deciding it itself.",
+    activityStageObserving: "The character has reviewed this item and continues to observe it. Its reason: “{reason}”",
+    activityStageHeld:
+      "Reactions alone cannot settle this item, and the character's own decisions are turned off in the advanced settings, so it remains under observation.",
+    activityStageOff: "Automatic learning is turned off in the advanced settings, so this item is not put into use.",
+    activityStageReady: "It meets every condition and will be put into use with the next reaction the character receives.",
+    activityExpires: "If no new reaction arrives, it will be set aside on {date}.",
+    activityByReactions: "Put into use because the reactions agreed.",
+    activityByCharacter: "Put into use by the character's own decision. Its reason: “{reason}”",
+    activityByPerson: "Put into use by a person.",
+    activityFresh: "The character has learned something new since your last visit",
     activityLearned: "Learned",
     activityNotes: "Remembers",
     activityRecent: "Recent",
@@ -338,11 +365,7 @@ const translations = {
     activityForget: "Forget",
     activityForgotten: "Forgotten.",
     listSep: ", ",
-    activityKeep: "Keep",
-    activityDiscard: "Discard",
     activityUndo: "Undo",
-    activityKept: "Kept. Later replies will use it.",
-    activityDiscarded: "Discarded.",
     activityUndone: "Undone. The character will no longer phrase it this way.",
     activityQuiet: "Stayed quiet",
     activityCount: "×{n}",
@@ -1465,10 +1488,35 @@ function modeText(row) {
     row.mode === "judge" && !row.spoke ? "m_judge_quiet" : `m_${row.mode}`;
   return translations[lang]?.[key] || translations.en[key] || row.mode;
 }
+// The dot means only "learned something new since you last looked": nothing
+// here waits for the reader, so items under observation never light it.
+const ACTIVITY_SEEN_KEY = "personagent-activity-seen";
+function activityLatest() {
+  return Math.max(0, ...(activity?.chats || []).map((chat) => chat.latest || 0));
+}
+function activitySeen() {
+  try {
+    const value = localStorage.getItem(ACTIVITY_SEEN_KEY);
+    return value === null ? null : Number(value) || 0;
+  } catch {
+    return null;
+  }
+}
+function markActivitySeen() {
+  try {
+    localStorage.setItem(ACTIVITY_SEEN_KEY, String(activityLatest()));
+  } catch {
+    // Without storage the dot simply stays off.
+  }
+}
 function renderActivityDot() {
-  $("activity-dot").hidden = !(activity?.chats || []).some(
-    (chat) => chat.review > 0,
-  );
+  // The first look ever records what is there instead of lighting the dot.
+  if (activity?.chats && (view === "activity" || activitySeen() === null))
+    markActivitySeen();
+  const seen = activitySeen();
+  const dot = $("activity-dot");
+  dot.hidden = seen === null || activityLatest() <= seen;
+  dot.title = dot.hidden ? "" : t("activityFresh");
 }
 function renderActivity() {
   renderActivityDot();
@@ -1520,8 +1568,6 @@ function renderActivity() {
         ),
       );
       row.append(chatBadge(chat), text);
-      if (chat.review)
-        row.append(el("span", "count review", String(chat.review)));
       row.addEventListener("click", () => selectChat(chat.id));
       const item = el("li");
       item.append(row);
@@ -1547,8 +1593,47 @@ function action(key, cls, focus, run) {
   button.addEventListener("click", run);
   return button;
 }
-function change(item, waiting) {
-  const card = el("div", `change${waiting ? " waiting" : ""}`);
+function activityDate(epoch) {
+  return new Date(epoch * 1000).toLocaleDateString(LANGS[lang] || "en", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+// Where an item under observation stands: one sentence, then when it would be
+// set aside. The learned panel shows the same sentences (PA.standing).
+function standingText(info) {
+  if (!info) return [];
+  const counts = {
+    events: ["activityStageEvents", info.events, info.needEvents],
+    strong: ["activityStageStrong", info.strong, info.needStrong],
+    speakers: ["activityStageSpeakers", info.speakers, info.needSpeakers],
+  };
+  let head = "";
+  if (info.stage === "reactions") {
+    const [key, have, need] = counts[info.missing] || [];
+    head = key
+      ? t(key, { have: String(have ?? 0), need: String(need ?? 0) })
+      : t("activityStageApproval");
+  } else if (info.stage === "observing")
+    head = t("activityStageObserving", { reason: info.reason || "" });
+  else if (
+    ["deciding", "held", "off", "ready"].includes(info.stage)
+  )
+    head = t(`activityStage${info.stage[0].toUpperCase()}${info.stage.slice(1)}`);
+  const out = head ? [head] : [];
+  if (info.expires) out.push(t("activityExpires", { date: activityDate(info.expires) }));
+  return out;
+}
+// How an item in use came into use.
+function cameInText(info) {
+  if (!info || !info.by) return "";
+  if (info.by === "character")
+    return t("activityByCharacter", { reason: info.why || "" });
+  return t(info.by === "reactions" ? "activityByReactions" : "activityByPerson");
+}
+function change(item, observed) {
+  const card = el("div", `change${observed ? " observed" : ""}`);
   const top = el("div", "change-top");
   const who = item.from.length
     ? t("activityFrom", { who: item.from.join(t("listSep")) })
@@ -1576,24 +1661,13 @@ function change(item, waiting) {
     }
   } else body.append(el("p", "change-reply", item.said));
   card.append(body);
+  // Observed items are there to be read: their standing, and no buttons.
+  const status = observed ? standingText(item.standing) : [cameInText(item.by)];
+  for (const text of status.filter(Boolean))
+    card.append(el("p", "change-status", text));
+  if (observed) return card;
   const buttons = el("div", "change-actions");
-  const keep = ["replace", "promote"].find((name) =>
-    item.actions.includes(name),
-  );
-  if (waiting) {
-    if (keep)
-      buttons.append(
-        action("activityKeep", "primary small", `${keep}:${item.id}`, () =>
-          decide(item, keep),
-        ),
-      );
-    if (item.actions.includes("reject"))
-      buttons.append(
-        action("activityDiscard", "quiet", `reject:${item.id}`, () =>
-          decide(item, "reject"),
-        ),
-      );
-  } else if (item.actions.includes("rollback"))
+  if (item.actions.includes("rollback"))
     buttons.append(
       action("activityUndo", "secondary", `rollback:${item.id}`, () =>
         decide(item, "rollback"),
@@ -1642,15 +1716,16 @@ function renderChat() {
   const parts = [head];
   if (activityError)
     parts.push(el("p", "activity-note error-note", t(activityError)));
-  if (chat.review.length) {
-    const part = section("activityReview", chat.review.length);
-    part.append(el("p", "section-hint", t("activityReviewHint")));
-    for (const item of chat.review) part.append(change(item, true));
-    parts.push(part);
-  }
   if (chat.learned.length) {
     const part = section("activityLearned", chat.learned.length);
     for (const item of chat.learned) part.append(change(item, false));
+    parts.push(part);
+  }
+  if (chat.observing.length) {
+    const part = section("activityObserving", chat.observing.length);
+    part.id = "activity-observing";
+    part.append(el("p", "section-hint", t("activityObservingHint")));
+    for (const item of chat.observing) part.append(change(item, true));
     parts.push(part);
   }
   if (chat.core || chat.notes.length) {
@@ -1701,9 +1776,9 @@ async function loadActivity(withChat) {
     activity = listed;
     activityError = "";
     const chats = activity.chats || [];
-    // Open on a chat with something to decide, else the latest one.
+    // Open on the latest chat; nothing in any chat waits for the reader.
     if (!chats.some((chat) => chat.id === activitySelected))
-      activitySelected = (chats.find((chat) => chat.review) || chats[0] || {}).id || "";
+      activitySelected = (chats[0] || {}).id || "";
     if (withChat && activitySelected) {
       const chat = await api(
         `activity/chat?id=${encodeURIComponent(activitySelected)}`,
@@ -1747,15 +1822,7 @@ async function decide(item, verb) {
       chat: activitySelected,
     });
     if (seq === activitySeq) activityChat = chat;
-    toast(
-      t(
-        verb === "reject"
-          ? "activityDiscarded"
-          : verb === "rollback"
-            ? "activityUndone"
-            : "activityKept",
-      ),
-    );
+    toast(t("activityUndone"));
   } catch (error) {
     toast(t(error.message));
   } finally {
@@ -2346,6 +2413,9 @@ window.PA = {
   t,
   toast,
   ask,
+  // The Activity view's sentences for where an item stands and how it came into use.
+  standing: standingText,
+  cameIn: cameInText,
   refresh,
   showView,
   get state() {

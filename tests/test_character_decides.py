@@ -499,6 +499,14 @@ async def test_an_item_with_no_new_reaction_is_set_aside_by_rule(tmp: Path) -> N
           and row["history"][-1]["reason"]
           == "Set aside by rule: no new reactions for 30 days."
           and "adopt" not in model.calls, str(row["history"][-1]))
+    check("told apart from the character's discard and the content rules",
+          row["history"][-1].get("judge") == candidates.JUDGE_EXPIRY
+          != learning.RULES_VERSION, str(row["history"][-1]))
+    check("the time limit's set-aside is one a person may bring back",
+          candidates.restorable(row)
+          and a.candidate_ledger.restore(cid, ts="2026-11-11T10:00:00",
+                                         actor="admin", reason="brought back")
+          and a.candidate_ledger.get(cid)["state"] == "promoted")
 
 
 def test_the_settings_and_their_defaults() -> None:
@@ -520,3 +528,191 @@ def test_the_settings_and_their_defaults() -> None:
           and env.promote_judge_batch == 5 and env.promote_judge_model == "cheap"
           and env.promote_observe_max_days == 0.0,
           repr((env.promote_judge_interval_s, env.promote_judge_batch)))
+
+
+# ---------------------------------------------------------------------------
+# What a person reads: where an item stands, never that it waits for them
+# ---------------------------------------------------------------------------
+
+UNTRUE = ("left for", "waits for you", "waiting for you", "await", "approve",
+          "Not promoted yet", "Policy: holding", "管理员", "待确认")
+
+
+def learned(a: Agent, monkeypatch, capsys, *argv: str) -> tuple[int, str]:
+    """`personagent learned ...` on this agent's own files."""
+    from persona_agent import ledger_admin
+
+    monkeypatch.setattr(ledger_admin, "_paths", lambda lang: {
+        "evidence": a.evidence_file, "ledger": a.candidate_ledger_file,
+        "examples_view": a.promoted_examples_file,
+        "feedback_view": a.promoted_feedback_file})
+    capsys.readouterr()
+    code = ledger_admin.main(list(argv), prog="personagent learned")
+    out = capsys.readouterr().out
+    for phrase in UNTRUE:
+        assert phrase not in out, (phrase, out)
+    return code, out
+
+
+async def test_the_trial_says_whether_the_character_decides_or_observes(
+        tmp: Path) -> None:
+    from persona_agent import chat
+
+    a, model = make_agent(tmp)
+    cid = await disagreed(a, model)
+    a.promote_judge_enabled = True
+    check("deciding", chat.held_reason("en", chat.checklist(a, a.candidate_ledger.get(cid)))
+          == "the character is deciding it itself")
+    a.promote_judge_enabled = False
+    check("its own decisions switched off",
+          chat.checklist(a, a.candidate_ledger.get(cid)).waiting_for() == "why_judge_off")
+    a.promote_judge_enabled = True
+    model.say("observe", "The reactions point both ways so far.")
+    await a._character_decide(cid)
+    row = a.candidate_ledger.get(cid)
+    check("observing, with the character's reason",
+          chat.candidate_line("en", a, row).endswith(
+              ": observing (the character looked at it and keeps observing: "
+              "The reactions point both ways so far.)"),
+          chat.candidate_line("en", a, row))
+    check("and in Chinese",
+          "观察中 (角色已审视此项，决定继续观察：The reactions point both ways so far.)"
+          in chat.candidate_line("zh", a, row),
+          chat.candidate_line("zh", a, row))
+
+    b, model = make_agent(tmp / "b")
+    cid = await disagreed(b, model)
+    b.promote_judge_enabled = True
+    model.say("discard", "Another member liked the original reply.")
+    await b._character_decide(cid)
+    check("a discard names the character and its reason",
+          chat.candidate_line("en", b, b.candidate_ledger.get(cid)).endswith(
+              ": rejected (the character decided: Another member liked the "
+              "original reply.)"), chat.candidate_line("en", b, b.candidate_ledger.get(cid)))
+
+
+async def test_the_summary_names_my_decision_and_claims_no_review_when_off(
+        tmp: Path) -> None:
+    a, model = make_agent(tmp)
+    cid = await rival(a, model)
+    a.promote_judge_enabled = True
+    check("one item for the character to decide",
+          "1 under my own review" in a._learned_summary(CONV, "en"),
+          a._learned_summary(CONV, "en"))
+    a.promote_judge_enabled = False
+    check("its own decisions off: it claims to review nothing",
+          "0 under my own review" in a._learned_summary(CONV, "en")
+          and "0 条由我自行判断" in a._learned_summary(CONV, "zh"),
+          a._learned_summary(CONV, "en"))
+    a.promote_judge_enabled = True
+    model.say("adopt", "The newer wording was accepted.", "A")
+    await a._character_decide(cid)
+    en, zh = a._learned_summary(CONV, "en"), a._learned_summary(CONV, "zh")
+    check("the chain names the character's own decision",
+          "decided by me" in en and "由我自己决定" in zh
+          and "admin" not in en and "管理员" not in zh, en + "\n" + zh)
+    b, model = make_agent(tmp / "b")
+    held = await disagreed(b, model)
+    b.candidate_ledger.promote(held, ts="2026-11-11T10:01:00", actor="dashboard",
+                               reason="local page")
+    b._rebuild_promoted_views()
+    check("put in use by a person on the page: by hand, not 'the admin'",
+          "put in use by hand" in b._learned_summary(CONV, "en")
+          and "人工启用" in b._learned_summary(CONV, "zh"),
+          b._learned_summary(CONV, "en"))
+
+
+async def test_learned_lists_and_shows_where_each_item_stands(
+        tmp: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setenv("AGENT_LANG", "en")
+    monkeypatch.delenv("PROMOTE_JUDGE_ENABLED", raising=False)
+    monkeypatch.delenv("PROMOTE_OBSERVE_MAX_DAYS", raising=False)
+    a, model = make_agent(tmp)
+    cid = await disagreed(a, model)
+    code, out = learned(a, monkeypatch, capsys, "list")
+    check("deciding", code == 0 and "Observing. The character is deciding it itself." in out
+          and "If no new reaction arrives, it will be set aside on" in out, out)
+    a.promote_judge_enabled = True
+    model.say("observe", "The reactions point both ways so far.")
+    await a._character_decide(cid)
+    _, out = learned(a, monkeypatch, capsys, "list")
+    check("observing, with when and why",
+          "and keeps observing: The reactions point both ways so far." in out, out)
+    _, out = learned(a, monkeypatch, capsys, "show", cid[:10])
+    check("show prints the character's record with its judgement",
+          "the character's record" in out and "Reactions it judged: " in out
+          and f"Judgement: {adoption.ADOPTION_VERSION}" in out, out)
+    monkeypatch.setenv("PROMOTE_JUDGE_ENABLED", "false")
+    _, out = learned(a, monkeypatch, capsys, "list")
+    check("its own decisions off, and no time limit runs",
+          "decisions are switched off (PROMOTE_JUDGE_ENABLED)" in out
+          and "set aside on" not in out, out)
+    monkeypatch.setenv("PROMOTE_AUTO_ENABLED", "false")
+    _, out = learned(a, monkeypatch, capsys, "list")
+    check("the master switch off", "Not in use. Automatic learning is switched off" in out, out)
+    monkeypatch.delenv("PROMOTE_AUTO_ENABLED")
+    monkeypatch.delenv("PROMOTE_JUDGE_ENABLED")
+
+    send(a, "a fresh line", "42")
+    await react(a, model, "42", dict(CORRECTION, better="a better line"))
+    _, out = learned(a, monkeypatch, capsys, "list")
+    check("one correction waits only for more reactions",
+          "Observing. Agreeing reactions: 1 of 2 needed." in out, out)
+
+    monkeypatch.setenv("AGENT_LANG", "zh")
+    _, out = learned(a, monkeypatch, capsys, "list")
+    check("in Chinese", "观察中。一致的反应：1/2 条。" in out
+          and "决定继续观察：The reactions point both ways so far." in out, out)
+
+
+async def test_restore_brings_back_the_characters_and_the_time_limits_only(
+        tmp: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setenv("AGENT_LANG", "en")
+    a, model = make_agent(tmp)
+    cid = await disagreed(a, model)
+    a.promote_judge_enabled = True
+    model.say("discard", "Another member liked the original reply.")
+    await a._character_decide(cid)
+    _, out = learned(a, monkeypatch, capsys, "list", "--state", "rejected")
+    check("who set it aside, why, and how to bring it back",
+          "Set aside by the character on " in out
+          and ": Another member liked the original reply." in out
+          and "To bring it back, run: " in out
+          and f"learned restore {cid[:12]}" in out, out)
+    code, out = learned(a, monkeypatch, capsys, "restore", cid[:10])
+    row = candidates.CandidateLedger(a.candidate_ledger_file).get(cid)
+    check("brought back through the ledger's restore, as the person's act",
+          code == 0 and row["state"] == "promoted"
+          and row["history"][-1]["actor"] == "admin"
+          and pairs(a) == [(REPLY, RETRY)], out)
+
+    ledger = candidates.CandidateLedger(a.candidate_ledger_file)
+    ledger.rollback(cid, ts="2026-11-11T10:00:00", actor="admin")
+    ledger.reject(cid, ts="2026-11-11T10:00:01", actor="admin", reason="not this")
+    code, out = learned(a, monkeypatch, capsys, "restore", cid[:10])
+    check("a person's discard stays final, said in a sentence",
+          code == 1 and "was set aside by a person (admin), and a person's "
+          "decision stays final." in out, out)
+    _, out = learned(a, monkeypatch, capsys, "list", "--state", "rejected")
+    check("and the list says so", "Set aside by a person (admin) on " in out
+          and "To bring it back" not in out, out)
+
+    b, model = make_agent(tmp / "b", judging=True)
+    send(b, REPLY, "42")
+    await react(b, model, "42", CORRECTION)
+    gone = cand(b, CORRECTION["better"])["candidate_id"]
+    b._expire_observing(time.time() + 31 * 86400)
+    _, out = learned(b, monkeypatch, capsys, "list", "--state", "rejected")
+    check("the time limit is named", "Set aside by the time limit on " in out, out)
+    code, out = learned(b, monkeypatch, capsys, "restore", gone[:10])
+    check("and its set-aside comes back",
+          code == 0 and candidates.CandidateLedger(b.candidate_ledger_file)
+          .get(gone)["state"] == "promoted", out)
+
+    c, model = make_agent(tmp / "c")
+    ruled = await rival(c, model, better="**oof**, rough")
+    c.promote_judge_enabled = True
+    await c._character_decide(ruled)
+    code, out = learned(c, monkeypatch, capsys, "restore", ruled[:10])
+    check("a content rule's discard does not",
+          code == 1 and "was set aside by rule, so it cannot be brought back." in out, out)

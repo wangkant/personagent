@@ -68,8 +68,12 @@ DIRECT_WINDOW = 40
 # Refusals a direct platform names, which the page explains one by one.
 NAMED_REFUSALS = direct_setup.NAMED_REFUSALS
 # The Activity view reads the character service's own API with the token it
-# keeps in its runtime folder; these are the decisions the view can make.
-ACTIVITY_ACTIONS = frozenset({"promote", "replace", "reject", "rollback"})
+# keeps in its runtime folder. The character decides what it learns, so the
+# view offers only Undo; the learned panel holds a person's other actions.
+ACTIVITY_ACTIONS = frozenset({"rollback"})
+# What one sentence per observed item needs (dashboard.standing).
+ACTIVITY_STANDING = ("stage", "missing", "reason", "expires", "events", "needEvents",
+                     "strong", "needStrong", "speakers", "needSpeakers")
 ACTIVITY_RECENT = 40
 CANDIDATE_ID = re.compile(r"[0-9A-Za-z_-]{1,64}")
 # The page's own connector: the outbox hands it only what is for this page's chat.
@@ -872,8 +876,8 @@ class Workspace:
             return {"running": raw is not None, "off": bool(raw), "chats": []}
         chats = [{"id": str(c.get("id", "")), "platform": str(c.get("platform", "")),
                   "kind": str(c.get("kind", "")), "last": c.get("last_activity", 0),
-                  "review": int(c.get("pending", 0)), "learned": int(c.get("learned", 0)),
-                  "notes": int(c.get("memories", 0))}
+                  "observing": int(c.get("observing", 0)), "learned": int(c.get("learned", 0)),
+                  "latest": float(c.get("latest") or 0), "notes": int(c.get("memories", 0))}
                  for c in raw.get("conversations", [])]
         return {"running": True, "off": False, "chats": chats}
 
@@ -917,20 +921,28 @@ class Workspace:
 
 
 def _activity_chat(raw: dict) -> dict:
-    """One chat as the Activity view shows it: what waits for a decision,
-    what it learned, what it remembers and what it recently did. The
-    service's checklists, evidence and history stay with `personagent learned`."""
+    """One chat as the Activity view shows it: what the character still
+    observes and where each item stands, what it learned and how, what it
+    remembers and what it recently did. Evidence and history stay with the
+    learned panel and `personagent learned`."""
     def item(cand: dict) -> dict:
         speakers = [e.get("speaker") for e in cand.get("evidence") or [] if e.get("speaker")]
-        return {"id": cand.get("id", ""),
-                "kind": "wording" if cand.get("type") == candidates.TYPE_PAIR else "repeat",
-                "said": cand.get("reply", ""), "better": cand.get("better", ""),
-                "lesson": cand.get("lesson", ""),
-                "when": cand.get("created", 0), "from": list(dict.fromkeys(speakers))[:3],
-                "actions": [a for a in cand.get("actions") or [] if a in ACTIVITY_ACTIONS]}
+        out = {"id": cand.get("id", ""),
+               "kind": "wording" if cand.get("type") == candidates.TYPE_PAIR else "repeat",
+               "said": cand.get("reply", ""), "better": cand.get("better", ""),
+               "lesson": cand.get("lesson", ""),
+               "when": cand.get("created", 0), "from": list(dict.fromkeys(speakers))[:3],
+               "actions": [a for a in cand.get("actions") or [] if a in ACTIVITY_ACTIONS]}
+        where = cand.get("standing")
+        if isinstance(where, dict):
+            out["standing"] = {key: where.get(key) for key in ACTIVITY_STANDING if key in where}
+        by = cand.get("by")
+        if isinstance(by, dict):
+            out["by"] = {"by": str(by.get("by") or ""), "why": str(by.get("why") or "")}
+        return out
 
     return {"id": raw.get("id", ""), "platform": raw.get("platform", ""), "kind": raw.get("kind", ""),
-            "review": [item(c) for c in raw.get("pending") or []],
+            "observing": [item(c) for c in raw.get("observing") or []],
             "learned": [item(c) for c in raw.get("learned") or []],
             "notes": [{"text": m.get("text", ""), "by": m.get("by", ""), "about": m.get("about", ""),
                        "when": m.get("time", 0), "id": m.get("id", ""), "conv": m.get("conv", "")}

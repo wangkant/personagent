@@ -848,11 +848,14 @@ def _activity_service(workspace, monkeypatch, handler):
 
 CONVERSATION = {
     "id": "telegram:-100", "platform": "telegram", "kind": "group",
-    "pending": [{"id": "abc123", "type": "preference_pair", "reply": "dune again", "better": "paddington 2",
-                 "lesson": "Priya hates rewatching Dune.", "created": 5.0, "actions": ["promote", "reject"], "checklist": {"rules": []},
-                 "evidence": [{"speaker": "Priya"}, {"speaker": "Priya"}, {"speaker": ""}]}],
+    "observing": [{"id": "abc123", "type": "preference_pair", "reply": "dune again", "better": "paddington 2",
+                   "lesson": "Priya hates rewatching Dune.", "created": 5.0, "actions": ["promote", "reject"],
+                   "checklist": {"rules": []}, "evidence": [{"speaker": "Priya"}, {"speaker": "Priya"}, {"speaker": ""}],
+                   "standing": {"stage": "observing", "reason": "Priya alone asked for it.", "expires": 9.0,
+                                "secret": "x"}, "by": None}],
     "learned": [{"id": "def456", "type": "positive_example", "reply": "fair", "better": "",
-                 "created": 4.0, "actions": ["rollback"], "evidence": [], "history": [{"state": "x"}]}],
+                 "created": 4.0, "actions": ["rollback"], "evidence": [], "history": [{"state": "x"}],
+                 "standing": None, "by": {"by": "character", "why": "It fits.", "judge": "j"}}],
     "past": [{"id": "old", "type": "preference_pair"}],
     "memories": [{"text": "match night at Sam's", "by": "Sam", "time": 3.0, "auto": False}],
     "decisions": [{"ts": 2.0, "mode": "called", "spoke": True, "reason": "addressed", "excerpt": "sure",
@@ -870,22 +873,27 @@ def test_activity_reads_the_service_with_its_token_and_keeps_only_what_the_view_
         if request.url.path == "/api/dashboard/conversations":
             return httpx.Response(200, json={"conversations": [
                 {"id": "telegram:-100", "platform": "telegram", "kind": "group", "last_activity": 9.0,
-                 "memories": 1, "learned": 1, "pending": 1},
+                 "memories": 1, "learned": 1, "observing": 1, "latest": 7.0},
                 {"id": "private:browser:x", "platform": "browser", "kind": "dm", "last_activity": 8.0,
-                 "memories": 0, "learned": 0, "pending": 0}]})
+                 "memories": 0, "learned": 0, "observing": 0, "latest": 0}]})
         return httpx.Response(200, json=CONVERSATION)
     _activity_service(workspace, monkeypatch, handler)
     listed = client.get("/api/activity", headers=HEADERS).json()
     assert listed["running"] and not listed["off"]
     assert [c["id"] for c in listed["chats"]] == ["telegram:-100", "private:browser:x"]
     assert listed["chats"][0] == {"id": "telegram:-100", "platform": "telegram", "kind": "group",
-                                  "last": 9.0, "review": 1, "learned": 1, "notes": 1}
+                                  "last": 9.0, "observing": 1, "learned": 1, "latest": 7.0, "notes": 1}
     chat = client.get("/api/activity/chat", params={"id": "telegram:-100"}, headers=HEADERS).json()
     assert seen[-1].url.params["id"] == "telegram:-100"
     assert all(r.headers["x-personagent-dashboard-token"] == "service-token" for r in seen)
-    assert chat["review"] == [{"id": "abc123", "kind": "wording", "said": "dune again", "better": "paddington 2",
-                               "lesson": "Priya hates rewatching Dune.", "when": 5.0, "from": ["Priya"], "actions": ["promote", "reject"]}]
+    # Observed items are only read: no decision reaches the view, and nothing is "review".
+    assert "review" not in chat
+    assert chat["observing"] == [{"id": "abc123", "kind": "wording", "said": "dune again", "better": "paddington 2",
+                                  "lesson": "Priya hates rewatching Dune.", "when": 5.0, "from": ["Priya"], "actions": [],
+                                  "standing": {"stage": "observing", "reason": "Priya alone asked for it.",
+                                               "expires": 9.0}}]
     assert chat["learned"][0]["kind"] == "repeat" and chat["learned"][0]["actions"] == ["rollback"]
+    assert chat["learned"][0]["by"] == {"by": "character", "why": "It fits."}
     assert chat["notes"] == [{"text": "match night at Sam's", "by": "Sam", "about": "", "when": 3.0,
                               "id": "", "conv": ""}]
     # Oldest first, like a chat; the service lists newest first.
@@ -905,18 +913,20 @@ def test_activity_decisions_go_to_the_service_as_writes_and_come_back_as_the_cha
         return httpx.Response(200, json=CONVERSATION)
     _activity_service(workspace, monkeypatch, handler)
     url = "/api/activity/decide"
-    chat = client.post(url, headers=HEADERS, json={"id": "abc123", "action": "promote",
+    chat = client.post(url, headers=HEADERS, json={"id": "abc123", "action": "rollback",
                                                    "chat": "telegram:-100"}).json()
     assert chat["id"] == "telegram:-100"
     request = writes[-1]
-    assert request.url.path == "/api/dashboard/candidates/abc123/promote"
+    assert request.url.path == "/api/dashboard/candidates/abc123/rollback"
     assert request.headers["x-personagent-dashboard"] == "1"
     assert request.headers["content-type"] == "application/json"
     assert json.loads(request.content) == {"reason": "local page"}
-    response = client.post(url, headers=HEADERS, json={"id": "stale", "action": "reject", "chat": "telegram:-100"})
+    response = client.post(url, headers=HEADERS, json={"id": "stale", "action": "rollback", "chat": "telegram:-100"})
     assert response.status_code == 400 and response.json()["error"] == "activity_changed"
-    for bad in ({"id": "abc123", "action": "delete", "chat": "x"}, {"id": "../x", "action": "reject", "chat": "x"},
-                {"id": "abc123", "action": "reject", "chat": ""}):
+    # Nobody confirms what the character learns: the view keeps only Undo.
+    for bad in ({"id": "abc123", "action": "promote", "chat": "x"}, {"id": "abc123", "action": "replace", "chat": "x"},
+                {"id": "abc123", "action": "reject", "chat": "x"}, {"id": "abc123", "action": "delete", "chat": "x"},
+                {"id": "../x", "action": "rollback", "chat": "x"}, {"id": "abc123", "action": "rollback", "chat": ""}):
         response = client.post(url, headers=HEADERS, json=bad)
         assert response.status_code == 400 and response.json()["error"] == "invalid_chat", bad
     assert len(writes) == 2   # nothing invalid is ever written
@@ -1036,6 +1046,56 @@ def test_each_page_language_translates_known_strings_with_their_fields(client, c
     assert set(data["catalog"]) <= catalog
     for source, text in data["catalog"].items():
         assert isinstance(text, str) and text.strip(), source
+
+
+@pytest.mark.parametrize("code", welcome.PAGE_LANGUAGES)
+def test_every_learning_sentence_is_translated(code):
+    """What says where a learned item stands never falls back to English."""
+    data = json.loads((welcome.ASSETS / "i18n" / f"{code}.json").read_text(encoding="utf-8"))["strings"]
+    english = _page_strings("en")
+    wanted = {k for k in english if k.startswith(("activity", "learned_", "practice_held"))
+              or k.startswith(("tuning_f_promote", "tuning_h_promote"))}
+    assert sorted(wanted - set(data)) == []
+
+
+# Phrases that tell the reader a learned item waits for them, in every page language.
+WAITS_FOR_THE_READER = {
+    "en": ("waiting for you", "await your decision", "awaits your decision", "left to you",
+           "only an admin", "waits for your decision", "until you keep"),
+    "zh": ("待你确认", "等待你", "由你决定", "管理员批准", "待确认"),
+    "zh-TW": ("待你確認", "等待你", "由你決定", "管理員核准", "待確認"),
+    "ja": ("確認待ち", "あなたの判断を待", "管理者のみ"),
+    "ko": ("확인 대기", "결정을 기다리", "관리자만"),
+    "es": ("pendiente de su decisión", "espera su decisión", "solo un administrador"),
+    "fr": ("en attente de votre décision", "attend votre décision", "seul un administrateur"),
+    "de": ("wartet auf sie", "warten auf ihre entscheidung", "nur ein administrator"),
+    "pt-BR": ("aguardando sua decisão", "aguarda sua decisão", "aguarda a sua decisão", "apenas um administrador"),
+    "ru": ("требует вашего решения", "ожидает вашего решения", "только администратор"),
+}
+
+
+@pytest.mark.parametrize("code", ["en", "zh", *welcome.PAGE_LANGUAGES])
+def test_no_page_sentence_says_a_learned_item_waits_for_the_reader(code):
+    if code in ("en", "zh"):
+        strings = _page_strings(code)
+    else:
+        strings = json.loads((welcome.ASSETS / "i18n" / f"{code}.json").read_text(encoding="utf-8"))["strings"]
+    found = [(key, text) for key, text in strings.items()
+             if any(phrase in text.lower() for phrase in WAITS_FOR_THE_READER[code])]
+    assert found == []
+
+
+def test_the_observed_items_in_activity_have_no_buttons_and_light_no_dot():
+    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
+    card = re.search(r"\nfunction change\(item, observed\) \{\n(.*?)\n\}\n", js, re.S).group(1)
+    # The card returns before any button is built.
+    assert card.index("if (observed) return card;") < card.index('el("div", "change-actions")')
+    dot = re.search(r"\nfunction renderActivityDot\(\) \{\n(.*?)\n\}\n", js, re.S).group(1)
+    # Only something new in use lights it, never an item still observed.
+    assert "observing" not in dot and "review" not in dot and "activityLatest()" in dot
+    assert '"activity/decide"' in js and '"promote"' not in js.split("async function decide(item, verb)")[1][:600]
+    html = (welcome.ASSETS / "index.html").read_text(encoding="utf-8")
+    assert 'id="activity-dot" class="dot"' in html
 
 
 def test_page_language_files_are_served_and_nothing_else(client):

@@ -75,7 +75,7 @@ def test_every_hold_names_its_gate_and_keeps_its_reason() -> None:
     laugh = event("carol", "positive")
     against = decide(pair(), STRONG_PAIR, related=[laugh])
     check("gate: against", against.gate == promotion.GATE_AGAINST
-          and against.reason == "compatible evidence disagrees — left for review"
+          and against.reason == "compatible evidence disagrees — the character decides"
           and against.blocked_by == laugh["event_id"]
           and (against.supporting, against.strong) == (2, 2), repr(against))
 
@@ -83,12 +83,12 @@ def test_every_hold_names_its_gate_and_keeps_its_reason() -> None:
     rival_ev = event("carol", "correction", better="restart the service instead")
     conflict = decide(pair(), STRONG_PAIR, related=[rival_ev], peers=[rival])
     check("gate: conflict", conflict.gate == promotion.GATE_CONFLICT
-          and conflict.reason == "a conflicting candidate exists — left for review"
+          and conflict.reason == "a conflicting candidate exists — the character decides"
           and conflict.blocked_by == rival["candidate_id"], repr(conflict))
 
     person = decide(example(), [event("a", "positive"), event("b", "positive")])
     check("gate: person", person.gate == promotion.GATE_PERSON
-          and person.reason == ("positive_example is promotable only by a person: "
+          and person.reason == ("positive_example is decided by the character: "
                                 "nothing that supports one classifies strong "
                                 "(2 supporting)"), repr(person))
 

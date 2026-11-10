@@ -4,12 +4,12 @@ PA.strings({
   en: {
     learned_title: "What the character has learned",
     learned_lead:
-      "Everything the character has learned in every chat: what it uses, what awaits your decision and what was set aside. You can review and decide here even when the character is not running.",
-    learned_sum: "The character uses {inUse} learned item(s) from {chats} chat(s). {waiting} item(s) await your decision.",
+      "Everything the character has learned in every chat: what it uses, what it is still observing and what was set aside. The character decides these items by itself; you may also step in here if you wish, even while the character is not running.",
+    learned_sum: "Learned items in use: {inUse}. Chats they were learned in: {chats}. Items still under observation: {observing}.",
     learned_sum_none: "The character has not learned anything yet. Items appear here when someone corrects or approves one of its replies.",
     learned_sum_idle: "{n} item(s) belong to an earlier character or an earlier chat on this page and are not used.",
     learned_sum_other: "These items were learned while the character spoke {lang}. They are used only when it speaks {lang} again.",
-    learned_not_running: "The character is not running. You can still review every item and decide here.",
+    learned_not_running: "The character is not running. Every item can still be read here, and the optional actions remain available.",
     learned_lang_label: "Language learned in",
     learned_lang_en: "English",
     learned_lang_zh: "Chinese",
@@ -17,20 +17,15 @@ PA.strings({
     learned_lang_note:
       "The character also learned {n} item(s) while speaking another language. They are used again when it speaks that language.",
     learned_tab_in_use: "In use",
-    learned_tab_waiting: "Pending",
-    learned_tab_discarded: "Discarded",
-    learned_tab_undone: "Undone",
-    learned_tab_replaced: "Replaced",
+    learned_tab_observing: "Observing",
+    learned_tab_set_aside: "Set aside",
     learned_hint_in_use: "These items shape the character's replies.",
-    learned_hint_waiting: "These items are not used until enough people agree or you keep them.",
-    learned_hint_discarded: "These items will not be used again. They remain here as a record.",
-    learned_hint_undone: "These items are no longer used. You can restore any of them.",
-    learned_hint_replaced: "A newer wording of the same reply has taken the place of these items.",
+    learned_hint_observing: "The character decides these items by itself as reactions arrive. Nothing here requires your action.",
+    learned_hint_set_aside:
+      "These items are not used. Each one states who set it aside and why. An item that the character or the time limit set aside can be brought back.",
     learned_empty_in_use: "No items are in use.",
-    learned_empty_waiting: "No items await your decision.",
-    learned_empty_discarded: "No items have been discarded.",
-    learned_empty_undone: "No items have been undone.",
-    learned_empty_replaced: "No items have been replaced.",
+    learned_empty_observing: "No items are under observation.",
+    learned_empty_set_aside: "No items have been set aside.",
     learned_loading: "Loading…",
     learned_more: "Show more",
     learned_wording: "Better wording",
@@ -45,29 +40,25 @@ PA.strings({
     learned_gap_lang: "Not in use: another language",
     learned_gap_persona: "Not in use: earlier character",
     learned_gap_chat: "Not in use: earlier chat on this page",
-    learned_why_title: "Why it is pending",
+    learned_stand_title: "Where it stands",
     learned_why_scope_lang: "The character uses this item only while it speaks {lang}.",
     learned_why_scope_persona:
-      "This item belongs to an earlier character: the character's name or persona version has changed since it was learned. The character does not use it, and it cannot be kept.",
+      "This item belongs to an earlier character: the character's name or persona version has changed since it was learned. The character does not use it, and it cannot be put into use.",
     learned_why_scope_chat:
-      "This item was learned in an earlier chat on this page, which has since been reset. The character does not use it, and it cannot be kept.",
-    learned_why_off: "Automatic application is turned off, so every item awaits your decision.",
-    learned_why_against: "Other reactions disagree with this item, so the decision is left to you.",
-    learned_why_conflict: "Another revision of the same reply exists, so the decision is left to you.",
-    learned_why_person: "Only an admin can approve this type of item. Keep it if you agree with it.",
-    learned_why_strong: "It still requires a clear correction from the person the reply was addressed to.",
-    learned_why_events: "It requires {n} more agreeing reaction(s).",
-    learned_why_speakers: "It requires agreement from {n} more person(s).",
-    learned_why_ready:
-      "It meets every rule and will apply automatically at the next reaction. You can also keep it now.",
+      "This item was learned in an earlier chat on this page, which has since been reset. The character does not use it, and it cannot be put into use.",
     learned_rule_events: "Agreeing reactions: {have} of {need}",
     learned_rule_strong: "Clear corrections from the person addressed: {have} of {need}",
     learned_rule_speakers: "Different people: {have} of {need}",
     learned_rule_stale: "{n} reaction(s) older than {days} days no longer count.",
     learned_now_in_use: "In use since {when}.",
-    learned_now_discarded: "Discarded on {when}. It cannot be restored.",
-    learned_now_undone: "Undone on {when}. You can restore it.",
-    learned_now_replaced: "Replaced on {when}. It cannot be restored.",
+    learned_now_rejected: "Set aside on {when}.",
+    learned_now_rolled_back: "Undone on {when}.",
+    learned_now_superseded: "Replaced on {when}.",
+    learned_out_auto: "It was set aside automatically in response to the reactions.",
+    learned_out_character: "The character set it aside by its own decision. Its reason: “{reason}”",
+    learned_out_person: "A person set it aside.",
+    learned_out_time: "It was set aside because no new reaction arrived for {days} days.",
+    learned_out_rule: "It was set aside by rule: {rule}.",
     learned_replaced_by: "Current wording: {text}",
     learned_context: "Preceding messages",
     learned_evidence: "Reactions",
@@ -89,76 +80,80 @@ PA.strings({
     learned_strong: "Clear correction",
     learned_history: "History",
     learned_h_picked: "Learned",
-    learned_h_in_use: "Put into use",
-    learned_h_discarded: "Discarded",
-    learned_h_undone: "Undone",
-    learned_h_replaced: "Replaced",
+    learned_h_promoted: "Put into use",
+    learned_h_rejected: "Set aside",
+    learned_h_rolled_back: "Undone",
+    learned_h_superseded: "Replaced",
+    learned_h_review: "Reviewed; observation continues",
     learned_by_auto: "automatically",
     learned_by_page: "by you on this page",
     learned_by_terminal: "from the terminal",
+    learned_by_character: "by the character",
+    learned_by_rule: "by rule",
+    learned_by_time: "after the time limit",
     learned_r_agreed: "{n} reactions agreed",
     learned_r_answered: "another revision for the same issue was kept",
     learned_r_replaced: "a newer wording took its place",
     learned_r_disagreed: "the person addressed disagreed",
     learned_r_note: "note: “{text}”",
-    learned_replaces: "Keeping this item replaces the wording in use: “{text}”",
-    learned_keep: "Keep",
-    learned_keeping: "Keeping…",
-    learned_back: "Restore",
-    learned_backing: "Restoring…",
-    learned_discard: "Discard",
-    learned_discarding: "Discarding…",
+    learned_r_said: "“{text}”",
+    learned_r_expired: "no new reaction arrived for {n} days",
+    learned_r_rule_policy: "the wording does not meet the character's reply policy",
+    learned_r_rule_lesson: "the lesson does not pass the memory filter",
+    learned_r_rule_blocked: "it is supported by a person whose corrections are blocked",
+    learned_r_rule_confirmed: "the person it was taught for confirmed it after the objection",
+    learned_replaces: "Putting this item into use replaces the wording in use: “{text}”",
+    learned_optional: "These actions are optional. The character decides by itself; use them only if you wish to step in.",
+    learned_use: "Put into use now",
+    learned_using: "Putting into use…",
+    learned_set: "Set aside",
+    learned_setting: "Setting aside…",
+    learned_back: "Bring back",
+    learned_backing: "Bringing back…",
     learned_undo: "Undo",
     learned_undoing: "Undoing…",
-    learned_ask_discard:
-      "Discard this item? It will not be used again and cannot be restored. It remains on record.",
-    learned_ask_replace:
-      "Use this item in place of “{text}”? The current wording will be marked as replaced and cannot be restored.",
+    learned_ask_set: "Set this item aside? It will not be used, and it cannot be brought back. It remains on record.",
+    learned_ask_undo:
+      "Undo this item? The character will stop using it, and it cannot be brought back from this page. It remains on record.",
+    learned_ask_replace: "Put this item into use in place of “{text}”? The current wording will be marked as replaced.",
     learned_ask_replace_yes: "Replace",
-    learned_done_keep: "Kept. The character's next replies will use this item.",
-    learned_done_keep_lang: "Kept. The character will use this item when it speaks {lang} again.",
-    learned_done_back: "Restored. The item is in use again.",
-    learned_done_discard: "Discarded.",
+    learned_done_use: "Put into use. The character's next replies will use this item.",
+    learned_done_use_lang: "Put into use. The character will use this item when it speaks {lang} again.",
+    learned_done_back: "Brought back. The item is in use again.",
+    learned_done_set: "Set aside.",
     learned_done_undo: "Undone. The character no longer uses this item.",
     learned_invalid: "The request was not understood. Reload the page and try again.",
     learned_unknown: "This item is no longer on record. The list has been refreshed.",
     learned_changed: "This item changed in the meantime. The list has been refreshed; review it and try again.",
     learned_scope:
-      "This item belongs to an earlier character or an earlier chat on this page, so keeping it would have no effect. The list has been refreshed.",
+      "This item belongs to an earlier character or an earlier chat on this page, so putting it into use would have no effect. The list has been refreshed.",
     learned_busy: "Another change is being saved. Try again in a moment.",
-    learned_unavailable:
-      "The running character could not be reached. Try again shortly, or stop the character and decide here.",
+    learned_unavailable: "The running character could not be reached. Try again shortly.",
     learned_failed: "The change was saved but is not yet in effect. Restart the character to apply it.",
   },
   zh: {
     learned_title: "角色学到的内容",
     learned_lead:
-      "角色在所有聊天中学到的内容：正在使用的、等待你确认的以及已搁置的。角色未运行时，你也可以在此查看并处理。",
-    learned_sum: "角色正在使用来自 {chats} 个聊天的 {inUse} 条内容，另有 {waiting} 条等待你确认。",
+      "角色在所有聊天中学到的内容：正在使用的、仍在观察的以及已搁置的。这些内容由角色自行决定；如有需要，你也可以在此介入，角色未运行时同样可以。",
+    learned_sum: "使用中的内容：{inUse} 条，来自 {chats} 个聊天；仍在观察的内容：{observing} 条。",
     learned_sum_none: "角色尚未学到任何内容。当有人纠正或认可它的回复时，相关内容会显示在这里。",
     learned_sum_idle: "此外，有 {n} 条内容属于之前的角色或本页面之前的对话，目前不会使用。",
     learned_sum_other: "以下内容是角色以{lang}交流时学到的，仅在它再次以{lang}交流时使用。",
-    learned_not_running: "角色未运行。你仍可在此查看全部内容并进行处理。",
+    learned_not_running: "角色未运行。你仍可在此查看全部内容，也可以使用各项可选操作。",
     learned_lang_label: "学习时使用的语言",
     learned_lang_en: "英文",
     learned_lang_zh: "中文",
     learned_lang_now: "{lang}（当前）",
     learned_lang_note: "角色以另一种语言交流时还学到了 {n} 条内容，将在它再次使用该语言时重新启用。",
     learned_tab_in_use: "使用中",
-    learned_tab_waiting: "待确认",
-    learned_tab_discarded: "已舍弃",
-    learned_tab_undone: "已撤销",
-    learned_tab_replaced: "已替换",
+    learned_tab_observing: "观察中",
+    learned_tab_set_aside: "已搁置",
     learned_hint_in_use: "这些内容目前会影响角色的回复。",
-    learned_hint_waiting: "这些内容在获得足够认同或由你保留之前不会使用。",
-    learned_hint_discarded: "这些内容不会再使用，仅作为记录保留。",
-    learned_hint_undone: "这些内容已停止使用，你可以恢复其中任意一条。",
-    learned_hint_replaced: "同一回复已有更新的说法，这些内容已被替换。",
+    learned_hint_observing: "角色会随着新的反应自行决定这些内容，此处无需你进行任何操作。",
+    learned_hint_set_aside: "这些内容不会使用，每条都注明了由谁搁置及其原因。由角色或时限搁置的内容可以恢复使用。",
     learned_empty_in_use: "没有使用中的内容。",
-    learned_empty_waiting: "没有待确认的内容。",
-    learned_empty_discarded: "没有已舍弃的内容。",
-    learned_empty_undone: "没有已撤销的内容。",
-    learned_empty_replaced: "没有已替换的内容。",
+    learned_empty_observing: "没有正在观察的内容。",
+    learned_empty_set_aside: "没有已搁置的内容。",
     learned_loading: "正在加载…",
     learned_more: "显示更多",
     learned_wording: "改进说法",
@@ -173,26 +168,23 @@ PA.strings({
     learned_gap_lang: "未使用：属于另一种语言",
     learned_gap_persona: "未使用：属于之前的角色",
     learned_gap_chat: "未使用：属于本页面之前的对话",
-    learned_why_title: "待确认原因",
+    learned_stand_title: "当前进展",
     learned_why_scope_lang: "角色仅在以{lang}交流时使用此条内容。",
-    learned_why_scope_persona: "此条内容属于之前的角色：学到它之后，角色的名字或人设版本已变更。角色不会使用它，也无法保留。",
-    learned_why_scope_chat: "此条内容学自本页面之前的对话，该对话已重置。角色不会使用它，也无法保留。",
-    learned_why_off: "自动生效已关闭，因此每条内容都需要由你决定。",
-    learned_why_against: "有其他反应与此条内容相反，因此由你决定。",
-    learned_why_conflict: "同一回复存在其他改法，因此由你决定。",
-    learned_why_person: "此类内容只能由管理员批准。如果你认同，请保留。",
-    learned_why_strong: "仍需要回复对象本人给出一次明确纠正。",
-    learned_why_events: "还需要 {n} 次认同的反应。",
-    learned_why_speakers: "还需要 {n} 位不同的人认同。",
-    learned_why_ready: "已满足全部条件，将在下一次有人回应时自动生效。你也可以现在保留。",
+    learned_why_scope_persona: "此条内容属于之前的角色：学到它之后，角色的名字或人设版本已变更。角色不会使用它，也无法将其投入使用。",
+    learned_why_scope_chat: "此条内容学自本页面之前的对话，该对话已重置。角色不会使用它，也无法将其投入使用。",
     learned_rule_events: "认同的反应：{have}/{need}",
     learned_rule_strong: "回复对象本人的明确纠正：{have}/{need}",
     learned_rule_speakers: "不同的人：{have}/{need}",
     learned_rule_stale: "有 {n} 次反应已超过 {days} 天，不再计入。",
     learned_now_in_use: "自 {when} 起使用。",
-    learned_now_discarded: "已于 {when} 舍弃，无法恢复。",
-    learned_now_undone: "已于 {when} 撤销，可以恢复。",
-    learned_now_replaced: "已于 {when} 被替换，无法恢复。",
+    learned_now_rejected: "已于 {when} 搁置。",
+    learned_now_rolled_back: "已于 {when} 撤销。",
+    learned_now_superseded: "已于 {when} 被替换。",
+    learned_out_auto: "系统根据收到的反应自动搁置了此条内容。",
+    learned_out_character: "角色自行决定搁置此条内容。理由：“{reason}”",
+    learned_out_person: "此条内容由人工操作搁置。",
+    learned_out_time: "由于 {days} 天内没有新的反应，此条内容已被搁置。",
+    learned_out_rule: "此条内容已按规则搁置：{rule}。",
     learned_replaced_by: "当前说法：{text}",
     learned_context: "之前的对话",
     learned_evidence: "收到的反应",
@@ -214,47 +206,73 @@ PA.strings({
     learned_strong: "明确纠正",
     learned_history: "处理记录",
     learned_h_picked: "学到",
-    learned_h_in_use: "开始使用",
-    learned_h_discarded: "舍弃",
-    learned_h_undone: "撤销",
-    learned_h_replaced: "被替换",
+    learned_h_promoted: "投入使用",
+    learned_h_rejected: "搁置",
+    learned_h_rolled_back: "撤销",
+    learned_h_superseded: "被替换",
+    learned_h_review: "已审视，继续观察",
     learned_by_auto: "自动",
     learned_by_page: "由你在本页面操作",
     learned_by_terminal: "通过命令行",
+    learned_by_character: "由角色自行决定",
+    learned_by_rule: "按规则",
+    learned_by_time: "因超过时限",
     learned_r_agreed: "{n} 次反应认同",
     learned_r_answered: "同一问题已保留其他改法",
     learned_r_replaced: "已由更新的说法替换",
     learned_r_disagreed: "回复对象本人不认同",
     learned_r_note: "备注：“{text}”",
-    learned_replaces: "保留此条内容将替换当前使用的说法：“{text}”",
-    learned_keep: "保留",
-    learned_keeping: "正在保留…",
-    learned_back: "恢复",
+    learned_r_said: "“{text}”",
+    learned_r_expired: "{n} 天内没有新的反应",
+    learned_r_rule_policy: "该说法不符合角色的回复规范",
+    learned_r_rule_lesson: "该经验未通过记忆筛选",
+    learned_r_rule_blocked: "支持它的人的纠正已被屏蔽",
+    learned_r_rule_confirmed: "被教导的对象在异议之后再次确认了它",
+    learned_replaces: "将此条内容投入使用会替换当前使用的说法：“{text}”",
+    learned_optional: "以下操作均为可选。角色会自行决定，仅在你希望介入时使用。",
+    learned_use: "立即投入使用",
+    learned_using: "正在投入使用…",
+    learned_set: "搁置",
+    learned_setting: "正在搁置…",
+    learned_back: "恢复使用",
     learned_backing: "正在恢复…",
-    learned_discard: "舍弃",
-    learned_discarding: "正在舍弃…",
     learned_undo: "撤销",
     learned_undoing: "正在撤销…",
-    learned_ask_discard: "确定舍弃此条内容吗？舍弃后它将不再使用且无法恢复，但会保留在记录中。",
-    learned_ask_replace: "确定用此条内容替换“{text}”吗？当前说法将标记为已替换，且无法恢复。",
+    learned_ask_set: "确定搁置此条内容吗？搁置后它将不再使用，也无法恢复，但会保留在记录中。",
+    learned_ask_undo: "确定撤销此条内容吗？角色将停止使用它，且无法在此页面恢复，但会保留在记录中。",
+    learned_ask_replace: "确定用此条内容替换“{text}”吗？当前说法将标记为已替换。",
     learned_ask_replace_yes: "替换",
-    learned_done_keep: "已保留，角色之后的回复将使用此条内容。",
-    learned_done_keep_lang: "已保留，角色再次以{lang}交流时将使用此条内容。",
+    learned_done_use: "已投入使用，角色之后的回复将使用此条内容。",
+    learned_done_use_lang: "已投入使用，角色再次以{lang}交流时将使用此条内容。",
     learned_done_back: "已恢复，此条内容重新投入使用。",
-    learned_done_discard: "已舍弃。",
+    learned_done_set: "已搁置。",
     learned_done_undo: "已撤销，角色不再使用此条内容。",
     learned_invalid: "无法识别此请求，请刷新页面后重试。",
     learned_unknown: "此条内容已不在记录中，列表已刷新。",
     learned_changed: "此条内容已被更改，列表已刷新。请查看后重试。",
-    learned_scope: "此条内容属于之前的角色或本页面之前的对话，保留不会产生任何效果。列表已刷新。",
+    learned_scope: "此条内容属于之前的角色或本页面之前的对话，投入使用不会产生任何效果。列表已刷新。",
     learned_busy: "另一项更改正在保存，请稍后重试。",
-    learned_unavailable: "无法连接正在运行的角色。请稍后重试，或先停止角色再在此处处理。",
+    learned_unavailable: "无法连接正在运行的角色，请稍后重试。",
     learned_failed: "更改已保存，但尚未生效。请重启角色以应用更改。",
   },
 });
 
 (() => {
-  const TABS = ["in_use", "waiting", "discarded", "undone", "replaced"];
+  const TABS = ["in_use", "observing", "set_aside"];
+  // A person's optional actions: the label, its working label, and a question first.
+  const VERBS = {
+    use: ["learned_use", "learned_using", ""],
+    bring_back: ["learned_back", "learned_backing", ""],
+    undo: ["learned_undo", "learned_undoing", "learned_ask_undo"],
+    set_aside: ["learned_set", "learned_setting", "learned_ask_set"],
+  };
+  const DONE = {
+    use: "learned_done_use",
+    bring_back: "learned_done_back",
+    undo: "learned_done_undo",
+    set_aside: "learned_done_set",
+  };
+  const RULES = ["policy", "lesson", "blocked", "confirmed"];
   // Reaction kinds with a label; anything else shows none (PA.t never returns the key).
   const KNOWN_WHAT = [
     "correction",
@@ -421,10 +439,10 @@ PA.strings({
 
   async function decide(item, verb) {
     if (busy) return;
-    if (verb === "discard" && !(await PA.ask(PA.t("learned_ask_discard"), PA.t("learned_discard"))))
-      return;
+    const [label, , question] = VERBS[verb];
+    if (question && !(await PA.ask(PA.t(question), PA.t(label)))) return;
     if (
-      verb === "keep" &&
+      (verb === "use" || verb === "bring_back") &&
       item.replaces &&
       !(await PA.ask(
         PA.t("learned_ask_replace", { text: item.replaces }),
@@ -435,16 +453,7 @@ PA.strings({
     busy = verb;
     detailError = "";
     render();
-    const done =
-      verb === "discard"
-        ? "learned_done_discard"
-        : verb === "undo"
-          ? "learned_done_undo"
-          : item.gap === "lang"
-            ? "learned_done_keep_lang"
-            : item.tab === "undone"
-              ? "learned_done_back"
-              : "learned_done_keep";
+    const done = verb === "use" && item.gap === "lang" ? "learned_done_use_lang" : DONE[verb];
     try {
       const value = await PA.api("learned/decide", { id: item.id, action: verb, lang });
       // Follow the item to where it now is, still open, so its new state shows.
@@ -483,19 +492,14 @@ PA.strings({
     return part;
   }
 
-  function waiting(item) {
-    const info = item.waiting;
-    const part = block("learned_why_title");
-    const left = {
-      events: Math.max(0, info.needEvents - info.events),
-      speakers: Math.max(0, info.needSpeakers - info.speakers),
-    };
-    const why =
-      info.key === "scope"
-        ? scopeText(item)
-        : PA.t(`learned_why_${info.key}`, { n: String(left[info.key] ?? "") });
-    part.append(make("p", "learned-why", why));
-    if (info.key === "scope" && item.gap !== "lang") return part;
+  // Where an observed item stands, in the Activity view's own sentences.
+  function standing(item) {
+    const info = item.standing;
+    const part = block("learned_stand_title");
+    if (item.gap) part.append(make("p", "learned-why", scopeText(item)));
+    if (item.gap && item.gap !== "lang") return part;
+    for (const text of PA.standing(info)) part.append(make("p", "learned-why", text));
+    if (!["reactions", "ready"].includes(info.stage)) return part;
     const rules = make("ul", "learned-rules");
     const rule = (key, have, need, ok) => {
       const li = make("li", ok ? "ok" : "", PA.t(key, { have: String(have), need: String(need) }));
@@ -519,8 +523,20 @@ PA.strings({
 
   function reasonText(why) {
     if (!why || !why.key) return "";
-    if (why.key === "note") return PA.t("learned_r_note", { text: why.text });
+    if (why.key === "note" || why.key === "said") return PA.t(`learned_r_${why.key}`, { text: why.text });
     return PA.t(`learned_r_${why.key}`, { n: why.n });
+  }
+
+  // Who put a decided item where it is, and why.
+  function decidedText(item) {
+    const info = item.decided;
+    if (!info || !info.by) return "";
+    if (item.tab === "in_use") return PA.cameIn(info);
+    if (info.by === "character") return PA.t("learned_out_character", { reason: info.why });
+    if (info.by === "time") return PA.t("learned_out_time", { days: info.days });
+    if (info.by === "rule")
+      return RULES.includes(info.why) ? PA.t("learned_out_rule", { rule: PA.t(`learned_r_rule_${info.why}`) }) : "";
+    return PA.t(info.by === "reactions" ? "learned_out_auto" : "learned_out_person");
   }
 
   function history(item) {
@@ -534,7 +550,7 @@ PA.strings({
     };
     add(PA.t("learned_h_picked"), item.when, []);
     for (const step of item.history)
-      add(PA.t(`learned_h_${step.tab || "in_use"}`), step.when, [
+      add(PA.t(`learned_h_${step.state}`), step.when, [
         PA.t(`learned_by_${step.by}`),
         reasonText(step.why),
       ]);
@@ -571,16 +587,10 @@ PA.strings({
   }
 
   function action(item, verb, cls) {
-    const back = verb === "keep" && item.tab === "undone";
-    const label = back ? "learned_back" : `learned_${verb}`;
-    const ing = {
-      keep: back ? "learned_backing" : "learned_keeping",
-      discard: "learned_discarding",
-      undo: "learned_undoing",
-    }[verb];
+    const [label, ing] = VERBS[verb];
     const button = make("button", cls, PA.t(busy === verb ? ing : label));
     button.type = "button";
-    button.id = `learned-${verb}`;
+    button.id = `learned-${verb.replace("_", "-")}`;
     button.dataset.verb = verb;
     button.disabled = Boolean(busy);
     button.addEventListener("click", () => decide(item, verb));
@@ -590,16 +600,21 @@ PA.strings({
   function full(item) {
     const box = make("div", "learned-detail");
     box.id = "learned-detail";
-    const last = item.history[item.history.length - 1];
+    const steps = item.history.filter((step) => step.state !== "review");
+    const last = steps[steps.length - 1];
     // An item the character would not use is never described as in use.
-    if (item.tab !== "waiting" && !(item.gap && item.tab === "in_use"))
+    if (item.tab !== "observing" && !(item.gap && item.tab === "in_use"))
       box.append(
-        make("p", "learned-status", PA.t(`learned_now_${item.tab}`, { when: date(last ? last.when : item.when) })),
+        make("p", "learned-status", PA.t(`learned_now_${item.tab === "in_use" ? "in_use" : item.state}`, {
+          when: date(last ? last.when : item.when),
+        })),
       );
-    // Pending items explain the scope under their reason instead.
-    if (item.gap && item.tab !== "waiting") box.append(make("p", "learned-status learned-out", scopeText(item)));
+    const decided = item.tab === "observing" ? "" : decidedText(item);
+    if (decided) box.append(make("p", "learned-status learned-by", decided));
+    // Observed items explain the scope under where they stand instead.
+    if (item.gap && item.tab !== "observing") box.append(make("p", "learned-status learned-out", scopeText(item)));
     if (item.replacedBy) box.append(make("p", "learned-small", PA.t("learned_replaced_by", { text: item.replacedBy })));
-    if (item.waiting) box.append(waiting(item));
+    if (item.standing) box.append(standing(item));
     if (item.context.length) {
       const part = block("learned_context");
       const rows = make("ul", "learned-context");
@@ -608,13 +623,18 @@ PA.strings({
       box.append(part);
     }
     box.append(evidence(item), history(item));
-    if (item.replaces && item.actions.includes("keep"))
-      box.append(make("p", "field-note", PA.t("learned_replaces", { text: item.replaces })));
+    if (!item.actions.length) return box;
+    // Optional: the character decides by itself; a person may step in.
+    const part = make("div", "learned-optional");
+    part.append(make("p", "field-note", PA.t("learned_optional")));
+    if (item.replaces && (item.actions.includes("use") || item.actions.includes("bring_back")))
+      part.append(make("p", "field-note", PA.t("learned_replaces", { text: item.replaces })));
     const buttons = make("div", "change-actions learned-actions");
-    if (item.actions.includes("keep")) buttons.append(action(item, "keep", "primary small"));
-    if (item.actions.includes("undo")) buttons.append(action(item, "undo", "secondary"));
-    if (item.actions.includes("discard")) buttons.append(action(item, "discard", "quiet"));
-    if (buttons.childElementCount) box.append(buttons);
+    for (const verb of ["use", "bring_back", "undo"])
+      if (item.actions.includes(verb)) buttons.append(action(item, verb, "secondary"));
+    if (item.actions.includes("set_aside")) buttons.append(action(item, "set_aside", "quiet"));
+    part.append(buttons);
+    box.append(part);
     return box;
   }
 
@@ -654,7 +674,7 @@ PA.strings({
     const text = PA.t("learned_sum", {
       inUse: String(totals.in_use - idle.in_use),
       chats: String(data.chats),
-      waiting: String(totals.waiting - idle.waiting),
+      observing: String(totals.observing - idle.observing),
     });
     const unused = Object.values(idle).reduce((a, b) => a + b, 0);
     return unused ? `${text}${zh() ? "" : " "}${PA.t("learned_sum_idle", { n: String(unused) })}` : text;
@@ -704,8 +724,7 @@ PA.strings({
         button.setAttribute("role", "tab");
         button.setAttribute("aria-selected", String(name === tab));
         button.append(make("span", "", PA.t(`learned_tab_${name}`)));
-        const waits = name === "waiting" && totals.waiting - (idle.waiting || 0) > 0;
-        button.append(make("span", `count${waits ? " review" : ""}`, String(totals[name])));
+        button.append(make("span", "count", String(totals[name])));
         button.addEventListener("click", () => {
           if (tab === name) return;
           tab = name;

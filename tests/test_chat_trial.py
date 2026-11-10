@@ -551,8 +551,8 @@ async def test_main_notes_what_an_earlier_session_left(
     assert "--name is ignored" in out and "PERSONA_NAME is not set" not in out
 
 
-def test_held_reasons_point_at_the_admin_and_stay_translated() -> None:
-    from persona_agent import promotion
+def test_held_reasons_never_leave_anything_to_a_person() -> None:
+    from persona_agent import langs, promotion
 
     def check(**over):
         base = dict(events=1, need_events=2, strong=0, need_strong=1,
@@ -560,9 +560,53 @@ def test_held_reasons_point_at_the_admin_and_stay_translated() -> None:
                     speakers_ok=True, same_chat=True, against=[], conflicts=[],
                     auto=True, decision=promotion.Decision(False, "3/4 something"))
         return chat.Checklist(**{**base, **over})
-    assert chat.held_reason("en", check()) == (
-        "only the admin can approve this kind; to see what is waiting: "
-        "`personagent learned list`")
+    # A liked reply short of its count says the count, not "only the admin".
+    assert chat.held_reason("en", check()) == "1 of 2 agreeing reactions so far"
+    liked = check(events=2, decision=promotion.Decision(
+        False, "x", gate=promotion.GATE_PERSON))
+    assert chat.held_reason("en", liked) == (
+        "waiting for an approving reaction from someone in the chat")
+    cases = {
+        "en": {
+            "deciding": "the character is deciding it itself",
+            "observing": "the character looked at it and keeps observing: one voice only",
+            "judge_off": ("no further reaction can settle it, and the character's own "
+                          "decisions are switched off (PROMOTE_JUDGE_ENABLED)"),
+            "off": "automatic learning is switched off, so nothing new is put in use"},
+        "zh": {
+            "deciding": "角色正在自行判断此项",
+            "observing": "角色已审视此项，决定继续观察：one voice only",
+            "judge_off": ("后续反应已无法决定此项，且角色自行判断的功能已关闭"
+                          "（PROMOTE_JUDGE_ENABLED）"),
+            "off": "自动学习已关闭，不会启用任何新内容"},
+    }
+    states = {"deciding": check(character=True),
+              "observing": check(character=True, observed="one voice only"),
+              "judge_off": check(character=True, judging=False),
+              "off": check(character=True, auto=False)}
+    for lang, want in cases.items():
+        for name, state in states.items():
+            assert chat.held_reason(lang, state) == want[name], (lang, name)
+    for lang in langs.CODES:
+        for state in states.values():
+            text = chat.held_reason(lang, state)
+            assert "admin" not in text and "管理员" not in text, (lang, text)
     done = check(events=2, strong=1)
     assert chat.held_reason("en", done) == "3/4 something"
     assert chat.held_reason("zh", done) == "尚未满足自动生效的条件"
+
+
+def test_a_decided_item_names_the_character_or_the_time_limit() -> None:
+    from persona_agent import candidates
+
+    def cand(state, **last):
+        return {"state": state, "history": [{"state": state, "ts": "t", **last}]}
+    by_me = cand("rejected", actor="character", reason="It would mock Alex.")
+    assert chat.decided_reason("en", by_me) == "the character decided: It would mock Alex."
+    assert chat.decided_reason("zh", by_me) == "角色已自行决定：It would mock Alex."
+    expired = cand("rejected", actor="auto", reason="Set aside by rule: no new reactions "
+                   "for 30 days.", judge=candidates.JUDGE_EXPIRY)
+    assert chat.decided_reason("en", expired) == (
+        "set aside after a long time without a new reaction")
+    assert chat.decided_reason("en", cand("rejected", actor="dashboard", reason="x")) == ""
+    assert chat.decided_reason("en", cand("promoted", actor="auto", reason="2 events")) == ""
