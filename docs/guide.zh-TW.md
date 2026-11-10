@@ -655,7 +655,7 @@ personagent 儲存的所有內容都在你自己的機器上，位於主目錄�
 
 ## 專案狀態和其他文件
 
-personagent 1.4.0 已釋出到 PyPI。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 執行測試，另有幾項任務會安裝軟體包，並實際執行命令和本地頁面。
+personagent 1.4.1 已釋出到 PyPI。CI 在 Linux 上用 Python 3.10–3.14、在 Windows 上用 Python 3.12 執行測試，另有幾項任務會安裝軟體包，並實際執行命令和本地頁面。
 
 OneBot 直連入口（`/v1/onebot`）已廢棄，在 1.x 期間保留。`tools/` 裡的指令碼供從原始碼執行時使用，說明見[工具指令碼](tools.zh-TW.md)。
 

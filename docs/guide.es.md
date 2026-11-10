@@ -636,7 +636,7 @@ La guía de despliegue tiene [la lista completa](deploy.es.md#cuando-el-bot-se-q
 
 ## Estado y otros documentos
 
-personagent 1.4.0 está en PyPI. La CI ejecuta las pruebas en Linux con Python 3.10–3.14 y en Windows con Python 3.12. Otros trabajos de CI instalan el paquete y manejan el comando y la página local.
+personagent 1.4.1 está en PyPI. La CI ejecuta las pruebas en Linux con Python 3.10–3.14 y en Windows con Python 3.12. Otros trabajos de CI instalan el paquete y manejan el comando y la página local.
 
 La vía directa de OneBot (`/v1/onebot`) está obsoleta, pero se mantiene durante 1.x. Los scripts de `tools/` están pensados para ejecutarse desde un clon, y [tools.md](tools.es.md) los describe.
 

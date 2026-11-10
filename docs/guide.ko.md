@@ -636,7 +636,7 @@ personagent가 저장하는 모든 것은 내 컴퓨터의 홈 폴더에 머물�
 
 ## 현재 상태와 기타 문서
 
-personagent 1.4.0은 PyPI에 있어요. CI는 Linux의 Python 3.10–3.14와 Windows의 Python 3.12에서 테스트를 실행해요. 추가 CI 작업이 패키지를 설치하고 명령과 로컬 페이지를 구동해요.
+personagent 1.4.1은 PyPI에 있어요. CI는 Linux의 Python 3.10–3.14와 Windows의 Python 3.12에서 테스트를 실행해요. 추가 CI 작업이 패키지를 설치하고 명령과 로컬 페이지를 구동해요.
 
 직접 OneBot 경로(`/v1/onebot`)는 폐지 예정이지만 1.x 동안 유지돼요. `tools/`의 스크립트는 클론에서 실행하는 용도이며 [tools.md](tools.ko.md)에서 설명해요.
 
