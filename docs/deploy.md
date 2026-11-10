@@ -141,8 +141,11 @@ Add platforms under **Connect apps** on the local page. personagent checks
 the credentials against the platform before it saves anything. If the
 platform refuses them, the page shows the refusal and keeps nothing.
 
-**Connected by personagent itself.** QQ, personal WeChat, Telegram and
-Discord run in one "direct" process, with no AstrBot and no NapCat.
+**Connected by personagent itself.** QQ, personal WeChat, Telegram,
+Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat run in one "direct"
+process, with no AstrBot and no NapCat. A platform that cannot be loaded is
+skipped, and the others still start. The table covers the first four; the
+user guide lists [what the other six need and their limits](guide.md#platforms-personagent-connects-itself).
 
 | Platform | What you do | Limits |
 |---|---|---|
@@ -175,7 +178,7 @@ AstrBot, NapCat (OneBot), Koishi (through the
 [Satori connector](../integrations/satori/README.md)) and Matrix (through the
 [Matrix connector](../integrations/matrix/README.md) and mautrix bridges) are
 third-party bridges that personagent works with. None of them is needed for
-QQ, WeChat, Telegram or Discord.
+the platforms personagent connects itself.
 
 AstrBot hands messages to personagent through a plugin in
 `integrations/astrbot/astrbot_plugin_personagent/`. The plugin posts each

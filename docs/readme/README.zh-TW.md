@@ -15,7 +15,7 @@
 
 *本頁譯自英文版與簡體中文版，以英文版為準，英文版可能較新。*
 
-personagent 是放進群組聊天裡的一個角色：選一個現成的或自己寫一個，接上任何相容 OpenAI 的模型就能用。先在自己電腦上和它聊，再從同一個本機頁面把它帶進 QQ、微信、Telegram、Discord 和另外十幾個平台。
+personagent 是放進群組聊天裡的一個角色：選一個現成的或自己寫一個，接上任何相容 OpenAI 的模型就能用。先在自己電腦上和它聊，再從同一個本機頁面把它帶進 QQ、微信、Telegram、Discord 和另外十八個平台。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本機頁面的「連接平台」：能接入的平台一目瞭然" width="960">
@@ -79,10 +79,10 @@ personagent 本身免費。錢付給你選的模型服務，依它自己的價�
 | 頁面分組 | 平台 | 需要準備什麼 |
 |---|---|---|
 | 掃描即可連接 | QQ、個人微信 | 手機。微信機器人只能一對一聊天 |
-| 貼上一兩項 | Telegram、Discord、KOOK、飛書、釘釘、Slack、企業微信智慧機器人、Mattermost、Misskey | 從平台後台複製，頁面會說明要複製哪一項 |
+| 填寫一至兩項 | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、飛書、釘釘、Slack、企業微信智慧機器人、Mattermost、Misskey | 從平台後台複製，頁面會說明要複製哪一項 |
 | 進階 | 企業微信應用程式、微信公眾號、QQ（Webhook）、OneBot v11（NapCat）、Satori | 公開網址，或本機的其他軟體 |
 
-連好的平台之後每次啟動 personagent 都會自動連上。掃描連接的平台、Telegram 和 Discord 由 personagent 自己連接；其餘平台透過它在背景下載並執行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入。在伺服器上，`personagent up` 不開瀏覽器就能全部啟動。各平台的設定方法見[使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#接進聊天平臺)；從零接上 QQ 見[部署教學](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-TW.md)。
+連好的平台之後每次啟動 personagent 都會自動連上。掃描連接的平台，以及 Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 自己連接；其餘平台透過它在背景下載並執行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入。在伺服器上，`personagent up` 不開瀏覽器就能全部啟動。各平台的設定方法見[使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#接進聊天平臺)；從零接上 QQ 見[部署教學](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-TW.md)。
 
 已經在跑 AstrBot、Koishi 或 Matrix？personagent 可以接在它後面，只擔任那個角色：見[你自己執行的橋接](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#你自己執行的橋接)、[Satori 連接器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.zh-TW.md)和 [Matrix 連接器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.zh-TW.md)。
 
@@ -102,11 +102,11 @@ personagent connect codex
 personagent connect dsh
 ```
 
-`--remove` 會把它移除。權限，以及讓角色在一輪結束時說一句話的 `--react`，見[手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#程式設計助手)。
+`--remove` 會把它移除；在頁面「連接平台」的「程式設計助理」中也可以完成串接與移除。權限，以及讓角色在一輪結束時說一句話的 `--react`，見[手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#程式設計助手)。
 
 ## 更新與解除安裝
 
-PyPI 上有新版本時，頁面會顯示一則提示和對應的更新指令。用 pip 安裝的話是 `python -m pip install -U personagent`。設定、角色、它學到的東西和連好的平台都會保留。要解除安裝，照[解除安裝步驟](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英文）做。
+PyPI 上有新版本時，頁面會顯示一則提示和對應的更新指令。用 pip 安裝的話是 `python -m pip install -U personagent`。對於大多數安裝方式，頁面「應用程式」檢視中的「更新並重新開啟」可以代你執行。設定、角色、它學到的東西和連好的平台都會保留。要解除安裝，照[解除安裝步驟](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英文）做。
 
 ## 隱私
 

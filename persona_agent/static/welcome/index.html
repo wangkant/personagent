@@ -7,7 +7,21 @@
     <title>personagent</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Cpath fill=%22%231c1c1a%22 d=%22M8.5 3.5h7a5.5 5.5 0 0 1 5.5 5.5v3a5.5 5.5 0 0 1-5.5 5.5h-4.6l-4.2 3.4a.6.6 0 0 1-1-.47v-3.3A5.5 5.5 0 0 1 3 12V9a5.5 5.5 0 0 1 5.5-5.5z%22/%3E%3Crect x=%228.6%22 y=%228.6%22 width=%222%22 height=%223.4%22 rx=%221%22 fill=%22%23fff%22/%3E%3Crect x=%2213.4%22 y=%228.6%22 width=%222%22 height=%223.4%22 rx=%221%22 fill=%22%23fff%22/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/assets/welcome.css" />
+    <link rel="stylesheet" href="/assets/panels/health.css" />
+    <link rel="stylesheet" href="/assets/panels/runtime.css" />
+    <link rel="stylesheet" href="/assets/panels/desk.css" />
+    <link rel="stylesheet" href="/assets/panels/tuning.css" />
+    <link rel="stylesheet" href="/assets/panels/learned.css" />
+    <link rel="stylesheet" href="/assets/panels/agents.css" />
+    <link rel="stylesheet" href="/assets/panels/practice.css" />
     <script src="/assets/welcome.js" defer></script>
+    <script src="/assets/panels/health.js" defer></script>
+    <script src="/assets/panels/runtime.js" defer></script>
+    <script src="/assets/panels/desk.js" defer></script>
+    <script src="/assets/panels/tuning.js" defer></script>
+    <script src="/assets/panels/learned.js" defer></script>
+    <script src="/assets/panels/agents.js" defer></script>
+    <script src="/assets/panels/practice.js" defer></script>
   </head>
   <body>
     <div class="shell">
@@ -30,6 +44,13 @@
           <button class="nav" data-view="settings">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span data-t="settings">角色与设置</span>
           </button>
+          <button class="nav" data-view="practice">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h9v7H8.5L5 15.5z"/><path d="M14 9.5h5v7l-2.5-2H11v-2"/></svg><span data-t="practice">演练</span>
+          </button>
+          <button class="nav" data-view="app">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="12" rx="2"/><path d="M4 9h16M9 20h6M12 17v3"/></svg><span data-t="app">应用</span
+            ><span id="app-dot" class="dot" hidden></span>
+          </button>
         </nav>
         <div class="sidebar-bottom">
           <span class="local-dot"></span
@@ -41,7 +62,7 @@
       <main>
         <header class="topbar">
           <div>
-            <span id="page-label" data-t="welcome">欢迎来到 personagent</span>
+            <span id="page-label" data-t="welcome">欢迎使用 personagent</span>
           </div>
           <div class="top-actions">
             <select id="language" aria-label="Language">
@@ -61,22 +82,22 @@
           </div>
         </header>
         <section id="setup-view" class="page setup-page" hidden>
-          <h1 data-t="hero">设置你的角色</h1>
+          <h1 data-t="hero">设置角色</h1>
           <p class="lead" data-t="intro">
-            填一个模型密钥就能开始聊天，其他都有默认值。
+            填写模型密钥即可开始聊天，其余设置均有默认值。
           </p>
           <div class="setup-grid">
             <form id="settings-form" class="card setup-card">
               <div class="card-heading">
                 <div>
-                  <h2 data-t="modelTitle">连接一个模型</h2>
-                  <p data-t="modelHint">角色通过你选择的模型服务与你聊天。</p>
+                  <h2 data-t="modelTitle">连接模型</h2>
+                  <p data-t="modelHint">角色通过你选择的模型服务进行聊天。</p>
                 </div>
               </div>
               <label for="provider" data-t="provider">模型服务</label
               ><select id="provider"></select>
               <p id="free-note" class="field-note" data-t="freeNote" hidden>
-                OpenRouter 的免费模型：密钥不花钱，每天限 50 次请求。每次用的模型可能不同，部分免费服务商会保留收到的内容。
+                OpenRouter 免费模型：密钥本身不收费，每天限 50 次请求。每次请求使用的模型可能不同，部分免费服务商会保留收到的内容。
               </p>
               <div class="label-line">
                 <label for="api-key">API Key</label
@@ -85,7 +106,7 @@
                   target="_blank"
                   rel="noopener noreferrer"
                   data-t="getKey"
-                  >去获取密钥 ↗</a
+                  >获取密钥 ↗</a
                 >
               </div>
               <div class="key-field">
@@ -100,10 +121,10 @@
                 </button>
               </div>
               <p class="field-note" data-t="keyNote">
-                密钥保存在本机；聊天内容会发送给你选择的模型服务。
+                密钥保存在本机；聊天内容会发送至你选择的模型服务。
               </p>
               <details id="advanced">
-                <summary data-t="advanced">更多设置</summary>
+                <summary data-t="advanced">高级设置</summary>
                 <label for="model" data-t="model">模型名称</label
                 ><input id="model" autocomplete="off" /><label for="base-url"
                   >API Base URL</label
@@ -111,9 +132,9 @@
               </details>
               <details id="character-details">
                 <summary data-t="characterOptions">
-                  给角色换个名字或性格
+                  更改角色名称或性格
                 </summary>
-                <label for="character-name" data-t="name">角色名字</label
+                <label for="character-name" data-t="name">角色名称</label
                 ><input
                   id="character-name"
                   maxlength="64"
@@ -126,7 +147,7 @@
                   hidden
                   data-t="customKept"
                 >
-                  已有的人设会保留；选择新性格才会替换它。
+                  现有人设将保留；仅在选择新的性格时才会被替换。
                 </p>
               </details>
               <div id="form-error" class="error" role="alert" hidden></div>
@@ -139,7 +160,7 @@
                 验证并开始聊天 →
               </button>
               <p class="footnote" data-t="testNote">
-                会用一个很小的请求验证密钥，可能产生少量模型费用。
+                验证时会发送一次很小的请求，可能产生少量模型费用。
               </p>
             </form>
             <div class="preview-column">
@@ -148,26 +169,26 @@
                 <div class="eyebrow" data-t="yourCharacter">预览</div>
                 <h2 id="preview-name">小夏</h2>
                 <p data-t="previewText">
-                  性格决定它说话的语气。
+                  性格决定角色说话的语气。
                 </p>
                 <div class="sample-bubble" data-t="sample">
-                  今天怎么样？有什么想和我说的吗？
+                  今天过得怎么样？有什么想聊的吗？
                 </div>
                 <div class="trio" id="trio" hidden>
                   <div class="trio-label" data-t="trioLabel">
-                    也可以选 GPT 娘、鲸鱼娘或 Claude 娘
+                    也可以选择 GPT 娘、鲸鱼娘或 Claude 娘
                   </div>
                   <div class="trio-row" id="trio-row"></div>
                 </div>
                 <div class="preview-caption" data-t="changeLater">
-                  名字和性格，随时都能改。
+                  名称和性格可随时更改。
                 </div>
               </div>
               <div class="small-note">
                 <div>
-                  <strong data-t="qqLater">也可以把它带到 QQ</strong>
+                  <strong data-t="qqLater">也可以将角色接入 QQ、微信、Telegram…</strong>
                   <p data-t="qqLaterHint">
-                    先聊起来。想接入 QQ 时，点一下连接，再用手机扫码。
+                    如需接入其他平台，请在「连接平台」中选择，扫码或填写一至两项即可完成。
                   </p>
                 </div>
               </div>
@@ -178,7 +199,7 @@
               <h2 data-t="personaTitle">人设</h2>
             </label>
             <p class="field-note" data-t="personaHint">
-              写它是谁、怎么说话、在意什么。保存后马上生效，它学到的东西会保留。
+              描述角色的身份、说话方式和关注的事物。保存后立即生效，角色已学到的内容将保留。
             </p>
             <textarea
               id="persona-text"
@@ -215,7 +236,7 @@
                 ><span id="search-state" class="feature-state"></span>
               </div>
               <p class="field-note" data-t="searchHint">
-                遇到不熟的事会先查一下。默认用 DuckDuckGo，不需要密钥；填 Tavily 的密钥会更稳定。
+                遇到不了解的内容时，角色会先进行搜索。默认使用 DuckDuckGo，无需密钥；填写 Tavily 密钥可获得更稳定的结果。
               </p>
               <input
                 id="tavily-key"
@@ -231,18 +252,18 @@
             <div class="feature">
               <label class="check"
                 ><input type="checkbox" id="vision-on" /><span data-t="visionTitle"
-                  >看懂图片</span
+                  >识别图片</span
                 ></label
               >
               <p class="field-note" data-t="visionHint">
-                收到图片和表情包时，用一个能看图的模型描述它；不开时只认图里的文字。
+                收到图片和表情包时，使用支持图像的模型进行描述；未开启时仅识别图片中的文字。
               </p>
               <div id="vision-fields" hidden>
-                <label for="vision-model" data-t="visionModel">看图模型</label
+                <label for="vision-model" data-t="visionModel">图像模型</label
                 ><input id="vision-model" autocomplete="off" spellcheck="false" />
                 <label class="check"
                   ><input type="checkbox" id="vision-same" /><span data-t="visionSame"
-                    >和聊天用同一个服务和密钥</span
+                    >使用与聊天相同的服务和密钥</span
                   ></label
                 >
                 <div id="vision-own" hidden>
@@ -261,15 +282,15 @@
             <div class="feature">
               <label class="check"
                 ><input type="checkbox" id="proactive-on" /><span data-t="proactiveTitle"
-                  >偶尔主动说话</span
+                  >偶尔主动发言</span
                 ></label
               >
               <p class="field-note" data-t="proactiveHint">
-                群聊或私聊安静一阵后，它可能会主动开个话题，次数很少。
+                群聊或私聊安静一段时间后，角色可能会主动发起话题，频率很低。
               </p>
               <div id="proactive-fields" hidden>
                 <p class="field-note" data-t="proactivePlatforms">
-                  只在这些平台上（都不勾就是全部）：
+                  仅在以下平台启用（均未勾选时适用于所有平台）：
                 </p>
                 <div id="proactive-platforms" class="checks"></div>
               </div>
@@ -277,11 +298,11 @@
             <div class="feature">
               <label class="check"
                 ><input type="checkbox" id="share-rooms" /><span data-t="shareRoomsTitle"
-                  >让群之间的记忆互通</span
+                  >在群聊之间共享记忆</span
                 ></label
               >
               <p class="field-note" data-t="shareRoomsHint">
-                在一个群里记下的关于某人的事，也会带到 TA 发言的其他群。私聊内容和不针对具体某人的笔记不会带过去。
+                在一个群聊中记下的关于某人的内容，也会用于此人发言的其他群聊。私聊内容和不针对具体个人的记录不会共享。
               </p>
             </div>
             <div id="features-error" class="error" role="alert" hidden></div>
@@ -291,6 +312,7 @@
               </button>
             </div>
           </div>
+          <div id="tuning-root" class="panel-root side-card" hidden></div>
         </section>
         <section id="chat-view" class="page chat-page" hidden>
           <div class="chat-heading">
@@ -299,8 +321,11 @@
             ></div>
             <div>
               <h2 id="chat-name"></h2>
-              <p data-t="chatHint">本机对话</p>
+              <p data-t="chatHint">本机对话，你在此处的身份是管理员。</p>
             </div>
+            <button class="quiet" id="forget-chat" data-t="forgetChat">
+              清除本次对话的记忆
+            </button>
             <button class="quiet" id="reset-chat" data-t="newChat">
               新对话
             </button>
@@ -309,14 +334,14 @@
             <span class="gs-title" data-t="gsTitle">开始使用</span
             ><button type="button" class="gs-step" id="gs-platform">
               <span class="gs-check" aria-hidden="true"></span
-              ><span data-t="gsPlatform">连接一个平台</span></button
+              ><span data-t="gsPlatform">连接平台</span></button
             ><button type="button" class="quiet gs-close" id="gs-close">×</button>
           </div>
           <div id="update-bar" class="update-bar" role="status" hidden>
             <div class="update-head">
               <strong id="update-title"></strong
               ><a id="update-notes" target="_blank" rel="noopener noreferrer" data-t="updateNotes"
-                >更新内容 ↗</a
+                >更新说明 ↗</a
               ><button type="button" class="quiet gs-close" id="update-close">×</button>
             </div>
             <p id="update-how"></p>
@@ -329,14 +354,14 @@
             <div class="chat-empty" id="chat-empty">
               <div class="avatar big" id="empty-avatar" aria-hidden="true"></div>
               <h1 id="chat-greeting"></h1>
-              <p data-t="emptyHint">说点什么，开始聊天。</p>
+              <p data-t="emptyHint">发送一条消息以开始聊天。</p>
               <div class="suggestions">
                 <button data-prompt="hello" data-t="promptHello">
-                  你好，认识一下？</button
+                  你好，请做个自我介绍。</button
                 ><button data-prompt="day" data-t="promptDay">
                   今天过得怎么样？</button
                 ><button data-prompt="film" data-t="promptFilm">
-                  推荐一部周末看的电影吧
+                  请推荐一部适合周末观看的电影。
                 </button>
               </div>
             </div>
@@ -347,30 +372,38 @@
             ><textarea id="message" rows="1" maxlength="8000"></textarea
             ><button type="submit" id="send" aria-label="Send">↑</button>
           </form>
-          <div class="composer-note" data-t="composerNote">
-            Enter 发送 · Shift + Enter 换行
+          <div id="chat-commands" class="chat-commands" hidden>
+            <span data-t="commandsHint">点击命令即可填入输入框：</span>
+            <span id="chat-command-list" class="chat-command-list"></span>
+          </div>
+          <div class="composer-note">
+            <span data-t="composerNote">Enter 发送 · Shift + Enter 换行</span>
+            <button type="button" class="quiet" id="commands-show" data-t="commandsShow" aria-expanded="false">
+              记忆命令
+            </button>
           </div>
         </section>
         <section id="activity-view" class="page activity-page" hidden>
           <h1 data-t="activity">动态</h1>
           <p class="lead" data-t="activityLead">
-            它在哪些群和私聊里，最近说了什么，学到了什么。
+            角色所在的群聊和私聊、近期的发言，以及学到的内容。
           </p>
           <div id="activity-empty" class="activity-empty" hidden>
             <p id="activity-empty-text"></p>
             <button type="button" class="secondary" id="activity-connect" data-t="activityConnect">
-              去连接平台
+              连接平台
             </button>
           </div>
           <div id="activity-body" class="activity" hidden>
             <ul id="activity-chats" class="activity-chats" aria-label="Chats"></ul>
             <div id="activity-chat" class="activity-chat"></div>
           </div>
+          <div id="learned-root" class="panel-root"></div>
         </section>
         <section id="platforms-view" class="page platforms-page" hidden>
           <h1 id="platforms-title"></h1>
           <p class="lead" data-t="platformsIntro">
-            扫码或填一两项即可，下载、配置和启动都会自动完成。
+            扫码或填写一至两项即可，下载、配置和启动均会自动完成。
           </p>
           <div id="connected-card" class="card connected-card" hidden>
             <div class="connected-head">
@@ -381,7 +414,7 @@
                   id="start-services"
                   data-t="startServices"
                 >
-                  一键启动</button
+                  全部启动</button
                 ><button class="quiet" id="stop-services" data-t="stopServices">
                   暂停运行
                 </button>
@@ -392,16 +425,16 @@
           </div>
           <div id="platform-groups">
             <div class="group-head">
-              <h3 class="group-title" data-t="groupScan">扫码就能连</h3>
+              <h3 class="group-title" data-t="groupScan">扫码连接</h3>
               <p class="group-hint" data-t="groupScanHint">
-                用手机确认一下就好，什么都不用填。
+                在手机上确认即可，无需填写任何内容。
               </p>
             </div>
             <div class="tiles" data-group="scan"></div>
             <div class="group-head">
-              <h3 class="group-title" data-t="groupKey">粘贴一两项</h3>
+              <h3 class="group-title" data-t="groupKey">填写一至两项</h3>
               <p class="group-hint" data-t="groupKeyHint">
-                从平台后台复制，页面会告诉你复制哪一项。
+                从平台的开发者后台复制，页面会说明需要复制哪几项。
               </p>
             </div>
             <div class="tiles" data-group="key"></div>
@@ -411,6 +444,7 @@
               </summary>
               <div class="tiles" data-group="advanced"></div>
             </details>
+            <div id="agents-root" class="panel-root"></div>
           </div>
           <div id="platform-panel" class="card platform-card" hidden>
             <button class="quiet back" id="panel-back" data-t="back">
@@ -425,12 +459,13 @@
             </div>
             <div id="panel-howto" class="howto">
               <p id="panel-note"></p>
+              <ol id="panel-steps" hidden></ol>
               <a
                 id="panel-guide"
                 target="_blank"
                 rel="noopener noreferrer"
                 data-t="guide"
-                >去平台后台获取 ↗</a
+                >前往平台后台获取 ↗</a
               >
             </div>
             <form id="platform-form">
@@ -446,13 +481,14 @@
                 hidden
               ></button>
               <p class="footnote" data-t="scope">
-                连接后，角色会回复这个平台上的群聊和私聊。
+                连接后，角色将回复此平台上的群聊和私聊。
               </p>
             </form>
             <div id="panel-progress" hidden>
               <div id="qr-box" hidden>
                 <img id="qr-image" alt="QR code" />
                 <p id="scan-help"></p>
+                <a id="qr-link" target="_blank" rel="noopener noreferrer" hidden></a>
               </div>
               <div id="progress-spinner" class="spinner"></div>
               <h2 id="progress-title"></h2>
@@ -470,8 +506,20 @@
             </div>
           </div>
           <p class="platforms-footer" data-t="keepOpen">
-            使用期间保持应用运行即可。关闭程序时，会一并停止由它启动的服务。
+            使用期间请保持本应用运行。退出本应用时，由其启动的服务将一并停止。
           </p>
+        </section>
+        <section id="practice-view" class="page panel-page" data-panel-view="practice" hidden>
+          <h1 data-t="practice">演练</h1>
+          <p class="lead" data-t="practiceLead">无需连接平台，即可查看角色在群聊中如何发言、如何学习。</p>
+          <div id="practice-root" class="panel-root"></div>
+        </section>
+        <section id="app-view" class="page panel-page" data-panel-view="app" hidden>
+          <h1 data-t="app">应用</h1>
+          <p class="lead" data-t="appLead">运行检查、后台运行、版本更新，以及数据的存放位置。</p>
+          <div id="health-root" class="panel-root"></div>
+          <div id="runtime-root" class="panel-root"></div>
+          <div id="desk-root" class="panel-root"></div>
         </section>
         <div id="toast" role="status" hidden></div>
         <dialog id="ask" class="ask" aria-labelledby="ask-text">
@@ -484,7 +532,7 @@
         <div id="closed" class="closed-overlay" hidden>
           <div class="card">
             <h2 data-t="closed">应用已关闭</h2>
-            <p data-t="closedHint">再次运行 personagent，即可回到这里。</p>
+            <p data-t="closedHint">再次运行 personagent 即可返回此页面。</p>
           </div>
         </div>
       </main>

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import types
 import json
 
 import httpx
@@ -619,3 +620,66 @@ def test_qq_lets_held_plain_messages_out_before_a_later_at_message(monkeypatch):
     run(scenario())
     assert seen == ["p1", "a2"]
     assert bot.passive[("group", "G")][0] == "a2" and not bot.held
+
+
+async def test_a_platform_that_cannot_load_does_not_stop_the_others(tmp_path, monkeypatch) -> None:
+    """A kind left behind by another version, or a module whose import fails."""
+    from persona_agent.direct import __main__ as runner
+
+    base.save_credentials(tmp_path, "gone_platform", {"token": "x"})
+    base.save_credentials(tmp_path, "telegram", {"telegram_token": "1:a"})
+    ran = []
+
+    class Bridge:
+        def __init__(self, platform, agent, status):
+            self.platform = platform
+
+        async def run(self, stop):
+            ran.append(self.platform.kind)
+
+    monkeypatch.setattr(runner, "Bridge", Bridge)
+    monkeypatch.setattr(runner, "sdk", lambda: types.SimpleNamespace(Connector=lambda *a, **k: object()))
+    assert await runner.serve(tmp_path) == 0
+    assert ran == ["telegram"]
+    assert base.read_status(tmp_path)["gone_platform"]["state"] == "error"
+
+
+def test_every_listed_kind_builds_its_own_platform_and_keeps_state_per_login(tmp_path):
+    from persona_agent import direct
+
+    for kind in direct.KINDS:
+        platform = direct.platform_for(kind, {}, tmp_path)
+        assert platform.kind == kind
+        if kind in ("matrix", "twitch", "weixin_oc"):
+            assert platform.state_path == direct.state_path(tmp_path, kind)
+        close = getattr(platform, "close", None)
+        if close:
+            run(close())
+    with pytest.raises(ValueError):
+        direct.platform_for("line", {}, tmp_path)
+
+
+def test_sign_in_flows_take_the_form_values_only_where_they_need_them(monkeypatch):
+    from persona_agent import direct
+    from persona_agent.direct import twitch
+
+    seen = []
+
+    async def bind(client, show):
+        seen.append(("qq", client, show))
+        return {"appid": "1"}
+
+    async def device(client, show, values):
+        seen.append(("twitch", client, show, values))
+        return {**values, "twitch_access_token": "a"}
+
+    monkeypatch.setattr(qq, "bind", bind)
+    monkeypatch.setattr(twitch, "login", device)
+    flow, failed = direct.sign_in_for("qq_official")
+    assert run(flow("c", "s", {"ignored": 1})) == {"appid": "1"} and failed is qq.BindFailed
+    flow, failed = direct.sign_in_for("twitch")
+    assert run(flow("c", "s", {"twitch_client_id": "x"}))["twitch_access_token"] == "a"
+    assert failed is twitch.LoginFailed
+    assert seen == [("qq", "c", "s"), ("twitch", "c", "s", {"twitch_client_id": "x"})]
+    assert direct.sign_in_for("weixin_oc")[1] is weixin.LoginFailed
+    assert direct.sign_in_for("telegram") is None and direct.sign_in_for("matrix") is None

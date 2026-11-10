@@ -15,7 +15,7 @@
 
 *Esta é uma tradução do README em inglês, que é a versão de referência e pode estar mais atualizada.*
 
-O personagent é um personagem para seus grupos de chat: escolha um pronto ou escreva o seu, e rode em qualquer modelo compatível com OpenAI. Comece conversando com ele no seu próprio computador e depois leve para o QQ, WeChat, Telegram, Discord e mais uma dúzia de apps pela mesma página local.
+O personagent é um personagem para seus grupos de chat: escolha um pronto ou escreva o seu, e rode em qualquer modelo compatível com OpenAI. Comece conversando com ele no seu próprio computador e depois leve para o QQ, WeChat, Telegram, Discord e outras dezoito plataformas pela mesma página local.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="A tela Conectar apps da página local, com todas as plataformas em que ele pode entrar" width="960">
@@ -79,10 +79,10 @@ Abra **Conectar apps** na página local:
 | Na página | Apps | O que você precisa |
 |---|---|---|
 | Escanear para conectar | QQ, WeChat pessoal | Seu celular. Bots do WeChat só têm conversas privadas |
-| Colar um ou dois valores | Telegram, Discord, KOOK, Feishu/Lark, DingTalk, Slack, bot de IA do WeCom, Mattermost, Misskey | Valores do console do app; a página diz quais |
+| Colar um ou dois valores | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, bot de IA do WeCom, Mattermost, Misskey | Valores do console do app; a página diz quais |
 | Avançado | App do WeCom, Conta Oficial do WeChat, webhook do QQ, OneBot v11 (NapCat), Satori | Um endereço público ou outro software neste computador |
 
-Os apps conectados voltam a iniciar sempre que o personagent inicia. O personagent conecta por conta própria os apps de escanear, o Telegram e o Discord; o resto passa por um [AstrBot](https://github.com/AstrBotDevs/AstrBot) que ele baixa e roda em segundo plano. Num servidor, `personagent up` inicia tudo sem navegador. A configuração de cada app está no [guia do usuário](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#coloque-em-um-chat), e o QQ do zero no [guia de implantação em chinês](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
+Os apps conectados voltam a iniciar sempre que o personagent inicia. O personagent conecta por conta própria os apps de escanear, o Telegram, o Discord, o Matrix, o Twitch, o IRC, o Zulip, o VK e o Stoat; o resto passa por um [AstrBot](https://github.com/AstrBotDevs/AstrBot) que ele baixa e roda em segundo plano. Num servidor, `personagent up` inicia tudo sem navegador. A configuração de cada app está no [guia do usuário](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#coloque-em-um-chat), e o QQ do zero no [guia de implantação em chinês](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
 
 Já usa AstrBot, Koishi ou Matrix? O personagent pode rodar por trás de qualquer um deles como o personagem: veja [pontes que você mesmo executa](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#pontes-que-você-mesmo-executa), o [conector Satori](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.pt-BR.md) e o [conector Matrix](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.pt-BR.md).
 
@@ -102,11 +102,11 @@ personagent connect codex
 personagent connect dsh
 ```
 
-`--remove` tira de novo. O [guia](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#agentes-de-código) cobre as permissões e o `--react`, que deixa o personagem dizer uma frase quando um turno termina.
+`--remove` desfaz a conexão, e **Assistentes de programação**, em **Conectar plataformas**, faz as duas coisas pela página. O [guia](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#agentes-de-código) cobre as permissões e o `--react`, que deixa o personagem dizer uma frase quando um turno termina.
 
 ## Atualizar e desinstalar
 
-Quando há uma versão mais nova no PyPI, a página mostra um aviso com o comando de atualização. Com pip, é `python -m pip install -U personagent`. As configurações, o personagem, o que ele aprendeu e os apps conectados são mantidos. Para remover, siga os [passos de desinstalação](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it) (em inglês).
+Quando há uma versão mais nova no PyPI, a página mostra um aviso com o comando de atualização. Com pip, é `python -m pip install -U personagent`. Na maioria das instalações, **Atualizar e reabrir**, na visão **Aplicativo** da página, executa esse comando por você. As configurações, o personagem, o que ele aprendeu e os apps conectados são mantidos. Para remover, siga os [passos de desinstalação](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it) (em inglês).
 
 ## Privacidade
 

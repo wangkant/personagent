@@ -250,8 +250,8 @@ def _fake_window(monkeypatch, run):
     made = []
 
     class Fake:
-        def __init__(self, url, *, storage, confirm):
-            self.url, self.storage, self.confirm = url, storage, confirm
+        def __init__(self, url, *, storage, confirm, **options):
+            self.url, self.storage, self.confirm, self.options = url, storage, confirm, options
             self.error = ""
             self.closed = 0
             made.append(self)
@@ -339,6 +339,39 @@ def test_the_window_asks_before_closing_only_while_a_platform_runs(page, monkeyp
     assert made[0].confirm() == ""
     monkeypatch.setattr(page.workspace.services, "running", lambda name: name == "direct")
     assert "out of your chats" in made[0].confirm()
+
+
+def test_the_window_hides_instead_of_closing_only_when_the_person_chose_that(page, monkeypatch) -> None:
+    server = _Server()
+    made = _fake_window(monkeypatch, lambda fake: True)
+    welcome._serve_in_window(page.app, server, None, "http://127.0.0.1:1/", page.home, hidden=True)
+    options = made[0].options
+    assert options["background"]() is False and options["start_hidden"] is False
+    welcome.save_app_settings(page.home, background=True)
+    assert options["background"]() is True, "read at the moment of closing, not at start"
+    assert set(options["words"]()) == {"open", "quit", "still"}
+    made = _fake_window(monkeypatch, lambda fake: True)
+    welcome._serve_in_window(page.app, _Server(), None, "http://127.0.0.1:1/", page.home, hidden=True)
+    assert made[0].options["start_hidden"] is True
+
+
+def test_closing_goes_to_the_background_icon_when_there_is_one(webview, tmp_path) -> None:
+    outcomes = []
+
+    def person(shown) -> None:
+        app._tray = object()  # the notification-area icon Windows gives
+        hidden = []
+        app.hide = lambda: hidden.append(True) or True
+        outcomes.append(shown.press_close())
+        outcomes.append(len(hidden))
+        keep["on"] = False
+        outcomes.append(shown.press_close())
+
+    keep = {"on": True}
+    webview.person = person
+    app = window.AppWindow("http://127.0.0.1:1/", storage=tmp_path, background=lambda: keep["on"])
+    assert app.run() is True
+    assert outcomes == [False, 1, True], "hidden while the switch is on, closed once it is off"
 
 
 def test_show_needs_the_capability_and_reports_whether_a_window_came_forward(page) -> None:
@@ -497,7 +530,7 @@ def test_start_opens_the_window_when_it_can(tmp_path, monkeypatch, capsys,
     monkeypatch.setattr(welcome.webbrowser, "open", lambda url: opened.set())
     in_window: list[str] = []
     monkeypatch.setattr(welcome, "_serve_in_window",
-                        lambda app, server, sock, url, desktop: in_window.append(url))
+                        lambda app, server, sock, url, desktop, hidden=False: in_window.append(url))
     monkeypatch.setattr(uvicorn.Server, "run", lambda self, sockets=None: None)
     assert welcome.main(argv) == 0
     out = capsys.readouterr().out
@@ -560,3 +593,48 @@ def test_windows_writes_the_link_and_takes_it_away(tmp_path) -> None:
     assert not (folder / shortcut.LINK).exists()
     failed = shortcut.run(shortcut.script(home, folders=[tmp_path / "missing"]))
     assert failed and "CLIXML" not in failed, "the reason is a sentence, not PowerShell's envelope"
+
+
+# -- the page's own chat ----------------------------------------------------
+
+def test_the_page_names_its_chat_as_the_owners(tmp_path) -> None:
+    from persona_agent import access
+
+    workspace = welcome.Workspace(tmp_path)
+    try:
+        assert access.page_owner(tmp_path / "runtime") == frozenset(), "nothing named before the first save"
+        workspace.reset_chat()
+        named = access.page_owner(tmp_path / "runtime")
+        assert named == {f"browser:{workspace._conversation}"}
+        workspace.reset_chat()
+        assert access.page_owner(tmp_path / "runtime") == {f"browser:{workspace._conversation}"} != named
+        (tmp_path / "runtime" / access.PAGE_OWNER_FILE).write_text("x, qq:1", encoding="utf-8")
+        assert access.page_owner(tmp_path / "runtime") == frozenset(), "only one plain id is ever an owner"
+    finally:
+        workspace.close()
+
+
+async def test_forgetting_a_chat_forgets_each_note_then_starts_a_new_one(tmp_path, monkeypatch) -> None:
+    workspace = welcome.Workspace(tmp_path)
+    before = workspace._conversation
+    chat = f"private:browser:{before}"
+    calls = []
+
+    async def call(method, path, **options):
+        calls.append((method, path, options.get("json") or options.get("params")))
+        if method == "GET":
+            return {"memories": [{"conv": chat, "id": "n1"}, {"conv": "room", "id": "n2"}], "core_note": "likes tea"}
+        if options["json"]["note"] == "n2":
+            raise ValueError("activity_changed")  # someone forgot it first
+        return {"ok": True}
+
+    monkeypatch.setattr(workspace, "_activity_call", call)
+    monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
+    try:
+        done = await workspace.forget_chat()
+    finally:
+        workspace.close()
+    assert done == {"ok": True, "forgotten": 2}
+    assert [c[2] for c in calls[1:]] == [{"conv": chat, "note": "n1"}, {"conv": "room", "note": "n2"},
+                                         {"conv": chat, "note": ""}]
+    assert workspace._conversation != before and workspace._history == []

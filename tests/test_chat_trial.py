@@ -237,7 +237,7 @@ async def test_the_trial_lives_in_its_own_folder_and_reset_wipes_it(
 async def test_zh_trial_speaks_chinese(tmp: Path) -> None:
     async with trial_in(tmp, lang="zh") as (trial, model):
         turn = await say(trial, model, ("小林", "1001"), "今晚谁看球？")
-        assert chat.reason("zh", turn, "小夏") == "没被点名，1/4 条消息"
+        assert chat.reason("zh", turn, "小夏") == "未被点名，已累计 1/4 条消息"
         turn = await say(trial, model, ("小林", "1001"), "小夏，记住小林不吃辣")
         assert turn.memory_saved
         turn = await say(trial, model, ("小林", "1001"), "小夏，部署又挂了",
@@ -247,7 +247,7 @@ async def test_zh_trial_speaks_chinese(tmp: Path) -> None:
                          verdict=demo._verdict("rejection", True, "只是吐槽",
                                                better="啊又挂了？"))
         assert chat.trace("zh", turn.reaction) == (
-            "[学习] 判定：否定，采信（仅否定），等你对它的重试作出反应")
+            "[学习] 判定：否定，采信（仅否定），正在等待你对重试回复作出反应")
 
 
 def _feed(monkeypatch, lines):
@@ -286,7 +286,7 @@ async def test_main_runs_a_session(tmp: Path, monkeypatch, capsys) -> None:
     assert "/reply <text>" in out and "/why" in out
     assert "(Nova stays quiet: not addressed, 1 of 4 messages)" in out
     assert "Nova > hey Alex" in out
-    assert out.rstrip().endswith("bye")
+    assert out.rstrip().endswith("Goodbye.")
 
 
 # -- findings from the review of the trial ------------------------------------
@@ -424,7 +424,7 @@ async def test_short_lines_say_they_do_not_count(tmp: Path) -> None:
         assert chat.reason("en", turn, NOVA) == "not addressed, 1 of 4 messages"
     async with trial_in(tmp, lang="zh") as (trial, model):
         turn = await say(trial, model, ("小林", "1001"), "你好")
-        assert "太短，不计数" in chat.reason("zh", turn, "小夏")
+        assert "过短（少于 4 个字符），不计入" in chat.reason("zh", turn, "小夏")
 
 
 async def test_unknown_commands_and_a_spent_reply_are_said(
@@ -550,4 +550,4 @@ def test_held_reasons_point_at_the_admin_and_stay_translated() -> None:
         "`personagent learned list`")
     done = check(events=2, strong=1)
     assert chat.held_reason("en", done) == "3/4 something"
-    assert chat.held_reason("zh", done) == "还没满足自动生效的条件"
+    assert chat.held_reason("zh", done) == "尚未满足自动生效的条件"

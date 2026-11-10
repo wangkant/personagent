@@ -5,11 +5,11 @@
 Ce guide explique comment configurer personagent, le placer dans vos discussions, lui enseigner des choses et vous en occuper. Le [README](readme/README.fr.md) est la version courte, et [Premiers pas](start.fr.md) parcourt la page locale écran par écran.
 
 1. [Installation et dossier personnel](#installation-et-dossier-personnel)
-2. [La page locale](#la-page-locale)
+2. [La page locale](#la-page-locale) : [Réglages avancés](#réglages-avancés) · [La vue Application](#la-vue-application)
 3. [Le voir d'abord : la démo](#le-voir-dabord--la-démo)
 4. [Commandes du terminal](#commandes-du-terminal) : [configuration](#configurer-dans-le-terminal) · [discussion](#discuter-dans-le-terminal) · [exécuter le service](#exécuter-le-service)
 5. [En faire votre personnage](#en-faire-votre-personnage)
-6. [Le placer dans une discussion](#le-placer-dans-une-discussion) : [QQ, WeChat, Telegram, Discord](#qq-wechat-telegram-et-discord) · [Autres plateformes](#autres-plateformes-via-lastrbot-géré) · [Ponts que vous exécutez vous-même](#ponts-que-vous-exécutez-vous-même) · [Parler en premier](#parler-en-premier)
+6. [Le placer dans une discussion](#le-placer-dans-une-discussion) : [Plateformes connectées par personagent lui-même](#plateformes-connectées-par-personagent-lui-même) · [Autres plateformes](#autres-plateformes-via-lastrbot-géré) · [Ponts que vous exécutez vous-même](#ponts-que-vous-exécutez-vous-même) · [Parler en premier](#parler-en-premier)
 7. [Agents de code](#agents-de-code)
 8. [Lui enseigner](#lui-enseigner)
 9. [Activité](#activité)
@@ -51,20 +51,70 @@ Ce guide écrit les commandes sous la forme `personagent ...`. Si vous ne l'avez
 
 ## La page locale
 
-`personagent` (ou `personagent start`) sert une page accessible uniquement depuis cet ordinateur. Sous Windows, elle s'ouvre dans sa propre fenêtre. Sous macOS et Linux, elle s'ouvre dans le navigateur, ou aussi dans une fenêtre une fois que `pip install "personagent[app]"` a ajouté [pywebview](https://pywebview.flowrl.com/), avec Qt sous Linux. La page a quatre vues :
+`personagent` (ou `personagent start`) sert une page accessible uniquement depuis cet ordinateur. Sous Windows, elle s'ouvre dans sa propre fenêtre. Sous macOS et Linux, elle s'ouvre dans le navigateur, ou aussi dans une fenêtre une fois que `pip install "personagent[app]"` a ajouté [pywebview](https://pywebview.flowrl.com/), avec Qt sous Linux. La page comporte six vues, présentées dans cet ordre dans la barre latérale :
 
-- **Discussion** est une discussion individuelle avec le personnage dans la page. Le même agent que celui qui sert vos plateformes de discussion y répond.
+- **Discussion** est une discussion individuelle avec le personnage dans la page. Le même agent que celui qui sert vos plateformes de discussion y répond. Dans cette discussion, vous êtes l'administrateur. **Commandes de mémoire**, sous la zone de saisie, liste les [commandes de mémoire](#commandes-de-mémoire) ; en sélectionner une l'insère dans la zone de saisie. **Oublier cette discussion** supprime ce que le personnage a noté dans cette discussion et en commence une nouvelle. Cette fonction nécessite les données de la vue [Activité](#activité).
 - **Activité** montre les discussions où se trouve le personnage, ce qu'il a dit récemment, ce qu'il a appris et ce qui attend votre décision. Voir [Activité](#activité).
-- **Connecter des applis** place le personnage dans QQ, WeChat, Telegram, Discord et d'autres plateformes. Voir [Le placer dans une discussion](#le-placer-dans-une-discussion).
-- **Personnage et réglages** est l'endroit où vous choisissez un service de modèles (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama ou tout autre service compatible OpenAI), collez la clé d'API et choisissez un nom et une personnalité toute prête. **Vérifier et discuter** teste la clé avec une petite requête et ne l'enregistre que si la requête réussit. Après la configuration, la zone **Fiche du personnage** affiche `persona.txt`. **Enregistrer la fiche** redémarre l'agent avec le nouveau texte et conserve ce qu'il a appris. **Autres fonctions** active la recherche web via Tavily (DuckDuckGo est l'option gratuite par défaut), la compréhension d'images et la prise de parole en premier sur les applications de votre choix.
+- **Connecter des plateformes** place le personnage dans QQ, WeChat, Telegram, Discord et d'autres plateformes. Voir [Le placer dans une discussion](#le-placer-dans-une-discussion). En bas de la vue, **Assistants de programmation** relie le personnage aux [agents de code](#agents-de-code) installés sur cet ordinateur.
+- **Personnage et réglages** est l'endroit où vous choisissez un service de modèles (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama ou tout autre service compatible OpenAI), collez la clé d'API et choisissez un nom et une personnalité toute prête. **Vérifier et commencer la discussion** teste la clé avec une petite requête et ne l'enregistre que si la requête réussit. Après la configuration, la zone **Fiche du personnage** affiche `persona.txt`. **Enregistrer la fiche** redémarre l'agent avec le nouveau texte et conserve ce qu'il a appris. **Autres fonctions** active la recherche web via Tavily (DuckDuckGo est l'option gratuite par défaut), la compréhension d'images et la prise de parole en premier sur les applications de votre choix. Viennent ensuite les [Réglages avancés](#réglages-avancés).
+- **Entraînement** joue la démonstration scriptée et anime un groupe de discussion d'entraînement. Voir [Le voir d'abord : la démo](#le-voir-dabord--la-démo).
+- **Application** vérifie les services dont dépend le personnage et regroupe les journaux, l'exécution en arrière-plan, les mises à jour et vos données. Voir [La vue Application](#la-vue-application).
 
-Tant que vous n'avez pas connecté d'application, la vue Discussion affiche une courte barre **Pour commencer**.
+**Entraînement** et **Application** sont accessibles avant même la configuration d'un modèle. Tant que vous n'avez pas connecté d'application, la vue Discussion affiche une courte barre **Prise en main**.
 
-Relancer `personagent` fait réapparaître la page déjà ouverte. `--browser` ouvre la page dans le navigateur plutôt que dans une fenêtre, et `--no-browser` affiche le lien sans rien ouvrir. Sous Windows, `personagent shortcut` place sur le bureau et dans le menu Démarrer une icône qui ouvre la fenêtre sans terminal derrière, et `personagent shortcut --remove` la retire.
+Relancer `personagent` fait réapparaître la page déjà ouverte. `--browser` ouvre la page dans le navigateur plutôt que dans une fenêtre, et `--no-browser` affiche le lien sans rien ouvrir. Sous Windows, `personagent shortcut` place sur le bureau et dans le menu Démarrer une icône qui ouvre la fenêtre sans terminal derrière, et `personagent shortcut --remove` la retire. La vue **Application** offre les mêmes possibilités.
 
-Quand un personagent plus récent est sur PyPI, la vue Discussion affiche un avis avec la commande qui met à jour votre installation, qu'elle vienne de pip, uvx, uv tool, pipx ou d'un clone Git. Pour un ZIP des sources décompressé, l'avis renvoie plutôt à la page des versions. Le terminal affiche la même commande. Fermer l'avis le masque pour cette version, et **N disponible** sous le numéro de version le fait réapparaître. `personagent up` et `personagent doctor` signalent aussi une nouvelle version. La page et `up` interrogent pypi.org au plus une fois par jour, en arrière-plan. `doctor` interroge immédiatement quand la dernière réponse date de plus d'un jour. Définissez `UPDATE_CHECK_ENABLED=false` pour désactiver la vérification.
+Quand un personagent plus récent est sur PyPI, la vue Discussion affiche un avis avec la commande qui met à jour votre installation, qu'elle vienne de pip, uvx, uv tool, pipx ou d'un clone Git. Pour un ZIP des sources décompressé, l'avis renvoie plutôt à la page des versions. Le terminal affiche la même commande. Fermer l'avis le masque pour cette version, et **N disponible** sous le numéro de version le fait réapparaître. `personagent up` et `personagent doctor` signalent aussi une nouvelle version. La page et `up` interrogent pypi.org au plus une fois par jour, en arrière-plan. `doctor` interroge immédiatement quand la dernière réponse date de plus d'un jour. Définissez `UPDATE_CHECK_ENABLED=false` pour désactiver la vérification. La vue **Application** peut également installer la mise à jour elle-même ; voir [Version et mises à jour](#version-et-mises-à-jour).
 
-La page démarre l'agent et les plateformes connectées en arrière-plan, alors gardez sa fenêtre ouverte pendant que vous les utilisez. Tout ce qu'elle a démarré s'arrête avec elle, que vous cliquiez sur **Quitter**, appuyiez sur Ctrl+C ou fermiez la fenêtre. Tant qu'une application est connectée, fermer la fenêtre demande d'abord confirmation. Si une exécution précédente a planté en laissant des processus, le démarrage suivant les arrête d'abord.
+La page démarre l'agent et les plateformes connectées en arrière-plan, alors gardez sa fenêtre ouverte pendant que vous les utilisez. Tout ce qu'elle a démarré s'arrête avec elle, que vous cliquiez sur **Quitter**, appuyiez sur Ctrl+C ou fermiez la fenêtre. Tant qu'une application est connectée, fermer la fenêtre demande d'abord confirmation. Sous Windows, vous pouvez à la place faire en sorte que la fermeture de la fenêtre laisse personagent actif ; voir [Exécution en arrière-plan](#exécution-en-arrière-plan). Si une exécution précédente a planté en laissant des processus, le démarrage suivant les arrête d'abord.
+
+### Réglages avancés
+
+Une fois un modèle configuré, **Personnage et réglages** se termine par **Réglages avancés**. Cette partie regroupe, en cinq sections, des réglages qui n'étaient auparavant accessibles que dans `.env`. Tous sont facultatifs et possèdent une valeur par défaut ; un champ laissé vide utilise cette valeur.
+
+| Section | Réglages |
+|---|---|
+| **Administrateur et accès** | La façon dont le personnage vous appelle et la relation qui vous lie à lui (`ADMIN_NAME`, `ADMIN_RELATIONSHIP`) ; **Vos comptes** (`ADMIN_IDS`) ; **Répondre uniquement dans ces groupes** (`ACCESS_GROUPS`) ; **Autres personnes autorisées à envoyer des messages privés** (`ACCESS_DM_USERS`). **Choisir parmi les discussions récentes** liste les personnes et les groupes connus de la vue Activité, afin que vous puissiez ajouter leurs identifiants sans les saisir. |
+| **Prise de parole et style des réponses** | **Fuseau horaire** (`PERSONA_TZ_OFFSET_HOURS`) ; **Messages avant d'intervenir** (`CHAT_TRIGGER_COUNT`) ; **Fréquence des conversations qu'il engage**, qui règle en une seule fois les sept délais `PROACTIVE_*` ; **Style des réponses** : emoji, trois jeux de symboles et longueur maximale des réponses, enregistrés dans `persona.card.json`. |
+| **Modèles** | Un modèle de secours, avec sa propre adresse de service et sa propre clé (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_API_KEY`), le modèle des décisions rapides (`LLM_JUDGE_MODEL`) et le modèle des discussions privées (`LLM_DM_MODEL`). Le modèle de secours est testé avant d'être enregistré. |
+| **Apprentissage** | `REACT_LEARN_ENABLED`, `REACT_ELICIT_ENABLED`, `PROMOTE_AUTO_ENABLED` et `PROMOTE_MIN_SPEAKERS` (1 ou 2). **Recommencer l'apprentissage** écrit une nouvelle valeur de `PERSONA_VERSION`, de sorte que ce que le personnage a appris jusque-là n'est plus utilisé. Rien n'est supprimé. |
+| **Autres réglages** | `AGENT_ENABLED`, `DASHBOARD_ENABLED`, `UPDATE_CHECK_ENABLED`, les sept délais `PROACTIVE_*`, `CHAT_CONTEXT_MESSAGES`, `CHAT_FOLLOWUP_WINDOW_S`, les limites `REACT_*` et `PROMOTE_*`, `REACT_MODEL` et `PERSONA_VERSION`. |
+
+**Enregistrer** n'écrit que les réglages modifiés et laisse le reste de `.env` inchangé. Le personnage est ensuite redémarré, sauf si `UPDATE_CHECK_ENABLED` est la seule modification. La désactivation des réponses (`AGENT_ENABLED`) demande d'abord confirmation. Il en va de même pour le changement de nom du personnage sous **Nom du personnage**, car un nouveau nom crée un nouveau personnage.
+
+### La vue Application
+
+**Application** affiche un point rouge lorsqu'un élément requiert votre attention : un service n'a pas pu démarrer, un réglage porte un ancien nom ou contient une erreur, la connexion à une plateforme a échoué, ou la dernière vérification a échoué.
+
+**Diagnostic.** **Lancer la vérification** teste chaque service dont dépend le personnage : le modèle de discussion pour les réponses en groupe et en privé, la compréhension des images, le modèle d'auto-évaluation, la recherche en mémoire, la recherche web, le pont QQ (NapCat) et les registres d'apprentissage. Chaque service occupe une ligne, marquée **Opérationnel**, **Hors service** ou **Non configuré**, et un verdict affiché au-dessus des lignes indique ce qu'il faut corriger. Lorsque le personnage est en cours d'exécution, la vérification passe par lui. Sinon, une exécution de test distincte effectue les mêmes contrôles que `personagent doctor`. Une vérification envoie quelques courtes requêtes et consomme une petite partie du quota de votre service de modèles. Un résultat datant de moins d'une minute est réutilisé tant que les réglages n'ont pas changé. Cette même partie de la vue affiche également :
+
+- la raison pour laquelle le personnage, AstrBot ou la connexion aux plateformes n'a pas pu démarrer, avec la ligne de journal correspondante, **Afficher le journal** et **Redémarrer** ;
+- **Réglages portant d'anciens noms** : les réglages renommés en 1.0. **Renommer les réglages** effectue la même opération que `personagent doctor --fix`. Il demande d'abord confirmation, conserve le fichier précédent sous le nom `.env.bak` et redémarre le personnage si celui-ci avait refusé de démarrer ;
+- **Connexions aux plateformes** : l'état de chaque plateforme que personagent connecte lui-même, et la raison de l'échec le cas échéant ;
+- **Réglages à vérifier** : les problèmes détectés dans `.env`, tels qu'une clé de modèle manquante, un réglage que personagent ne lit pas, une valeur vide ou une marque d'ordre des octets (BOM) ;
+- **Journaux** : les dernières lignes de chaque journal de `runtime/desktop/` (le personnage, AstrBot, les connexions aux plateformes, les téléchargements et l'installation, l'application, l'entraînement et la dernière mise à jour). Les clés et jetons reconnaissables sont masqués, mais le contenu des discussions peut apparaître. **Afficher plus de lignes** affiche jusqu'à 200 lignes, et **Ouvrir le dossier des journaux** ouvre le dossier.
+
+#### Exécution en arrière-plan
+
+Cette partie est disponible dans la fenêtre de l'application sous Windows. Lorsque **Poursuivre l'exécution après la fermeture de la fenêtre** est coché, la fermeture de la fenêtre place personagent sous la forme d'une icône dans la zone de notification, en bas à droite de l'écran, et le personnage continue de répondre. Le menu de l'icône permet de rouvrir personagent ou de le quitter ; un double-clic sur l'icône le rouvre. **Passer en arrière-plan maintenant** masque immédiatement la fenêtre. `personagent start --background` démarre personagent derrière l'icône sans afficher la fenêtre, à condition que cette option soit cochée.
+
+#### Version et mises à jour
+
+Cette partie indique la version en cours d'exécution et la date de la dernière vérification. **Rechercher des mises à jour** interroge immédiatement pypi.org, même lorsque la vérification quotidienne est désactivée. Lorsqu'une version plus récente existe, **Mettre à jour et rouvrir** demande d'abord confirmation, ferme personagent, exécute la commande de mise à jour propre à cette installation, puis rouvre personagent. L'opération prend environ une minute, pendant laquelle le personnage ne répond pas. Un clone est mis à jour avec `git pull --ff-only`, suivi de `pip install -e`. Si la mise à jour échoue, la version précédente est rouverte, et **Afficher le journal** indique ce qui s'est passé. L'application ne peut pas se mettre à jour elle-même dans quatre cas ; elle affiche alors la commande ou la page des versions :
+
+- une copie décompressée depuis le ZIP des sources, que vous remplacez manuellement par les nouvelles sources ;
+- une copie exécutée via uvx, qui récupère la nouvelle version au prochain démarrage avec `uvx personagent@latest` ;
+- une installation dont l'outil (`git`, `uv` ou `pipx`) est introuvable ;
+- un clone comportant des modifications locales.
+
+#### Cet ordinateur et vos données
+
+- **Icône du Bureau et du menu Démarrer** (Windows) : **Ajouter l'icône** et **Supprimer l'icône** effectuent la même opération que `personagent shortcut`. Une copie exécutée via uvx ne peut pas recevoir d'icône, car elle s'exécute depuis un dossier temporaire.
+- **Démarrer personagent à l'ouverture de session Windows** ajoute un raccourci dans le dossier Démarrage. Si personagent est configuré pour s'exécuter en arrière-plan, il démarre alors derrière son icône sans ouvrir la fenêtre.
+- **Vos données** ouvre le dossier personagent, le fichier de la fiche du personnage, les journaux, la mémoire et les apprentissages, le dossier des autocollants et le dossier `data/` destiné à vos propres fichiers de lorebook, d'exemples et de filtres de sortie.
+- **Sauvegarder maintenant** enregistre un fichier zip unique sur le Bureau, dans Documents ou dans le dossier `backups` du dossier personnel. Il contient les réglages avec vos clés d'API, la fiche du personnage, la mémoire et les apprentissages, les fichiers de lorebook, les autocollants et les identifiants de connexion aux plateformes. Les journaux et les composants téléchargés n'y figurent pas. Conservez ce fichier en lieu sûr.
+- **Restaurer une sauvegarde** liste les sauvegardes présentes dans ces trois emplacements. **Restaurer** demande d'abord confirmation, met le personnage en pause, enregistre les données actuelles sous forme de sauvegarde, les remplace par celles de la sauvegarde et efface la discussion de cette page.
+- **Effacer et réinitialiser** enregistre d'abord une sauvegarde dans le dossier `backups` et met le personnage en pause. **Effacer la mémoire** supprime les notes du personnage sur les personnes, les réponses qu'il a apprises et leur historique, les données d'entraînement et la discussion de cette page ; les réglages, la fiche du personnage, les plateformes connectées et les autocollants sont conservés. **Tout réinitialiser** ramène personagent à l'état de sa première exécution : les réglages et les clés d'API, la fiche du personnage, la mémoire et les apprentissages sont supprimés, et toutes les plateformes sont déconnectées. Les autocollants, le dossier `data/` et l'AstrBot téléchargé sont conservés.
 
 ## Le voir d'abord : la démo
 
@@ -95,6 +145,10 @@ Voici une exécution abrégée de `personagent demo teach`. Les répliques du mo
 ```
 
 La scène envoie aussi le même message avant et après la leçon : l'ordinateur portable de quelqu'un a lâché en pleine démo. Avant la correction, Nova propose une solution. Après, Nova compatit. La démo reste scénarisée même avec une clé définie, donc chaque exécution est identique et ne coûte rien. `personagent demo --online` la joue plutôt sur votre propre modèle, ce qui coûte des jetons et varie d'une exécution à l'autre.
+
+La vue **Entraînement** de la page locale joue les trois mêmes scènes. Sous **Démonstration**, choisissez une scène et sélectionnez **Lire**. Chaque étape montre ce que les participants ont dit, ce que le personnage a répondu, pourquoi il est resté silencieux ou est intervenu, comment les réactions ont été jugées, ainsi que la liste de contrôle de l'apprentissage.
+
+**Groupe d'entraînement**, dans la même vue, est l'équivalent sur la page de [`personagent chat`](#discuter-dans-le-terminal) et nécessite un modèle. **Écrire en tant que** détermine qui envoie le message suivant : vous-même en tant qu'administrateur, ou l'un des trois membres fictifs. **Afficher le motif**, sur une ligne, indique pourquoi le personnage a répondu ou est resté silencieux, ce qu'il a appris et quel apprentissage antérieur il a utilisé. **Répondre** cite l'une des répliques du personnage, de sorte que le message suivant compte comme une réaction à celle-ci. **Afficher les apprentissages** liste ce qu'il a appris dans ce groupe. Le groupe d'entraînement conserve son état dans `runtime/trial/`, le même dossier que `personagent chat`, et n'a aucune incidence sur vos discussions réelles. **Réinitialiser le groupe d'entraînement** supprime cet état.
 
 ## Commandes du terminal
 
@@ -212,9 +266,9 @@ Chat platform  ⇄  connector  ⇄  personagent  ⇄  Model API
 
 Un connecteur se connecte à la plateforme, transmet chaque message à personagent et rapporte la réponse. Il en existe trois sortes.
 
-### QQ, WeChat, Telegram et Discord
+### Plateformes connectées par personagent lui-même
 
-personagent connecte ces quatre-là lui-même, dans un seul processus d'arrière-plan. Ils n'ont besoin ni d'AstrBot ni de NapCat.
+personagent connecte lui-même ces dix plateformes, dans un seul processus d'arrière-plan. Elles n'ont besoin ni d'AstrBot ni de NapCat. Si l'une d'elles ne peut pas être chargée, les autres démarrent malgré tout.
 
 | Plateforme | Ce que vous faites |
 |---|---|
@@ -222,6 +276,14 @@ personagent connecte ces quatre-là lui-même, dans un seul processus d'arrière
 | WeChat (personnel) | Scannez le code avec WeChat et confirmez la connexion. La connexion utilise l'API de bots iLink de Tencent et ne gère que les discussions individuelles, car WeChat ne transmet pas les messages de groupe à ces bots. |
 | Telegram | Créez un bot avec [@BotFather](https://t.me/BotFather) et collez son jeton. |
 | Discord | Dans le [Developer Portal](https://discord.com/developers/applications), copiez le jeton du bot et activez Message Content Intent. |
+| Matrix | Créez un compte Matrix distinct pour le bot. Dans Element, connecté en tant que bot, copiez son jeton d'accès sous **All settings > Help & About > Advanced**, puis fermez cette fenêtre sans vous déconnecter. Collez le jeton avec l'adresse du homeserver et votre propre identifiant Matrix. Ensuite, depuis votre propre compte, invitez le bot dans un salon dont le chiffrement de bout en bout est désactivé. Le bot n'accepte que les invitations provenant de votre identifiant Matrix et ne peut pas lire les salons chiffrés. |
+| Twitch | Enregistrez une application gratuite dont le Client Type est **Public** dans la [console développeur de Twitch](https://dev.twitch.tv/console). Collez son Client ID et les chaînes dans lesquelles le personnage doit discuter, sélectionnez **Connecter**, puis approuvez la connexion au moyen du lien affiché par la page, dans un navigateur connecté au compte Twitch du personnage. Texte uniquement, seulement dans les chaînes indiquées, et sans chuchotements (messages privés). |
+| IRC | Indiquez le serveur (Libera.Chat par défaut, ou `irc.oftc.net` pour OFTC), le port TLS, le pseudonyme du bot, les canaux et, si le pseudonyme est enregistré, le mot de passe NickServ. Le bot se connecte en TLS, ne rejoint que les canaux indiqués et répond aux messages privés adressés à son pseudonyme. Texte uniquement. Libera.Chat exige l'autorisation des opérateurs de chaque canal avant qu'un bot d'IA ne le rejoigne. |
+| Zulip | Ajoutez un **Generic bot** sous **Personal settings > Bots**, puis collez l'adresse de l'organisation, l'adresse e-mail du bot et sa clé d'API. Le bot ne lit que les canaux auxquels il est abonné et les messages privés qui lui sont adressés. Dans un canal, il répond lorsqu'il est mentionné ou cité. Tout membre de l'organisation peut lui envoyer des messages privés. |
+| VK | Dans les paramètres de la communauté, activez les messages et les fonctionnalités de bot, créez une clé d'accès disposant des droits de gestion de la communauté, des messages et des photos, puis activez l'API Long Poll avec l'événement `message_new`. Collez la clé. Tout utilisateur de VK peut écrire à la communauté. Dans une discussion de groupe, le bot ne reçoit que les messages qui le mentionnent ou lui répondent, sauf si la discussion lui donne accès à tous les messages. |
+| Stoat (anciennement Revolt) | Créez un bot sous **Settings > My Bots** et collez son jeton. Ne modifiez l'adresse de l'API que pour un serveur auto-hébergé. Le bot répond à tous les messages privés. Dans les serveurs et les groupes, il ne répond que là où vous êtes vous-même membre, et seulement lorsque quelqu'un le mentionne, lui répond ou commence un message par son nom. |
+
+Pour les six dernières, la page affiche des étapes numérotées au-dessus des champs. Le projet n'a pas encore testé Matrix, Twitch, IRC, Zulip, VK ni Stoat avec les services réels ; leur intégration suit la documentation de chaque plateforme.
 
 Pour QQ, trouvez le bot dans QQ mobile sous Contacts → Bots, puis discutez avec lui en privé ou ajoutez-le à un groupe. Tant que le bot n'est pas certifié, QQ ne le laisse rejoindre que les groupes dont vous êtes propriétaire. Vous choisissez quels messages de groupe il reçoit dans QQ, sur le profil du bot dans ce groupe. Le [guide des bots QQ](https://bot.q.qq.com/wiki/bot_new_product-intro/) couvre la certification.
 
@@ -243,7 +305,7 @@ Depuis un terminal, `personagent connect astrbot --install` télécharge le mêm
 
 ### Ponts que vous exécutez vous-même
 
-Les projets ci-dessous sont des logiciels tiers avec lesquels personagent fonctionne. Vous n'en avez besoin d'aucun pour QQ, WeChat, Telegram ou Discord.
+Les projets ci-dessous sont des logiciels tiers avec lesquels personagent fonctionne. Vous n'en avez besoin d'aucun pour les [plateformes connectées par personagent lui-même](#plateformes-connectées-par-personagent-lui-même).
 
 | Pont | Atteint |
 |---|---|
@@ -254,7 +316,7 @@ Les projets ci-dessous sont des logiciels tiers avec lesquels personagent foncti
 
 Tout le reste peut se connecter via le [protocole des connecteurs](connectors.fr.md), qui prend une requête HTTP signée par message. Plusieurs connecteurs peuvent servir un même personagent à la fois. Le [guide de déploiement](deploy.fr.md) couvre l'exécution en production.
 
-**Un AstrBot que vous exécutez déjà.** AstrBot transmet les messages à personagent via un petit plugin, [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.fr.md). Le plugin est livré avec personagent, et l'AstrBot géré le reçoit automatiquement. `personagent connect astrbot` trouve votre AstrBot, ou prend son dossier en argument. Il installe le plugin, écrit un `CONNECTOR_TOKEN` commun des deux côtés et demande quels groupes autoriser. Envoyez `/sid` dans un groupe pour voir son identifiant.
+**Un AstrBot que vous exécutez déjà.** AstrBot transmet les messages à personagent via un petit plugin, [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.fr.md). Le plugin est livré avec personagent, et l'AstrBot géré le reçoit automatiquement. `personagent connect astrbot` trouve votre AstrBot, ou prend son dossier en argument. Il installe le plugin, écrit un `CONNECTOR_TOKEN` commun des deux côtés et demande quels groupes autoriser. Envoyez `/sid` dans un groupe pour voir son identifiant. Sur la page locale, **Utiliser une instance AstrBot existante**, sous **Assistants de programmation** en bas de **Connecter des plateformes**, effectue la même opération : il trouve le dossier d'AstrBot, installe ou met à jour le plugin et enregistre les identifiants des groupes et des messages privés sous **Destinataires des réponses**. Pour un AstrBot exécuté dans Docker ou sur un autre ordinateur, il accepte l'adresse HTTPS décrite ci-dessous. **Déconnecter** supprime de nouveau le plugin et ses réglages.
 
 Pour un AstrBot sur une autre machine :
 
@@ -305,6 +367,8 @@ personagent connect dsh
 
 La première appelle `claude mcp add` à la portée utilisateur. La deuxième écrit dans `config.toml` du dossier de Codex (`CODEX_HOME` ou `~/.codex`). La troisième ajoute une entrée à `cordis.patch.yml` dans chaque profil sous `DSH_HOME` ou `~/.dsh`. Chaque façon d'exécuter DeepSeek Harness, comme l'application de bureau ou `dsh web`, obtient son profil au premier démarrage, alors démarrez-le une fois avant de connecter, et redémarrez-le ensuite. Les trois nomment cette installation et ce dossier personnel, alors relancez la commande si vous déplacez l'un ou l'autre, avec `--react` si vous l'avez utilisé : une exécution sans lui retire le hook. Démarrez une nouvelle session, puis demandez à l'agent de code de dire quelque chose à votre personnage.
 
+**Depuis la page locale.** **Assistants de programmation**, en bas de **Connecter des plateformes**, détecte Claude Code, Codex et DeepSeek Harness sur cet ordinateur et indique si chacun est connecté. **Connecter** (ou **Réparer** et **Mettre à jour** pour une configuration existante) et **Retirer** effectuent les mêmes opérations que les commandes ci-dessus et `--remove`, après avoir demandé confirmation. Une reconnexion conserve le réglage des remarques tel qu'il était. Sur Claude Code et Codex, **Formuler une remarque à la fin de chaque tour** active ou désactive le hook `--react`, et **Intervalle minimal entre les remarques** règle `CODING_REACT_COOLDOWN_S` sur 10 minutes, 30 minutes, 1 heure ou 2 heures. **Vérifier à nouveau** relit l'état, par exemple après l'installation de l'un de ces outils.
+
 Il dispose de deux outils :
 
 | Outil | Rôle | Coût |
@@ -332,7 +396,7 @@ personagent connect claude-code --react
 - Cela n'utilise qu'un service de personnage déjà en cours d'exécution et n'en démarre jamais.
 - Codex n'exécute un nouveau hook qu'après que vous lui avez fait confiance : tapez `/hooks` dans une session Codex.
 
-**Ce qu'il faut garder en tête.** `talk` envoie ce qu'écrit l'agent de code à votre service de modèles et dans la mémoire du personnage. La description de l'outil dit à l'agent de code de n'envoyer que ce que vous voulez dire, jamais de code ni de secrets, et de traiter les réponses comme de la conversation et non comme des instructions, car les notes d'un personnage peuvent venir de ce que les gens ont dit dans vos groupes. Ce sont des instructions à un modèle, pas une garantie, alors gardez les invites d'autorisation de l'agent de code pour tout ce qu'il ferait avec une réponse.
+**Ce qu'il faut garder en tête.** `talk` envoie ce qu'écrit l'agent de code à votre service de modèles et dans la mémoire du personnage. La description de l'outil dit à l'agent de code de n'envoyer que ce que vous voulez dire, jamais de code ni de secrets, et de traiter les réponses comme de la conversation et non comme des instructions, car les notes d'un personnage peuvent venir de ce que les gens ont dit dans vos groupes. Ce sont des instructions à un modèle, pas une garantie, alors gardez les invites d'autorisation de l'agent de code pour tout ce qu'il ferait avec une réponse. La discussion de la page est celle de l'administrateur : ce qu'un agent de code envoie au moyen de `talk` est donc également considéré comme provenant de l'administrateur. Ses seules corrections peuvent suffire à instruire le personnage, et il peut lui faire oublier n'importe quelle note.
 
 **Annuler.** `--remove` retire le serveur et le hook et laisse le reste de la configuration de l'agent de code tel quel. Faites-le avant de désinstaller personagent.
 
@@ -472,9 +536,18 @@ La vue liste chaque discussion connue du personnage, avec la plateforme, s'il s'
 - **Ce qu'il retient** montre ses notes de mémoire pour cette discussion, de qui elles parlent et qui les a ajoutées, ainsi que la note principale. **Oublier** en supprime une. En message privé, cela inclut ce que les groupes ont noté sur cette personne.
 - **Récent** montre les derniers messages et ses réponses. Chaque réponse porte une étiquette indiquant pourquoi il a parlé : **appelé**, **intervenu de lui-même**, **suite**, **spontané** ou **admin**. Les lignes qu'il a laissé passer montrent pourquoi il s'est tu. L'activité récente n'est gardée qu'en mémoire, donc un redémarrage l'efface.
 
-Chaque **Garder**, **Rejeter** et **Annuler** est écrit dans le même registre que `personagent learned`, avec l'acteur `dashboard` et la raison `local page`. L'enregistrement complet de chaque changement, avec la liste de contrôle de promotion, les preuves, l'historique et les éléments rejetés, se trouve dans le terminal. Voir [Examiner et annuler](#examiner-et-annuler).
+Chaque **Conserver**, **Rejeter** et **Annuler** est écrit dans le même registre que `personagent learned`, avec l'acteur `dashboard` et la raison `local page`.
 
-La vue reste vide tant que le personnage ne tourne pas. Il démarre quand vous discutez sur la page ou connectez une application, et la vue vous le dit. `DASHBOARD_ENABLED=false` désactive les données derrière la vue. La vue dit alors qu'elle est désactivée, et `personagent doctor` signale `activity: off`.
+Sous les discussions, **Apprentissages du personnage** liste tout ce que le personnage a appris dans l'ensemble des discussions. Cette liste lit directement les fichiers du registre ; elle fonctionne donc aussi lorsque le personnage n'est pas en cours d'exécution.
+
+- Les onglets **Utilisés**, **En attente**, **Rejetés**, **Annulés** et **Remplacés** affichent chacun un nombre.
+- Sélectionner un élément ouvre son enregistrement complet : la raison pour laquelle il est en attente, avec la liste de contrôle de promotion ; les messages qui le précèdent ; chaque réaction, avec l'indication de sa prise en compte ou non ; et son historique.
+- **Conserver** met en usage un élément en attente. Lorsqu'une autre formulation de la même réponse est déjà en usage, cette formulation est affichée et une confirmation est demandée avant son remplacement. **Annuler** cesse d'utiliser un élément, et **Rétablir** remet en usage un élément annulé. **Rejeter** demande d'abord confirmation et rejette définitivement un élément. Les éléments rejetés ou remplacés ne peuvent pas être rétablis.
+- Lorsque le personnage a également appris en s'exprimant dans une autre langue, **Langue d'apprentissage** permet d'afficher ces éléments.
+
+Lorsque le personnage est en cours d'exécution, une décision passe par lui. Sinon, elle est écrite directement dans les fichiers. Le terminal donne accès au même enregistrement ; voir [Examiner et annuler](#examiner-et-annuler).
+
+La liste des discussions reste vide tant que le personnage ne tourne pas. Il démarre quand vous discutez sur la page ou connectez une application, et la vue vous le dit. `DASHBOARD_ENABLED=false` désactive les données derrière la vue. La vue dit alors qu'elle est désactivée, et `personagent doctor` signale `activity: off`.
 
 La page locale ne répond que sur cet ordinateur. Sur un serveur sans page locale, utilisez `personagent learned` pour examiner et annuler ce qu'il a appris. Les scripts peuvent lire les mêmes données via l'API du service, décrite dans la [section Activité](deploy.fr.md#activité) du guide de déploiement.
 
@@ -537,9 +610,11 @@ Avant de le connecter à de vraies personnes, dites-leur que c'est un bot et obt
 
 ## Dépannage
 
-**Commencez par `personagent doctor`.** Il vérifie la configuration et nomme les réglages mal orthographiés ou renommés. Il sonde ensuite chaque service dont personagent dépend. Les sondes envoient de toutes petites requêtes et peuvent coûter un peu de crédit. `--json` affiche les mêmes résultats en JSON. `--fix` renomme les réglages retirés en 1.0 et enregistre l'ancien fichier sous `.env.bak`.
+**Commencez par le diagnostic.** Sur la page locale, ouvrez **Application** et sélectionnez **Lancer la vérification**. La vue nomme chaque service hors service, la raison pour laquelle le personnage ou une plateforme n'a pas pu démarrer et les réglages qui requièrent votre attention ; **Journaux** affiche chaque journal sans qu'il soit nécessaire d'ouvrir un fichier. Voir [La vue Application](#la-vue-application).
 
-**Une plateforme ne se connecte pas.** Quand la plateforme refuse les identifiants, la page dit pourquoi. Vérifiez-les dans la console de la plateforme, et pour Discord, confirmez que Message Content Intent est activé. Vous pouvez demander un nouveau code QR quand il expire, et réessayer un téléchargement d'AstrBot qui a échoué. Les journaux de tout ce que la page ou `personagent up` a démarré se trouvent dans `runtime/desktop/` du dossier personnel.
+**Dans un terminal, exécutez `personagent doctor`.** Il vérifie la configuration et nomme les réglages mal orthographiés ou renommés. Il sonde ensuite chaque service dont personagent dépend. Les sondes envoient de toutes petites requêtes et peuvent coûter un peu de crédit. `--json` affiche les mêmes résultats en JSON. `--fix` renomme les réglages retirés en 1.0 et enregistre l'ancien fichier sous `.env.bak`.
+
+**Une plateforme ne se connecte pas.** Quand la plateforme refuse les identifiants, la page dit pourquoi. Vérifiez-les dans la console de la plateforme, et pour Discord, confirmez que Message Content Intent est activé. Vous pouvez demander un nouveau code QR quand il expire, et réessayer un téléchargement d'AstrBot qui a échoué. **Connexions aux plateformes**, dans la vue **Application**, indique l'état de chaque plateforme que personagent connecte lui-même. Les journaux de tout ce que la page ou `personagent up` a démarré se trouvent dans `runtime/desktop/` du dossier personnel, et la vue **Application** les affiche sous **Journaux**.
 
 **Il tourne mais ne répond jamais.** Les trois causes les plus courantes sont :
 
@@ -551,7 +626,7 @@ Le guide de déploiement contient [la liste de contrôle complète](deploy.fr.md
 
 **Est-il en marche ?** `curl http://127.0.0.1:8080/health` répond sans appeler de modèle. `/health/details` sonde aussi les services et exige un en-tête `X-Personagent-Token` dès qu'un jeton est configuré.
 
-**Il ne démarre pas.** `personagent run` s'arrête avec une phrase qui dit pourquoi. Les raisons habituelles sont un port déjà utilisé, un autre personagent lancé depuis le même dossier personnel, une adresse réseau définie sans `CONNECTOR_TOKEN`, ou un réglage retiré en 1.0 encore défini. Les réglages retirés sont listés un par ligne sous la forme `OLD -> NEW`, et `personagent doctor --fix` les renomme. La page et `personagent up` choisissent un port libre quand 8080 est pris.
+**Il ne démarre pas.** `personagent run` s'arrête avec une phrase qui dit pourquoi. Les raisons habituelles sont un port déjà utilisé, un autre personagent lancé depuis le même dossier personnel, une adresse réseau définie sans `CONNECTOR_TOKEN`, ou un réglage retiré en 1.0 encore défini. Les réglages retirés sont listés un par ligne sous la forme `OLD -> NEW`, et `personagent doctor --fix` les renomme, tout comme **Renommer les réglages** dans la vue **Application**. Lorsque le personnage démarré depuis la page échoue, la vue **Application** nomme l'élément défaillant et affiche la dernière ligne de son journal. La page et `personagent up` choisissent un port libre quand 8080 est pris.
 
 **Un réglage n'a aucun effet.** Redémarrez le processus qui le lit, vérifiez l'orthographe et enregistrez `.env` en UTF-8 sans BOM. Les variables d'environnement du shell ont priorité sur `.env`. Les booléens sont `true` ou `false`. `PERSONA_TZ_OFFSET_HOURS` règle l'horloge de la plage nocturne. Quand il est vide (par défaut), personagent utilise UTC+8 avec `AGENT_LANG=zh` ou `zh-TW` et sinon le fuseau horaire de cette machine. Indiquez un nombre pour choisir un autre décalage.
 

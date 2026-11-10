@@ -1,0 +1,207 @@
+/* The health panel. */
+#health-root .health-card {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+#app-dot.health-attention {
+  background: var(--error);
+}
+.health-alerts {
+  margin-bottom: 8px;
+}
+/* Setting names, paths and log lines can be long unbroken strings. */
+#health-root p,
+#health-root li {
+  overflow-wrap: anywhere;
+}
+.health-alert {
+  background: var(--error-bg);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 4px 0 12px;
+}
+.health-alert-title {
+  margin: 0 0 4px;
+  color: var(--error);
+  font-weight: 500;
+}
+.health-alert .field-note {
+  margin: 2px 0 4px;
+}
+.health-said-label {
+  margin-bottom: 0;
+}
+.health-section .feature-head strong {
+  font-weight: 600;
+}
+.health-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0 0 -10px;
+}
+.health-section > .secondary {
+  margin: 6px 0 0 -10px;
+}
+.health-list {
+  margin: 4px 0 6px;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.health-code {
+  font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.health-results {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.health-verdict {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.health-verdict.is-ok {
+  color: var(--ok);
+}
+.health-verdict.is-bad {
+  color: var(--error);
+}
+.health-inline {
+  margin-left: -10px;
+}
+.health-when {
+  margin: 4px 0 8px;
+}
+.health-rows {
+  display: flex;
+  flex-direction: column;
+}
+.health-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.health-row:first-child {
+  border-top: 0;
+}
+.health-mark {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.health-row.is-ok .health-mark {
+  background: var(--ok);
+}
+.health-row.is-bad .health-mark {
+  background: var(--error);
+}
+.health-row-main {
+  flex: 1;
+  min-width: 0;
+}
+.health-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.health-row-head strong {
+  font-weight: 500;
+}
+.health-row.is-bad .feature-state {
+  color: var(--error);
+}
+.health-ms {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.health-detail {
+  margin: 2px 0 0;
+  font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.health-row .field-note {
+  margin: 4px 0 0;
+}
+.health-toggle {
+  margin: 4px 0 0 -9px;
+}
+.health-note {
+  margin: 10px 0 0;
+}
+.health-finding {
+  padding: 6px 0;
+}
+.health-level {
+  flex: none;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--warn-text);
+}
+.health-finding.is-bad .health-level {
+  color: var(--error);
+}
+.health-finding-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.health-log-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.health-log-label {
+  margin: 0;
+}
+.health-log-bar select {
+  width: auto;
+  min-width: 180px;
+  max-width: 100%;
+  height: 32px;
+  margin-right: 4px;
+}
+.health-log-bar .secondary {
+  margin-left: auto;
+}
+.health-log {
+  margin: 12px 0 0;
+  max-height: 360px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 7px;
+  background: var(--deep);
+  color: var(--ink);
+  font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.health-logs .error,
+.health-card .error {
+  margin-top: 10px;
+}
+@media (max-width: 480px) {
+  .health-ms {
+    margin-left: 0;
+  }
+  .health-log-bar .secondary {
+    margin-left: -10px;
+  }
+}

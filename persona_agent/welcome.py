@@ -1,6 +1,7 @@
 """Local, capability-protected setup, chat and platform connections. No account
-is needed to open it. QQ, WeChat, Telegram and Discord are connected directly;
-the other platforms go through a managed AstrBot with no login of its own."""
+is needed to open it. QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip,
+VK and Stoat are connected directly; the other platforms go through a managed
+AstrBot with no login of its own."""
 from __future__ import annotations
 
 import argparse
@@ -8,6 +9,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 import functools
+import importlib
 import json
 import os
 from pathlib import Path
@@ -28,7 +30,7 @@ from dotenv import dotenv_values
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from . import __version__, candidates, home as homes, langs
+from . import __version__, access, candidates, home as homes, langs
 from . import connections as conn
 from . import direct
 from .direct import base as direct_base
@@ -43,6 +45,10 @@ ASSETS = Path(__file__).with_name("static") / "welcome"
 # The page's languages besides English and Chinese, each a translation in
 # ASSETS/i18n/<code>.json. The character still speaks en or zh prompts.
 PAGE_LANGUAGES = ("zh-TW", "ja", "ko", "es", "fr", "de", "pt-BR", "ru")
+# Parts of the page beyond its four first views. Each is a module in
+# persona_agent/panels with `mount(app, workspace, body)`, and a script and a
+# stylesheet of the same name under ASSETS/panels.
+PANELS = ("health", "runtime", "desk", "tuning", "learned", "agents", "practice")
 TOKEN_HEADER = "x-personagent-setup-token"
 # Bytes; a chat message may be 8000 characters, three bytes each in Chinese.
 MAX_BODY = 32_768
@@ -56,7 +62,11 @@ REJECT_WINDOW = 12
 DIRECT_WINDOW = 40
 # Refusals a direct platform names, which the page explains one by one.
 NAMED_REFUSALS = {"token_rejected", "app_rejected", "bot_in_use", "message_content_intent_off",
-                  "intents_not_allowed", "session_expired", "bot_offline", "bot_banned"}
+                  "intents_not_allowed", "session_expired", "bot_offline", "bot_banned",
+                  "account_deactivated", "insecure_address", "homeserver_invalid", "owner_invalid",
+                  "channel_not_found", "nick_in_use", "nick_invalid", "password_rejected",
+                  "sasl_required", "long_poll_off", "message_events_off", "token_rights_missing",
+                  "not_a_bot", "wrong_bot_type", "not_zulip_site"}
 # The Activity view reads the character service's own API with the token it
 # keeps in its runtime folder; these are the decisions the view can make.
 ACTIVITY_ACTIONS = frozenset({"promote", "replace", "reject", "rollback"})
@@ -330,6 +340,56 @@ class Workspace:
     def _save_chat(self) -> None:
         atomic_write_text(self._history_path, json.dumps({"conversation": self._conversation,
                                                         "messages": self._history}, ensure_ascii=False))
+        self._name_owner()
+
+    def _runtime(self) -> Path:
+        # Where the service keeps its state, read the way its own process gets
+        # it: .env over this process's environment, else <home>/runtime.
+        configured = dotenv_values(self.env).get("AGENT_RUNTIME_DIR")
+        if configured is None:
+            configured = os.environ.get("AGENT_RUNTIME_DIR", "")
+        runtime = Path(configured.strip() or "runtime").expanduser()
+        return runtime if runtime.is_absolute() else self.home / runtime
+
+    def _name_owner(self) -> None:
+        """Tell the service who talks in this page's chat: its owner."""
+        path = self._runtime() / access.PAGE_OWNER_FILE
+        if self.home not in path.resolve().parents:
+            return  # a runtime folder outside the home is not this page's to write
+        try:
+            if path.read_text(encoding="utf-8").strip() == self._conversation:
+                return
+        except (OSError, UnicodeDecodeError):
+            pass
+        try:
+            atomic_write_text(path, self._conversation)
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+
+    async def forget_chat(self) -> dict:
+        """Forget what the character noted in this page's chat, then start a new one."""
+        chat = f"private:{access.PAGE_PLATFORM}:{self._conversation}"
+        async with self._chat_lock:
+            await asyncio.to_thread(self.services.start_agent)
+            raw = await self._activity_call("GET", "/api/dashboard/conversation", params={"id": chat})
+            if raw is None:
+                raise ValueError("activity_unavailable")
+            if raw.get("off"):
+                # Memory is read and forgotten through the Activity data, which is switched off.
+                raise ValueError("forget_needs_activity")
+            # Each note by its id, then the core note, which has none.
+            notes = [(str(m.get("conv") or chat), str(m.get("id") or "")) for m in raw.get("memories") or []]
+            forgotten = 0
+            for conv, note in [n for n in notes if n[1]] + ([(chat, "")] if raw.get("core_note") else []):
+                try:
+                    await self._activity_call("POST", "/api/dashboard/memory/forget",
+                                              json={"conv": conv, "note": note})
+                    forgotten += 1
+                except ValueError:
+                    pass  # already gone
+            self.reset_chat()
+            return {"ok": True, "forgotten": forgotten}
 
     def start_job(self, action: str, kind: str = "", values: dict | None = None) -> None:
         """Run `action` in the background: "start", or "scan", "connect" or
@@ -408,13 +468,17 @@ class Workspace:
             if not self._closed:
                 # Detailed dependency logs stay on disk; do not return secrets.
                 reason = str(exc)
+                # Services name what did not start: "agent could not start; ...".
+                service = reason.split(" ", 1)[0] if reason.split(" ", 1)[0] in ("agent", "astrbot", "direct") else ""
                 error = ("download_failed" if isinstance(exc, subprocess.CalledProcessError)
                          else reason if reason in NAMED_REFUSALS
                          or reason in ("scan_failed", "platform_rejected", "network_failed")
+                         else "agent_failed" if service == "agent"
                          else "service_failed" if self.job.get("stage") == "start"
                          else "setup_failed")
                 self.job = ({"state": "idle", "stage": "", "error": ""} if self._cancelled else
-                            {**self.job, "state": "error", "stage": "", "error": error})
+                            {**self.job, "state": "error", "stage": "", "error": error,
+                             "service": service})
         finally:
             if self._closed:
                 self.services.close()
@@ -474,6 +538,11 @@ class Workspace:
             self._astrbot_changed = True
 
     def _connect_direct(self, spec: conn.Platform, values: dict) -> None:
+        flow = direct.sign_in_for(spec.kind) if spec.sign_in else None
+        if flow is not None:
+            # The fields name the app; the sign-in adds the tokens, then the whole is checked.
+            values = self._sign_in(flow, values)
+            self._stage("check")
         platform = direct.platform_for(spec.kind, values, self.home)
 
         async def check() -> None:
@@ -490,11 +559,15 @@ class Workspace:
         self._store_direct(spec, values)
 
     def _scan_direct(self, spec: conn.Platform) -> None:
-        import httpx
-        from .direct import qq, weixin
+        flow = direct.sign_in_for(spec.kind)
+        if flow is None:
+            raise RuntimeError("platform_rejected")
+        self._store_direct(spec, self._sign_in(flow, {}))
 
-        scan, failed = ((qq.bind, qq.BindFailed) if spec.kind == "qq_official"
-                        else (weixin.login, weixin.LoginFailed))
+    def _sign_in(self, flow: tuple, values: dict) -> dict:
+        """Run a platform's QR or link login, showing what it asks to show;
+        the values to store."""
+        scan, failed = flow
 
         def show(content: str) -> None:
             import base64
@@ -508,7 +581,7 @@ class Workspace:
 
         async def login() -> dict:
             async with httpx.AsyncClient() as client:
-                task = asyncio.create_task(scan(client, show))
+                task = asyncio.create_task(scan(client, show, values))
                 while not task.done():
                     if self._cancelled or self._closed:
                         task.cancel()
@@ -516,12 +589,12 @@ class Workspace:
                     await asyncio.sleep(0.3)
                 return task.result()
         try:
-            values = asyncio.run(login())
-        except failed:
-            raise RuntimeError("scan_failed") from None
+            return asyncio.run(login())
+        except failed as exc:
+            # A login may name a refusal the page explains, such as an app it does not accept.
+            raise RuntimeError(str(exc) if str(exc) in NAMED_REFUSALS else "scan_failed") from None
         except (httpx.HTTPError, ValueError):
             raise RuntimeError("network_failed") from None
-        self._store_direct(spec, values)
 
     def _disconnect_direct(self, spec: conn.Platform) -> None:
         direct_base.remove_credentials(self.home, spec.kind)
@@ -561,6 +634,7 @@ class Workspace:
         if len(text) > 8000:
             raise ValueError("invalid_message")
         async with self._chat_lock:
+            self._name_owner()
             await asyncio.to_thread(self.services.start_agent)
             reply = await send_chat_event(self.services.agent_url, self.config().get("CONNECTOR_TOKEN", ""),
                                           self._conversation, text)
@@ -570,16 +644,8 @@ class Workspace:
             return {"reply": reply}
 
     def _activity_token(self) -> str:
-        # Where the service keeps it, read the way the service's own process
-        # gets it: .env over this process's environment, else <home>/runtime.
-        configured = dotenv_values(self.env).get("AGENT_RUNTIME_DIR")
-        if configured is None:
-            configured = os.environ.get("AGENT_RUNTIME_DIR", "")
-        runtime = Path(configured.strip() or "runtime").expanduser()
-        if not runtime.is_absolute():
-            runtime = self.home / runtime
         try:
-            return (runtime / "dashboard.token").read_text(encoding="utf-8").strip()
+            return (self._runtime() / "dashboard.token").read_text(encoding="utf-8").strip()
         except (OSError, UnicodeDecodeError):
             return ""
 
@@ -719,10 +785,14 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
                 workspace.start_job("start")
             yield
         finally:
+            for stop in app.state.closers:
+                await asyncio.to_thread(stop)
             await asyncio.to_thread(workspace.close)
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.workspace = workspace
+    # What a panel started outside the workspace's services; called before those stop.
+    app.state.closers = []
 
     @app.middleware("http")
     async def boundary(request: Request, call_next):
@@ -770,9 +840,11 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
                    "model_required", "invalid_character", "key_rejected", "model_limited", "model_unreachable",
                    "permission_required", "invalid_message", "invalid_platform",
                    "field_required", "invalid_field", "invalid_persona", "invalid_feature",
-                   "invalid_chat", "activity_unavailable", "activity_changed"}
+                   "invalid_chat", "activity_unavailable", "activity_changed", "forget_needs_activity"}
         error = str(exc)
-        return JSONResponse({"error": error if error in allowed else "generic"}, status_code=400)
+        known = error in allowed or any(
+            error in importlib.import_module(f"{__package__}.panels.{name}").ERRORS for name in PANELS)
+        return JSONResponse({"error": error if known else "generic"}, status_code=400)
 
     @app.get("/")
     async def index():
@@ -783,6 +855,13 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
         if name not in ("welcome.js", "welcome.css"):
             raise HTTPException(404)
         return FileResponse(ASSETS / name)
+
+    @app.get("/assets/panels/{name}")
+    async def panel_asset(name: str):
+        stem, _, kind = name.rpartition(".")
+        if stem not in PANELS or kind not in ("js", "css"):
+            raise HTTPException(404)
+        return FileResponse(ASSETS / "panels" / name)
 
     @app.get("/assets/i18n/{name}")
     async def page_language(name: str):
@@ -878,8 +957,10 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
             return await workspace.chat(str(payload.get("text") or ""))
         except ValueError:
             raise
-        except Exception:
-            return JSONResponse({"error": "chat_failed"}, status_code=502)
+        except Exception as error:
+            # The character itself did not start: a different thing to fix than a reply that failed.
+            code = "agent_failed" if str(error).startswith("agent ") else "chat_failed"
+            return JSONResponse({"error": code}, status_code=502)
 
     @app.post("/api/chat/reset")
     async def reset(request: Request):
@@ -887,6 +968,11 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
         async with workspace._chat_lock:
             workspace.reset_chat()
         return {"ok": True}
+
+    @app.post("/api/chat/forget")
+    async def forget(request: Request):
+        await body(request)
+        return await workspace.forget_chat()
 
     @app.get("/api/chat/history")
     async def history():
@@ -923,6 +1009,8 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
             callback()
         return {"ok": True}
 
+    for name in PANELS:
+        importlib.import_module(f"{__package__}.panels.{name}").mount(app, workspace, body)
     return app
 
 
@@ -943,7 +1031,19 @@ def _raise_window(url: str) -> bool:
         return False
 
 
-def _serve_in_window(app: FastAPI, server, sock: socket.socket, url: str, desktop: Path) -> None:
+def app_settings(desktop: Path) -> dict:
+    """What the person chose about the app itself, not about the character."""
+    return sw._read_json(desktop / "app.json")
+
+
+def save_app_settings(desktop: Path, **changes) -> dict:
+    values = {**app_settings(desktop), **changes}
+    atomic_write_text(desktop / "app.json", json.dumps(values))
+    return values
+
+
+def _serve_in_window(app: FastAPI, server, sock: socket.socket, url: str, desktop: Path,
+                     hidden: bool = False) -> None:
     """The page in its own window on this thread, the server behind it on another."""
     services = app.state.workspace.services
 
@@ -953,7 +1053,16 @@ def _serve_in_window(app: FastAPI, server, sock: socket.socket, url: str, deskto
         return langs.term("Closing personagent takes the character out of your chats "
                           "until you open it again. Close it?")
 
-    window = appwindow.AppWindow(url, storage=desktop / "webview", confirm=confirm)
+    def words() -> dict:
+        return {"open": langs.term("Open personagent"), "quit": langs.term("Quit"),
+                "still": langs.term("personagent is still running here, and the character keeps answering.")}
+
+    window = appwindow.AppWindow(
+        url, storage=desktop / "webview", confirm=confirm, words=words,
+        background=lambda: bool(app_settings(desktop).get("background")),
+        # Hidden only makes sense where closing can hide too.
+        start_hidden=hidden and bool(app_settings(desktop).get("background")))
+    app.state.window = window
 
     def stop() -> None:
         server.should_exit = True
@@ -990,6 +1099,7 @@ def main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
     parser = argparse.ArgumentParser(prog=prog, description=langs.term("Open local setup and chat in a window of their own"))
     parser.add_argument("--browser", action="store_true", help=langs.term("open the page in your browser instead of a window"))
     parser.add_argument("--no-browser", action="store_true", help=langs.term("print the local link and open nothing"))
+    parser.add_argument("--background", action="store_true", help=langs.term("start behind the notification-area icon, when closing the window is set to keep it running"))
     parser.add_argument("--terminal", action="store_true", help=langs.term("use the terminal menu instead"))
     parser.add_argument("--port", type=int, default=0, help=langs.term("local page port (default: choose automatically)"))
     args = parser.parse_args(argv)
@@ -1065,7 +1175,7 @@ def _start(args: argparse.Namespace, home: Path, refuse: Callable[[str], int], l
         app = create_app(home, token)
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
         if windowed:
-            _serve_in_window(app, server, sock, url, desktop)
+            _serve_in_window(app, server, sock, url, desktop, hidden=args.background)
             return 0
         if not args.no_browser:
             # The socket already listens, so an early request waits its turn.

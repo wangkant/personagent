@@ -16,6 +16,7 @@ an import cycle.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Iterable, Mapping
 
 from . import channels
@@ -82,6 +83,32 @@ def canonical_ids(*lists, native_platforms: Iterable[str] = ()) -> tuple[str, ..
 def parse_ids(*lists, native_platforms: Iterable[str] = ()) -> frozenset[str]:
     """`canonical_ids` as a set, for membership tests."""
     return frozenset(canonical_ids(*lists, native_platforms=native_platforms))
+
+
+#: Where the local page names the sender of its own chat. Whoever sits at
+#: the page installed the character, so that sender is an owner too; the file
+#: sits beside dashboard.token and is as private.
+PAGE_OWNER_FILE = "page.owner"
+PAGE_PLATFORM = "browser"
+_page_owner: dict = {}
+
+
+def page_owner(runtime: Path) -> frozenset[str]:
+    """The page chat's sender as an admin id, or nothing; read again when the file changes."""
+    path = runtime / PAGE_OWNER_FILE
+    try:
+        stamp = path.stat().st_mtime_ns
+    except OSError:
+        return frozenset()
+    if _page_owner.get("key") != (str(path), stamp):
+        try:
+            sender = path.read_text(encoding="utf-8").strip()
+        except (OSError, UnicodeDecodeError):
+            sender = ""
+        usable = 8 <= len(sender) <= 64 and all(c.isascii() and (c.isalnum() or c in "-_") for c in sender)
+        _page_owner.update(key=(str(path), stamp),
+                           ids=frozenset({f"{PAGE_PLATFORM}:{sender}"}) if usable else frozenset())
+    return _page_owner["ids"]
 
 
 def is_admin(user_id, admins: Iterable[str]) -> bool:

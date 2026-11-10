@@ -8,7 +8,7 @@
 
 | Коннектор | Куда подключается | Путь |
 |---|---|---|
-| Прямой | Официальные боты QQ, личный WeChat (iLink), Telegram и Discord, без других программ. Локальная страница и `personagent up` запускают его одним процессом, `python -m persona_agent.direct`. | `persona_agent/direct/` |
+| Прямой | Официальные боты QQ, личный WeChat (iLink), Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK и Stoat, без других программ. Локальная страница и `personagent up` запускают его одним процессом, `python -m persona_agent.direct`. | `persona_agent/direct/` |
 | Плагин AstrBot | Платформы AstrBot, стороннего моста. AstrBot, которым personagent управляет для KOOK, Feishu/Lark, DingTalk, Slack, WeCom, Mattermost, Misskey, OneBot v11 и остальных, получает плагин автоматически. Для уже работающего у вас AstrBot настройку выполняет `personagent connect astrbot`. Можно также загрузить `astrbot_plugin_personagent.zip` из GitHub Release через «Установить из файла» в AstrBot и задать `connector_token` самостоятельно. | `integrations/astrbot/` |
 | Satori | Все реализации Satori (Koishi и другие, сторонние): QQ, Telegram, Discord, KOOK, Lark, DingTalk, LINE, WhatsApp, Matrix, Zulip, электронная почта и другие. | `integrations/satori/` |
 | Matrix | Комнаты Matrix, а через сторонние мосты mautrix — WhatsApp, Signal, Messenger, Instagram, Google Messages и другие. | `integrations/matrix/` |

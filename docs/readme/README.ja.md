@@ -15,7 +15,7 @@
 
 *これは英語版 README の翻訳です。基準となるのは英語版で、こちらより新しい場合があります。*
 
-personagent はグループチャットのためのキャラクターです。用意されたものから選ぶか自分で書き、OpenAI 互換の任意のモデルで動かせます。まずは自分のパソコンで話してみて、そのあと同じローカルページから QQ、WeChat、Telegram、Discord、さらに十数個のアプリへ連れていけます。
+personagent はグループチャットのためのキャラクターです。用意されたものから選ぶか自分で書き、OpenAI 互換の任意のモデルで動かせます。まずは自分のパソコンで話してみて、そのあと同じローカルページから QQ、WeChat、Telegram、Discord、さらに 18 のアプリへ連れていけます。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「アプリ連携」画面。参加できるすべてのプラットフォームが並んでいる" width="960">
@@ -79,10 +79,10 @@ personagent 自体は無料です。料金は、選んだモデルサービス�
 | ページ上の表示 | アプリ | 必要なもの |
 |---|---|---|
 | スキャンで連携 | QQ、個人 WeChat | スマートフォン。WeChat のボットは 1 対 1 のチャットのみ |
-| 値を 1〜2 個貼り付け | Telegram、Discord、KOOK、Feishu/Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey | アプリのコンソールで取得する値。どの値かはページに表示されます |
+| 値を 1〜2 個貼り付け | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、Feishu/Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey | アプリのコンソールで取得する値。どの値かはページに表示されます |
 | 上級 | WeCom アプリ、WeChat 公式アカウント、QQ Webhook、OneBot v11 (NapCat)、Satori | 公開アドレス、またはこのコンピューター上の他のソフトウェア |
 
-連携済みのアプリは personagent を起動するたびに再び起動します。スキャンで連携するアプリと Telegram、Discord には personagent が自分で接続し、それ以外は personagent がダウンロードしてバックグラウンドで動かす [AstrBot](https://github.com/AstrBotDevs/AstrBot) を経由します。サーバーでは、`personagent up` でブラウザーなしですべてを起動できます。アプリごとの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#チャットに入れる)に、QQ をゼロからつなぐ手順は[中国語のデプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)にあります。
+連携済みのアプリは personagent を起動するたびに再び起動します。スキャンで連携するアプリと Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat には personagent が自分で接続し、それ以外は personagent がダウンロードしてバックグラウンドで動かす [AstrBot](https://github.com/AstrBotDevs/AstrBot) を経由します。サーバーでは、`personagent up` でブラウザーなしですべてを起動できます。アプリごとの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#チャットに入れる)に、QQ をゼロからつなぐ手順は[中国語のデプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)にあります。
 
 すでに AstrBot、Koishi、Matrix を運用していますか？personagent はその背後でキャラクターとして動かせます。[自分で動かすブリッジ](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#自分で動かすブリッジ)、[Satori コネクター](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ja.md)、[Matrix コネクター](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ja.md)を参照してください。
 
@@ -102,11 +102,11 @@ personagent connect codex
 personagent connect dsh
 ```
 
-`--remove` で元に戻せます。権限と、ターンの終わりにキャラクターが一言話せるようにする `--react` については[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#コーディングエージェント)にあります。
+`--remove` で元に戻せます。**プラットフォーム連携** の **コーディングアシスタント** を使えば、どちらの操作もページから行えます。権限と、ターンの終わりにキャラクターが一言話せるようにする `--react` については[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#コーディングエージェント)にあります。
 
 ## アップデートとアンインストール
 
-PyPI に新しいバージョンが出ると、ページに通知とアップデートコマンドが表示されます。pip の場合は `python -m pip install -U personagent` です。設定、キャラクター、学んだこと、連携済みのアプリはそのまま引き継がれます。削除するには、[アンインストール手順](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英語）に従ってください。
+PyPI に新しいバージョンが出ると、ページに通知とアップデートコマンドが表示されます。pip の場合は `python -m pip install -U personagent` です。ほとんどのインストールでは、ページのアプリビューにある **更新して再起動** がこのコマンドを代わりに実行します。設定、キャラクター、学んだこと、連携済みのアプリはそのまま引き継がれます。削除するには、[アンインストール手順](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英語）に従ってください。
 
 ## プライバシー
 

@@ -15,7 +15,7 @@
 
 *Это перевод английского README. Эталоном остаётся английская версия, она может быть новее.*
 
-personagent — это персонаж для ваших групповых чатов: выберите готового или напишите своего и запустите его на любой модели, совместимой с OpenAI. Начните с чата с ним на своём компьютере, а потом с той же локальной страницы приведите его в QQ, WeChat, Telegram, Discord и ещё десяток приложений.
+personagent — это персонаж для ваших групповых чатов: выберите готового или напишите своего и запустите его на любой модели, совместимой с OpenAI. Начните с чата с ним на своём компьютере, а потом с той же локальной страницы приведите его в QQ, WeChat, Telegram, Discord и ещё восемнадцать приложений.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Экран «Подключить приложения» на локальной странице со всеми платформами, к которым можно подключиться" width="960">
@@ -79,10 +79,10 @@ personagent бесплатен. Вы платите выбранному сер�
 | На странице | Приложения | Что нужно |
 |---|---|---|
 | Подключить по QR-коду | QQ, личный WeChat | Ваш телефон. Боты WeChat получают только личные чаты |
-| Вставить одно-два значения | Telegram, Discord, KOOK, Feishu/Lark, DingTalk, Slack, ИИ-бот WeCom, Mattermost, Misskey | Значения из консоли приложения; страница подскажет, какие |
+| Вставить одно-два значения | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, ИИ-бот WeCom, Mattermost, Misskey | Значения из консоли приложения; страница подскажет, какие |
 | Дополнительно | Приложение WeCom, официальный аккаунт WeChat, вебхук QQ, OneBot v11 (NapCat), Satori | Публичный адрес или другое ПО на этом компьютере |
 
-Подключённые приложения запускаются заново при каждом старте personagent. Приложения с подключением по QR-коду, Telegram и Discord personagent подключает сам; остальные работают через [AstrBot](https://github.com/AstrBotDevs/AstrBot), который он скачивает и запускает в фоне. На сервере `personagent up` запускает всё без браузера. Настройка каждого приложения описана в [руководстве пользователя](https://github.com/wangkant/personagent/blob/main/docs/guide.ru.md#добавьте-его-в-чат), а QQ с нуля — в [китайском руководстве по развёртыванию](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
+Подключённые приложения запускаются заново при каждом старте personagent. Приложения с подключением по QR-коду, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK и Stoat personagent подключает сам; остальные работают через [AstrBot](https://github.com/AstrBotDevs/AstrBot), который он скачивает и запускает в фоне. На сервере `personagent up` запускает всё без браузера. Настройка каждого приложения описана в [руководстве пользователя](https://github.com/wangkant/personagent/blob/main/docs/guide.ru.md#добавьте-его-в-чат), а QQ с нуля — в [китайском руководстве по развёртыванию](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
 
 У вас уже работает AstrBot, Koishi или Matrix? personagent может стоять за ним в роли персонажа: см. [мосты, которые вы запускаете сами](https://github.com/wangkant/personagent/blob/main/docs/guide.ru.md#мосты-которые-вы-запускаете-сами), [коннектор Satori](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ru.md) и [коннектор Matrix](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ru.md).
 
@@ -102,11 +102,11 @@ personagent connect codex
 personagent connect dsh
 ```
 
-`--remove` снова всё убирает. В [руководстве](https://github.com/wangkant/personagent/blob/main/docs/guide.ru.md#агенты-для-кода) описаны разрешения и `--react`, с которым персонаж может сказать реплику в конце хода.
+`--remove` снова всё убирает; обе операции можно выполнить и на странице, в блоке **Помощники для программирования** раздела **Подключение платформ**. В [руководстве](https://github.com/wangkant/personagent/blob/main/docs/guide.ru.md#агенты-для-кода) описаны разрешения и `--react`, с которым персонаж может сказать реплику в конце хода.
 
 ## Обновление и удаление
 
-Когда на PyPI появляется новая версия, страница показывает уведомление с командой обновления. Для pip это `python -m pip install -U personagent`. Настройки, персонаж, всё выученное и подключённые приложения сохраняются. Чтобы удалить personagent, следуйте [инструкции по удалению](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it) (на английском).
+Когда на PyPI появляется новая версия, страница показывает уведомление с командой обновления. Для pip это `python -m pip install -U personagent`. В большинстве установок кнопка **Обновить и перезапустить** в разделе **Приложение** выполняет эту команду за вас. Настройки, персонаж, всё выученное и подключённые приложения сохраняются. Чтобы удалить personagent, следуйте [инструкции по удалению](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it) (на английском).
 
 ## Конфиденциальность
 

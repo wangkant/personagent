@@ -13,7 +13,7 @@
 
 <p align="center"><strong>English</strong> · <a href="https://github.com/wangkant/personagent/blob/main/README.zh-CN.md">简体中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.zh-TW.md">繁體中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ja.md">日本語</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ko.md">한국어</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.es.md">Español</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.fr.md">Français</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.de.md">Deutsch</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.pt-BR.md">Português</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ru.md">Русский</a></p>
 
-personagent is a character for your group chats: pick a ready one or write your own, and run it on any OpenAI-compatible model. Start by chatting with it on your own computer, then bring it into QQ, WeChat, Telegram, Discord and a dozen more from the same local page.
+personagent is a character for your group chats: pick a ready one or write your own, and run it on any OpenAI-compatible model. Start by chatting with it on your own computer, then bring it into QQ, WeChat, Telegram, Discord and eighteen more from the same local page.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="The Connect apps screen of the local page, with every platform it can join" width="960">
@@ -77,10 +77,10 @@ Open **Connect apps** in the local page:
 | On the page | Apps | What you need |
 |---|---|---|
 | Scan to connect | QQ, personal WeChat | Your phone. WeChat bots get one-to-one chats only |
-| Paste one or two values | Telegram, Discord, KOOK, Feishu/Lark, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey | Values from the app's console; the page says which |
+| Paste one or two values | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey | Values from the app's console; the page says which |
 | Advanced | WeCom app, WeChat Official Account, QQ webhook, OneBot v11 (NapCat), Satori | A public address, or other software on this computer |
 
-Connected apps start again each time personagent starts. The scan-to-connect apps, Telegram and Discord are connected by personagent itself; the rest go through an [AstrBot](https://github.com/AstrBotDevs/AstrBot) it downloads and runs in the background. On a server, `personagent up` starts everything without a browser. Setup for each app is in the [user guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#put-it-in-a-chat), and QQ from zero in the [Chinese deployment guide](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
+Connected apps start again each time personagent starts. The scan-to-connect apps, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat are connected by personagent itself; the rest go through an [AstrBot](https://github.com/AstrBotDevs/AstrBot) it downloads and runs in the background. On a server, `personagent up` starts everything without a browser. Setup for each app is in the [user guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#put-it-in-a-chat), and QQ from zero in the [Chinese deployment guide](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
 
 Already running AstrBot, Koishi or Matrix? personagent can sit behind it as the character: see [bridges you run yourself](https://github.com/wangkant/personagent/blob/main/docs/guide.md#bridges-you-run-yourself), the [Satori connector](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.md) and the [Matrix connector](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.md).
 
@@ -100,11 +100,11 @@ personagent connect codex
 personagent connect dsh
 ```
 
-`--remove` takes it out again. The [guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#coding-agents) covers permissions and `--react`, which lets the character say a line when a turn ends.
+`--remove` takes it out again, and **Coding assistants** under **Connect apps** does both from the page. The [guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#coding-agents) covers permissions and `--react`, which lets the character say a line when a turn ends.
 
 ## Update and uninstall
 
-When a newer version is on PyPI, the page shows a notice with the update command. With pip that is `python -m pip install -U personagent`. Settings, character, what it learned and connected apps carry over. To remove it, follow the [uninstall steps](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it).
+When a newer version is on PyPI, the page shows a notice with the update command. With pip that is `python -m pip install -U personagent`. On most installations, **Update and reopen** in the page's App view runs it for you. Settings, character, what it learned and connected apps carry over. To remove it, follow the [uninstall steps](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it).
 
 ## Privacy
 

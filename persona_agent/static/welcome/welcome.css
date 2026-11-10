@@ -907,8 +907,12 @@ label.check input:checked {
   color: var(--muted);
   margin: 0;
 }
+/* The first action takes the free space; the rest sit beside it. */
 .chat-heading > .quiet {
   margin-left: auto;
+}
+.chat-heading > .quiet + .quiet {
+  margin-left: 0;
 }
 #messages {
   flex: 1;
@@ -1278,9 +1282,24 @@ label.check input:checked {
   color: var(--text);
   margin: 0 0 4px;
 }
-#panel-guide {
+#panel-steps {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text);
+  margin: 6px 0 8px;
+  padding-left: 20px;
+}
+#panel-steps li + li {
+  margin-top: 4px;
+}
+#panel-guide,
+#qr-link {
   font-size: 13px;
   font-weight: 500;
+}
+#qr-link {
+  display: inline-block;
+  margin-bottom: 6px;
 }
 #panel-progress,
 #panel-done {
@@ -1374,6 +1393,8 @@ label.check input:checked {
   font-size: 13px;
   box-shadow: var(--shadow);
   z-index: 5;
+  /* A path or a command in a message wraps instead of running off the window. */
+  overflow-wrap: anywhere;
 }
 /* Clear of the composer. */
 #chat-view:not([hidden]) ~ #toast {
@@ -1415,6 +1436,7 @@ label.check input:checked {
   margin: 0 0 18px;
   font-size: 14px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 .ask-actions {
   display: flex;
@@ -1703,6 +1725,32 @@ label.check input:checked {
 .activity-empty p {
   margin: 0 auto 14px;
   max-width: 460px;
+}
+.chat-commands {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 8px auto 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.chat-command-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.chat-command-list .quiet {
+  background: var(--side);
+  color: var(--text);
+}
+.composer-note .quiet {
+  height: 22px;
+  padding: 0 6px;
+  font-size: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
 }
 /* Pressed: a button answers the click itself, before its result shows.
    After every :hover rule, so the pressed look wins while the pointer is on it. */

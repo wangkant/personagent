@@ -5,11 +5,11 @@ English · [简体中文](guide.zh-CN.md) · [繁體中文](guide.zh-TW.md) · [
 This guide covers setting personagent up, putting it in your chats, teaching it and looking after it. The [README](../README.md) is the short version, and [Getting started](start.md) walks through the local page screen by screen.
 
 1. [Install and the home folder](#install-and-the-home-folder)
-2. [The local page](#the-local-page)
+2. [The local page](#the-local-page): [Advanced settings](#advanced-settings) · [The App view](#the-app-view)
 3. [See it first: the demo](#see-it-first-the-demo)
 4. [Terminal commands](#terminal-commands): [setup](#set-up-in-the-terminal) · [chat](#chat-in-the-terminal) · [run the service](#run-the-service)
 5. [Make it your character](#make-it-your-character)
-6. [Put it in a chat](#put-it-in-a-chat): [QQ, WeChat, Telegram, Discord](#qq-wechat-telegram-and-discord) · [Other platforms](#other-platforms-through-the-managed-astrbot) · [Bridges you run yourself](#bridges-you-run-yourself) · [Speaking first](#speaking-first)
+6. [Put it in a chat](#put-it-in-a-chat): [Platforms personagent connects itself](#platforms-personagent-connects-itself) · [Other platforms](#other-platforms-through-the-managed-astrbot) · [Bridges you run yourself](#bridges-you-run-yourself) · [Speaking first](#speaking-first)
 7. [Coding agents](#coding-agents)
 8. [Teach it](#teach-it)
 9. [Activity](#activity)
@@ -51,20 +51,70 @@ This guide writes commands as `personagent ...`. If you did not install it, put 
 
 ## The local page
 
-`personagent` (or `personagent start`) serves a page that only this computer can reach. On Windows it opens in a window of its own. On macOS and Linux it opens in the browser, or in a window too once `pip install "personagent[app]"` has added [pywebview](https://pywebview.flowrl.com/), with Qt on Linux. The page has four views:
+`personagent` (or `personagent start`) serves a page that only this computer can reach. On Windows it opens in a window of its own. On macOS and Linux it opens in the browser, or in a window too once `pip install "personagent[app]"` has added [pywebview](https://pywebview.flowrl.com/), with Qt on Linux. The page has six views, listed in the sidebar in this order:
 
-- **Chat** is a one-to-one chat with the character on the page. The same agent that serves your chat platforms answers it.
+- **Chat** is a one-to-one chat with the character on the page. The same agent that serves your chat platforms answers it. In this chat you are the admin. **Memory commands** below the message box lists the [memory commands](#memory-commands), and selecting one inserts it into the message box. **Forget this chat** deletes what the character noted in this chat and starts a new chat. It needs the data behind [Activity](#activity).
 - **Activity** shows the chats the character is in, what it said lately, what it learned and what waits for your decision. See [Activity](#activity).
-- **Connect apps** puts the character in QQ, WeChat, Telegram, Discord and other platforms. See [Put it in a chat](#put-it-in-a-chat).
-- **Character & settings** is where you pick a model service (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama, or any other OpenAI-compatible service), paste the API key, and choose a name and a ready personality. **Verify & start chatting** tests the key with one small request and saves it only if the request succeeds. After setup, the **Persona** box shows `persona.txt`. **Save persona** restarts the agent with the new text and keeps what it has learned. **More features** turns on web search through Tavily (DuckDuckGo is the free default), image understanding, and speaking first on the apps you choose.
+- **Connect apps** puts the character in QQ, WeChat, Telegram, Discord and other platforms. See [Put it in a chat](#put-it-in-a-chat). At the bottom, **Coding assistants** connects the character to the [coding agents](#coding-agents) on this computer.
+- **Character & settings** is where you pick a model service (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama, or any other OpenAI-compatible service), paste the API key, and choose a name and a ready personality. **Verify & start chatting** tests the key with one small request and saves it only if the request succeeds. After setup, the **Persona** box shows `persona.txt`. **Save persona** restarts the agent with the new text and keeps what it has learned. **More features** turns on web search through Tavily (DuckDuckGo is the free default), image understanding, and speaking first on the apps you choose. [Advanced settings](#advanced-settings) follows.
+- **Practice** plays the scripted demo and runs a practice group chat. See [See it first: the demo](#see-it-first-the-demo).
+- **App** checks the services the character relies on and holds the logs, running in the background, updates, and your data. See [The App view](#the-app-view).
 
-Until you connect an app, the Chat view shows a short **Getting started** bar.
+**Practice** and **App** open before a model is set up. Until you connect an app, the Chat view shows a short **Getting started** bar.
 
-Running `personagent` again brings back the page that is already open. `--browser` opens the page in the browser instead of a window, and `--no-browser` prints the link and opens nothing. On Windows, `personagent shortcut` puts an icon on the desktop and in the Start menu that opens the window with no terminal behind it, and `personagent shortcut --remove` takes it away.
+Running `personagent` again brings back the page that is already open. `--browser` opens the page in the browser instead of a window, and `--no-browser` prints the link and opens nothing. On Windows, `personagent shortcut` puts an icon on the desktop and in the Start menu that opens the window with no terminal behind it, and `personagent shortcut --remove` takes it away. The App view does the same.
 
-When a newer personagent is on PyPI, the Chat view shows a notice with the command that updates your installation, whether it came from pip, uvx, uv tool, pipx or a Git clone. For an unpacked source ZIP, the notice links to the release page instead. The terminal prints the same command. Closing the notice hides it for that version, and **N available** under the version number brings it back. `personagent up` and `personagent doctor` report a new version too. The page and `up` ask pypi.org at most once a day, in the background. `doctor` asks right away when the last answer is more than a day old. Set `UPDATE_CHECK_ENABLED=false` to turn the check off.
+When a newer personagent is on PyPI, the Chat view shows a notice with the command that updates your installation, whether it came from pip, uvx, uv tool, pipx or a Git clone. For an unpacked source ZIP, the notice links to the release page instead. The terminal prints the same command. Closing the notice hides it for that version, and **N available** under the version number brings it back. `personagent up` and `personagent doctor` report a new version too. The page and `up` ask pypi.org at most once a day, in the background. `doctor` asks right away when the last answer is more than a day old. Set `UPDATE_CHECK_ENABLED=false` to turn the check off. The App view can also install the update itself; see [Version and updates](#version-and-updates).
 
-The page starts the agent and the connected platforms in the background, so keep its window open while you use them. Everything it started stops with it, whether you click **Quit**, press Ctrl+C or close the window. While an app is connected, closing the window asks first. If an earlier run crashed and left processes behind, the next start stops them first.
+The page starts the agent and the connected platforms in the background, so keep its window open while you use them. Everything it started stops with it, whether you click **Quit**, press Ctrl+C or close the window. While an app is connected, closing the window asks first. On Windows you can instead have closing the window leave personagent running; see [Run in the background](#run-in-the-background). If an earlier run crashed and left processes behind, the next start stops them first.
+
+### Advanced settings
+
+Once a model is set up, **Character & settings** ends with **Advanced settings**. It holds settings that were previously available only in `.env`, in five sections. Every one of them is optional and has a default, and an empty field uses the default.
+
+| Section | Settings |
+|---|---|
+| **Admin and access** | What the character calls you and your relationship to it (`ADMIN_NAME`, `ADMIN_RELATIONSHIP`); **Your accounts** (`ADMIN_IDS`); **Reply only in these groups** (`ACCESS_GROUPS`); **Others allowed to send private messages** (`ACCESS_DM_USERS`). **Choose from recent chats** lists the people and groups from Activity, so that you can add their ids without typing them. |
+| **Speaking and reply style** | **Time zone** (`PERSONA_TZ_OFFSET_HOURS`); **Messages before joining in** (`CHAT_TRIGGER_COUNT`); **How often it starts conversations**, which sets the seven `PROACTIVE_*` timings at once; **Reply style**: emoji, three sets of symbols and the maximum reply length, written to `persona.card.json`. |
+| **Models** | A backup model with its own service address and key (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_API_KEY`), the model for quick decisions (`LLM_JUDGE_MODEL`) and the model for private chats (`LLM_DM_MODEL`). The backup model is tested before it is saved. |
+| **Learning** | `REACT_LEARN_ENABLED`, `REACT_ELICIT_ENABLED`, `PROMOTE_AUTO_ENABLED` and `PROMOTE_MIN_SPEAKERS` (1 or 2). **Restart learning** writes a new `PERSONA_VERSION`, so that what the character learned so far is no longer used. Nothing is deleted. |
+| **Other settings** | `AGENT_ENABLED`, `DASHBOARD_ENABLED`, `UPDATE_CHECK_ENABLED`, the seven `PROACTIVE_*` timings, `CHAT_CONTEXT_MESSAGES`, `CHAT_FOLLOWUP_WINDOW_S`, the `REACT_*` and `PROMOTE_*` limits, `REACT_MODEL` and `PERSONA_VERSION`. |
+
+**Save** writes only the settings that changed and leaves the rest of `.env` as it was. It then restarts the character, except when `UPDATE_CHECK_ENABLED` is the only change. Turning off replies (`AGENT_ENABLED`) asks first. So does renaming the character under **Character name**, because a new name starts a new character.
+
+### The App view
+
+**App** has a red dot when something needs attention: a service failed to start, a setting has an old name or an error, a platform connection failed, or the last check failed.
+
+**Health check.** **Run check** tests every service the character relies on: the chat model for group and private replies, image understanding, the self-review model, memory lookup, web search, the QQ bridge (NapCat) and the learning records. Each service gets one row, marked **Working**, **Not working** or **Not set up**, and a verdict above the rows names what to fix. When the character is running, the check goes through it. Otherwise a separate test run performs the same checks as `personagent doctor`. A check sends a few short requests and uses a small amount of your model service's quota. A result less than one minute old is reused while the settings have not changed. The same part of the view also shows:
+
+- why the character, AstrBot or the platform connection failed to start, with the relevant log line, **Show log** and **Restart**;
+- **Settings with old names**: settings renamed in 1.0. **Rename settings** does what `personagent doctor --fix` does. It asks first, keeps the previous file as `.env.bak`, and starts the character again if it had refused to start;
+- **Platform connections**: the state of each platform personagent connects itself, and the reason when one failed;
+- **Settings to review**: problems found in `.env`, such as a missing model key, a setting personagent does not read, an empty value or a byte order mark;
+- **Logs**: the last lines of each log in `runtime/desktop/` (the character, AstrBot, platform connections, downloads and installation, the app, Practice and the last update). Recognizable keys and tokens are hidden, but chat content can appear. **Show more lines** shows up to 200 lines, and **Open the logs folder** opens the folder.
+
+#### Run in the background
+
+This part is available in the app window on Windows. With **Keep running after the window is closed** ticked, closing the window moves personagent to an icon in the notification area at the bottom right of the screen, and the character keeps answering. The icon's menu opens personagent again or quits it, and double-clicking the icon opens it. **Move to the background now** hides the window at once. `personagent start --background` starts personagent behind the icon without showing the window, provided that this option is ticked.
+
+#### Version and updates
+
+This part shows the version that is running and when the last check took place. **Check for updates** asks pypi.org at once, even when the daily check is turned off. When a newer version exists, **Update and reopen** asks first, closes personagent, runs the update command for this installation and opens personagent again. This takes about a minute, and the character does not answer in the meantime. A clone is updated with `git pull --ff-only` followed by `pip install -e`. If the update fails, the previous version opens again, and **Show log** shows what happened. The app cannot update itself in four cases, and shows the command or the release page instead:
+
+- a copy unpacked from the source ZIP, which you replace with the new source by hand;
+- a copy that runs through uvx, which fetches the new version the next time it starts with `uvx personagent@latest`;
+- an installation whose tool (`git`, `uv` or `pipx`) cannot be found;
+- a clone with local changes.
+
+#### This computer and your data
+
+- **Desktop and Start menu icon** (Windows): **Add icon** and **Remove icon** do what `personagent shortcut` does. A copy that runs through uvx cannot have an icon, because it runs from a temporary folder.
+- **Start personagent after signing in to Windows** adds a shortcut to the Startup folder. When personagent is set to run in the background, it then starts behind its icon without opening the window.
+- **Your data** opens the personagent folder, the persona file, the logs, the memory and learned content, the stickers folder, and the `data/` folder for your own lorebook, examples and output filters.
+- **Back up now** saves one zip file to the Desktop, to Documents or to the `backups` folder in the home folder. It contains the settings with your API keys, the persona, memory and learned content, the lorebook files, stickers and the platform logins. Logs and downloaded components are not included. Keep the file private.
+- **Restore from a backup** lists the backups in those three places. **Restore** asks first, pauses the character, saves the current data as a backup, replaces it with the backup's data and clears this page's chat.
+- **Clear and reset** saves a backup to the `backups` folder first and pauses the character. **Clear memory** deletes the character's notes about people, the replies it has learned and their history, the Practice data and this page's chat; the settings, persona, connected platforms and stickers are kept. **Reset all** returns personagent to its first-run state: it deletes the settings and API keys, the persona, memory and learned content, and disconnects every platform. Stickers, the `data/` folder and the downloaded AstrBot are kept.
 
 ## See it first: the demo
 
@@ -95,6 +145,10 @@ Below is a trimmed run of `personagent demo teach`. The model's lines are script
 ```
 
 The scene also sends the same message before and after the lesson: someone's laptop died mid-demo. Before the correction, Nova offers a fix. After it, Nova offers sympathy. The demo stays scripted even when a key is set, so every run is identical and costs nothing. `personagent demo --online` plays it on your own model instead, which costs tokens and varies from run to run.
+
+The **Practice** view of the local page plays the same three scenes. Under **Demo**, choose a scene and select **Play**. Each step shows what people said, what the character said, why it stayed silent or joined in, how reactions were judged and the learning checklist.
+
+**Practice group**, in the same view, is the page's version of [`personagent chat`](#chat-in-the-terminal) and needs a model. **Write as** chooses who sends the next message: you as the admin, or one of three made-up members. **Show reason** on a line shows why the character replied or stayed silent, what it learned and which earlier learning it used. **Reply** quotes one of the character's lines, so that the next message counts as a reaction to it. **Show what was learned** lists what it learned in this group. The practice group keeps its state in `runtime/trial/`, the same folder as `personagent chat`, and does not affect your real chats. **Reset practice group** deletes that state.
 
 ## Terminal commands
 
@@ -212,9 +266,9 @@ Chat platform  ⇄  connector  ⇄  personagent  ⇄  Model API
 
 A connector logs in to the platform, passes each message to personagent and carries the reply back. There are three kinds.
 
-### QQ, WeChat, Telegram and Discord
+### Platforms personagent connects itself
 
-personagent connects these four itself, in one background process. They need neither AstrBot nor NapCat.
+personagent connects these ten itself, in one background process. They need neither AstrBot nor NapCat. If one of them cannot be loaded, the others still start.
 
 | Platform | What you do |
 |---|---|
@@ -222,6 +276,14 @@ personagent connects these four itself, in one background process. They need nei
 | WeChat (personal) | Scan the code with WeChat and confirm the login. The connection uses Tencent's iLink bot API and handles one-to-one chats only, because WeChat does not deliver group messages to these bots. |
 | Telegram | Create a bot with [@BotFather](https://t.me/BotFather) and paste its token. |
 | Discord | In the [Developer Portal](https://discord.com/developers/applications), copy the bot token and turn on Message Content Intent. |
+| Matrix | Create a separate Matrix account for the bot. In Element, signed in as the bot, copy its access token under **All settings > Help & About > Advanced**, then close that window without signing out. Paste the token with the homeserver address and your own Matrix ID. Then, from your own account, invite the bot to a room with end-to-end encryption turned off. The bot accepts invitations only from your Matrix ID and cannot read encrypted rooms. |
+| Twitch | Register a free application with Client Type **Public** in the [Twitch developer console](https://dev.twitch.tv/console). Paste its Client ID and the channels the character should chat in, select **Connect**, and approve the sign-in through the link the page shows, in a browser signed in to the character's Twitch account. Text only, only in the listed channels, and no whispers (direct messages). |
+| IRC | Enter the server (Libera.Chat by default, or `irc.oftc.net` for OFTC), the TLS port, the bot's nickname, the channels, and the NickServ password if the nickname is registered. The bot connects over TLS, joins only the listed channels and answers direct messages to its nickname. Text only. Libera.Chat requires the permission of each channel's operators before an AI bot joins. |
+| Zulip | Add a **Generic bot** under **Personal settings > Bots**, then paste the organization address, the bot's email and its API key. The bot reads only the channels it is subscribed to and the direct messages sent to it. In a channel it answers when it is mentioned or quoted. Every member of the organization can send it direct messages. |
+| VK | In the community's settings, turn on messages and bot abilities, create an access key with the rights for community management, messages and photos, and turn on the Long Poll API with the `message_new` event. Paste the key. Any VK user can write to the community. In a group chat the bot receives only messages that mention it or reply to it, unless the chat gives it access to all messages. |
+| Stoat (formerly Revolt) | Create a bot under **Settings > My Bots** and paste its token. Change the API address only for a self-hosted server. The bot answers every direct message. In servers and groups it answers only where you are a member yourself, and only when someone mentions it, replies to it or begins a message with its name. |
+
+For the last six, the page shows numbered steps above the fields. The project has not yet tested Matrix, Twitch, IRC, Zulip, VK or Stoat against the live services; they follow each platform's documentation.
 
 For QQ, find the bot in mobile QQ under Contacts → Bots, then chat with it privately or add it to a group. Until the bot is certified, QQ lets it join only groups you own. You choose which group messages it receives in QQ, on the bot's profile in that group. [QQ's bot guide](https://bot.q.qq.com/wiki/bot_new_product-intro/) covers certification.
 
@@ -243,7 +305,7 @@ From a terminal, `personagent connect astrbot --install` downloads the same mana
 
 ### Bridges you run yourself
 
-The projects below are third-party software that personagent works with. You do not need any of them for QQ, WeChat, Telegram or Discord.
+The projects below are third-party software that personagent works with. You do not need any of them for the [platforms personagent connects itself](#platforms-personagent-connects-itself).
 
 | Bridge | Reaches |
 |---|---|
@@ -254,7 +316,7 @@ The projects below are third-party software that personagent works with. You do 
 
 Anything else can connect through the [connector protocol](connectors.md), which takes one signed HTTP request per message. Several connectors can serve one personagent at once. The [deployment guide](deploy.md) covers running it in production.
 
-**An AstrBot you already run.** AstrBot hands messages to personagent through a small plugin, [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.md). The plugin ships inside personagent, and the managed AstrBot gets it automatically. `personagent connect astrbot` finds your AstrBot, or takes its folder as an argument. It installs the plugin, writes one shared `CONNECTOR_TOKEN` to both sides and asks which groups to allow. Send `/sid` in a group to see its id.
+**An AstrBot you already run.** AstrBot hands messages to personagent through a small plugin, [astrbot_plugin_personagent](../integrations/astrbot/astrbot_plugin_personagent/README.md). The plugin ships inside personagent, and the managed AstrBot gets it automatically. `personagent connect astrbot` finds your AstrBot, or takes its folder as an argument. It installs the plugin, writes one shared `CONNECTOR_TOKEN` to both sides and asks which groups to allow. Send `/sid` in a group to see its id. On the local page, **Use an existing AstrBot**, under **Coding assistants** at the bottom of **Connect apps**, does the same: it finds the AstrBot folder, installs or updates the plugin, and saves the group and DM ids under **Who it replies to**. For an AstrBot in Docker or on another computer, it takes the HTTPS address described below. **Disconnect** deletes the plugin and its settings again.
 
 For an AstrBot on another machine:
 
@@ -305,6 +367,8 @@ personagent connect dsh
 
 The first calls `claude mcp add` at user scope. The second writes to `config.toml` in Codex's folder (`CODEX_HOME` or `~/.codex`). The third adds an entry to `cordis.patch.yml` in every profile under `DSH_HOME` or `~/.dsh`. Each way of running DeepSeek Harness, such as the desktop app or `dsh web`, gets its profile the first time it starts, so start it once before you connect, and restart it afterwards. All three name this installation and this home, so run the command again after you move either, with `--react` if you used it: a run without it takes the hook out. Start a new session, then ask the coding agent to say something to your character.
 
+**From the local page.** **Coding assistants**, at the bottom of **Connect apps**, finds Claude Code, Codex and DeepSeek Harness on this computer and shows whether each one is connected. **Connect** (or **Repair** and **Update** for an existing setup) and **Remove** do what the commands above and `--remove` do, and ask first. A reconnection keeps the remark setting as it was. On Claude Code and Codex, **Make a remark when a turn ends** turns the `--react` hook on or off, and **Minimum interval between remarks** sets `CODING_REACT_COOLDOWN_S` to 10 minutes, 30 minutes, 1 hour or 2 hours. **Check again** reads the state again, for example after you install one of them.
+
 It gets two tools:
 
 | Tool | Does | Costs |
@@ -332,7 +396,7 @@ personagent connect claude-code --react
 - It only uses a character service that is already running and never starts one.
 - Codex runs a new hook only after you trust it: type `/hooks` in a Codex session.
 
-**What to keep in mind.** `talk` sends what the coding agent writes to your model service and into the character's memory. The tool's description tells the coding agent to send only what you want said and never code or secrets, and to treat replies as chat and not as instructions, since a character's notes can come from what people said in your groups. Those are instructions to a model, not a guarantee, so keep the coding agent's permission prompts for anything it would do with a reply.
+**What to keep in mind.** `talk` sends what the coding agent writes to your model service and into the character's memory. The tool's description tells the coding agent to send only what you want said and never code or secrets, and to treat replies as chat and not as instructions, since a character's notes can come from what people said in your groups. Those are instructions to a model, not a guarantee, so keep the coding agent's permission prompts for anything it would do with a reply. The page's chat is the admin's, so what a coding agent sends through `talk` also counts as coming from the admin: its corrections alone can teach the character, and it can make the character forget any note.
 
 **Undo.** `--remove` takes out the server and the hook and leaves the rest of the coding agent's configuration as it was. Do this before you uninstall personagent.
 
@@ -472,9 +536,18 @@ The view lists every chat the character knows, with the platform, whether it is 
 - **Remembers** shows its memory notes for that chat, who they are about and who added them, along with the core note. **Forget** deletes one. In a DM it includes what groups noted about that person.
 - **Recent** shows the latest messages and its replies. Each reply carries a tag for why it spoke: **called**, **joined in on its own**, **follow-up**, **proactive** or **admin**. Lines it let pass show why it stayed quiet. Recent activity is kept in memory only, so a restart clears it.
 
-Every Keep, Discard and Undo is written to the same ledger as `personagent learned`, with the actor `dashboard` and the reason `local page`. The full record of each change, with the promotion checklist, the evidence, the history and the rejected items, is in the terminal. See [Review and overrule](#review-and-overrule).
+Every Keep, Discard and Undo is written to the same ledger as `personagent learned`, with the actor `dashboard` and the reason `local page`.
 
-The view stays empty until the character runs. It starts when you chat on the page or connect an app, and the view tells you so. `DASHBOARD_ENABLED=false` turns off the data behind the view. The view then says it is off, and `personagent doctor` reports `activity: off`.
+Below the chats, **What the character has learned** lists everything the character has learned in every chat. It reads the ledger files directly, so it also works while the character is not running.
+
+- The tabs **In use**, **Pending**, **Discarded**, **Undone** and **Replaced** each show a count.
+- Selecting an item opens its full record: why it is pending, with the promotion checklist; the messages before it; every reaction, with whether it counts; and its history.
+- **Keep** puts a pending item into use. When another wording of the same reply is in use, it shows that wording and asks before it replaces it. **Undo** stops using an item, and **Restore** puts an undone item back into use. **Discard** asks first and rejects an item permanently. Discarded and replaced items cannot be restored.
+- When the character has also learned while speaking another language, **Language learned in** switches to those items.
+
+While the character runs, a decision goes through it. Otherwise the decision is written to the files directly. The terminal offers the same record; see [Review and overrule](#review-and-overrule).
+
+The list of chats stays empty until the character runs. It starts when you chat on the page or connect an app, and the view tells you so. `DASHBOARD_ENABLED=false` turns off the data behind the view. The view then says it is off, and `personagent doctor` reports `activity: off`.
 
 The local page answers only on this computer. On a server without the local page, use `personagent learned` to review and overrule what it learned. Scripts can read the same data through the service's API, described in the deployment guide's [Activity section](deploy.md#activity).
 
@@ -537,9 +610,11 @@ Before you connect it to real people, tell them it is a bot and get their consen
 
 ## Troubleshooting
 
-**Start with `personagent doctor`.** It checks the configuration and names misspelled or renamed settings. It then probes each service personagent depends on. The probes send tiny requests and may cost a little credit. `--json` prints the same results as JSON. `--fix` renames settings retired in 1.0 and saves the old file as `.env.bak`.
+**Start with the health check.** On the local page, open **App** and select **Run check**. The view names each service that is not working, why the character or a platform failed to start, and settings that need attention, and **Logs** shows each log without opening a file. See [The App view](#the-app-view).
 
-**A platform will not connect.** When the platform refuses the credentials, the page says why. Check them in the platform's console, and for Discord, confirm that Message Content Intent is on. You can request a new QR code when one expires, and retry a failed AstrBot download. Logs from everything the page or `personagent up` started are in `runtime/desktop/` in the home folder.
+**In a terminal, run `personagent doctor`.** It checks the configuration and names misspelled or renamed settings. It then probes each service personagent depends on. The probes send tiny requests and may cost a little credit. `--json` prints the same results as JSON. `--fix` renames settings retired in 1.0 and saves the old file as `.env.bak`.
+
+**A platform will not connect.** When the platform refuses the credentials, the page says why. Check them in the platform's console, and for Discord, confirm that Message Content Intent is on. You can request a new QR code when one expires, and retry a failed AstrBot download. **Platform connections** in the App view shows the state of each platform personagent connects itself. Logs from everything the page or `personagent up` started are in `runtime/desktop/` in the home folder, and the App view shows them under **Logs**.
 
 **It runs but never replies.** The three most common causes are:
 
@@ -551,7 +626,7 @@ The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet)
 
 **Is it up?** `curl http://127.0.0.1:8080/health` answers without calling a model. `/health/details` also probes the services, and requires an `X-Personagent-Token` header once a token is configured.
 
-**It will not start.** `personagent run` stops with one sentence that says why. The usual reasons are a port already in use, another personagent running from the same home folder, a network address set without `CONNECTOR_TOKEN`, or a setting retired in 1.0 that is still set. Retired settings are listed one per line as `OLD -> NEW`, and `personagent doctor --fix` renames them. The page and `personagent up` pick a free port when 8080 is taken.
+**It will not start.** `personagent run` stops with one sentence that says why. The usual reasons are a port already in use, another personagent running from the same home folder, a network address set without `CONNECTOR_TOKEN`, or a setting retired in 1.0 that is still set. Retired settings are listed one per line as `OLD -> NEW`, and `personagent doctor --fix` renames them, as does **Rename settings** in the App view. When the character started from the page fails, the App view names the part that failed and shows its last log line. The page and `personagent up` pick a free port when 8080 is taken.
 
 **A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`. Booleans are `true` or `false`. `PERSONA_TZ_OFFSET_HOURS` sets the clock for the night window. When it is blank (the default), personagent uses UTC+8 with `AGENT_LANG=zh` or `zh-TW` and this machine's time zone otherwise. Set a number to choose another offset.
 

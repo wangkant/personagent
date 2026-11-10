@@ -152,6 +152,57 @@ def how_to_update() -> tuple[str, bool]:
     return f"{_program(_python())} -m pip install -U personagent", False
 
 
+def plan() -> tuple[str, list[list[str]]]:
+    """How this installation came to be, and the commands that update it for
+    the app to run after it quits. A source ZIP and uvx have none: the first
+    is replaced by hand, the second fetches the new version when started."""
+    python = _python()
+    if homes.is_checkout():
+        if not (homes.CHECKOUT / ".git").exists():
+            return "zip", []
+        root = str(homes.CHECKOUT)
+        # Fast-forward only: a clone someone changed is theirs to merge.
+        return "git", [["git", "-C", root, "pull", "--ff-only"],
+                       [python, "-m", "pip", "install", "-e", root]]
+    prefix = Path(sys.prefix)
+    if langs.under_uvx():
+        return "uvx", []
+    if (prefix / "uv-receipt.toml").is_file():
+        return "uv-tool", [["uv", "tool", "upgrade", "personagent"]]
+    if (prefix / "pipx_metadata.json").is_file():
+        return "pipx", [["pipx", "upgrade", "personagent"]]
+    try:
+        config = (prefix / "pyvenv.cfg").read_text(encoding="utf-8")
+    except OSError:
+        config = ""
+    if re.search(r"^uv\s*=", config, re.MULTILINE):
+        return "uv-pip", [["uv", "pip", "install", "-U", "personagent", "--python", python]]
+    return "pip", [[python, "-m", "pip", "install", "-U", "personagent"]]
+
+
+def blocked(kind: str, commands: list[list[str]]) -> str:
+    """Why the app cannot run this update itself, as a code, or ''."""
+    import shutil
+    import subprocess
+
+    if not commands:
+        return "update_by_hand"
+    tool = commands[0][0]
+    if tool in ("git", "uv", "pipx") and not shutil.which(tool):
+        return "update_tool_missing"
+    if kind == "git":
+        try:
+            changed = subprocess.run(
+                ["git", "-C", str(homes.CHECKOUT), "status", "--porcelain", "--untracked-files=no"],
+                capture_output=True, timeout=20, stdin=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except (OSError, subprocess.TimeoutExpired):
+            return "update_tool_missing"
+        if changed.returncode or changed.stdout.strip():
+            return "update_clone_changed"
+    return ""
+
+
 def _python() -> str:
     """This interpreter as someone would type it. The desktop icon starts
     pythonw.exe, which prints nothing in a terminal."""
@@ -160,9 +211,10 @@ def _python() -> str:
     return str(console if here.name.lower() == "pythonw.exe" and console.is_file() else here)
 
 
-def notice(home: Path, latest: str | None = None) -> dict | None:
-    """The newer release the last check found, and how to install it."""
-    if not enabled(home):
+def notice(home: Path, latest: str | None = None, *, always: bool = False) -> dict | None:
+    """The newer release the last check found, and how to install it.
+    `always`: also with the daily check turned off, for someone who asked."""
+    if not (always or enabled(home)):
         return None
     latest = str(_read(home).get("latest") or "") if latest is None else latest
     if not newer(latest):

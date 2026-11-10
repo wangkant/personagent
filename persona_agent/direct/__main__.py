@@ -33,7 +33,12 @@ async def serve(home: Path) -> int:
             pass            # Windows: the parent terminates the process instead
     bridges = []
     for kind, values in stored.items():
-        platform = platform_for(kind, values, home)
+        try:
+            platform = platform_for(kind, values, home)
+        except Exception as error:  # one platform that cannot load must not stop the rest
+            logging.getLogger(__name__).warning("direct: %s is skipped: %r", kind, error)
+            status.set(kind, "error", type(error).__name__)
+            continue
         agent = client_type(agent_url, env.get("CONNECTOR_TOKEN", ""),
                             connector_id=f"direct-{kind}", timeout_s=420)
         bridges.append(Bridge(platform, agent, status))

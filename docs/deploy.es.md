@@ -70,7 +70,7 @@ El servicio no sirve ninguna página. `GET /` responde con una nota breve que re
 
 Añade plataformas en **Conectar apps** en la página local. personagent comprueba las credenciales con la plataforma antes de guardar nada. Si la plataforma las rechaza, la página muestra el rechazo y no conserva nada.
 
-**Conectadas por personagent mismo.** QQ, WeChat personal, Telegram y Discord se ejecutan en un solo proceso «direct», sin AstrBot ni NapCat.
+**Conectadas por personagent mismo.** QQ, WeChat personal, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK y Stoat se ejecutan en un solo proceso «direct», sin AstrBot ni NapCat. Si una plataforma no puede cargarse, se omite y las demás se inician igualmente. La tabla recoge las cuatro primeras; la guía de usuario indica [qué necesitan las otras seis y cuáles son sus limitaciones](guide.es.md#plataformas-que-personagent-conecta-por-sí-mismo).
 
 | Plataforma | Qué haces | Límites |
 |---|---|---|
@@ -85,7 +85,7 @@ En ambas vías, una plataforma conectada responde a todos los grupos y mensajes 
 
 ## A través de un AstrBot que ya ejecutas
 
-AstrBot, NapCat (OneBot), Koishi (a través del [conector Satori](../integrations/satori/README.es.md)) y Matrix (a través del [conector Matrix](../integrations/matrix/README.es.md) y puentes mautrix) son puentes de terceros con los que personagent funciona. Ninguno hace falta para QQ, WeChat, Telegram ni Discord.
+AstrBot, NapCat (OneBot), Koishi (a través del [conector Satori](../integrations/satori/README.es.md)) y Matrix (a través del [conector Matrix](../integrations/matrix/README.es.md) y puentes mautrix) son puentes de terceros con los que personagent funciona. Ninguno hace falta para las plataformas que personagent conecta por sí mismo.
 
 AstrBot entrega los mensajes a personagent mediante un plugin en `integrations/astrbot/astrbot_plugin_personagent/`. El plugin envía cada mensaje a `POST /v1/events` y retransmite las respuestas que recibe. También recoge la bandeja de salida de personagent (`outbox_enabled`, activado por defecto), así que la persona puede hablar primero donde la plataforma se lo permita a un bot. El README del plugin tiene la tabla. El AstrBot gestionado recibe el plugin automáticamente. Para tu propio AstrBot, inícialo una vez para que cree su carpeta de datos (la que contiene `cmd_config.json`, `plugins/` y `config/`) y luego ejecuta:
 

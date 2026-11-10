@@ -15,7 +15,7 @@
 
 *이 문서는 영어 README를 번역한 것입니다. 기준이 되는 영어 README가 더 최신일 수 있습니다.*
 
-personagent는 그룹 채팅에 들어가는 캐릭터입니다. 준비된 캐릭터를 고르거나 직접 써서, OpenAI 호환 모델이라면 어떤 모델로든 실행할 수 있습니다. 먼저 내 컴퓨터에서 이야기해 보고, 같은 로컬 페이지에서 QQ, WeChat, Telegram, Discord와 그 밖의 십여 개 앱으로 데려가세요.
+personagent는 그룹 채팅에 들어가는 캐릭터입니다. 준비된 캐릭터를 고르거나 직접 써서, OpenAI 호환 모델이라면 어떤 모델로든 실행할 수 있습니다. 먼저 내 컴퓨터에서 이야기해 보고, 같은 로컬 페이지에서 QQ, WeChat, Telegram, Discord와 그 밖의 18개 앱으로 데려가세요.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="로컬 페이지의 앱 연결 화면. 참여할 수 있는 모든 플랫폼이 표시되어 있습니다" width="960">
@@ -79,10 +79,10 @@ personagent는 무료입니다. 비용은 선택한 모델 서비스에, 그 서
 | 페이지 표시 | 앱 | 필요한 것 |
 |---|---|---|
 | 스캔해서 연결 | QQ, 개인 WeChat | 휴대폰. WeChat 봇은 1:1 대화만 가능 |
-| 값 한두 개 붙여넣기 | Telegram, Discord, KOOK, Feishu/Lark, DingTalk, Slack, WeCom AI 봇, Mattermost, Misskey | 앱 콘솔에서 얻는 값. 어떤 값인지 페이지에 표시 |
+| 값 한두 개 붙여넣기 | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, WeCom AI 봇, Mattermost, Misskey | 앱 콘솔에서 얻는 값. 어떤 값인지 페이지에 표시 |
 | 고급 | WeCom 앱, WeChat 공식 계정, QQ 웹훅, OneBot v11 (NapCat), Satori | 공개 주소, 또는 이 컴퓨터의 다른 소프트웨어 |
 
-연결된 앱은 personagent가 시작될 때마다 함께 다시 시작됩니다. 스캔해서 연결하는 앱과 Telegram, Discord는 personagent가 직접 연결하고, 나머지는 personagent가 내려받아 백그라운드에서 실행하는 [AstrBot](https://github.com/AstrBotDevs/AstrBot)을 거칩니다. 서버에서는 `personagent up`으로 브라우저 없이 모든 것을 시작합니다. 앱별 설정 방법은 [사용자 가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#채팅에-넣기)에, QQ를 처음부터 연결하는 방법은 [중국어 배포 가이드](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)에 있습니다.
+연결된 앱은 personagent가 시작될 때마다 함께 다시 시작됩니다. 스캔해서 연결하는 앱과 Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat는 personagent가 직접 연결하고, 나머지는 personagent가 내려받아 백그라운드에서 실행하는 [AstrBot](https://github.com/AstrBotDevs/AstrBot)을 거칩니다. 서버에서는 `personagent up`으로 브라우저 없이 모든 것을 시작합니다. 앱별 설정 방법은 [사용자 가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#채팅에-넣기)에, QQ를 처음부터 연결하는 방법은 [중국어 배포 가이드](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)에 있습니다.
 
 이미 AstrBot, Koishi, Matrix를 운영 중인가요? personagent를 그 뒤에서 캐릭터로 실행할 수 있습니다. [직접 실행하는 브리지](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#직접-실행하는-브리지), [Satori 커넥터](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ko.md), [Matrix 커넥터](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ko.md)를 참고하세요.
 
@@ -102,11 +102,11 @@ personagent connect codex
 personagent connect dsh
 ```
 
-`--remove`는 다시 걷어 냅니다. 권한, 그리고 턴이 끝날 때 캐릭터가 한마디 하게 하는 `--react`는 [가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#코딩-에이전트)에서 다룹니다.
+`--remove`는 연결을 다시 해제하며, **플랫폼 연결** 아래의 **코딩 어시스턴트**에서 페이지로 연결과 해제를 모두 할 수 있습니다. 권한, 그리고 턴이 끝날 때 캐릭터가 한마디 하게 하는 `--react`는 [가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#코딩-에이전트)에서 다룹니다.
 
 ## 업데이트와 제거
 
-PyPI에 새 버전이 올라오면 페이지에 알림과 업데이트 명령이 표시됩니다. pip라면 `python -m pip install -U personagent`입니다. 설정, 캐릭터, 배운 것, 연결된 앱이 모두 남습니다. 제거하려면 [제거 절차](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)(영어)를 따르세요.
+PyPI에 새 버전이 올라오면 페이지에 알림과 업데이트 명령이 표시됩니다. pip라면 `python -m pip install -U personagent`입니다. 대부분의 설치 방식에서는 페이지의 앱 보기에 있는 **업데이트 후 다시 열기**가 이 명령을 대신 실행합니다. 설정, 캐릭터, 배운 것, 연결된 앱이 모두 남습니다. 제거하려면 [제거 절차](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)(영어)를 따르세요.
 
 ## 개인정보
 

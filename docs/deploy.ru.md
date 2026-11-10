@@ -70,7 +70,7 @@ API находится под `/api/dashboard/` в службе агента:
 
 Добавляйте платформы в разделе **Подключить приложения** на локальной странице. personagent проверяет учётные данные у платформы, прежде чем что-либо сохранить. Если платформа их отклоняет, страница показывает отказ и ничего не сохраняет.
 
-**Подключаемые самим personagent.** QQ, личный WeChat, Telegram и Discord работают в одном процессе «direct», без AstrBot и NapCat.
+**Подключаемые самим personagent.** QQ, личный WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK и Stoat работают в одном процессе «direct», без AstrBot и NapCat. Платформа, которую не удаётся загрузить, пропускается, а остальные всё равно запускаются. Таблица охватывает первые четыре платформы; [требования и ограничения остальных шести](guide.ru.md#платформы-которые-personagent-подключает-сам) приведены в руководстве пользователя.
 
 | Платформа | Что вы делаете | Ограничения |
 |---|---|---|
@@ -85,7 +85,7 @@ API находится под `/api/dashboard/` в службе агента:
 
 ## Через AstrBot, который у вас уже работает
 
-AstrBot, NapCat (OneBot), Koishi (через [коннектор Satori](../integrations/satori/README.ru.md)) и Matrix (через [коннектор Matrix](../integrations/matrix/README.ru.md) и мосты mautrix) — это сторонние мосты, с которыми работает personagent. Ни один из них не нужен для QQ, WeChat, Telegram или Discord.
+AstrBot, NapCat (OneBot), Koishi (через [коннектор Satori](../integrations/satori/README.ru.md)) и Matrix (через [коннектор Matrix](../integrations/matrix/README.ru.md) и мосты mautrix) — это сторонние мосты, с которыми работает personagent. Ни один из них не нужен для платформ, которые personagent подключает сам.
 
 AstrBot передаёт сообщения в personagent через плагин в `integrations/astrbot/astrbot_plugin_personagent/`. Плагин отправляет каждое сообщение в `POST /v1/events` и передаёт ответы из отклика. Он также забирает исходящую очередь personagent (`outbox_enabled`, по умолчанию включено), поэтому персона может заговорить первой там, где платформа это разрешает боту. Таблица есть в README плагина. Управляемый AstrBot получает плагин автоматически. Свой AstrBot запустите один раз, чтобы он создал папку данных (ту, где лежат `cmd_config.json`, `plugins/` и `config/`), затем выполните:
 
