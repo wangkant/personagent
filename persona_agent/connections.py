@@ -10,6 +10,7 @@ that need a public callback address are kept apart as advanced.
 """
 from __future__ import annotations
 
+import functools
 import json
 import re
 import subprocess
@@ -484,33 +485,61 @@ def platform(kind: str) -> Platform:
     return found
 
 
+class FieldError(ValueError):
+    """field_required or invalid_field, naming the field it is about."""
+
+    def __init__(self, code: str, key: str = ""):
+        super().__init__(code)
+        self.key = key
+
+
+def clean_field(item: Field, raw) -> str | int:
+    """One submitted value, checked: its default when empty, a port as a number."""
+    text = (str(raw) if isinstance(raw, (str, int)) else "").strip() or item.default
+    if not text:
+        if item.required:
+            raise FieldError("field_required", item.key)
+        return ""
+    if len(text) > 4096 or any(c in text for c in "\r\n\0"):
+        raise FieldError("invalid_field", item.key)
+    if item.kind == "port":
+        if not text.isdigit() or not 1 <= int(text) <= 65535:
+            raise FieldError("invalid_field", item.key)
+        return int(text)
+    if item.kind == "url":
+        parts = urlsplit(text)
+        if parts.scheme not in ("https", "http", "wss", "ws") or not parts.hostname:
+            raise FieldError("invalid_field", item.key)
+        text = text.rstrip("/")
+    return text
+
+
 def clean_values(spec: Platform, values: dict) -> dict:
     """The submitted fields, checked; anything not asked for is dropped."""
     if not isinstance(values, dict):
-        raise ValueError("invalid_field")
-    clean = {}
-    for item in spec.fields:
-        raw = values.get(item.key)
-        text = (str(raw) if isinstance(raw, (str, int)) else "").strip() or item.default
-        if not text:
-            if item.required:
-                raise ValueError("field_required")
-            clean[item.key] = ""
-            continue
-        if len(text) > 4096 or any(c in text for c in "\r\n\0"):
-            raise ValueError("invalid_field")
-        if item.kind == "port":
-            if not text.isdigit() or not 1 <= int(text) <= 65535:
-                raise ValueError("invalid_field")
-            clean[item.key] = int(text)
-            continue
-        if item.kind == "url":
-            parts = urlsplit(text)
-            if parts.scheme not in ("https", "http", "wss", "ws") or not parts.hostname:
-                raise ValueError("invalid_field")
-            text = text.rstrip("/")
-        clean[item.key] = text
-    return clean
+        raise FieldError("invalid_field")
+    return {item.key: clean_field(item, values.get(item.key)) for item in spec.fields}
+
+
+_PAGE_I18N = Path(__file__).resolve().parent / "static" / "welcome" / "i18n"
+
+
+@functools.lru_cache(maxsize=None)
+def _page_catalog(lang: str) -> dict:
+    try:
+        return json.loads((_PAGE_I18N / f"{lang}.json").read_text(encoding="utf-8")).get("catalog", {})
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def say(pair: tuple[str, str], lang: str) -> str:
+    """A name, label, note or step of the catalog in `lang`, as the page shows it."""
+    en, zh = pair
+    if lang == "zh":
+        return zh
+    if lang == "en" or not en:
+        return en
+    return _page_catalog(lang).get(en, zh if lang == "zh-TW" else en)
 
 
 def astrbot_template(installation: AstrBotInstallation, kind: str) -> dict:

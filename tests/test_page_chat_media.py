@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import os
+import time
 
 from fastapi.testclient import TestClient
+import httpx
 import pytest
 
 from persona_agent import setup_wizard as sw
@@ -85,6 +88,7 @@ def test_a_linked_picture_is_refused(client, workspace, tmp_path):
     outside.write_bytes(PNG)
     link = workspace._pictures / ("a" * 40 + ".png")
     workspace._pictures.mkdir(parents=True, exist_ok=True)
+    workspace._append([{"role": "assistant", "picture": link.name}])
     try:
         os.symlink(outside, link)
     except (OSError, NotImplementedError):
@@ -98,6 +102,7 @@ def test_a_pictures_folder_that_leads_elsewhere_is_refused(client, workspace, tm
     name = "b" * 40 + ".png"
     (elsewhere / name).write_bytes(PNG)
     workspace._pictures.parent.mkdir(parents=True, exist_ok=True)
+    workspace._append([{"role": "assistant", "picture": name}])
     try:
         if os.name == "nt":
             import _winapi
@@ -113,8 +118,29 @@ def test_a_pictures_folder_that_leads_elsewhere_is_refused(client, workspace, tm
     assert (elsewhere / name).is_file()
 
 
+def test_a_picture_no_message_shows_is_not_served(client, workspace):
+    name = workspace._keep_picture(base64.b64encode(PNG).decode())
+    assert (workspace._pictures / name).is_file()
+    assert client.get(f"/api/chat/picture/{name}", headers=HEADERS).status_code == 404
+    workspace._append([{"role": "assistant", "picture": name}])
+    assert client.get(f"/api/chat/picture/{name}", headers=HEADERS).status_code == 200
+
+
+def test_a_link_in_the_pictures_folder_is_never_written_through(workspace, tmp_path):
+    outside = tmp_path / "outside.png"
+    workspace._pictures.mkdir(parents=True, exist_ok=True)
+    link = workspace._pictures / f"{hashlib.sha256(PNG).hexdigest()[:40]}.png"
+    try:
+        os.symlink(outside, link)
+    except (OSError, NotImplementedError):
+        pytest.skip("this system does not let the test create a symbolic link")
+    assert workspace._keep_picture(base64.b64encode(PNG).decode()) == ""
+    assert not outside.exists()
+
+
 def test_a_removed_picture_is_missing_and_what_is_not_a_picture_is_not_kept(client, workspace):
     name = workspace._keep_picture(base64.b64encode(PNG).decode())
+    workspace._append([{"role": "assistant", "picture": name}])
     (workspace._pictures / name).unlink()
     assert client.get(f"/api/chat/picture/{name}", headers=HEADERS).status_code == 404
     assert workspace._keep_picture(base64.b64encode(b"<svg onload=x>").decode()) == ""
@@ -234,6 +260,144 @@ def test_the_page_pulls_only_its_own_deliveries_and_a_connector_keeps_its_own(mo
         loop.cancel()
         theirs.cancel()
         await outbox.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_after_a_coding_assistant_speaks_the_character_still_reaches_the_page(monkeypatch, workspace, tmp_path):
+    """A real agent and outbox: the page speaks, a coding assistant speaks in
+    the same chat, then the character speaks first and the page shows it."""
+    from helpers import CLOSED_ONEBOT_URL, isolated_agent
+
+    async def scenario():
+        agent = isolated_agent(tmp_path / "agent", qq_onebot_url=CLOSED_ONEBOT_URL)
+        agent._typing_delay = lambda chunk: 0.0
+        said = []
+
+        async def chat_dm(history, is_admin=False, pkey="", proactive=False, proactive_cue=""):
+            said.append(proactive)
+            return ("good evening" if proactive else "hi back"), ""
+
+        agent._chat_dm = chat_dm
+        agent.proactive_dm_min_silence_s = 0
+        agent.proactive_dm_cooldown_s = 0
+        agent.proactive_dm_prob = 1.0
+
+        class Connector(welcome._connector_type()):
+            async def send_event(self, event):
+                return await agent.handle_event({**event, "connector_id": event.get(
+                    "connector_id", self.connector_id)})
+
+            async def pull_once(self, *, wait_s=25, max_deliveries=10):
+                acks, self._pending_acks = self._pending_acks, []
+                return await agent.outbox.pull(self.connector_id, wait_s=min(wait_s, 0.3), acks=acks)
+
+        monkeypatch.setattr(welcome, "_connector_type", lambda: Connector)
+        monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
+        monkeypatch.setattr(workspace.services, "running", lambda name: name == "agent")
+        key = workspace._page_key()
+        loop = asyncio.create_task(workspace.outbox_loop())
+        try:
+            page = await workspace.chat("hello")
+            assert page["reply"] == "hi back"
+            coding = await welcome.send_chat_items(
+                workspace.services.agent_url, "token", workspace._conversation, "from the terminal",
+                connector_id="coding-agent", timeout_s=5)
+            # What the coding assistant gets back is unchanged.
+            assert [i.get("text") for i in coding if i.get("type") == "text"] == ["hi back"]
+            assert agent.connector_handles.get(key)["connector_id"] == welcome.PAGE_CONNECTOR
+            for _ in range(100):
+                if agent.outbox.live(welcome.PAGE_CONNECTOR):
+                    break
+                await asyncio.sleep(0.02)
+            agent.last_dm_activity_at[f"{welcome.access.PAGE_PLATFORM}:{workspace._conversation}"] = time.time() - 1
+            assert await asyncio.wait_for(agent._maybe_proactive_dms(), 10) is True
+            assert said[-1] is True
+            texts = [m.get("text") for m in workspace.history()["messages"]]
+            assert texts[-1] == "good evening" and texts.count("good evening") == 1
+        finally:
+            workspace._closed = True
+            loop.cancel()
+            await agent.outbox.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_a_delivery_during_forgetting_is_not_counted_as_shown(monkeypatch, workspace):
+    """What arrives while the chat is forgotten would vanish with it, so it is not acknowledged as sent."""
+    async def scenario():
+        monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
+        asked, release = asyncio.Event(), asyncio.Event()
+
+        async def activity_call(method, path, **kwargs):
+            if method == "GET":
+                asked.set()
+                await release.wait()
+                return {"memories": [], "core_note": ""}
+            return {}
+
+        monkeypatch.setattr(workspace, "_activity_call", activity_call)
+        old = workspace._page_key()
+        forgetting = asyncio.create_task(workspace.forget_chat())
+        await asyncio.wait_for(asked.wait(), 5)
+        status = workspace.take_delivery({"conversation_key": old, "items": [{"type": "text", "text": "late"}]})
+        release.set()
+        await forgetting
+        assert status == ("failed", 0)
+        assert workspace.history()["messages"] == [] and workspace._page_key() != old
+        # Afterwards the new chat takes deliveries again.
+        assert workspace.take_delivery({"conversation_key": workspace._page_key(),
+                                        "items": [{"type": "text", "text": "next"}]}) == ("sent", 1)
+
+    asyncio.run(scenario())
+
+
+def test_one_page_runs_one_pull_loop(monkeypatch, workspace):
+    async def scenario():
+        monkeypatch.setattr(workspace.services, "running", lambda name: False)
+        first = asyncio.create_task(workspace.outbox_loop())
+        await asyncio.sleep(0.05)
+        await asyncio.wait_for(workspace.outbox_loop(), 1)
+        assert not first.done()
+        workspace._closed = True
+        first.cancel()
+
+    asyncio.run(scenario())
+
+
+def test_a_restarted_service_is_pulled_at_once_after_its_outbox_was_off(monkeypatch, workspace):
+    """A 404 pauses the pulls for a minute, but a service started since may have the outbox on."""
+    async def scenario():
+        monkeypatch.setattr(welcome, "OUTBOX_IDLE_S", 0.05)
+        monkeypatch.setattr(workspace.services, "running", lambda name: name == "agent")
+        workspace.services.processes["agent"] = object()
+        pulls = []
+
+        class Connector(welcome._connector_type()):
+            async def pull_once(self, *, wait_s=25, max_deliveries=10):
+                pulls.append(time.monotonic())
+                if len(pulls) == 1:
+                    request = httpx.Request("POST", "http://127.0.0.1/v1/outbox")
+                    raise httpx.HTTPStatusError("off", request=request,
+                                                response=httpx.Response(404, request=request))
+                await asyncio.sleep(0.2)
+                return {"deliveries": []}
+
+        monkeypatch.setattr(welcome, "_connector_type", lambda: Connector)
+        loop = asyncio.create_task(workspace.outbox_loop())
+        try:
+            await asyncio.sleep(0.5)
+            assert len(pulls) == 1    # switched off: no pull for now
+            workspace.services.processes["agent"] = object()    # restarted, settings read again
+            for _ in range(100):
+                if len(pulls) > 1:
+                    break
+                await asyncio.sleep(0.02)
+            assert len(pulls) > 1
+        finally:
+            workspace._closed = True
+            loop.cancel()
+            workspace.services.processes.pop("agent", None)
 
     asyncio.run(scenario())
 

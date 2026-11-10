@@ -134,11 +134,22 @@ class HandleStore:
                conversation_type: str, conversation_id: str,
                prefiltered: bool = True) -> None:
         data = self._data()
+        capabilities = sorted(str(c) for c in capabilities or ())
+        current = data.get(str(key))
+        if (current and "outbox" not in capabilities
+                and "outbox" in current["capabilities"]
+                and current["connector_id"] != str(connector_id or "")):
+            # A connector that cannot pull leaves another connector's route in place.
+            data[str(key)] = data.pop(str(key))
+            current["updated_at"] = time.time()
+            self._dirty = True
+            self.flush()
+            return
         old = data.pop(str(key), None)
         record = {
             "reply_handle": str(reply_handle or ""),
             "connector_id": str(connector_id or ""),
-            "capabilities": sorted(str(c) for c in capabilities or ()),
+            "capabilities": capabilities,
             "platform": str(platform or ""),
             "native": bool(native),
             "conversation_type": str(conversation_type or ""),

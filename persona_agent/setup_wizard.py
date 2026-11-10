@@ -180,10 +180,16 @@ _TEXT: dict[str, tuple[str, str]] = {
     "persona_written": ("persona.txt written ({what})", "已写入 persona.txt（{what}）"),
     # chat apps / AstrBot
     "connect_intro": (
-        "Optional: put the bot in groups on QQ, Telegram, Discord and more through AstrBot.\n"
-        "Already installed? Use it. Otherwise this setup can download and install it for you.",
-        "可选：通过 AstrBot 将机器人接入 QQ、Telegram、Discord 等聊天平台。\n"
-        "如已安装，可直接连接；如尚未安装，可在此处自动下载并安装。"),
+        "Optional: put the bot on a chat platform.\n"
+        "personagent connects QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat itself.\n"
+        "To connect one of them, run `personagent connect <platform>` after this setup; the next steps show how.\n"
+        "Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot, which this step\n"
+        "can connect, and download and install if it is not installed yet.",
+        "可选：将机器人接入聊天平台。\n"
+        "personagent 可直接连接 QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat。\n"
+        "如需连接其中之一，请在完成本设置后运行 `personagent connect <平台>`；后续步骤中会说明具体方法。\n"
+        "其他平台（如 Slack、KOOK 或飞书）需通过 AstrBot 接入。本步骤可连接 AstrBot，\n"
+        "如尚未安装，也可自动下载并安装。"),
     "astrbot_install_q": ("Download and install AstrBot now? (includes Python 3.12 if needed)",
                           "是否立即自动下载并安装 AstrBot？（如有需要，将一并下载 Python 3.12）"),
     "astrbot_installing": ("Installing AstrBot in {path}. The first download may take a few minutes.",
@@ -199,23 +205,23 @@ _TEXT: dict[str, tuple[str, str]] = {
     "start_unset": ("not set up", "尚未配置"),
     "start_menu": ("1. Chat (first time: set up your model and character)\n"
                    "2. Model, API key and character settings\n"
-                   "3. Install / connect a chat platform (AstrBot)\n"
+                   "3. Connect a chat platform (QQ, WeChat, Telegram, Discord, Matrix and others)\n"
                    "4. Start the installed AstrBot\n"
-                   "5. Start the personagent service for chat platforms\n"
+                   "5. Start personagent with the connected chat platforms\n"
                    "6. Watch the offline demo (no API key needed)\n"
                    "0. Exit",
                    "1. 开始聊天（首次使用会先配置模型和角色）\n"
                    "2. 设置模型、API Key 和角色\n"
-                   "3. 安装 / 连接聊天平台（AstrBot）\n"
+                   "3. 连接聊天平台（QQ、微信、Telegram、Discord、Matrix 等）\n"
                    "4. 启动已安装的 AstrBot\n"
-                   "5. 启动 personagent 聊天平台服务\n"
+                   "5. 启动 personagent 及已连接的聊天平台\n"
                    "6. 观看离线演示（无需 API Key）\n"
                    "0. 退出"),
     "start_choose": ("Choose 0–6", "请选择 0–6"),
     "start_failed": ("The command exited with code {code}. You can retry from this menu.",
                      "命令已退出，状态码为 {code}。可在菜单中重新操作。"),
-    "connect_q": ("Connect to AstrBot now? (No = chat in this terminal only)",
-                  "是否立即连接 AstrBot？（否 = 仅在终端中聊天）"),
+    "connect_q": ("Connect to AstrBot now? (No = skip AstrBot)",
+                  "是否立即连接 AstrBot？（否 = 跳过 AstrBot）"),
     "astrbot_explain": ("AstrBot folder = the one holding cmd_config.json: AstrBot's data folder or the one above it.",
                         "AstrBot 文件夹即存放 cmd_config.json 的文件夹：AstrBot 的 data 文件夹或其上一级文件夹。"),
     "astrbot_dir": ("AstrBot folder", "AstrBot 文件夹"),
@@ -309,6 +315,201 @@ _TEXT: dict[str, tuple[str, str]] = {
     "allowlists_empty": ("The plugin forwards no group or DM yet: add groups / dm_users in AstrBot's WebUI.",
                          "插件尚未放行任何群聊或私聊：请在 AstrBot 的 WebUI 中填写 groups / dm_users。"),
     "allowlists_kept": ("Kept the plugin's groups and dm_users.", "已保留插件现有的 groups 和 dm_users。"),
+    # platforms personagent connects itself
+    "direct_list_title": ("Chat platforms that personagent connects itself:",
+                          "personagent 可直接连接的聊天平台："),
+    "direct_on": ("connected", "已连接"),
+    "direct_off": ("not connected", "未连接"),
+    "direct_via_astrbot": ("connected through AstrBot", "已通过 AstrBot 连接"),
+    "direct_list_how": ("To connect one, run `personagent connect <platform>`, for example "
+                        "`personagent connect telegram`. To disconnect it, add --remove.",
+                        "如需连接，请运行 `personagent connect <平台>`，例如 "
+                        "`personagent connect telegram`。如需断开连接，请加上 --remove。"),
+    "direct_list_more": ("Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: "
+                         "`personagent connect astrbot`. Coding assistants: `personagent connect claude-code`, "
+                         "`codex` or `dsh`.",
+                         "其他平台（如 Slack、KOOK 或飞书）需通过 AstrBot 接入：`personagent connect astrbot`。"
+                         "编程助手：`personagent connect claude-code`、`codex` 或 `dsh`。"),
+    "direct_unknown": ("personagent cannot connect \"{name}\". Run `personagent connect` to list the "
+                       "platforms it can connect.",
+                       "personagent 无法连接“{name}”。请运行 `personagent connect` 查看可连接的平台。"),
+    "direct_guide": ("Guide: {url}", "说明：{url}"),
+    "direct_steps": ("Steps:", "操作步骤："),
+    "direct_steps_here": ("Where a step mentions this page or the Connect button, enter the values below "
+                          "instead. They are checked with {name} before anything is saved.",
+                          "步骤中提到本页或「连接」按钮之处，请改为在下方填写各项。所有内容将先经 {name} "
+                          "核验，然后才会保存。"),
+    "direct_optional": ("{label} (optional)", "{label}（可选）"),
+    "direct_required": ("This value is required.", "此项为必填项。"),
+    "direct_invalid": ("This value is not valid. An address must be complete and begin with https://, "
+                       "and a port must be a number from 1 to 65535.",
+                       "此项格式不正确。地址须完整并以 https:// 开头，端口须为 1 至 65535 之间的数字。"),
+    "direct_missing": ("The required value {flag} ({label}) was not given.",
+                       "未提供必填项 {flag}（{label}）。"),
+    "direct_bad_flag": ("The value given with {flag} ({label}) is not valid.",
+                        "通过 {flag} 提供的值（{label}）格式不正确。"),
+    "direct_nothing_saved": ("Nothing was saved.", "未保存任何内容。"),
+    "direct_qq_ways": ("QQ can be connected in two ways:\n"
+                       "  1. Scan a code with mobile QQ, which creates a bot or selects one of yours\n"
+                       "  2. Enter the AppID and AppSecret of a bot you created on the QQ Open Platform",
+                       "QQ 可通过以下两种方式连接：\n"
+                       "  1. 使用手机 QQ 扫码，新建一个机器人或选用你已有的机器人\n"
+                       "  2. 填写你在 QQ 开放平台创建的机器人的 AppID 和 AppSecret"),
+    "direct_way": ("Method", "连接方式"),
+    "direct_scan_qq": ("Scan this code with mobile QQ and confirm:", "请使用手机 QQ 扫描以下二维码并确认："),
+    "direct_scan_wechat": ("Scan this code with WeChat and confirm the login:",
+                           "请使用微信扫描以下二维码并确认登录："),
+    "direct_scan_address": ("The code contains this address: {url}", "该二维码对应的地址为：{url}"),
+    "direct_scan_fallback": ("If the code cannot be scanned in this terminal, connect {name} in the "
+                             "personagent window instead, which the command below opens:",
+                             "如无法扫描终端中显示的二维码，请改在 personagent 窗口中连接 {name}。"
+                             "该窗口可通过以下命令打开："),
+    "direct_link": ("Open this link in a browser that is signed in to the character's {name} account, "
+                    "check that the page shows the code below, and approve the sign-in:",
+                    "请在已登录角色 {name} 账号的浏览器中打开以下链接，核对页面显示的代码与下方一致后，"
+                    "批准登录："),
+    "direct_code": ("Code: {code}", "代码：{code}"),
+    "direct_waiting": ("Waiting for the approval. Press Ctrl+C to stop.", "正在等待批准。按 Ctrl+C 可中止。"),
+    "direct_checking": ("Checking the values with {name}.", "正在向 {name} 核验所填内容。"),
+    "direct_failed": ("{name} was not connected, and nothing was saved.", "{name} 未能连接，未保存任何内容。"),
+    "direct_stopped": ("Stopped. Nothing was saved.", "已中止，未保存任何内容。"),
+    "direct_unexpected": ("An unexpected error ({error}) stopped the connection. Run the command again; if the "
+                          "error recurs, connect the platform from the personagent window.",
+                          "连接因意外错误（{error}）而中止。请重新运行此命令；如该错误再次出现，请改在 "
+                          "personagent 窗口中连接该平台。"),
+    "direct_saved": ("{name} is connected. Its values are saved in {path}.",
+                     "{name} 已连接，相关信息已保存至 {path}。"),
+    "direct_released": ("{name} was also connected through AstrBot. That connection has been removed, "
+                        "so that the bot is not served twice.",
+                        "{name} 此前也已通过 AstrBot 连接。该连接已移除，以免同一机器人被重复接入。"),
+    "direct_next": ("The connection is active while personagent runs: start it with the command below and "
+                    "keep the terminal open, or restart it if it is already running. {log} records the "
+                    "connection.",
+                    "personagent 运行期间，该连接保持有效：请使用以下命令启动 personagent 并保持终端开启；"
+                    "如其已在运行，请重新启动。{log} 会记录该连接的情况。"),
+    "direct_restart": ("If personagent is already running, restart it so that it applies this change.",
+                       "如 personagent 已在运行，请重新启动，以使此项更改生效。"),
+    "direct_no_key": ("Set up the AI model first, otherwise the character cannot answer:",
+                      "请先设置 AI 模型，否则角色无法回复："),
+    "direct_removed": ("{name} is disconnected, and its saved values have been deleted.",
+                       "{name} 已断开连接，已保存的信息已删除。"),
+    "direct_not_connected": ("{name} is not connected. Nothing was changed.", "{name} 未连接，未作任何更改。"),
+    "menu_platforms": ("Which chat platform should the character join?", "请选择角色要加入的聊天平台。"),
+    "menu_astrbot": ("Another platform through AstrBot (Slack, KOOK, Feishu and others)",
+                     "通过 AstrBot 接入的其他平台（Slack、KOOK、飞书等）"),
+    "menu_back": ("Back", "返回"),
+    "menu_platform_choose": ("Choose 0–{n}", "请选择 0–{n}"),
+    # why a platform refused; `<code>_<platform>` is one platform's own wording
+    "refused_platform_rejected": ("{name} refused the connection. Check the values and the platform's own "
+                                  "settings, then try again.",
+                                  "{name} 拒绝了此次连接。请检查所填内容及平台后台的设置，然后重试。"),
+    "refused_network_failed": ("The servers of {name} could not be reached. Check the network connection "
+                               "and any proxy settings, then try again.",
+                               "无法连接 {name} 的服务器。请检查网络连接及代理设置，然后重试。"),
+    "refused_scan_failed": ("The scan did not complete, or the code expired. Run the command again to "
+                            "receive a new code.",
+                            "扫码未完成或二维码已过期。请重新运行此命令以获取新的二维码。"),
+    "refused_scan_failed_twitch": ("The Twitch sign-in did not finish, was declined, or the link expired. "
+                                   "Run the command again to receive a new link.",
+                                   "Twitch 登录未完成、已被拒绝或链接已过期。请重新运行此命令以获取新的链接。"),
+    "refused_token_rejected": ("{name} did not accept this token. Copy the complete token again.",
+                               "{name} 未接受该令牌。请重新复制完整的令牌。"),
+    "refused_token_rejected_zulip": ("Zulip does not accept this bot email and API key. Copy both again "
+                                     "from the bot's row under Personal settings > Bots.",
+                                     "Zulip 不接受该机器人邮箱和 API 密钥。请在「个人设置 > 机器人」中该机器人"
+                                     "所在行重新复制这两项。"),
+    "refused_token_rejected_vk": ("VK does not accept this key. Create a community access key under Manage > "
+                                  "API usage > Access keys and enter the whole key.",
+                                  "VK 不接受该密钥。请在「管理 > API 使用 > 访问密钥」中创建社区访问密钥，"
+                                  "并完整填写。"),
+    "refused_token_rejected_twitch": ("The Twitch sign-in did not grant the chat permissions. Run the command "
+                                      "again and approve the sign-in again.",
+                                      "此次 Twitch 登录未授予聊天权限。请重新运行此命令并再次批准登录。"),
+    "refused_app_rejected": ("QQ did not accept the AppID or AppSecret. Copy them again from the QQ console.",
+                             "QQ 未接受该 AppID 或 AppSecret。请到 QQ 开放平台重新复制。"),
+    "refused_app_rejected_twitch": ("Twitch does not accept this Client ID for this sign-in. Check that the "
+                                    "application exists and that its Client Type is Public, then copy the "
+                                    "Client ID again.",
+                                    "Twitch 不接受此 Client ID 用于本次登录。请确认该开发者应用存在且 Client "
+                                    "Type 为 Public，然后重新复制 Client ID。"),
+    "refused_bot_in_use": ("Another program is using this bot, or a webhook is set for it. Stop that program, "
+                           "then connect again.",
+                           "该机器人正被其他程序使用，或已设置 Webhook。请先停止该程序，然后重新连接。"),
+    "refused_message_content_intent_off": ("Discord refused the connection. Turn on Message Content Intent on "
+                                           "the Bot page of the developer portal, save, and try again.",
+                                           "Discord 拒绝了连接。请在开发者后台的 Bot 页面开启 Message Content "
+                                           "Intent，保存后重试。"),
+    "refused_intents_not_allowed": ("QQ has not given this bot permission to receive group and direct "
+                                    "messages.",
+                                    "QQ 未授予该机器人接收群聊和私聊消息的权限。"),
+    "refused_session_expired": ("The login has expired. Run the command again.", "登录已失效，请重新运行此命令。"),
+    "refused_session_expired_twitch": ("The Twitch sign-in has ended. Run the command again and approve the "
+                                       "sign-in again.",
+                                       "Twitch 登录已失效。请重新运行此命令并再次批准登录。"),
+    "refused_bot_offline": ("This QQ bot has been taken offline.", "该 QQ 机器人已下架。"),
+    "refused_bot_banned": ("This QQ bot has been banned.", "该 QQ 机器人已被封禁。"),
+    "refused_bot_banned_irc": ("The network has banned this connection (a K-line or another ban).",
+                               "该 IRC 网络已封禁此连接（K-line 或其他封禁）。"),
+    "refused_bot_banned_vk": ("VK has blocked or deactivated this community.", "VK 已封禁或停用该社区。"),
+    "refused_account_deactivated": ("The platform has deactivated this bot account or its organization. "
+                                    "Reactivate it on the platform, or create a new bot account and connect "
+                                    "again.",
+                                    "平台已停用该机器人账号或其所在组织。请在平台上重新启用，或新建一个机器人"
+                                    "账号后重新连接。"),
+    "refused_insecure_address": ("The server address must begin with https://. A plain http address is "
+                                 "accepted only for a server on this computer.",
+                                 "服务器地址必须以 https:// 开头。仅本机上的服务器可以使用 http 地址。"),
+    "refused_homeserver_invalid": ("This address is not a Matrix homeserver that accepts secure connections. "
+                                   "Check the address, for example https://matrix.org. A plain http address "
+                                   "is accepted only for a server on this computer.",
+                                   "该地址不是可用的 Matrix 服务器，或未使用安全连接（https）。请检查地址，例如 "
+                                   "https://matrix.org。仅本机上的服务器可以使用 http 地址。"),
+    "refused_owner_invalid": ("Enter your own Matrix ID, for example @you:matrix.org. It must be your "
+                              "personal account, not the bot account.",
+                              "请填写你本人的 Matrix ID，例如 @you:matrix.org。该 ID 必须是你本人的账号，"
+                              "而不是机器人账号。"),
+    "refused_channel_not_found": ("One of the listed Twitch channels does not exist, or no channel was "
+                                  "entered. Check the channel names and try again.",
+                                  "所填写的 Twitch 频道中有一个不存在，或未填写任何频道。请检查频道名后重试。"),
+    "refused_nick_in_use": ("This nickname is already in use on the network. Close the other IRC client "
+                            "that uses it, or choose another nickname.",
+                            "该昵称在此网络上已被占用。请关闭正在使用该昵称的其他 IRC 客户端，或改用其他昵称。"),
+    "refused_nick_invalid": ("The network does not accept this nickname. Use only letters, digits and the "
+                             "characters - _ [ ] {{ }} | ^, and begin with a letter.",
+                             "该网络不接受此昵称。昵称只能包含字母、数字及 - _ [ ] {{ }} | ^，且须以字母开头。"),
+    "refused_password_rejected": ("The network reports that the nickname's password is incorrect. Check the "
+                                  "NickServ password for this nickname.",
+                                  "网络提示该昵称的密码不正确。请检查该昵称在 NickServ 中的密码。"),
+    "refused_sasl_required": ("This network accepts only registered nicknames from your network address. "
+                              "Register the nickname with NickServ and enter its password.",
+                              "该网络只允许已注册的昵称从你的网络地址连接。请先通过 NickServ 注册昵称，"
+                              "再填写其密码。"),
+    "refused_long_poll_off": ("The Long Poll API is turned off for this community. In the community, open "
+                              "Manage > API usage > Long Poll API, set it to Enabled, and connect again.",
+                              "该社区未开启 Long Poll API。请在社区中打开「管理 > API 使用 > Long Poll API」，"
+                              "将其设为「开启」，然后重新连接。"),
+    "refused_message_events_off": ("The community does not yet send new messages to the bot. Under Manage > "
+                                   "API usage > Long Poll API > Event types, tick Incoming message "
+                                   "(message_new) and save.",
+                                   "该社区尚未向机器人推送新消息。请在「管理 > API 使用 > Long Poll API > 事件"
+                                   "类型」中勾选「收到消息（message_new）」并保存。"),
+    "refused_token_rights_missing": ("This key lacks a required right. Create a new key under Manage > API "
+                                     "usage with community management, messages and photos ticked, then "
+                                     "enter it here.",
+                                     "该密钥缺少必需的权限。请在「管理 > API 使用」中新建密钥，勾选社区管理、"
+                                     "消息和照片权限，再在此处填写。"),
+    "refused_not_a_bot": ("These are the details of a personal account, not of a bot. Add a Generic bot "
+                          "under Personal settings > Bots and enter its email and API key.",
+                          "这是个人账号的信息，而非机器人的信息。请在「个人设置 > 机器人」中添加一个通用"
+                          "机器人，并填写其邮箱和 API 密钥。"),
+    "refused_wrong_bot_type": ("This bot cannot read messages. In Zulip, add a bot of the type Generic bot "
+                               "and use its details.",
+                               "该机器人无法读取消息。请在 Zulip 中添加类型为「通用机器人（Generic bot）」的"
+                               "机器人，并使用其信息。"),
+    "refused_not_zulip_site": ("This address does not respond as a Zulip organization. Copy the address from "
+                               "the browser while Zulip is open, for example https://yourteam.zulipchat.com.",
+                               "该地址不是 Zulip 组织的地址。请在打开 Zulip 时从浏览器地址栏复制，例如 "
+                               "https://yourteam.zulipchat.com。"),
     # finish
     "done": ("Setup complete", "设置完成"),
     "next": ("Next:", "接下来："),
@@ -324,6 +525,10 @@ _TEXT: dict[str, tuple[str, str]] = {
                 "在 AstrBot 的 WebUI 中添加 QQ（OneBot v11 / aiocqhttp）平台，再将 NapCat 的\n"
                 "     反向 WebSocket 指向 ws://127.0.0.1:6199/ws。教程：https://docs.astrbot.app"),
     "next_say": ("Say \"{name}, hi\" in one of those groups.", "在其中一个群聊中发送「{name}，你好」。"),
+    "next_platform": ("Connect a chat platform that personagent connects itself, such as Telegram, Discord, "
+                      "Matrix or IRC. Without a platform name, the command lists them all:",
+                      "接入 personagent 可直接连接的聊天平台，例如 Telegram、Discord、Matrix 或 IRC。"
+                      "不指定平台名称时，该命令将列出全部平台："),
     "next_persona": ("Edit {path} to change who {name} is, then restart.",
                      "修改 {path} 即可调整{name}的人设，修改后请重新启动。"),
     "next_key": ("Add your API key: run this setup again, or set LLM_API_KEY in {path}.",
@@ -1621,6 +1826,10 @@ def finish(launcher: Launcher, home: Path, *, name: str, has_key: bool,
             n += 1
         _say(f"{n}. " + t("next_say", name=name))
         n += 1
+    _say(f"{n}. " + t("next_platform"))
+    for line in launcher.shown("connect"):
+        _say(f"     {line}")
+    n += 1
     _say(f"{n}. " + t("next_demo"))
     for line in launcher.shown("demo"):
         _say(f"     {line}")
@@ -1834,42 +2043,320 @@ def main(argv: list[str] | None = None, prog: str = "personagent init") -> int:
         return 130
 
 
+CODING_TARGETS = ("claude-code", "codex", "dsh")
+# The words typed after `personagent connect` for two catalog ids; the ids work too.
+DIRECT_WORDS = {"qq_official": "qq", "weixin_oc": "wechat"}
+
+
+def direct_targets() -> dict[str, str]:
+    """What may follow `personagent connect` for each directly connected platform."""
+    from persona_agent.direct import KINDS
+
+    found = {DIRECT_WORDS.get(kind, kind): kind for kind in KINDS}
+    found.update({kind: kind for kind in KINDS})
+    return found
+
+
+def _flag(key: str) -> str:
+    return "--" + key.replace("_", "-")
+
+
+def _shown(pair: tuple[str, str]) -> str:
+    return connections.say(pair, _lang)
+
+
+def _via_astrbot(home: Path) -> list[str]:
+    from persona_agent.astrbot_install import AstrBotInstallation
+
+    return connections.connected(AstrBotInstallation(home).root / "data")
+
+
+def list_platforms(home: Path) -> int:
+    """`personagent connect`: which platforms are connected and which can be."""
+    from persona_agent import direct_setup
+
+    from persona_agent.direct import KINDS
+
+    saved, via = direct_setup.stored(home), _via_astrbot(home)
+    words = {p.kind: DIRECT_WORDS.get(p.kind, p.kind) for p in connections.PLATFORMS if p.kind in KINDS}
+    rows = [(word, _shown(connections.platform(kind).name),
+             t("direct_on") if kind in saved else t("direct_via_astrbot") if kind in via else t("direct_off"))
+            for kind, word in words.items()]
+    print()
+    _say(t("direct_list_title"))
+    first = max(len(word) for word, _, _ in rows)
+    second = max(langs.width(name) for _, name, _ in rows)
+    for word, name, state in rows:
+        _say(f"  {word:<{first}}  {name}{' ' * (second - langs.width(name))}  {state}")
+    others = [kind for kind in via if kind not in words]
+    if others:
+        _say(t("direct_via_astrbot") + ": " + ", ".join(_shown(connections.platform(k).name) for k in others))
+    print()
+    _say(t("direct_list_how"))
+    _say(t("direct_list_more"))
+    return 0
+
+
+def _ask_field(item: connections.Field) -> str | int:
+    label = _shown(item.label)
+    prompt = label if item.required else t("direct_optional", label=label)
+    while True:
+        raw = ask(prompt, default=item.default, required=item.required and not item.default,
+                  secret=item.secret)
+        try:
+            return connections.clean_field(item, raw)
+        except connections.FieldError as exc:
+            _say("  " + t("direct_required" if str(exc) == "field_required" else "direct_invalid"))
+
+
+def _direct_values(spec: connections.Platform, given: dict, asking: bool) -> dict | None:
+    """Every field of `spec`: from its option, else asked, else its default;
+    None, with each missing or refused value named, when one cannot be had."""
+    values, problems = {}, []
+    for item in spec.fields:
+        label = _shown(item.label)
+        if item.key in given:
+            try:
+                values[item.key] = connections.clean_field(item, given[item.key])
+                continue
+            except connections.FieldError as exc:
+                if not asking or str(exc) != "field_required":
+                    problems.append(t("direct_bad_flag", flag=_flag(item.key), label=label)
+                                    if str(exc) == "invalid_field" else
+                                    t("direct_missing", label=label, flag=_flag(item.key)))
+                    continue
+        if asking:
+            values[item.key] = _ask_field(item)
+            continue
+        try:
+            values[item.key] = connections.clean_field(item, "")
+        except connections.FieldError:
+            problems.append(t("direct_missing", label=label, flag=_flag(item.key)))
+    sys.stdout.flush()
+    for line in problems:
+        print(line, file=sys.stderr)
+    return None if problems else values
+
+
+def _enable_ansi() -> bool:
+    """Whether this console draws colour codes; Windows needs them switched on."""
+    if not sys.stdout.isatty():
+        return False
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-11)
+        mode = ctypes.c_uint32()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        return bool(kernel32.SetConsoleMode(handle, mode.value | 0x0004))
+    except (AttributeError, OSError):
+        return False
+
+
+def print_qr(content: str) -> None:
+    """A QR code in the terminal: light on dark, which phones read in any theme
+    once the colours are set; without colour codes, for a dark background."""
+    import qrcode
+
+    code = qrcode.QRCode(border=2)
+    code.add_data(content)
+    code.make(fit=True)
+    sys.stdout.flush()
+    code.print_ascii(out=sys.stdout, tty=_enable_ansi(), invert=True)
+
+
+def _shower(spec: connections.Platform, name: str, launcher: Launcher):
+    """How the terminal shows what a sign-in asks to show."""
+    def show(content: str) -> None:
+        print()
+        if spec.sign_in == "link":
+            _say(t("direct_link", name=name))
+            _say(f"  {content}")
+            code = urllib.parse.parse_qs(urllib.parse.urlsplit(content).query).get("device-code", [""])[0]
+            if code:
+                _say(t("direct_code", code=code))
+        else:
+            _say(t("direct_scan_qq" if spec.kind == "qq_official" else "direct_scan_wechat"))
+            print_qr(content)
+            _say(t("direct_scan_address", url=content))
+            _say(t("direct_scan_fallback", name=name))
+            for line in launcher.shown("start"):
+                _say(f"     {line}")
+        _say(t("direct_waiting"))
+        sys.stdout.flush()
+    return show
+
+
+def refusal(code: str, spec: connections.Platform, name: str) -> str:
+    """Why a platform was not connected, in words."""
+    short = spec.kind.split("_")[0]
+    for key in (f"refused_{code}_{short}", f"refused_{code}", "refused_platform_rejected"):
+        if key in _TEXT:
+            return t(key, name=name)
+    return t("refused_platform_rejected", name=name)
+
+
+def _introduce(spec: connections.Platform, name: str, scan: bool) -> None:
+    print()
+    _header(name)
+    if spec.note[0]:
+        _say(_shown(spec.note))
+    if spec.guide and not scan:
+        _say(t("direct_guide", url=spec.guide))
+    if spec.steps and not scan:
+        print()
+        _say(t("direct_steps"))
+        for i, step in enumerate(spec.steps, 1):
+            _say(f"  {i}. {_shown(step)}")
+        _say(t("direct_steps_here", name=name))
+    print()
+
+
+def connect_platform(home: Path, kind: str, given: dict, *, remove: bool = False,
+                     no_input: bool = False, launcher: Launcher | None = None) -> int:
+    """`personagent connect <platform>`: what the page's Connect and
+    Disconnect do, with the same checks and the same saved form."""
+    from persona_agent import direct_setup
+    from persona_agent.direct import base as direct_base
+
+    spec = connections.platform(kind)
+    name = _shown(spec.name)
+    launcher = launcher or Launcher(python=sys.executable, home=home)
+    try:
+        if remove:
+            if kind not in direct_setup.stored(home) and kind not in _via_astrbot(home):
+                _say(t("direct_not_connected", name=name))
+                return 0
+            direct_setup.remove(home, spec)
+            direct_setup.clear_state(home, kind)
+            _say(t("direct_removed", name=name))
+            _say(t("direct_restart"))
+            return 0
+        asking = not no_input and langs.interactive()
+        scan = spec.group == connections.SCAN and not given
+        if scan and spec.fields and asking:
+            _say(t("direct_qq_ways"))
+            scan = ask_number(t("direct_way"), 2, 1) == 1
+        if asking or scan:
+            _introduce(spec, name, scan)
+        values: dict = {}
+        if not scan:
+            found = _direct_values(spec, given, asking)
+            if found is None:
+                print(t("direct_nothing_saved"), file=sys.stderr)
+                return 2
+            values = found
+        try:
+            if scan or spec.sign_in:
+                values = direct_setup.sign_in(spec, values, _shower(spec, name, launcher))
+            if not scan:
+                _say(t("direct_checking", name=name))
+                direct_setup.check(home, spec, values)
+        except RuntimeError as exc:
+            sys.stdout.flush()
+            print(t("direct_failed", name=name), file=sys.stderr)
+            print(refusal(str(exc), spec, name), file=sys.stderr)
+            return 1
+        except Exception as exc:
+            # Only the error's type: its message may quote a credential.
+            sys.stdout.flush()
+            print(t("direct_failed", name=name), file=sys.stderr)
+            print(t("direct_unexpected", error=type(exc).__name__), file=sys.stderr)
+            return 1
+        released = direct_setup.store(home, spec, values)
+        direct_setup.clear_state(home, kind)
+    except (KeyboardInterrupt, EOFError):
+        print()
+        _say(t("direct_stopped"))
+        return 130
+    except OSError as exc:
+        print(t("write_failed", path=home, error=exc), file=sys.stderr)
+        return 1
+    print()
+    _say(t("direct_saved", name=name, path=direct_base.credentials_path(home)))
+    if released:
+        _say(t("direct_released", name=name))
+    if not env_get(home / ".env", "LLM_API_KEY"):
+        _say(t("direct_no_key"))
+        for line in launcher.shown("init --terminal"):
+            _say(f"     {line}")
+    _say(t("direct_next", log=home / "runtime" / "desktop" / "direct.log"))
+    for line in launcher.shown("up"):
+        _say(f"     {line}")
+    return 0
+
+
 def connect_parser(prog: str) -> argparse.ArgumentParser:
+    from persona_agent.direct import KINDS
+
     p = argparse.ArgumentParser(
-        prog=prog, description=langs.term("Connect personagent to AstrBot: copy the plugin, share a "
-                               "token, write the allowlists. With DATA_DIR nothing is asked. "
-                               "Or put the character into a coding agent: claude-code, codex or "
-                               "dsh (DeepSeek Harness)."),
+        prog=prog, description=langs.term("Connect a chat platform that personagent connects itself, "
+                               "such as telegram, discord, matrix, twitch, irc, zulip, vk, stoat, qq or "
+                               "wechat; without a target, list them. Or connect AstrBot: copy the plugin, "
+                               "share a token, write the allowlists; with DATA_DIR nothing is asked. Or put "
+                               "the character into a coding agent: claude-code, codex or dsh (DeepSeek "
+                               "Harness)."),
         epilog=langs.term("AstrBot in Docker cannot reach 127.0.0.1 on this machine: give it host "
                "networking, or put personagent behind HTTPS and pass that address as --url."))
-    p.add_argument("target", choices=("astrbot", "claude-code", "codex", "dsh"))
-    p.add_argument("--react", action="store_true",
-                   help=langs.term("claude-code, codex: also let the character react when a turn ends; "
-                        "sends the folder's name and the start of the coding agent's last message to your model service"))
+    p.add_argument("target", nargs="?", metavar="TARGET",
+                   help=langs.term("a chat platform, astrbot, claude-code, codex or dsh; "
+                                   "omit it to list the chat platforms"))
+    react = p.add_argument("--react", action="store_true",
+                           help=langs.term("claude-code, codex: also let the character react when a turn ends; "
+                                "sends the folder's name and the start of the coding agent's last message to your model service"))
     p.add_argument("--remove", action="store_true",
-                   help=langs.term("claude-code, codex, dsh: take the character out of the coding agent again"))
-    p.add_argument("data_dir", nargs="?", metavar="DATA_DIR",
-                   help=langs.term("AstrBot's folder (its data folder or the one above it)"))
+                   help=langs.term("a chat platform, claude-code, codex or dsh: disconnect it again"))
+    p.add_argument("--no-input", action="store_true",
+                   help=langs.term("a chat platform: ask nothing; give every required value as an option"))
+    p.add_argument("--lang", choices=LANGS,
+                   help=langs.term("the language of this command's messages (default: the saved one)"))
+    values = p.add_argument_group(langs.term("values of a chat platform (asked in a terminal when not given)"))
+    shown = langs.terminal_lang()
+    for kind in KINDS:
+        spec = connections.platform(kind)
+        for item in spec.fields:
+            label = f"{connections.say(spec.name, shown)}: {connections.say(item.label, shown)}"
+            values.add_argument(_flag(item.key), dest=f"field_{item.key}", metavar="VALUE",
+                                help=label.replace("%", "%%"))
+    own = [react, p.add_argument("data_dir", nargs="?", metavar="DATA_DIR",
+                                 help=langs.term("AstrBot's folder (its data folder or the one above it)"))]
     action = p.add_mutually_exclusive_group()
-    action.add_argument("--install", action="store_true",
-                        help=langs.term("download and initialise AstrBot under this agent home, then connect it"))
-    action.add_argument("--start", action="store_true",
-                        help=langs.term("start the AstrBot installed under this agent home"))
+    own.append(action.add_argument("--install", action="store_true",
+                                   help=langs.term("download and initialise AstrBot under this agent home, "
+                                                   "then connect it")))
+    own.append(action.add_argument("--start", action="store_true",
+                                   help=langs.term("start the AstrBot installed under this agent home")))
     qq = p.add_mutually_exclusive_group()
-    qq.add_argument("--qq", dest="qq", action="store_const", const=True,
-                    help=langs.term("route QQ through AstrBot too"))
-    qq.add_argument("--no-qq", dest="qq", action="store_const", const=False,
-                    help=langs.term("stop routing QQ through AstrBot (without either, it is left as it is)"))
-    p.add_argument("--platform", choices=tuple(PLATFORMS),
-                   help=langs.term("also switch on this adapter in AstrBot's own config"))
-    p.add_argument("--token", default="", help=langs.term("the adapter's bot token"))
-    p.add_argument("--app-token", default="", help=langs.term("Slack's app-level token"))
-    p.add_argument("--app-id", default="", help=langs.term("Lark / Feishu app id"))
-    p.add_argument("--app-secret", default="", help=langs.term("Lark / Feishu app secret"))
-    p.add_argument("--url", default="",
-                   help=langs.term("the address the plugin posts to, such as an https:// one "
-                        "(default http://127.0.0.1:<SERVER_PORT>)"))
+    own.append(qq.add_argument("--qq", dest="qq", action="store_const", const=True,
+                               help=langs.term("route QQ through AstrBot too")))
+    own.append(qq.add_argument("--no-qq", dest="qq", action="store_const", const=False,
+                               help=langs.term("stop routing QQ through AstrBot (without either, it is left as it is)")))
+    own.append(p.add_argument("--platform", choices=tuple(PLATFORMS),
+                              help=langs.term("also switch on this adapter in AstrBot's own config")))
+    own.append(p.add_argument("--token", default="", help=langs.term("the adapter's bot token")))
+    own.append(p.add_argument("--app-token", default="", help=langs.term("Slack's app-level token")))
+    own.append(p.add_argument("--app-id", default="", help=langs.term("Lark / Feishu app id")))
+    own.append(p.add_argument("--app-secret", default="", help=langs.term("Lark / Feishu app secret")))
+    own.append(p.add_argument("--url", default="",
+                              help=langs.term("the address the plugin posts to, such as an https:// one "
+                                   "(default http://127.0.0.1:<SERVER_PORT>)")))
+    # Read only for astrbot or a coding agent; a chat platform refuses them by name.
+    p.set_defaults(not_for_platforms=tuple(own))
     return p
+
+
+def _given(args: argparse.Namespace, actions) -> list[str]:
+    """The options among `actions` that the command line set."""
+    used = []
+    for item in actions:
+        value = getattr(args, item.dest)
+        if value != item.default and (item.const is None or value == item.const):
+            used.append(item.option_strings[0] if item.option_strings else item.metavar)
+    return used
 
 
 def connect_without_questions(home: Path, data_dir: Path, *, qq: bool | None,
@@ -1912,11 +2399,62 @@ def connect_without_questions(home: Path, data_dir: Path, *, qq: bool | None,
     return 0
 
 
+def _lang_option(argv: list[str]) -> str:
+    """The language `--lang` names, read before the help is built in it."""
+    for i, word in enumerate(argv):
+        if word == "--":
+            break
+        if word == "--lang" and i + 1 < len(argv):
+            return langs.normalize(argv[i + 1])
+        if word.startswith("--lang="):
+            return langs.normalize(word.split("=", 1)[1])
+    return ""
+
+
 def connect_main(argv: list[str] | None = None, prog: str = "personagent connect") -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    chosen = _lang_option(argv)
+    before = os.environ.get("AGENT_LANG")
+    if chosen:
+        os.environ["AGENT_LANG"] = chosen
+    try:
+        return _connect_main(argv, prog, chosen)
+    finally:
+        if chosen and before is None:
+            os.environ.pop("AGENT_LANG", None)
+        elif chosen:
+            os.environ["AGENT_LANG"] = before
+
+
+def _connect_main(argv: list[str], prog: str, chosen: str) -> int:
     args = connect_parser(prog).parse_args(argv)
     home = homes.find_home()
     env_path = home / ".env"
-    set_lang(env_get(env_path, "AGENT_LANG") or detect_lang())
+    set_lang(chosen or os.environ.get("AGENT_LANG", "") or env_get(env_path, "AGENT_LANG") or detect_lang())
+    fields = {name[len("field_"):]: value for name, value in vars(args).items()
+              if name.startswith("field_") and value is not None}
+    kind = direct_targets().get(args.target or "")
+    if args.target is None or kind:
+        used = _given(args, args.not_for_platforms)
+        if used:
+            raise SystemExit(langs.term(f"{', '.join(used)}: used only with astrbot and the coding assistants, not with a chat platform"))
+    if args.target is None:
+        if fields or args.remove or args.no_input:
+            raise SystemExit(langs.term("Name the chat platform, for example: personagent connect telegram"))
+        return list_platforms(home)
+    if kind:
+        own = {item.key for item in connections.platform(kind).fields}
+        stray = [_flag(key) for key in fields if key not in own]
+        if stray:
+            raise SystemExit(langs.term(f"{', '.join(stray)}: not a value of the platform {args.target}"))
+        if args.remove and fields:
+            raise SystemExit(langs.term("--remove does not accept platform values"))
+        return connect_platform(home, kind, fields, remove=args.remove, no_input=args.no_input)
+    if args.target not in ("astrbot", *CODING_TARGETS):
+        print(t("direct_unknown", name=args.target), file=sys.stderr)
+        return 2
+    if fields or args.no_input:
+        raise SystemExit(langs.term("--no-input and the platform values apply only to the chat platforms"))
     if args.target != "astrbot":
         if args.data_dir:
             raise SystemExit(langs.term(f"{args.target} takes no folder"))
@@ -1924,7 +2462,7 @@ def connect_main(argv: list[str] | None = None, prog: str = "personagent connect
 
         return coding.connect(home, args.target, react=args.react, remove=args.remove)
     if args.react or args.remove:
-        raise SystemExit(langs.term("--react and --remove are for the coding agents"))
+        raise SystemExit(langs.term("--react applies only to claude-code and codex, and --remove does not apply to astrbot"))
     if args.data_dir and (args.install or args.start):
         raise SystemExit(langs.term("--install and --start use the managed folder; omit DATA_DIR"))
     if args.start:
@@ -1977,6 +2515,27 @@ def connect_main(argv: list[str] | None = None, prog: str = "personagent connect
     return 0
 
 
+def choose_platform() -> list[str]:
+    """The menu's platform list; the `connect` command to run, or [] for back."""
+    from persona_agent.direct import KINDS
+
+    kinds = [p.kind for p in connections.PLATFORMS if p.kind in KINDS]
+    print()
+    _say(t("menu_platforms"))
+    for i, kind in enumerate(kinds, 1):
+        print(f"    {i}. {_shown(connections.platform(kind).name)}")
+    print(f"    {len(kinds) + 1}. {t('menu_astrbot')}")
+    print(f"    0. {t('menu_back')}")
+    while True:
+        choice = ask(t("menu_platform_choose", n=len(kinds) + 1), default="0")
+        if choice == "0":
+            return []
+        if choice.isdigit() and 1 <= int(choice) <= len(kinds):
+            return ["connect", DIRECT_WORDS.get(kinds[int(choice) - 1], kinds[int(choice) - 1])]
+        if choice == str(len(kinds) + 1):
+            return ["connect", "astrbot"]
+
+
 def start_main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
     """A small front door; each action runs in a fresh process to reload settings."""
     argparse.ArgumentParser(prog=prog, description=langs.term("Open the personagent start menu")).parse_args(argv)
@@ -1998,11 +2557,15 @@ def start_main(argv: list[str] | None = None, prog: str = "personagent start") -
             choice = ask(t("start_choose"), default="1")
             if choice == "0":
                 return 0
-            commands = {"1": ["chat"], "2": ["init", "--terminal"], "3": ["connect", "astrbot"],
-                        "4": ["connect", "astrbot", "--start"], "5": ["run"],
+            commands = {"1": ["chat"], "2": ["init", "--terminal"], "3": [],
+                        "4": ["connect", "astrbot", "--start"], "5": ["up"],
                         "6": ["demo", "--offline", "--lang", _lang]}
             if choice not in commands:
                 continue
+            if choice == "3":
+                commands["3"] = choose_platform()
+                if not commands["3"]:
+                    continue
             if choice in ("1", "5") and not key:
                 code = subprocess.call([*launcher.argv("init"), "--terminal"], cwd=launcher.cwd())
                 if code or not env_get(env, "LLM_API_KEY"):
