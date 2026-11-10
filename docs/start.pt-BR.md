@@ -27,7 +27,7 @@ Escolha um serviço de modelo, cole a chave de API dele e clique em **Verificar 
 
 A chave permanece no seu computador; clique em **Mostrar** para conferi-la. As mensagens da conversa são enviadas ao serviço de modelo que você escolher, pelas tarifas habituais desse serviço.
 
-O personagem responde na página. As configurações ficam salvas, de modo que a próxima abertura leva diretamente à conversa.
+O personagem responde na página, com figurinhas e imagens quando as envia. As mensagens que ele envia depois, como uma mensagem iniciada por ele mesmo, aparecem na conversa em poucos segundos. As configurações ficam salvas, de modo que a próxima abertura leva diretamente à conversa.
 
 Após a configuração, **Personagem e configurações** apresenta uma caixa **Persona** com o texto que define o personagem. Reescreva quem ele é e como se expressa e, em seguida, clique em **Salvar a persona**. A alteração entra em vigor imediatamente, e o que o personagem aprendeu é mantido.
 
@@ -46,6 +46,7 @@ Outras duas visões não exigem nenhuma plataforma. **Prática** reproduz uma de
 2. O personagent conecta QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK e Stoat por conta própria. As demais plataformas passam pelo AstrBot, uma ponte de terceiros. Na primeira vez que você conecta uma delas, o personagent baixa o AstrBot com um ambiente Python 3.12 separado; mantenha a página aberta até a conclusão. Depois disso, o AstrBot é executado em segundo plano, sem painel em que seja preciso fazer login.
 3. O personagent verifica as credenciais com a plataforma antes de salvá-las. Se a plataforma as recusar, a página informa o motivo e nada é salvo.
 4. As plataformas conectadas ficam listadas no topo de **Conectar plataformas**, onde você pode configurá-las novamente ou desconectá-las.
+5. Sem a página, por exemplo em um servidor sem monitor, `personagent connect <plataforma>` conecta QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK ou Stoat pelo terminal, com as mesmas etapas e verificações. `personagent connect` sozinho lista essas plataformas. O [guia completo](guide.pt-BR.md#conectar-uma-plataforma-no-terminal) descreve o comando.
 
 Para encontrar um bot do QQ, abra o QQ no celular e acesse Contatos → Bots. Converse com ele em particular ou adicione-o a um grupo do qual você seja o proprietário. Este caminho usa a plataforma oficial de bots do QQ; portanto, você não precisa de uma conta pessoal do QQ nem de software adicional. O QQ decide onde o bot pode entrar. Até que o bot seja certificado, ele só pode entrar em grupos cujo proprietário seja o administrador dele, e não há sandbox a configurar. Em um grupo, ele só vê as mensagens que o mencionam com @, a menos que o proprietário do grupo ative o recebimento de todas as mensagens no perfil do bot nesse grupo. O [guia de bots do QQ](https://bot.q.qq.com/wiki/bot_new_product-intro/) trata da certificação e dos demais aspectos da conta.
 

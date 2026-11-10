@@ -6,9 +6,10 @@ personagent는 [PolyForm Noncommercial License 1.0.0](../LICENSE)으로 배포�
 
 ## 채팅 플랫폼과 사용자 계정
 
-personagent가 채팅 플랫폼에 닿는 방법은 두 가지입니다. QQ 공식 봇, 개인 WeChat, Telegram, Discord에는 직접 연결합니다. 그 밖의 플랫폼은 서드파티 브리지를 거치는데, 보통 personagent가 내려받아 실행하는 AstrBot을 씁니다. 위험은 그 연결이 무엇으로 로그인하느냐에 달려 있습니다.
+personagent가 채팅 플랫폼에 닿는 방법은 두 가지입니다. QQ 공식 봇, 개인 WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat의 열 개 플랫폼에는 직접 연결합니다. 그 밖의 플랫폼은 서드파티 브리지를 거치는데, 보통 personagent가 내려받아 실행하는 AstrBot을 씁니다. 위험은 그 연결이 무엇으로 로그인하느냐에 달려 있습니다.
 
-- **공식 봇 API**는 봇을 위해 만들어졌습니다. QQ 공식 봇 API, 개인 WeChat용 Tencent iLink 봇 API, Telegram, Discord, Slack, KOOK, Feishu/Lark, DingTalk, WeCom 같은 플랫폼이 여기에 속합니다. 그래도 각 플랫폼의 개발자 약관과 속도 제한은 지켜야 합니다.
+- **공식 봇 API**는 봇을 위해 만들어졌습니다. QQ 공식 봇 API, 개인 WeChat용 Tencent iLink 봇 API, Telegram과 Discord의 봇 API, Zulip의 Generic bot, 커뮤니티 액세스 키를 사용하는 VK 커뮤니티의 Bots Long Poll API, Stoat의 봇, 그리고 Slack, KOOK, Feishu/Lark, DingTalk, WeCom 같은 플랫폼이 여기에 속합니다. 그래도 각 플랫폼의 개발자 약관과 속도 제한은 지켜야 합니다.
+- **개방형 네트워크의 전용 계정.** Matrix, Twitch, IRC에서 봇은 사용자가 봇을 위해 만드는 일반 계정입니다. personagent는 해당 네트워크의 공개 문서에 나온 인터페이스를 사용합니다. Matrix에서는 봇 계정이 있는 홈서버의 Matrix Client-Server API를 사용하고, Twitch에서는 사용자가 등록한 애플리케이션에 대해 캐릭터의 계정이 승인한 로그인으로 Twitch API를 사용하며, IRC에서는 봇 자신의 닉네임으로 TLS를 통한 IRC 프로토콜을 사용합니다. 해당 홈서버, Twitch, 각 IRC 네트워크의 약관이 적용되며, 각 방과 채널의 규칙도 적용됩니다. 봇이 참여하기 전에 허가를 요구하는 곳도 있습니다. 예를 들어 Libera.Chat에서는 AI 봇이 채널에 참여하기 전에 그 채널 운영자의 명시적인 허가를 받아야 합니다.
 - **비공식 클라이언트**는 일반 사용자 계정으로 로그인해 소프트웨어로 조작합니다. 플랫폼은 이를 허용하지 않으며 약관으로 금지할 수도 있습니다. 계정이 제한, 동결되거나 영구 정지될 수 있습니다. 다음이 여기에 속합니다.
   - **NapCat, LLOneBot, Lagrange 등 OneBot 구현을 통한 QQ**. 고급 OneBot v11 옵션입니다. QQ 공식 봇에는 이 중 아무것도 필요 없습니다. Tencent는 이를 허용하지 않으며, 클라우드나 해외 IP 주소에서는 위험이 가장 큽니다.
   - **mautrix 브리지를 통한 WhatsApp, Signal, Messenger, Instagram, Google Messages 등**. Matrix 커넥터가 이 방식으로 닿습니다. 브리지는 각 네트워크의 비공식 클라이언트이고, 일부 네트워크는 약관에서 자동 메시지를 다룹니다. [Matrix 커넥터 안내](../integrations/matrix/README.ko.md#각-네트워크의-약관)를 보십시오.
@@ -36,9 +37,9 @@ DeepSeek 고래 소녀, GPT 드래곤 소녀, Claude 아가씨의 초상화는 �
 
 ## 사용자의 컴퓨터에 저장하는 것
 
-저장하는 모든 것은 홈 폴더 아래에 있습니다. 설정과 API 키는 `.env`에 있습니다. 봇 자격 증명과 대신 실행하는 AstrBot은 `platforms/`에 있습니다. `runtime/`에는 채팅 메모, 판정한 반응(원문 그대로 인용), 학습 내용 장부, 학습한 예시가 있습니다. `SERVER_LOG_FILE`을 설정하면 로그에도 대화 내용이 남을 수 있습니다. 폴더는 비공개로 두십시오. 절대 공개하거나 이슈에 첨부하지 말고, 학습한 내용이 소중하다면 백업하십시오. 다른 사람의 메시지를 저장하고 처리하는 법은 나라마다 다르며, 해당 법을 지키는 것은 사용자의 책임입니다.
+저장하는 모든 것은 홈 폴더 아래에 있습니다. 설정과 API 키는 `.env`에 있습니다. 봇 자격 증명과 대신 실행하는 AstrBot은 `platforms/`에 있습니다. `runtime/`에는 채팅 메모, 판정한 반응(원문 그대로 인용), 학습 기록, 학습한 예시가 있습니다. `SERVER_LOG_FILE`을 설정하면 로그에도 대화 내용이 남을 수 있습니다. 폴더는 비공개로 두십시오. 절대 공개하거나 이슈에 첨부하지 말고, 학습한 내용이 소중하다면 백업하십시오. 다른 사람의 메시지를 저장하고 처리하는 법은 나라마다 다르며, 해당 법을 지키는 것은 사용자의 책임입니다.
 
-잘못된 것을 배울 수도 있습니다. 변경에는 같은 채팅에서 나온 일치하는 반응 두 개가 필요하고, 그중 적어도 하나는 답변을 받은 사람의 것이어야 합니다. 모든 변경은 추가 전용 장부에 기록되며, `personagent learned`나 로컬 페이지의 활동 화면에서 검토하고 되돌릴 수 있습니다. 가끔 확인하십시오.
+잘못된 것을 배울 수도 있습니다. 변경에는 같은 채팅에서 나온 일치하는 반응 두 개가 필요하고, 그중 적어도 하나는 답변을 받은 사람의 것이어야 합니다. 모든 변경은 추가 전용 학습 기록에 기록되며, `personagent learned`나 로컬 페이지의 활동 화면에서 검토하고 되돌릴 수 있습니다. 가끔 확인하십시오.
 
 ## 보증 없음
 

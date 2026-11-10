@@ -221,6 +221,8 @@ key 仅保存在本机，对话内容会发送给你选择的模型服务。`.en
 
 在本地页面的「连接平台」中添加平台。personagent 在保存之前会先向平台验证凭据。平台拒绝时，页面会显示拒绝原因，且不保留任何内容。
 
+在没有显示器的服务器上，可在终端中使用 `personagent connect <平台>` 连接 personagent 直接连接的平台，例如 `personagent connect telegram`。该命令执行与页面相同的步骤和核验，并以相同的格式保存。QQ 和微信会在终端中显示二维码，Twitch 会显示一个链接和一个代码。加 `--no-input` 并以参数形式提供全部内容时，命令不进行任何询问；缺少必填项时以退出码 2 结束。随后运行 `personagent up`，即可启动 personagent 及其已连接的平台。[该命令及其参数](guide.zh-CN.md#在终端中连接平台)的说明见使用手册。
+
 **由 personagent 直接连接。** QQ、个人微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 运行在一个「直连」进程中，不需要 AstrBot 和 NapCat。某个平台无法加载时会被跳过，其余平台仍正常启动。下表列出前四个平台；其余六个平台需要填写的内容和使用限制见[使用手册](guide.zh-CN.md#personagent-直接连接的平台)。
 
 | 平台 | 操作 | 限制 |
@@ -299,6 +301,8 @@ AstrBot 位于 Docker 中或另一台主机上时，请参阅[使用指南](guid
 非应答的消息经拉取 personagent outbox 的连接器到达平台。这些消息包括主动开场、被否定后的追问，以及群聊中模型调用失败时的致歉。私聊的致歉随带来该消息的请求的响应返回。
 
 直连进程和这里的三个连接器都会拉取 outbox，前提是平台允许机器人先发言。QQ 会限制官方机器人主动发消息的频率，用户也可以关闭这类消息。你自己的连接器在事件中发送 `connector_id`、`reply_handle` 和 `"capabilities": ["outbox"]`，并长轮询 `/v1/outbox`（见[连接器协议](connectors.zh-CN.md)）。没有此类连接器时，personagent 只能在带来消息的请求内发言。主动发言循环会跳过这些会话，追问和致歉也不会发送。
+
+本地页面也会拉取 outbox，但仅限其自身的对话。不拉取 outbox 的程序（例如在某个对话中发言的编程助手）所发送的事件，不会使拉取 outbox 的连接器失去该对话（见[连接器协议](connectors.zh-CN.md#outboxpost-v1outbox)）。
 
 `PROACTIVE_PLATFORMS` 限制主动发言循环可以在哪些平台上主动发起对话。`PROACTIVE_PLATFORMS=qq_official` 限定在 QQ 官方机器人，`qq` 限定在经 NapCat 的 QQ。`CONNECTOR_OUTBOX_ENABLED=false` 彻底关闭 outbox。
 

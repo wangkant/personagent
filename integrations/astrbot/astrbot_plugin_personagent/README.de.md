@@ -7,7 +7,7 @@ Dieses [AstrBot](https://github.com/AstrBotDevs/AstrBot)-Plugin verbindet AstrBo
 
 ## Wird es benötigt?
 
-Für QQ, WeChat, Telegram oder Discord nicht. personagent verbindet diese Plattformen selbst, ohne AstrBot. Führen Sie `personagent` aus, um die lokale Seite zu öffnen, und fügen Sie sie unter **Apps verbinden** hinzu.
+Für QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK oder Stoat nicht. personagent verbindet diese Plattformen selbst, ohne AstrBot. Führen Sie `personagent` aus, um die lokale Seite zu öffnen, und fügen Sie sie unter **Plattformen verbinden** hinzu, oder führen Sie im Terminal `personagent connect <platform>` aus.
 
 Sie benötigen dieses Plugin, wenn AstrBot das Gespräch überträgt. Dies ist in zwei Fällen gegeben.
 

@@ -57,7 +57,7 @@ O [satori-python](https://github.com/RF-Tar-Railt/satori-python) cuida do lado d
 | `PERSONAGENT_URL` | `http://127.0.0.1:8080` | A URL base do agente. `/v1/events` e `/v1/outbox` são acrescentados. |
 | `CONNECTOR_TOKEN` | | O `CONNECTOR_TOKEN` do agente. |
 | `SATORI_GROUPS` | | Grupos a encaminhar, como ids de canal ou servidor, opcionalmente `platform:id`. Vazio não encaminha nenhum, `*` encaminha todos. |
-| `SATORI_DM_USERS` | | Pessoas cujas mensagens diretas são encaminhadas, como ids de usuário, opcionalmente `platform:id`. Vazio não encaminha nenhuma, `*` encaminha todas. |
+| `SATORI_DM_USERS` | | Pessoas cujas mensagens privadas são encaminhadas, como ids de usuário, opcionalmente `platform:id`. Vazio não encaminha nenhuma, `*` encaminha todas. |
 | `SATORI_PLATFORMS` | todas | Limita o conector a estas plataformas Satori. |
 | `SATORI_PLATFORM_NAMES` | `qq=qqbot` | Renomeia as plataformas como o agente as vê: `satori_name=name, ...` |
 | `SATORI_OUTBOX_ENABLED` | `true` | Buscar a caixa de saída do agente. |
@@ -73,9 +73,9 @@ A URL do agente precisa ser um endereço de loopback, ou HTTPS com `CONNECTOR_TO
 O conector nega por padrão. Com listas vazias, não encaminha nada.
 
 - Um grupo é um canal Satori. Ele é encaminhado quando o id de canal ou de servidor está em `SATORI_GROUPS`. No Discord ou KOOK, portanto, um id de servidor admite todos os canais desse servidor, e cada canal continua sendo uma conversa separada.
-- Uma mensagem direta é encaminhada quando o id de usuário do remetente está em `SATORI_DM_USERS`.
+- Uma conversa privada é encaminhada quando o id de usuário do remetente está em `SATORI_DM_USERS`.
 - Uma entrada pode nomear a plataforma, como `telegram:-1001234` ou `discord:4242`, e então só corresponde nessa plataforma. Uma entrada sem plataforma corresponde em todas.
-- `*` encaminha todos os grupos (ou todas as mensagens diretas) e marca o evento com `prefiltered: false`. Nesse caso, a decisão cabe a `ACCESS_GROUPS` e `ACCESS_DM_USERS` do próprio agente, e uma plataforma sem entradas ali é recusada.
+- `*` encaminha todos os grupos (ou todas as mensagens privadas) e marca o evento com `prefiltered: false`. Nesse caso, a decisão cabe a `ACCESS_GROUPS` e `ACCESS_DM_USERS` do próprio agente, e uma plataforma sem entradas ali é recusada.
 
 O plugin `inspect` do Koishi imprime os ids de plataforma, canal, servidor e usuário de uma mensagem.
 
@@ -90,7 +90,7 @@ O personagent armazena ids como `<platform>:<id>`, em que a plataforma é a do l
 
 | Recurso | Status |
 |---|---|
-| Chats em grupo e mensagens diretas | Sim. Uma mensagem direta é um canal `DIRECT`, ou uma mensagem sem servidor. |
+| Chats em grupo e conversas privadas | Sim. Uma conversa privada é um canal `DIRECT`, ou uma mensagem sem servidor. |
 | Detecção de chamada (`addressed`) | Um `<at>` do bot (por id, ou pelo nome do bot quando o servidor não dá id) e uma resposta a uma mensagem do bot. `@all` conta como texto, não como menção. |
 | Mensagens citadas | O texto citado, o remetente e o id, de um elemento `<quote>` ou de `message.quote`. |
 | Imagens recebidas | Imagens `data:` e `internal:` e imagens no servidor Satori são embutidas. URLs públicas são passadas para o agente buscar. URLs de rede privada são descritas como `(sent an image)`. No máximo 4 downloads por mensagem, de 4 MB cada. |

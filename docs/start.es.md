@@ -27,7 +27,7 @@ Elija un servicio de modelos, pegue su clave de API y seleccione **Verificar e i
 
 La clave permanece en su equipo; seleccione **Mostrar** para comprobarla. Los mensajes del chat se envían al servicio de modelos que usted elija, con las tarifas habituales de dicho servicio.
 
-El personaje responde en la página. Los ajustes se guardan, por lo que el siguiente inicio abre directamente el chat.
+El personaje responde en la página, con stickers e imágenes cuando los envía. Los mensajes que envía más tarde, como uno que inicia por su cuenta, aparecen en el chat en pocos segundos. Los ajustes se guardan, por lo que el siguiente inicio abre directamente el chat.
 
 Una vez configurado, **Personaje y ajustes** contiene un cuadro **Perfil** con el texto en el que se basa el personaje. Modifique quién es y cómo habla, y seleccione **Guardar el perfil**. El cambio se aplica de inmediato y se conserva lo que el personaje ha aprendido.
 
@@ -46,6 +46,7 @@ Hay otras dos vistas que no requieren conectar ninguna plataforma. **Práctica**
 2. personagent conecta por sí mismo QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK y Stoat. Las demás plataformas utilizan AstrBot, un puente de terceros. La primera vez que conecte una de ellas, personagent descargará AstrBot con un entorno de Python 3.12 independiente, por lo que debe mantener la página abierta hasta que finalice. A continuación, AstrBot se ejecuta en segundo plano, sin ningún panel en el que iniciar sesión.
 3. personagent comprueba las credenciales con la plataforma antes de guardarlas. Si la plataforma las rechaza, la página se lo indica y no se guarda nada.
 4. Las plataformas conectadas aparecen en la parte superior de **Conectar plataformas**, donde puede volver a configurarlas o desconectarlas.
+5. Sin la página, por ejemplo en un servidor sin pantalla, `personagent connect <plataforma>` conecta QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK o Stoat desde el terminal, con los mismos pasos y comprobaciones. `personagent connect` por sí solo las enumera. La [guía completa](guide.es.md#conectar-una-plataforma-en-el-terminal) describe el comando.
 
 Para encontrar un bot de QQ, abra QQ para móvil y vaya a Contactos → Bots. Puede chatear con él en privado o añadirlo a un grupo del que sea propietario. Esta vía utiliza la plataforma oficial de bots de QQ, por lo que no necesita una cuenta personal de QQ ni software adicional. QQ determina dónde puede participar el bot. Hasta que el bot esté certificado, solo puede unirse a grupos de los que su administrador sea propietario, y no es necesario configurar ningún entorno de pruebas. En un grupo, solo ve los mensajes que lo mencionan con @, salvo que el propietario del grupo active la recepción de todos los mensajes en el perfil del bot en ese grupo. La [guía de bots de QQ](https://bot.q.qq.com/wiki/bot_new_product-intro/) describe la certificación y el resto de la configuración de la cuenta.
 

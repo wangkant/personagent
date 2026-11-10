@@ -7,7 +7,7 @@ This guide covers setting personagent up, putting it in your chats, teaching it 
 1. [Install and the home folder](#install-and-the-home-folder)
 2. [The local page](#the-local-page): [Advanced settings](#advanced-settings) · [The App view](#the-app-view)
 3. [See it first: the demo](#see-it-first-the-demo)
-4. [Terminal commands](#terminal-commands): [setup](#set-up-in-the-terminal) · [chat](#chat-in-the-terminal) · [run the service](#run-the-service)
+4. [Terminal commands](#terminal-commands): [setup](#set-up-in-the-terminal) · [connect a platform](#connect-a-platform-in-the-terminal) · [chat](#chat-in-the-terminal) · [run the service](#run-the-service)
 5. [Make it your character](#make-it-your-character)
 6. [Put it in a chat](#put-it-in-a-chat): [Platforms personagent connects itself](#platforms-personagent-connects-itself) · [Other platforms](#other-platforms-through-the-managed-astrbot) · [Bridges you run yourself](#bridges-you-run-yourself) · [Speaking first](#speaking-first)
 7. [Coding agents](#coding-agents)
@@ -53,7 +53,7 @@ This guide writes commands as `personagent ...`. If you did not install it, put 
 
 `personagent` (or `personagent start`) serves a page that only this computer can reach. On Windows it opens in a window of its own. On macOS and Linux it opens in the browser, or in a window too once `pip install "personagent[app]"` has added [pywebview](https://pywebview.flowrl.com/), with Qt on Linux. The page has six views, listed in the sidebar in this order:
 
-- **Chat** is a one-to-one chat with the character on the page. The same agent that serves your chat platforms answers it. In this chat you are the admin. **Memory commands** below the message box lists the [memory commands](#memory-commands), and selecting one inserts it into the message box. **Forget this chat** deletes what the character noted in this chat and starts a new chat. It needs the data behind [Activity](#activity).
+- **Chat** is a one-to-one chat with the character on the page. The same agent that serves your chat platforms answers it. In this chat you are the admin. Stickers and pictures the character sends appear in the chat, and a picture that is no longer stored shows a short note in its place. Messages the character sends after its reply, such as the answer to a memory command sent while it was replying, a short message when the model fails, or a message it starts itself, appear within a few seconds while the Chat view is open. Both stay in the chat's history. **Memory commands** below the message box lists the [memory commands](#memory-commands), and selecting one inserts it into the message box. **Forget this chat** deletes what the character noted in this chat and starts a new chat. It needs the data behind [Activity](#activity).
 - **Activity** shows the chats the character is in, what it said lately, what it learned and what waits for your decision. See [Activity](#activity).
 - **Connect apps** puts the character in QQ, WeChat, Telegram, Discord and other platforms. See [Put it in a chat](#put-it-in-a-chat). At the bottom, **Coding assistants** connects the character to the [coding agents](#coding-agents) on this computer.
 - **Character & settings** is where you pick a model service (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama, or any other OpenAI-compatible service), paste the API key, and choose a name and a ready personality. **Verify & start chatting** tests the key with one small request and saves it only if the request succeeds. After setup, the **Persona** box shows `persona.txt`. **Save persona** restarts the agent with the new text and keeps what it has learned. **More features** turns on web search through Tavily (DuckDuckGo is the free default), image understanding, and speaking first on the apps you choose. [Advanced settings](#advanced-settings) follows.
@@ -127,7 +127,7 @@ Below is a trimmed run of `personagent demo teach`. The model's lines are script
   Nova: did you check the logs? roll back first, then diff the configs
   Alex: Nova, I was just venting
       judged: rejection, accepted: "Alex was venting, not asking for a fix"
-      ledger: negative only (it says the reply was off, not what to say)
+      ledger: negative only (it says the reply was wrong, not what to say instead)
       Nova's next reply to Alex counts as its second try
   Nova: fair. that's a rough end to the day
   Alex: haha yeah it is, thanks Nova
@@ -162,6 +162,7 @@ Everything the page does is also available from a terminal, which suits servers 
 | `personagent demo` | the scripted demo above |
 | `personagent run` | the service alone, for connectors you run yourself |
 | `personagent up` | the service, the platforms personagent connects itself and the managed AstrBot, together |
+| `personagent connect <platform>` | connect one of the [platforms personagent connects itself](#connect-a-platform-in-the-terminal) (`--remove` to disconnect it); without a platform, list them |
 | `personagent connect astrbot` | connect an AstrBot (`--install` to download a managed one, `--start` to start it) |
 | `personagent connect claude-code`, `personagent connect codex`, `personagent connect dsh` | put the character into a [coding agent](#coding-agents) (`--react` for remarks when a turn ends on the first two, `--remove` to undo) |
 | `personagent mcp` | the MCP server a coding agent starts; you do not run it yourself |
@@ -178,9 +179,20 @@ Every command takes `--help`.
 - **The AI service.** The presets match the page. The default is OpenRouter's `openrouter/free`, which hands each request to one of its free models. The key costs nothing. The limit is 20 requests a minute and 50 a day, or 1000 a day once you have bought at least 10 credits. Every model call counts, not only replies, and the day resets at midnight UTC. Once it runs out the character says it cannot answer right now, and `runtime/desktop/agent.log` has OpenRouter's reason. The model changes between requests, so the character's voice varies more than on one chosen model, and some free providers keep what they receive. For a steadier character, use a paid model with the same key. If OpenRouter is hard to reach where you are, Zhipu's `glm-4.7-flash` is free too. For Ollama, name a model you have already pulled. Ollama needs no key.
 - **The key.** Input is hidden by default. You can choose to show it, which also reveals the saved key when you reconfigure. The wizard tests the key with one small request. If the request fails, it shows the address it called, the HTTP status and a likely fix.
 - **The character.** A name, and one of seven ready characters (dry-witted friend, warm listener, gamer, bookworm, and three the community already draws: the DeepSeek whale girl, the GPT dragon girl and the Claude lady) or a plain one to write yourself. Pick one of the last three without choosing a name and the character is named after it. The local page shows its animated portrait.
-- **AstrBot.** Optional, and you can skip it the first time. See [Bridges you run yourself](#bridges-you-run-yourself).
+- **Chat platforms.** Optional, and you can skip this step the first time. The setup names the ten platforms personagent connects itself, which you connect afterwards with [`personagent connect <platform>`](#connect-a-platform-in-the-terminal). For the other platforms it can connect AstrBot, and download and install it first. See [Bridges you run yourself](#bridges-you-run-yourself).
 
 To set up without questions, for example in a script, run `personagent init --no-input` with `--provider`, `--model`, `--key-env VAR`, `--name`, `--lang` and `--persona`. On a new home, a key from `--key-env` or the shell's `LLM_API_KEY` needs `--provider` or `--base-url` to say whose it is. `--provider other` also needs `--base-url`. `personagent init --help` lists every flag. If `personagent init` runs without a terminal and without any of these flags, it skips the questions, says so, and exits with code 2.
+
+### Connect a platform in the terminal
+
+`personagent connect <platform>` connects one of the [platforms personagent connects itself](#platforms-personagent-connects-itself) without the page. The platform is `qq`, `wechat`, `telegram`, `discord`, `matrix`, `twitch`, `irc`, `zulip`, `vk` or `stoat`. The command shows the same steps as **Connect apps**, asks for each value, checks the values with the platform and saves them in the same form as the page, which then shows the platform as connected. If the platform refuses the values, the command says why and saves nothing. `personagent connect` without a platform lists the ten platforms and whether each one is connected.
+
+- QQ and WeChat print a QR code in the terminal, which you scan with your phone. For QQ you can instead enter the AppID and AppSecret of a bot you created. If the code cannot be scanned in your terminal, connect the platform in the personagent window; the command prints how to open it.
+- Twitch prints a link and a code. Open the link in a browser that is signed in to the character's Twitch account, check that the page shows the same code, and approve the sign-in. The command waits until then.
+- Each value is also an option, such as `--telegram-token` or `--irc-server`, and `personagent connect --help` lists them all. A value given as an option can remain in the shell's history. With `--no-input` the command asks nothing; when a required value is missing, it names the option and exits with code 2.
+- `--remove` disconnects the platform and deletes its saved values.
+
+The connection is active while personagent runs. `personagent up` starts personagent with its connected platforms; if personagent is already running, restart it. In the menu of `personagent start --terminal`, option 3 connects these platforms and option 5 starts personagent with them.
 
 ### Chat in the terminal
 
@@ -225,7 +237,7 @@ Alex> Nova, you there?
 
 `personagent run` starts only the service the connectors talk to, at `http://127.0.0.1:8080`. On startup it prints the version, the address, the home folder and whether the agent is on. `--host` and `--port` override `SERVER_HOST` and `SERVER_PORT`. Use this command when you run the connector yourself.
 
-`personagent up` starts the service together with every platform you connected from the page or with `connect astrbot --install`. It opens no browser. Ctrl+C stops everything, and each process writes its log to `runtime/desktop/` in the home folder.
+`personagent up` starts the service together with every platform you connected from the page, with `personagent connect <platform>` or with `connect astrbot --install`. It opens no browser. Ctrl+C stops everything, and each process writes its log to `runtime/desktop/` in the home folder.
 
 ## Make it your character
 
@@ -258,7 +270,7 @@ To let it see images, set `VISION_MODEL`, `VISION_API_KEY` and `VISION_BASE_URL`
 
 ## Put it in a chat
 
-Open **Connect apps** on the local page and pick a platform. The page asks only for the values you copy from the platform's own console. It checks them against the platform, starts the connection and waits a few seconds to confirm the platform accepted it. If the platform refuses, the page says so and saves nothing. Connected platforms are listed at the top, where you can set one up again or disconnect it. They start again whenever the page or `personagent up` starts.
+Open **Connect apps** on the local page and pick a platform. The page asks only for the values you copy from the platform's own console. It checks them against the platform, starts the connection and waits a few seconds to confirm the platform accepted it. If the platform refuses, the page says so and saves nothing. Connected platforms are listed at the top, where you can set one up again or disconnect it. They start again whenever the page or `personagent up` starts. On a computer without a display, `personagent connect <platform>` connects the platforms personagent connects itself from the terminal; see [Connect a platform in the terminal](#connect-a-platform-in-the-terminal).
 
 ```text
 Chat platform  ⇄  connector  ⇄  personagent  ⇄  Model API
@@ -277,7 +289,7 @@ personagent connects these ten itself, in one background process. They need neit
 | Telegram | Create a bot with [@BotFather](https://t.me/BotFather) and paste its token. |
 | Discord | In the [Developer Portal](https://discord.com/developers/applications), copy the bot token and turn on Message Content Intent. |
 | Matrix | Create a separate Matrix account for the bot. In Element, signed in as the bot, copy its access token under **All settings > Help & About > Advanced**, then close that window without signing out. Paste the token with the homeserver address and your own Matrix ID. Then, from your own account, invite the bot to a room with end-to-end encryption turned off. The bot accepts invitations only from your Matrix ID and cannot read encrypted rooms. |
-| Twitch | Register a free application with Client Type **Public** in the [Twitch developer console](https://dev.twitch.tv/console). Paste its Client ID and the channels the character should chat in, select **Connect**, and approve the sign-in through the link the page shows, in a browser signed in to the character's Twitch account. Text only, only in the listed channels, and no whispers (direct messages). |
+| Twitch | Register a free application with Client Type **Public** in the [Twitch developer console](https://dev.twitch.tv/console). Paste its Client ID and the channels the character should chat in, select **Connect**, and approve the sign-in through the link the page shows, in a browser signed in to the character's Twitch account. The character chats in text only, and only in the listed channels. Twitch whispers (direct messages) are not supported, so the tile on **Connect apps** says **Channels only**. |
 | IRC | Enter the server (Libera.Chat by default, or `irc.oftc.net` for OFTC), the TLS port, the bot's nickname, the channels, and the NickServ password if the nickname is registered. The bot connects over TLS, joins only the listed channels and answers direct messages to its nickname. Text only. Libera.Chat requires the permission of each channel's operators before an AI bot joins. |
 | Zulip | Add a **Generic bot** under **Personal settings > Bots**, then paste the organization address, the bot's email and its API key. The bot reads only the channels it is subscribed to and the direct messages sent to it. In a channel it answers when it is mentioned or quoted. Every member of the organization can send it direct messages. |
 | VK | In the community's settings, turn on messages and bot abilities, create an access key with the rights for community management, messages and photos, and turn on the Long Poll API with the `message_new` event. Paste the key. Any VK user can write to the community. In a group chat the bot receives only messages that mention it or reply to it, unless the chat gives it access to all messages. |
@@ -353,7 +365,7 @@ personagent listens on `127.0.0.1:8080`, and a blank `SERVER_HOST` means the sam
 
 ### Speaking first
 
-Some messages are not replies to anyone. These are openers (`PROACTIVE_ENABLED`, off by default), the follow-up question after a rejection, and the excuse sent when the model fails in a group. In a DM, the excuse goes back in the response to the waiting message instead. personagent queues these messages in an outbox, and the connectors pull and send them on platforms that let a bot speak first. WeChat official accounts and WeCom smart bots do not. QQ rate-limits an official bot's unprompted messages, and users can switch them off. `PROACTIVE_PLATFORMS=qq_official` limits openers to the official QQ bot, and `qq` limits them to QQ through NapCat. On the page, **Sometimes speak first** under **More features** writes both settings. See the [deployment guide](deploy.md#more-than-one-platform).
+Some messages are not replies to anyone. These are openers (`PROACTIVE_ENABLED`, off by default), the follow-up question after a rejection, and the excuse sent when the model fails in a group. In a DM, the excuse goes back in the response to the waiting message instead. personagent queues these messages in an outbox, and the connectors pull and send them on platforms that let a bot speak first. The local page pulls them for its own Chat view in the same way. WeChat official accounts and WeCom smart bots do not. QQ rate-limits an official bot's unprompted messages, and users can switch them off. `PROACTIVE_PLATFORMS=qq_official` limits openers to the official QQ bot, and `qq` limits them to QQ through NapCat. On the page, **Sometimes speak first** under **More features** writes both settings. See the [deployment guide](deploy.md#more-than-one-platform).
 
 ## Coding agents
 
@@ -373,7 +385,7 @@ It gets two tools:
 
 | Tool | Does | Costs |
 |---|---|---|
-| `talk` | one message in the same one-to-one chat as the local page, with the same memory. Turns said from a coding agent show up in the page's Chat after a reload, when the page is what answered them. Memory commands such as `Nova, what do you remember?` work here too. | one reply from your model service, except memory commands |
+| `talk` | one message in the same one-to-one chat as the local page, with the same memory. Turns said from a coding agent appear in the page's Chat within a few seconds while the Chat view is open, when the page is what answered them. Memory commands such as `Nova, what do you remember?` work here too. | one reply from your model service, except memory commands |
 | `character` | reads the name and `persona.txt` | nothing |
 
 Claude Code and Codex ask before the first `talk`, and you can allow it from then on in that prompt. `dsh headless` does not ask. A run with nobody there to answer needs the permission up front: `claude -p` takes `--allowedTools mcp__personagent__talk`, and `codex exec` needs this in `config.toml`:
@@ -614,7 +626,7 @@ Before you connect it to real people, tell them it is a bot and get their consen
 
 **In a terminal, run `personagent doctor`.** It checks the configuration and names misspelled or renamed settings. It then probes each service personagent depends on. The probes send tiny requests and may cost a little credit. `--json` prints the same results as JSON. `--fix` renames settings retired in 1.0 and saves the old file as `.env.bak`.
 
-**A platform will not connect.** When the platform refuses the credentials, the page says why. Check them in the platform's console, and for Discord, confirm that Message Content Intent is on. You can request a new QR code when one expires, and retry a failed AstrBot download. **Platform connections** in the App view shows the state of each platform personagent connects itself. Logs from everything the page or `personagent up` started are in `runtime/desktop/` in the home folder, and the App view shows them under **Logs**.
+**A platform will not connect.** When the platform refuses the credentials, the page says why, and so does `personagent connect <platform>` in a terminal. Check them in the platform's console, and for Discord, confirm that Message Content Intent is on. You can request a new QR code when one expires, and retry a failed AstrBot download. **Platform connections** in the App view shows the state of each platform personagent connects itself. Logs from everything the page or `personagent up` started are in `runtime/desktop/` in the home folder, and the App view shows them under **Logs**.
 
 **It runs but never replies.** The three most common causes are:
 
@@ -636,7 +648,7 @@ The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet)
 
 ## Status and other docs
 
-personagent 1.4.1 is on PyPI. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12. Further CI jobs install the package and drive the command and the local page.
+personagent 1.4.1 is on PyPI. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12. Further CI jobs install the package and drive the command and the local page, and open the app window on Linux, macOS and Windows.
 
 The direct OneBot route (`/v1/onebot`) is deprecated but kept through 1.x. The scripts in `tools/` are meant to be run from a clone, and [tools.md](tools.md) describes them.
 

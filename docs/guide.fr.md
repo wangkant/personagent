@@ -7,7 +7,7 @@ Ce guide explique comment configurer personagent, le placer dans vos discussions
 1. [Installation et dossier personnel](#installation-et-dossier-personnel)
 2. [La page locale](#la-page-locale) : [Réglages avancés](#réglages-avancés) · [La vue Application](#la-vue-application)
 3. [Le voir d'abord : la démo](#le-voir-dabord--la-démo)
-4. [Commandes du terminal](#commandes-du-terminal) : [configuration](#configurer-dans-le-terminal) · [discussion](#discuter-dans-le-terminal) · [exécuter le service](#exécuter-le-service)
+4. [Commandes du terminal](#commandes-du-terminal) : [configuration](#configurer-dans-le-terminal) · [connecter une plateforme](#connecter-une-plateforme-dans-le-terminal) · [discussion](#discuter-dans-le-terminal) · [exécuter le service](#exécuter-le-service)
 5. [En faire votre personnage](#en-faire-votre-personnage)
 6. [Le placer dans une discussion](#le-placer-dans-une-discussion) : [Plateformes connectées par personagent lui-même](#plateformes-connectées-par-personagent-lui-même) · [Autres plateformes](#autres-plateformes-via-lastrbot-géré) · [Ponts que vous exécutez vous-même](#ponts-que-vous-exécutez-vous-même) · [Parler en premier](#parler-en-premier)
 7. [Assistants de programmation](#assistants-de-programmation)
@@ -53,7 +53,7 @@ Ce guide écrit les commandes sous la forme `personagent ...`. Si vous ne l'avez
 
 `personagent` (ou `personagent start`) sert une page accessible uniquement depuis cet ordinateur. Sous Windows, elle s'ouvre dans sa propre fenêtre. Sous macOS et Linux, elle s'ouvre dans le navigateur, ou aussi dans une fenêtre une fois que `pip install "personagent[app]"` a ajouté [pywebview](https://pywebview.flowrl.com/), avec Qt sous Linux. La page comporte six vues, présentées dans cet ordre dans la barre latérale :
 
-- **Discussion** est une discussion individuelle avec le personnage dans la page. Le même agent que celui qui sert vos plateformes de discussion y répond. Dans cette discussion, vous êtes l'administrateur. **Commandes de mémoire**, sous la zone de saisie, liste les [commandes de mémoire](#commandes-de-mémoire) ; en sélectionner une l'insère dans la zone de saisie. **Oublier cette discussion** supprime ce que le personnage a noté dans cette discussion et en commence une nouvelle. Cette fonction nécessite les données de la vue [Activité](#activité).
+- **Discussion** est une discussion individuelle avec le personnage dans la page. Le même agent que celui qui sert vos plateformes de discussion y répond. Dans cette discussion, vous êtes l'administrateur. Les autocollants et les images que le personnage envoie apparaissent dans la discussion, et une image qui n'est plus conservée est remplacée par une courte mention. Les messages que le personnage envoie après sa réponse, comme la réponse à une commande de mémoire envoyée pendant qu'il répondait, un court message en cas d'échec du modèle ou un message qu'il lance de lui-même, apparaissent en quelques secondes tant que la vue **Discussion** est ouverte. Les uns comme les autres restent dans l'historique de la discussion. **Commandes de mémoire**, sous la zone de saisie, liste les [commandes de mémoire](#commandes-de-mémoire) ; en sélectionner une l'insère dans la zone de saisie. **Oublier cette discussion** supprime ce que le personnage a noté dans cette discussion et en commence une nouvelle. Cette fonction nécessite les données de la vue [Activité](#activité).
 - **Activité** montre les discussions où se trouve le personnage, ce qu'il a dit récemment, ce qu'il a appris et ce qui attend votre décision. Voir [Activité](#activité).
 - **Connecter des plateformes** place le personnage dans QQ, WeChat, Telegram, Discord et d'autres plateformes. Voir [Le placer dans une discussion](#le-placer-dans-une-discussion). En bas de la vue, **Assistants de programmation** relie le personnage aux [assistants de programmation](#assistants-de-programmation) installés sur cet ordinateur.
 - **Personnage et réglages** est l'endroit où vous choisissez un service de modèles (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama ou tout autre service compatible OpenAI), collez la clé d'API et choisissez un nom et une personnalité prédéfinie. **Vérifier et commencer la discussion** teste la clé avec une petite requête et ne l'enregistre que si la requête réussit. Après la configuration, la zone **Fiche du personnage** affiche `persona.txt`. **Enregistrer la fiche** redémarre l'agent avec le nouveau texte et conserve ce qu'il a appris. **Autres fonctions** active la recherche web via Tavily (DuckDuckGo est l'option gratuite par défaut), la compréhension d'images et la prise de parole en premier sur les plateformes de votre choix. Viennent ensuite les [Réglages avancés](#réglages-avancés).
@@ -120,28 +120,28 @@ Cette partie indique la version en cours d'exécution et la date de la dernière
 
 `personagent demo` joue trois scènes sur un modèle scénarisé, donc sans clé. Les scènes montrent quels messages de groupe il ignore et pourquoi, comment il apprend d'une correction et comment un inconnu échoue à implanter une instruction. Pour ne jouer qu'une scène, nommez-la (`quiet`, `teach` ou `troll`). Ajoutez `--lang` et un code de langue pour une autre langue, comme `--lang ja`.
 
-Voici une exécution abrégée de `personagent demo teach`. Les répliques du modèle sont scénarisées, mais le registre et la règle de promotion sont le vrai code :
+Voici une exécution abrégée de `personagent demo teach --lang fr`. Les répliques du modèle sont scénarisées, mais le registre et la règle de promotion sont le vrai code :
 
 ```text
-  Alex: Nova, the deploy failed again
-  Nova: did you check the logs? roll back first, then diff the configs
-  Alex: Nova, I was just venting
-      judged: rejection, accepted: "Alex was venting, not asking for a fix"
-      ledger: negative only (it says the reply was off, not what to say)
-      Nova's next reply to Alex counts as its second try
-  Nova: fair. that's a rough end to the day
-  Alex: haha yeah it is, thanks Nova
-      judged: positive, accepted: "Alex agreed with the second try and thanked Nova"
-      ledger: weak (a laugh or a thanks never changes anything alone)
-      ledger: Alex accepted the second try: strong (Alex is who the reply was for)
+  Alex : Nova, le déploiement a encore planté
+  Nova : t'as regardé les logs ? fais d'abord un rollback, puis compare les configs
+  Alex : Nova, je voulais juste râler
+      jugé : rejet, acceptée : « Alex râlait, il ne demandait pas de solution »
+      registre d'apprentissage : négative seulement (dit que la réponse tombait mal, pas quoi dire)
+      la prochaine réponse de Nova à Alex compte comme sa deuxième tentative
+  Nova : c'est clair. dure fin de journée
+  Alex : haha oui c'est ça, merci Nova
+      jugé : positive, acceptée : « Alex a approuvé la deuxième tentative et a remercié Nova »
+      registre d'apprentissage : faible (un rire ou un merci ne change jamais rien à lui seul)
+      registre d'apprentissage : Alex a accepté la deuxième tentative : forte (la réponse s'adressait à Alex)
 
-  fix: "did you check the logs? roll back first, ..." -> "fair. that's a rough end to the day"
-    [x] 2 of 2 agreeing reactions
-    [x] 1 of 1 strong
-    [x] same chat
-    [x] 1 of 1 person (PROMOTE_MIN_SPEAKERS)
-    [x] nothing disagrees, no rival fix
-    now in use: 2 agreeing reactions, 1 strong, same chat
+  correction : « t'as regardé les logs ? fais d'abord un r... » -> « c'est clair. dure fin de journée »
+    [x] 2 réactions concordantes sur 2
+    [x] 1 fortes sur 1
+    [x] même conversation
+    [x] 1 personne sur 1 (PROMOTE_MIN_SPEAKERS)
+    [x] aucune opposition, aucune correction concurrente
+    désormais utilisé : 2 réactions concordantes, 1 fortes, même conversation
 ```
 
 La scène envoie aussi le même message avant et après la leçon : l'ordinateur portable de quelqu'un a lâché en pleine démo. Avant la correction, Nova propose une solution. Après, Nova compatit. La démo reste scénarisée même avec une clé définie, donc chaque exécution est identique et ne coûte rien. `personagent demo --online` la joue plutôt sur votre propre modèle, ce qui coûte des jetons et varie d'une exécution à l'autre.
@@ -162,6 +162,7 @@ Tout ce que fait la page est aussi disponible depuis un terminal, ce qui convien
 | `personagent demo` | la démo scénarisée ci-dessus |
 | `personagent run` | le service seul, pour les connecteurs que vous exécutez vous-même |
 | `personagent up` | le service, les plateformes que personagent connecte lui-même et l'AstrBot géré, ensemble |
+| `personagent connect <plateforme>` | connecte l'une des [plateformes que personagent connecte lui-même](#connecter-une-plateforme-dans-le-terminal) (`--remove` pour la déconnecter) ; sans plateforme, les liste |
 | `personagent connect astrbot` | connecte un AstrBot (`--install` pour en télécharger un géré, `--start` pour le démarrer) |
 | `personagent connect claude-code`, `personagent connect codex`, `personagent connect dsh` | place le personnage dans un [assistant de programmation](#assistants-de-programmation) (`--react` pour des remarques à la fin d'un tour sur les deux premiers, `--remove` pour annuler) |
 | `personagent mcp` | le serveur MCP que démarre un assistant de programmation ; vous ne le lancez pas vous-même |
@@ -178,20 +179,31 @@ Toutes les commandes acceptent `--help`.
 - **Le service d'IA.** Les préréglages correspondent à ceux de la page. Le défaut est `openrouter/free` d'OpenRouter, qui confie chaque requête à l'un de ses modèles gratuits. La clé ne coûte rien. La limite est de 20 requêtes par minute et 50 par jour, ou 1000 par jour une fois que vous avez acheté au moins 10 crédits. Chaque appel au modèle compte, pas seulement les réponses, et la journée repart à minuit UTC. Une fois la limite atteinte, le personnage dit qu'il ne peut pas répondre pour l'instant, et `runtime/desktop/agent.log` contient la raison d'OpenRouter. Le modèle change d'une requête à l'autre, donc la voix du personnage varie plus qu'avec un modèle choisi, et certains fournisseurs gratuits conservent ce qu'ils reçoivent. Pour un personnage plus stable, utilisez un modèle payant avec la même clé. Si OpenRouter est difficile d'accès chez vous, `glm-4.7-flash` de Zhipu est aussi gratuit. Pour Ollama, nommez un modèle déjà téléchargé. Ollama ne nécessite pas de clé.
 - **La clé.** La saisie est masquée par défaut. Vous pouvez choisir de l'afficher, ce qui révèle aussi la clé enregistrée lors d'une reconfiguration. L'assistant teste la clé avec une petite requête. Si elle échoue, il montre l'adresse appelée, le statut HTTP et une correction probable.
 - **Le personnage.** Un nom, et l'un des sept personnages prédéfinis (ami pince-sans-rire, interlocuteur attentionné, joueur, grand lecteur, ainsi que trois personnages que la communauté dessine déjà : la fille-baleine DeepSeek, la fille-dragon GPT et la demoiselle Claude), ou un personnage simple à rédiger vous-même. Si vous choisissez l'un des trois derniers sans indiquer de nom, le personnage porte le sien. La page locale affiche son portrait animé.
-- **AstrBot.** Facultatif, et vous pouvez le passer la première fois. Voir [Ponts que vous exécutez vous-même](#ponts-que-vous-exécutez-vous-même).
+- **Les plateformes de discussion.** Facultatif, et vous pouvez passer cette étape la première fois. La configuration nomme les dix plateformes que personagent connecte lui-même, que vous connectez ensuite avec [`personagent connect <plateforme>`](#connecter-une-plateforme-dans-le-terminal). Pour les autres plateformes, elle peut connecter AstrBot, après l'avoir téléchargé et installé. Voir [Ponts que vous exécutez vous-même](#ponts-que-vous-exécutez-vous-même).
 
 Pour configurer sans questions, par exemple dans un script, exécutez `personagent init --no-input` avec `--provider`, `--model`, `--key-env VAR`, `--name`, `--lang` et `--persona`. Sur un nouveau dossier personnel, une clé venant de `--key-env` ou du `LLM_API_KEY` du shell a besoin de `--provider` ou `--base-url` pour indiquer à qui elle appartient. `--provider other` nécessite aussi `--base-url`. `personagent init --help` liste toutes les options. Si `personagent init` s'exécute sans terminal et sans aucune de ces options, il saute les questions, le signale et sort avec le code 2.
+
+### Connecter une plateforme dans le terminal
+
+`personagent connect <plateforme>` connecte l'une des [plateformes que personagent connecte lui-même](#plateformes-connectées-par-personagent-lui-même) sans passer par la page. La plateforme est `qq`, `wechat`, `telegram`, `discord`, `matrix`, `twitch`, `irc`, `zulip`, `vk` ou `stoat`. La commande affiche les mêmes étapes que **Connecter des plateformes**, demande chaque valeur, vérifie les valeurs auprès de la plateforme et les enregistre sous la même forme que la page, qui affiche ensuite la plateforme comme connectée. Si la plateforme refuse les valeurs, la commande indique pourquoi et n'enregistre rien. Sans plateforme, `personagent connect` liste les dix plateformes et indique si chacune est connectée.
+
+- QQ et WeChat affichent un QR code dans le terminal, que vous scannez avec votre téléphone. Pour QQ, vous pouvez plutôt saisir l'AppID et l'AppSecret d'un bot que vous avez créé. Si le code ne peut pas être scanné dans votre terminal, connectez la plateforme dans la fenêtre de personagent ; la commande indique comment l'ouvrir.
+- Twitch affiche un lien et un code. Ouvrez le lien dans un navigateur connecté au compte Twitch du personnage, vérifiez que la page affiche le même code, puis approuvez la connexion. La commande attend jusque-là.
+- Chaque valeur peut aussi être passée en option, comme `--telegram-token` ou `--irc-server`, et `personagent connect --help` les liste toutes. Une valeur passée en option peut rester dans l'historique du shell. Avec `--no-input`, la commande ne pose aucune question ; lorsqu'une valeur obligatoire manque, elle nomme l'option et sort avec le code 2.
+- `--remove` déconnecte la plateforme et supprime les valeurs enregistrées.
+
+La connexion est active tant que personagent s'exécute. `personagent up` démarre personagent avec ses plateformes connectées ; si personagent est déjà en cours d'exécution, redémarrez-le. Dans le menu de `personagent start --terminal`, l'option 3 connecte ces plateformes et l'option 5 démarre personagent avec elles.
 
 ### Discuter dans le terminal
 
 `personagent chat` vous place dans une discussion de groupe simulée avec le personnage. Une ligne ordinaire est un message de groupe normal, et l'essai indique si le personnage interviendrait et pourquoi. Une ligne contenant son nom l'appelle :
 
 ```text
-Alex> anyone around tonight?
-  (Nova stays quiet: not addressed, 1 of 4 messages)
+Alex> il y a quelqu'un ce soir ?
+  (Nova se tait : pas interpellé, 1 messages sur 4)
 
-Alex> Nova, the deploy failed again
-  Nova > did you check the logs? roll back first, then diff the configs
+Alex> Nova, le déploiement a encore planté
+  Nova > t'as regardé les logs ? fais d'abord un rollback, puis compare les configs
 ```
 
 | Tapez | Pour |
@@ -217,15 +229,15 @@ Les lignes `/as` et `/admin` suivent également les règles de groupe ; incluez 
 L'essai exécute la vraie décision de parler ou de se taire, les vérifications de sortie, les commandes de mémoire et l'apprentissage. Il envisage de participer après 4 messages, là où le bot en production en attend 30. Ce qu'il apprend reste dans `runtime/trial/` du dossier personnel, séparé du bot en production. `personagent learned` ne le montre pas, et `/reset` l'efface. L'essai ignore les listes d'autorisation et la livraison réelle. Il désactive aussi l'auto-évaluation, la vision, la question de suivi et les messages que le personnage lancerait de lui-même. Quand un appel au modèle échoue, il affiche une ligne qui dit quoi vérifier :
 
 ```text
-Alex> Nova, you there?
-  [error: the model provider refused the key or the account (HTTP 401); check LLM_API_KEY, then run `personagent doctor`]
+Alex> Nova, tu es là ?
+  [erreur : le fournisseur du modèle a refusé la clé ou le compte (HTTP 401) ; vérifiez LLM_API_KEY, puis lancez `personagent doctor`]
 ```
 
 ### Exécuter le service
 
 `personagent run` démarre uniquement le service auquel parlent les connecteurs, à `http://127.0.0.1:8080`. Au démarrage, il affiche la version, l'adresse, le dossier personnel et si l'agent est actif. `--host` et `--port` remplacent `SERVER_HOST` et `SERVER_PORT`. Utilisez cette commande quand vous exécutez le connecteur vous-même.
 
-`personagent up` démarre le service avec toutes les plateformes connectées depuis la page ou avec `connect astrbot --install`. Il n'ouvre pas de navigateur. Ctrl+C arrête tout, et chaque processus écrit son journal dans `runtime/desktop/` du dossier personnel.
+`personagent up` démarre le service avec toutes les plateformes connectées depuis la page, avec `personagent connect <plateforme>` ou avec `connect astrbot --install`. Il n'ouvre pas de navigateur. Ctrl+C arrête tout, et chaque processus écrit son journal dans `runtime/desktop/` du dossier personnel.
 
 ## En faire votre personnage
 
@@ -258,7 +270,7 @@ Pour lui faire voir les images, définissez `VISION_MODEL`, `VISION_API_KEY` et 
 
 ## Le placer dans une discussion
 
-Ouvrez **Connecter des plateformes** sur la page locale et choisissez une plateforme. La page ne demande que les valeurs que vous copiez depuis la console de la plateforme. Elle les vérifie auprès de la plateforme, démarre la connexion et attend quelques secondes pour confirmer que la plateforme l'a acceptée. Si la plateforme refuse, la page le dit et n'enregistre rien. Les plateformes connectées sont listées en haut, où vous pouvez en reconfigurer une ou la déconnecter. Elles redémarrent chaque fois que la page ou `personagent up` démarre.
+Ouvrez **Connecter des plateformes** sur la page locale et choisissez une plateforme. La page ne demande que les valeurs que vous copiez depuis la console de la plateforme. Elle les vérifie auprès de la plateforme, démarre la connexion et attend quelques secondes pour confirmer que la plateforme l'a acceptée. Si la plateforme refuse, la page le dit et n'enregistre rien. Les plateformes connectées sont listées en haut, où vous pouvez en reconfigurer une ou la déconnecter. Elles redémarrent chaque fois que la page ou `personagent up` démarre. Sur un ordinateur sans écran, `personagent connect <plateforme>` connecte depuis le terminal les plateformes que personagent connecte lui-même ; voir [Connecter une plateforme dans le terminal](#connecter-une-plateforme-dans-le-terminal).
 
 ```text
 Chat platform  ⇄  connector  ⇄  personagent  ⇄  Model API
@@ -277,7 +289,7 @@ personagent connecte lui-même ces dix plateformes, dans un seul processus d'arr
 | Telegram | Créez un bot avec [@BotFather](https://t.me/BotFather) et collez son jeton. |
 | Discord | Dans le [Developer Portal](https://discord.com/developers/applications), copiez le jeton du bot et activez Message Content Intent. |
 | Matrix | Créez un compte Matrix distinct pour le bot. Dans Element, connecté en tant que bot, copiez son jeton d'accès sous **All settings > Help & About > Advanced**, puis fermez cette fenêtre sans vous déconnecter. Collez le jeton avec l'adresse du homeserver et votre propre identifiant Matrix. Ensuite, depuis votre propre compte, invitez le bot dans un salon dont le chiffrement de bout en bout est désactivé. Le bot n'accepte que les invitations provenant de votre identifiant Matrix et ne peut pas lire les salons chiffrés. |
-| Twitch | Enregistrez une application gratuite dont le Client Type est **Public** dans la [console développeur de Twitch](https://dev.twitch.tv/console). Collez son Client ID et les chaînes dans lesquelles le personnage doit discuter, sélectionnez **Connecter**, puis approuvez la connexion au moyen du lien affiché par la page, dans un navigateur connecté au compte Twitch du personnage. Texte uniquement, seulement dans les chaînes indiquées, et sans chuchotements (messages privés). |
+| Twitch | Enregistrez une application gratuite dont le Client Type est **Public** dans la [console développeur de Twitch](https://dev.twitch.tv/console). Collez son Client ID et les chaînes dans lesquelles le personnage doit discuter, sélectionnez **Connecter**, puis approuvez la connexion au moyen du lien affiché par la page, dans un navigateur connecté au compte Twitch du personnage. Le personnage discute uniquement par écrit, et seulement dans les chaînes indiquées. Les chuchotements (messages privés) de Twitch ne sont pas pris en charge ; la tuile de **Connecter des plateformes** indique donc **Canaux uniquement**. |
 | IRC | Indiquez le serveur (Libera.Chat par défaut, ou `irc.oftc.net` pour OFTC), le port TLS, le pseudonyme du bot, les canaux et, si le pseudonyme est enregistré, le mot de passe NickServ. Le bot se connecte en TLS, ne rejoint que les canaux indiqués et répond aux messages privés adressés à son pseudonyme. Texte uniquement. Libera.Chat exige l'autorisation des opérateurs de chaque canal avant qu'un bot d'IA ne le rejoigne. |
 | Zulip | Ajoutez un **Generic bot** sous **Personal settings > Bots**, puis collez l'adresse de l'organisation, l'adresse e-mail du bot et sa clé d'API. Le bot ne lit que les canaux auxquels il est abonné et les messages privés qui lui sont adressés. Dans un canal, il répond lorsqu'il est mentionné ou cité. Tout membre de l'organisation peut lui envoyer des messages privés. |
 | VK | Dans les paramètres de la communauté, activez les messages et les fonctionnalités de bot, créez une clé d'accès disposant des droits de gestion de la communauté, des messages et des photos, puis activez l'API Long Poll avec l'événement `message_new`. Collez la clé. Tout utilisateur de VK peut écrire à la communauté. Dans une discussion de groupe, le bot ne reçoit que les messages qui le mentionnent ou lui répondent, sauf si la discussion lui donne accès à tous les messages. |
@@ -353,7 +365,7 @@ personagent écoute sur `127.0.0.1:8080`, et un `SERVER_HOST` vide signifie la m
 
 ### Parler en premier
 
-Certains messages ne répondent à personne. Ce sont les prises de parole (`PROACTIVE_ENABLED`, désactivé par défaut), la question de suivi après un rejet et l'excuse envoyée quand le modèle échoue dans un groupe. En message privé, l'excuse repart dans la réponse au message en attente. personagent met ces messages dans une boîte d'envoi, et les connecteurs les récupèrent et les envoient sur les plateformes qui laissent un bot parler en premier. Les comptes officiels WeChat et les bots intelligents WeCom ne le permettent pas. QQ limite le débit des messages spontanés d'un bot officiel, et les utilisateurs peuvent les désactiver. `PROACTIVE_PLATFORMS=qq_official` limite les prises de parole au bot QQ officiel, et `qq` à QQ via NapCat. Sur la page, **Prendre parfois la parole en premier** sous **Autres fonctions** écrit les deux réglages. Voir le [guide de déploiement](deploy.fr.md#plusieurs-plateformes).
+Certains messages ne répondent à personne. Ce sont les prises de parole (`PROACTIVE_ENABLED`, désactivé par défaut), la question de suivi après un rejet et l'excuse envoyée quand le modèle échoue dans un groupe. En message privé, l'excuse repart dans la réponse au message en attente. personagent met ces messages dans une boîte d'envoi, et les connecteurs les récupèrent et les envoient sur les plateformes qui laissent un bot parler en premier. La page locale les récupère de la même manière pour sa propre vue **Discussion**. Les comptes officiels WeChat et les bots intelligents WeCom ne le permettent pas. QQ limite le débit des messages spontanés d'un bot officiel, et les utilisateurs peuvent les désactiver. `PROACTIVE_PLATFORMS=qq_official` limite les prises de parole au bot QQ officiel, et `qq` à QQ via NapCat. Sur la page, **Prendre parfois la parole en premier** sous **Autres fonctions** écrit les deux réglages. Voir le [guide de déploiement](deploy.fr.md#plusieurs-plateformes).
 
 ## Assistants de programmation
 
@@ -373,7 +385,7 @@ Il dispose de deux outils :
 
 | Outil | Rôle | Coût |
 |---|---|---|
-| `talk` | un message dans la même discussion individuelle que la page locale, avec la même mémoire. Les tours envoyés depuis un assistant de programmation apparaissent dans la vue **Discussion** de la page après rechargement, quand c'est la page qui a répondu. Les commandes de mémoire comme `Nova, what do you remember?` fonctionnent ici aussi. | une réponse de votre service de modèles, sauf pour les commandes de mémoire |
+| `talk` | un message dans la même discussion individuelle que la page locale, avec la même mémoire. Les tours envoyés depuis un assistant de programmation apparaissent dans la vue **Discussion** de la page en quelques secondes tant que cette vue est ouverte, quand c'est la page qui a répondu. Les commandes de mémoire comme `Nova, what do you remember?` fonctionnent ici aussi. | une réponse de votre service de modèles, sauf pour les commandes de mémoire |
 | `character` | lit le nom et `persona.txt` | rien |
 
 Claude Code et Codex demandent avant le premier `talk`, et vous pouvez l'autoriser pour la suite dans cette invite. `dsh headless` ne demande pas. Une exécution sans personne pour répondre a besoin de l'autorisation à l'avance : `claude -p` prend `--allowedTools mcp__personagent__talk`, et `codex exec` a besoin de ceci dans `config.toml` :
@@ -614,7 +626,7 @@ Avant de le connecter à de vraies personnes, dites-leur que c'est un bot et obt
 
 **Dans un terminal, exécutez `personagent doctor`.** Il vérifie la configuration et nomme les réglages mal orthographiés ou renommés. Il sonde ensuite chaque service dont personagent dépend. Les sondes envoient de toutes petites requêtes et peuvent coûter un peu de crédit. `--json` affiche les mêmes résultats en JSON. `--fix` renomme les réglages retirés en 1.0 et enregistre l'ancien fichier sous `.env.bak`.
 
-**Une plateforme ne se connecte pas.** Quand la plateforme refuse les identifiants, la page dit pourquoi. Vérifiez-les dans la console de la plateforme, et pour Discord, confirmez que Message Content Intent est activé. Vous pouvez demander un nouveau code QR quand il expire, et réessayer un téléchargement d'AstrBot qui a échoué. **Connexions aux plateformes**, dans la vue **Application**, indique l'état de chaque plateforme que personagent connecte lui-même. Les journaux de tout ce que la page ou `personagent up` a démarré se trouvent dans `runtime/desktop/` du dossier personnel, et la vue **Application** les affiche sous **Journaux**.
+**Une plateforme ne se connecte pas.** Quand la plateforme refuse les identifiants, la page dit pourquoi, tout comme `personagent connect <plateforme>` dans un terminal. Vérifiez-les dans la console de la plateforme, et pour Discord, confirmez que Message Content Intent est activé. Vous pouvez demander un nouveau code QR quand il expire, et réessayer un téléchargement d'AstrBot qui a échoué. **Connexions aux plateformes**, dans la vue **Application**, indique l'état de chaque plateforme que personagent connecte lui-même. Les journaux de tout ce que la page ou `personagent up` a démarré se trouvent dans `runtime/desktop/` du dossier personnel, et la vue **Application** les affiche sous **Journaux**.
 
 **Il est en cours d'exécution mais ne répond jamais.** Les trois causes les plus courantes sont :
 
@@ -636,7 +648,7 @@ La 1.0 a renommé la plupart des réglages, et personagent ne démarre pas tant 
 
 ## État et autres documents
 
-personagent 1.4.1 est sur PyPI. La CI exécute les tests sous Linux avec Python 3.10–3.14 et sous Windows avec Python 3.12. D'autres tâches CI installent le paquet et pilotent la commande et la page locale.
+personagent 1.4.1 est sur PyPI. La CI exécute les tests sous Linux avec Python 3.10–3.14 et sous Windows avec Python 3.12. D'autres tâches CI installent le paquet, pilotent la commande et la page locale, et ouvrent la fenêtre de l'application sous Linux, macOS et Windows.
 
 La voie directe OneBot (`/v1/onebot`) est obsolète mais reste pendant toute la 1.x. Les scripts de `tools/` sont faits pour être exécutés depuis un clone, et [tools.md](tools.fr.md) les décrit.
 

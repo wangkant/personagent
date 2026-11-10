@@ -29,10 +29,10 @@ A página local configura o conector direto. Os outros três usam os mesmos nome
 | Quanto tempo uma solicitação pode levar, em segundos | `SATORI_TIMEOUT_S` | `MATRIX_TIMEOUT_S` | `timeout_s` |
 | Consultar a caixa de saída | `SATORI_OUTBOX_ENABLED` | `MATRIX_OUTBOX_ENABLED` | `outbox_enabled` |
 | Grupos a encaminhar | `SATORI_GROUPS` | `MATRIX_GROUPS` | `groups` |
-| Pessoas cujas mensagens diretas são encaminhadas | `SATORI_DM_USERS` | `MATRIX_DM_USERS` | `dm_users` |
+| Pessoas cujas mensagens privadas são encaminhadas | `SATORI_DM_USERS` | `MATRIX_DM_USERS` | `dm_users` |
 | O servidor da plataforma | `SATORI_URL` | `MATRIX_URL` | O do próprio AstrBot |
 
-Uma lista de grupos ou de mensagens diretas vazia não encaminha nada desse tipo. `*` encaminha tudo e marca os eventos com `"prefiltered": false`, o que deixa a decisão para `ACCESS_GROUPS` e `ACCESS_DM_USERS` do agente. O README de cada conector lista as demais configurações.
+Uma lista de grupos ou de conversas privadas vazia não encaminha nada desse tipo. `*` encaminha tudo e marca os eventos com `"prefiltered": false`, o que deixa a decisão para `ACCESS_GROUPS` e `ACCESS_DM_USERS` do agente. O README de cada conector lista as demais configurações.
 
 ## Endereçamento
 
@@ -104,7 +104,7 @@ Estes campos opcionais ativam mais do agente:
 | `reply_handle` | O que o conector precisar para alcançar esta conversa depois sem uma mensagem recebida: o `unified_msg_origin` do AstrBot, um id de sala do Matrix ou um login do Satori mais um id de canal. O agente o trata como opaco, guarda por conversa e devolve nas entregas da caixa de saída. |
 | `capabilities` | O que o conector sabe fazer. `outbox` significa que ele consulta a caixa de saída e pode enviar por conta própria. `quote_text` significa que os segmentos de resposta trazem o texto citado. |
 | `prefiltered` | `true` (o padrão) quando o conector aplicou a própria lista de permissão. `false` faz das listas do agente o único filtro. |
-| `proactive` | Marca um evento de mensagem direta como uma deixa escrita pelo conector, não como palavras da pessoa. Veja "Falar primeiro sem a caixa de saída". |
+| `proactive` | Marca um evento de conversa privada como uma deixa escrita pelo conector, não como palavras da pessoa. Veja "Falar primeiro sem a caixa de saída". |
 
 A resposta é assim:
 
@@ -117,7 +117,7 @@ A resposta é assim:
 
 - `replies`: envie em ordem, cada uma como uma mensagem separada. Quando `mention_user_id` está presente, é o id com prefixo a mencionar. Exiba a menção da forma usada pela plataforma.
 - `owned`: o agente assumiu esta conversa. Quando é verdadeiro, impeça qualquer outra lógica de bot de responder, mesmo que `replies` esteja vazio, porque a persona optou por permanecer em silêncio. Quando é falso, a mensagem é sua. Ou a conversa não está nas listas de permissão do agente, ou o agente não consegue responder de forma alguma (sem `LLM_API_KEY`, ou `AGENT_ENABLED=false`). No segundo caso, o log do agente traz uma linha ERROR com a causa.
-- A solicitação dura até o turno terminar, que é um debounce curto mais o tempo do modelo. As chamadas ao modelo de um turno dividem um único orçamento de 1,5 × `LLM_TIMEOUT_S`, novas tentativas incluídas, tanto em um grupo quanto em uma mensagem direta, e uma mensagem que chega enquanto um turno anterior da sua conversa ainda está pensando aguarda esse turno terminar antes de começar o seu. Reserve pelo menos 3 × `LLM_TIMEOUT_S` segundos (360 com o padrão).
+- A solicitação dura até o turno terminar, que é um debounce curto mais o tempo do modelo. As chamadas ao modelo de um turno dividem um único orçamento de 1,5 × `LLM_TIMEOUT_S`, novas tentativas incluídas, tanto em um grupo quanto em uma conversa privada, e uma mensagem que chega enquanto um turno anterior da sua conversa ainda está pensando aguarda esse turno terminar antes de começar o seu. Reserve pelo menos 3 × `LLM_TIMEOUT_S` segundos (360 com o padrão).
 - Um comando de memória (como "remember ...") que chega enquanto um turno da sua conversa ainda está pensando é respondido depois desse turno. Um conector que declarou `outbox` recebe `{"handled": false, "owned": true, "replies": []}` na hora e o resultado depois, como uma entrega `follow_up`. Sem `outbox`, o resultado vem na resposta a uma solicitação: a dele mesmo ou a de outra solicitação em espera da mesma conversa, então uma resposta pode trazer `replies` que mencionam outra pessoa que não o remetente do evento.
 
 ## Caixa de saída: `POST /v1/outbox`
@@ -159,7 +159,9 @@ O agente segura a solicitação por até `wait_s` segundos (no máximo 30) até 
 }
 ```
 
-`items` tem a mesma forma de `replies`. `reason` é `proactive`, `follow_up` ou `excuse`, e `conversation_type` é `group` ou `dm`. `conversation_key` é a chave sob a qual o agente guarda a conversa, como `private:telegram:42` para uma mensagem direta. `conversation_id` é o id bruto que o evento trouxe, que em uma mensagem direta é o id do usuário. O agente lembra `reply_handle`, `connector_id` e `capabilities` do último evento admitido em cada conversa, então uma conversa fica alcançável depois de enviar uma mensagem.
+`items` tem a mesma forma de `replies`. `reason` é `proactive`, `follow_up` ou `excuse`, e `conversation_type` é `group` ou `dm`. `conversation_key` é a chave sob a qual o agente guarda a conversa, como `private:telegram:42` para uma conversa privada. `conversation_id` é o id bruto que o evento trouxe, que em uma conversa privada é o id do usuário. O agente lembra `reply_handle`, `connector_id` e `capabilities` do último evento admitido em cada conversa, então uma conversa fica alcançável depois de enviar uma mensagem. Uma exceção mantém em seu lugar um conector que busca a caixa de saída: um evento de um conector sem a capacidade `outbox` não substitui o que outro conector com essa capacidade guardou para a mesma conversa. Assim, um conector que busca a caixa de saída continua alcançando a conversa depois que outro programa, como um assistente de programação, falou nela. Um evento do mesmo conector, ou de qualquer conector que declare `outbox`, substitui os valores guardados como antes.
+
+A página local é, ela própria, um conector de caixa de saída, com o `connector_id` `local-welcome`. Ela recebe apenas as entregas da conversa da própria página e as mostra na visão Conversa.
 
 Informe cada entrega em `acks` na próxima consulta:
 
@@ -185,9 +187,9 @@ Um 404 sem `code` significa que o agente não oferece a caixa de saída. Um `404
 
 ## Falar primeiro sem a caixa de saída
 
-Um conector que não consegue consultar ainda pode abrir uma mensagem direta. O próprio agendador dele, como uma tarefa de plugin do AstrBot ou uma entrada de cron, envia um evento comum de mensagem direta com `"proactive": true` para `/v1/events`. O agente lê o texto como uma deixa para a persona ("está quieto há um dia; a prova era hoje de manhã"), corta em 500 caracteres e nunca o guarda como palavras da pessoa. As instruções proativas do motor continuam decidindo o turno e podem manter a persona em silêncio. Se a persona falar, a resposta volta na resposta HTTP para o agendador repassar.
+Um conector que não consegue consultar ainda pode abrir uma conversa privada. O próprio agendador dele, como uma tarefa de plugin do AstrBot ou uma entrada de cron, envia um evento comum de conversa privada com `"proactive": true` para `/v1/events`. O agente lê o texto como uma deixa para a persona ("está quieto há um dia; a prova era hoje de manhã"), corta em 500 caracteres e nunca o guarda como palavras da pessoa. As instruções proativas do motor continuam decidindo o turno e podem manter a persona em silêncio. Se a persona falar, a resposta volta na resposta HTTP para o agendador repassar.
 
-O evento precisa de tudo o que os eventos normais do conector trazem: os cabeçalhos assinados, todos os campos obrigatórios, o mesmo `platform` e `sender_id` bruto que o conector envia para essa pessoa, texto não vazio e um `message_id` novo a cada vez. Um evento com `message_id` repetido é descartado em silêncio. A deixa conta para o mesmo intervalo de mensagens diretas que as aberturas do próprio agente (`PROACTIVE_DM_COOLDOWN_S`), e não conta como atividade da pessoa.
+O evento precisa de tudo o que os eventos normais do conector trazem: os cabeçalhos assinados, todos os campos obrigatórios, o mesmo `platform` e `sender_id` bruto que o conector envia para essa pessoa, texto não vazio e um `message_id` novo a cada vez. Um evento com `message_id` repetido é descartado em silêncio. A deixa conta para o mesmo intervalo de conversas privadas que as aberturas do próprio agente (`PROACTIVE_DM_COOLDOWN_S`), e não conta como atividade da pessoa.
 
 Defina sempre o indicador; sem ele, o agente guarda a deixa como palavras da pessoa. Um evento de grupo com o indicador é assumido (`owned: true`, para que o conector mantenha o próprio bot em silêncio) e descartado sem ler.
 
@@ -195,7 +197,7 @@ Defina sempre o indicador; sem ele, o agente guarda a deixa como palavras da pes
 
 | Faltando | Efeito |
 |---|---|
-| `outbox` | Sem aberturas agendadas, sem pergunta de acompanhamento e sem desculpa quando uma chamada ao modelo falha em um grupo. Ids de QQ ainda os recebem pelo NapCat quando `QQ_ONEBOT_URL` está definido e acessível. A desculpa de uma mensagem direta volta nos `replies` da resposta e não precisa da caixa de saída. |
+| `outbox` | Sem aberturas agendadas, sem pergunta de acompanhamento e sem desculpa quando uma chamada ao modelo falha em um grupo. Ids de QQ ainda os recebem pelo NapCat quando `QQ_ONEBOT_URL` está definido e acessível. A desculpa de uma conversa privada volta nos `replies` da resposta e não precisa da caixa de saída. |
 | `quote_text` | O agente só entende uma mensagem citada se viu essa mensagem ele mesmo. |
 | `reply_handle` | Igual a faltar `outbox`. |
 | `addressed` errado | A persona trata mensagens dirigidas a ela como conversa de fundo. |

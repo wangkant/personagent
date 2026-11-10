@@ -7,7 +7,7 @@ Este complemento de [AstrBot](https://github.com/AstrBotDevs/AstrBot) conecta As
 
 ## ¿Necesita este complemento?
 
-No es necesario para QQ, WeChat, Telegram ni Discord. personagent conecta estas plataformas por sí mismo, sin AstrBot. Ejecute `personagent` para abrir su página local y añádalas en **Conectar plataformas**.
+No es necesario para QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK ni Stoat. personagent conecta estas plataformas por sí mismo, sin AstrBot. Ejecute `personagent` para abrir su página local y añádalas en **Conectar plataformas**, o ejecute `personagent connect <plataforma>` en un terminal.
 
 Este complemento es necesario cuando AstrBot gestiona la conversación. Esto ocurre en dos casos.
 

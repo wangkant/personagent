@@ -159,7 +159,9 @@ L'agent retient la requête jusqu'à `wait_s` secondes (30 au plus) le temps que
 }
 ```
 
-`items` a la même forme que `replies`. `reason` vaut `proactive`, `follow_up` ou `excuse`, et `conversation_type` vaut `group` ou `dm`. `conversation_key` est la clé sous laquelle l'agent stocke la conversation, comme `private:telegram:42` pour un message privé. `conversation_id` est l'identifiant brut porté par l'événement, soit l'identifiant de l'utilisateur pour un message privé. L'agent retient `reply_handle`, `connector_id` et `capabilities` du dernier événement admis dans chaque conversation : une conversation devient donc joignable dès qu'elle a envoyé un message.
+`items` a la même forme que `replies`. `reason` vaut `proactive`, `follow_up` ou `excuse`, et `conversation_type` vaut `group` ou `dm`. `conversation_key` est la clé sous laquelle l'agent stocke la conversation, comme `private:telegram:42` pour un message privé. `conversation_id` est l'identifiant brut porté par l'événement, soit l'identifiant de l'utilisateur pour un message privé. L'agent retient `reply_handle`, `connector_id` et `capabilities` du dernier événement admis dans chaque conversation : une conversation devient donc joignable dès qu'elle a envoyé un message. Une exception maintient en place un connecteur qui récupère la boîte d'envoi : un événement provenant d'un connecteur sans la capacité `outbox` ne remplace pas ce qu'un autre connecteur doté de cette capacité a enregistré pour la même conversation. Un connecteur qui récupère la boîte d'envoi continue donc de joindre la conversation après qu'un autre programme, comme un assistant de programmation, s'y est exprimé. Un événement provenant du même connecteur, ou de tout connecteur qui déclare `outbox`, remplace les valeurs enregistrées comme auparavant.
+
+La page locale est elle-même un connecteur de boîte d'envoi, avec le `connector_id` `local-welcome`. Elle ne reçoit que les livraisons destinées à la discussion de la page et les affiche dans la vue **Discussion**.
 
 Signalez chaque livraison dans `acks` à l'interrogation suivante :
 

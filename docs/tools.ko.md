@@ -20,6 +20,7 @@
 | `sticker_holdout_eval.py` | 직접 레이블을 붙인 스티커로 스티커 승인 게이트의 안정성과 정확도를 측정합니다 | `runtime/holdout.jsonl`(형식은 `tools/holdout.example.jsonl`)과 `VISION_*` 설정 세 개 | 예. 이미지 수 × `--runs`(기본값 5)회의 비전 호출. 이미지 30개이면 약 150회 | 실험적 |
 | `package_smoke.py` | 설치된 `personagent` 명령을 처음부터 끝까지 확인합니다. 대상은 버전, `init --no-input`, `chat`, `/health`를 포함한 `run`, `doctor --json`입니다 | 설치된 `personagent`(`--personagent PATH`)만 | 아니요. 대역 서버가 응답합니다 | 지원. CI가 Linux와 Windows에서 실행합니다 |
 | `welcome_smoke.py` | 설치된 로컬 페이지를 처음부터 끝까지 확인합니다. 대상은 `start --no-browser`, 키 저장, 실제 캐릭터와의 채팅 한 번, 페이지를 재사용하는 두 번째 실행, 정상 종료입니다 | 설치된 `personagent`(`--personagent PATH`)만 | 아니요. 같은 대역 서버가 응답합니다 | 지원. CI가 Linux와 Windows에서 실행합니다 |
+| `window_smoke.py` | 임시 홈에서 실제 앱 창을 열고, 창 안에서 페이지를 설정해 채팅한 뒤 창을 닫습니다 | macOS와 Linux에서는 app 추가 기능으로 설치한 `personagent`(`pip install "personagent[app]"`). Linux에서는 `xvfb-run` 같은 디스플레이도 필요 | 아니요. 같은 대역 서버가 응답합니다 | 지원. CI가 Linux, macOS, Windows에서 실행합니다 |
 | `release_notes.py` | 릴리스 태그를 `pyproject.toml`과 대조하고 해당 버전의 CHANGELOG 절을 출력합니다 | `v1.1.0` 같은 태그 | 아니요 | 지원. 릴리스 워크플로가 실행합니다 |
 | `locale_gaps.py` | `persona_agent/locales/`의 언어마다 설정 마법사, 터미널 채팅, 데모의 문장 중 번역된 문장 수를 출력합니다. `ja` 같은 언어 코드를 지정하면 아직 번역되지 않아 영어로 표시되는 문장을 출력합니다 | 없음 | 아니요 | 지원. 누락된 문장이 있으면 `tests/test_locales.py`가 실패합니다 |
 

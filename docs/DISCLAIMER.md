@@ -9,16 +9,28 @@ not legal advice.
 
 ## Chat platforms and your accounts
 
-personagent reaches a chat platform in one of two ways. It connects QQ
-official bots, personal WeChat, Telegram and Discord itself. Every other
-platform goes through a third-party bridge, usually the AstrBot that
-personagent downloads and runs for you. Your risk depends on what the
-connection logs in as.
+personagent reaches a chat platform in one of two ways. It connects ten
+platforms itself: QQ official bots, personal WeChat, Telegram, Discord,
+Matrix, Twitch, IRC, Zulip, VK and Stoat. Every other platform goes through a
+third-party bridge, usually the AstrBot that personagent downloads and runs
+for you. Your risk depends on what the connection logs in as.
 
 - **Official bot APIs** are made for bots. These include the official QQ bot
-  API, Tencent's iLink bot API for personal WeChat, Telegram, Discord, Slack,
-  KOOK, Feishu/Lark, DingTalk, WeCom and similar platforms. You still have to
-  follow each platform's developer terms and rate limits.
+  API, Tencent's iLink bot API for personal WeChat, the bot APIs of Telegram
+  and Discord, a Generic bot on Zulip, a VK community's Bots Long Poll API
+  with a community access key, a bot on Stoat, and Slack, KOOK, Feishu/Lark,
+  DingTalk, WeCom and similar platforms. You still have to follow each
+  platform's developer terms and rate limits.
+- **Accounts of their own on open networks.** On Matrix, Twitch and IRC a bot
+  is an ordinary account that you create for it, and personagent uses the
+  network's documented interface: the Matrix Client-Server API on the
+  homeserver that holds the bot account, the Twitch API with a sign-in that
+  the character's account approves for an application you register, and the
+  IRC protocol over TLS with the bot's own nickname. The terms of that
+  homeserver, of Twitch and of each IRC network apply, as do the rules of
+  each room and channel. Some require permission before a bot joins:
+  Libera.Chat, for example, requires the explicit permission of a channel's
+  operators before an AI bot joins.
 - **Unofficial clients** log in as an ordinary user account and drive it with
   software. The platform does not sanction this and may forbid it in its
   terms. It can restrict, freeze or permanently ban the account. This covers:

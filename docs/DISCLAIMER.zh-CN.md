@@ -6,9 +6,10 @@ personagent 以 [PolyForm Noncommercial License 1.0.0](../LICENSE) 发布：可�
 
 ## 聊天平台和你的账号
 
-personagent 接入聊天平台有两种方式。QQ 官方机器人、个人微信、Telegram 和 Discord 由 personagent 直接连接；其他平台通过第三方桥接程序接入，通常是 personagent 代为下载并运行的 AstrBot。风险大小取决于连接以何种身份登录。
+personagent 接入聊天平台有两种方式。QQ 官方机器人、个人微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 这十个平台由 personagent 直接连接；其他平台通过第三方桥接程序接入，通常是 personagent 代为下载并运行的 AstrBot。风险大小取决于连接以何种身份登录。
 
-- **官方机器人接口**本身即为机器人而设计，包括 QQ 官方机器人接口、腾讯为个人微信提供的 iLink 机器人接口，以及 Telegram、Discord、Slack、KOOK、飞书、钉钉、企业微信等平台的接口。使用时仍须遵守各平台的开发者条款和频率限制。
+- **官方机器人接口**本身即为机器人而设计，包括 QQ 官方机器人接口、腾讯为个人微信提供的 iLink 机器人接口、Telegram 和 Discord 的机器人接口、Zulip 的通用机器人（Generic bot）、VK 社区的 Bots Long Poll API（使用社区访问密钥）、Stoat 的机器人，以及 Slack、KOOK、飞书、钉钉、企业微信等平台的接口。使用时仍须遵守各平台的开发者条款和频率限制。
+- **开放网络上的独立账号。** 在 Matrix、Twitch 和 IRC 上，机器人是你为其单独创建的普通账号，personagent 使用该网络公开文档中的接口：在机器人账号所在的服务器上使用 Matrix Client-Server API；使用 Twitch API，并由角色的账号为你注册的开发者应用批准登录；使用基于 TLS 的 IRC 协议及机器人自己的昵称。该服务器、Twitch 和各 IRC 网络的条款均适用，各房间和频道的规则同样适用。部分网络要求机器人加入前须获得许可，例如 Libera.Chat 规定，AI 机器人加入频道前须获得该频道管理员的明确许可。
 - **非官方客户端**以普通用户账号登录，再由软件代为操作。平台不认可这种做法，条款中可能明令禁止，账号可能因此被限制、冻结乃至永久封禁。这类方式包括：
   - **通过 NapCat、LLOneBot、Lagrange 或其他 OneBot 实现接入 QQ**，即高级选项中的 OneBot v11。使用 QQ 官方机器人则完全无需这些实现。腾讯不认可这些实现，从云服务器或境外 IP 登录时风险最高。
   - **通过 mautrix 桥接接入 WhatsApp、Signal、Messenger、Instagram、Google Messages 等**，即 Matrix 连接器的接入方式。桥接程序是这些网络的非官方客户端，其中一些网络的条款对自动发送消息有专门规定。详见 [Matrix 连接器的说明](../integrations/matrix/README.zh-CN.md#各网络的条款)。

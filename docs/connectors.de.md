@@ -159,7 +159,9 @@ Der Agent hält die Anfrage bis zu `wait_s` Sekunden (höchstens 30), bis etwas 
 }
 ```
 
-`items` hat dieselbe Form wie `replies`. `reason` ist `proactive`, `follow_up` oder `excuse`, und `conversation_type` ist `group` oder `dm`. `conversation_key` ist der Schlüssel, unter dem der Agent die Unterhaltung speichert, zum Beispiel `private:telegram:42` für eine DM. `conversation_id` ist die rohe ID aus dem Ereignis, bei einer DM die Nutzer-ID. Der Agent merkt sich `reply_handle`, `connector_id` und `capabilities` aus dem letzten zugelassenen Ereignis jeder Unterhaltung, sodass eine Unterhaltung erreichbar wird, sobald sie eine Nachricht gesendet hat.
+`items` hat dieselbe Form wie `replies`. `reason` ist `proactive`, `follow_up` oder `excuse`, und `conversation_type` ist `group` oder `dm`. `conversation_key` ist der Schlüssel, unter dem der Agent die Unterhaltung speichert, zum Beispiel `private:telegram:42` für eine DM. `conversation_id` ist die rohe ID aus dem Ereignis, bei einer DM die Nutzer-ID. Der Agent merkt sich `reply_handle`, `connector_id` und `capabilities` aus dem letzten zugelassenen Ereignis jeder Unterhaltung, sodass eine Unterhaltung erreichbar wird, sobald sie eine Nachricht gesendet hat. Eine Ausnahme belässt einen abrufenden Konnektor an seinem Platz: Ein Ereignis von einem Konnektor ohne die Fähigkeit `outbox` ersetzt nicht, was ein anderer Konnektor mit dieser Fähigkeit für dieselbe Unterhaltung gespeichert hat. Ein Konnektor, der die Outbox abruft, erreicht die Unterhaltung daher weiterhin, nachdem ein anderes Programm, etwa ein Programmierassistent, dort gesprochen hat. Ein Ereignis vom selben Konnektor oder von einem beliebigen Konnektor, der `outbox` deklariert, ersetzt die gespeicherten Werte wie bisher.
+
+Die lokale Seite ist selbst ein Outbox-Konnektor mit der `connector_id` `local-welcome`. Sie erhält nur die Zustellungen für den eigenen Chat der Seite und zeigt sie in der Ansicht **Chat** an.
 
 Melden Sie jede Zustellung bei der nächsten Abfrage in `acks`:
 

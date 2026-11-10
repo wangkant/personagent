@@ -15,13 +15,13 @@
 
 *Dies ist eine Übersetzung der englischen README, die maßgeblich ist und aktueller sein kann.*
 
-personagent ist eine Figur für Ihre Gruppenchats: Wählen Sie eine fertige aus oder schreiben Sie Ihre eigene, und betreiben Sie sie mit einem beliebigen OpenAI-kompatiblen Modell. Chatten Sie zunächst auf Ihrem eigenen Rechner mit ihr, und holen Sie sie dann von derselben lokalen Seite aus in QQ, WeChat, Telegram, Discord und achtzehn weitere Apps.
+personagent ist eine Figur für Ihre Gruppenchats: Wählen Sie eine fertige aus oder schreiben Sie Ihre eigene, und betreiben Sie sie mit einem beliebigen OpenAI-kompatiblen Modell. Chatten Sie zunächst auf Ihrem eigenen Rechner mit ihr, und holen Sie sie dann von derselben lokalen Seite aus in QQ, WeChat, Telegram, Discord und achtzehn weitere Plattformen.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Die Ansicht Apps verbinden der lokalen Seite mit allen Plattformen, denen die Figur beitreten kann" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Die Ansicht Plattformen verbinden der lokalen Seite mit allen Plattformen, denen die Figur beitreten kann" width="960">
 </p>
 
-<p align="center"><em>Apps verbinden, auf derselben lokalen Seite wie Einrichtung und Chat mit der Figur.</em></p>
+<p align="center"><em>Plattformen verbinden, auf derselben lokalen Seite wie Einrichtung und Chat mit der Figur.</em></p>
 
 ## Warum personagent
 
@@ -45,7 +45,7 @@ Jede Änderung wird festgehalten, und jede lässt sich zurücknehmen.
 <td width="220" valign="top"><strong>Die Figur ist schnell gestartet und dort präsent, wo Ihre Gruppe ist.</strong></td>
 <td valign="top">
 Ein Befehl öffnet sie auf Ihrem Rechner, auf Englisch, Chinesisch oder in acht weiteren Sprachen.<br>
-Fügen Sie einen Modellschlüssel ein, beginnen Sie den Chat und verbinden Sie anschließend eine App per Scan mit dem Smartphone oder mit ein bis zwei eingefügten Werten.
+Fügen Sie einen Modellschlüssel ein, beginnen Sie den Chat und verbinden Sie anschließend eine Plattform per Scan mit dem Smartphone oder mit ein bis zwei eingefügten Werten.
 </td>
 </tr>
 <tr>
@@ -74,15 +74,15 @@ personagent ist kostenlos. Sie bezahlen den gewählten Modelldienst zu dessen ei
 
 ## In Ihre Gruppe einbinden
 
-Öffnen Sie **Apps verbinden** auf der lokalen Seite:
+Öffnen Sie **Plattformen verbinden** auf der lokalen Seite:
 
-| Auf der Seite | Apps | Voraussetzung |
+| Auf der Seite | Plattformen | Voraussetzung |
 |---|---|---|
 | Per Scan verbinden | QQ, persönliches WeChat | Ihr Smartphone. WeChat-Bots erhalten nur Einzelchats |
-| Ein bis zwei Werte einfügen | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, WeCom-KI-Bot, Mattermost, Misskey | Werte aus der Konsole der App; die Seite gibt an, welche |
+| Ein bis zwei Werte einfügen | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, WeCom-KI-Bot, Mattermost, Misskey | Werte aus der Konsole der Plattform; die Seite gibt an, welche |
 | Erweitert | WeCom-App, Offizielles WeChat-Konto, QQ-Webhook, OneBot v11 (NapCat), Satori | Eine öffentliche Adresse oder zusätzliche Software auf diesem Computer |
 
-Verbundene Apps werden bei jedem Start von personagent automatisch mitgestartet. Die Apps mit Scan-Verbindung sowie Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK und Stoat verbindet personagent selbst; die übrigen laufen über ein [AstrBot](https://github.com/AstrBotDevs/AstrBot), das personagent herunterlädt und im Hintergrund betreibt. Auf einem Server startet `personagent up` alles ohne Browser. Die Einrichtung für jede App steht im [Benutzerhandbuch](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#in-einen-chat-bringen), und die vollständige Einrichtung von QQ in der [chinesischen Deployment-Anleitung](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
+Verbundene Plattformen werden bei jedem Start von personagent automatisch mitgestartet. Die Plattformen mit Scan-Verbindung sowie Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK und Stoat verbindet personagent selbst; die übrigen laufen über ein [AstrBot](https://github.com/AstrBotDevs/AstrBot), das personagent herunterlädt und im Hintergrund betreibt. Auf einem Server ohne Bildschirm verbindet `personagent connect <platform>` jede dieser zehn Plattformen im Terminal, mit denselben Schritten und Prüfungen wie die Seite, und `personagent up` startet alles ohne Browser. Die Einrichtung für jede Plattform steht im [Benutzerhandbuch](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#in-einen-chat-bringen), und die vollständige Einrichtung von QQ in der [chinesischen Deployment-Anleitung](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
 
 Sie betreiben bereits AstrBot, Koishi oder Matrix? personagent kann als Figur dahinter laufen: siehe [Brücken, die Sie selbst betreiben](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#brücken-die-sie-selbst-betreiben), den [Satori-Konnektor](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.de.md) und den [Matrix-Konnektor](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.de.md).
 
@@ -102,7 +102,7 @@ personagent connect codex
 personagent connect dsh
 ```
 
-`--remove` entfernt die Verbindung wieder; **Programmierassistenten** unter **Apps verbinden** erledigt beides auch auf der Seite. Das [Benutzerhandbuch](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#programmierassistenten) erklärt die Berechtigungen und `--react`, mit dem die Figur am Ende eines Durchgangs eine kurze Bemerkung macht.
+`--remove` entfernt die Verbindung wieder; **Programmierassistenten** unter **Plattformen verbinden** erledigt beides auch auf der Seite. Das [Benutzerhandbuch](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#programmierassistenten) erklärt die Berechtigungen und `--react`, mit dem die Figur am Ende eines Durchgangs eine kurze Bemerkung macht.
 
 ## Aktualisieren und deinstallieren
 

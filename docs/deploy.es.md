@@ -70,6 +70,8 @@ El servicio no sirve ninguna página. `GET /` responde con una nota breve que re
 
 Añada plataformas en **Conectar plataformas**, en la página local. personagent comprueba las credenciales con la plataforma antes de guardar nada. Si la plataforma las rechaza, la página muestra el rechazo y no conserva nada.
 
+En un servidor sin pantalla, conecte las plataformas que personagent conecta por sí mismo desde un terminal con `personagent connect <plataforma>`, por ejemplo `personagent connect telegram`. El comando realiza los mismos pasos y comprobaciones que la página y guarda los valores en el mismo formato. QQ y WeChat muestran su código QR en el terminal, y Twitch muestra un enlace y un código. Con `--no-input` y todos los valores indicados como opciones, no formula ninguna pregunta y finaliza con el código 2 si falta un valor obligatorio. A continuación, `personagent up` inicia personagent con las plataformas conectadas. La guía de usuario describe [el comando y sus opciones](guide.es.md#conectar-una-plataforma-en-el-terminal).
+
 **Conectadas por el propio personagent.** QQ, WeChat personal, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK y Stoat se ejecutan en un único proceso «direct», sin AstrBot ni NapCat. Si una plataforma no puede cargarse, se omite y las demás se inician igualmente. La tabla recoge las cuatro primeras; la guía de usuario indica [qué requieren las otras seis y cuáles son sus limitaciones](guide.es.md#plataformas-que-personagent-conecta-por-sí-mismo).
 
 | Plataforma | Qué debe hacer | Límites |
@@ -148,6 +150,8 @@ Varios conectores pueden funcionar a la vez con un mismo personagent, porque cad
 Los mensajes no solicitados llegan a una plataforma mediante un conector que recoge la bandeja de salida de personagent. Son los mensajes proactivos, la pregunta tras un rechazo y la disculpa que se envía cuando falla la llamada al modelo en un grupo. La disculpa de un mensaje directo se devuelve en la respuesta a la solicitud que contenía el mensaje.
 
 El proceso direct y los tres conectores incluidos recogen la bandeja de salida, en las plataformas en las que un bot puede escribir primero. QQ limita la frecuencia de los mensajes no solicitados de un bot oficial, y una persona puede desactivarlos. Un conector propio envía `connector_id`, `reply_handle` y `"capabilities": ["outbox"]` con sus eventos y realiza un sondeo largo a `/v1/outbox` (consulte [el protocolo de conectores](connectors.es.md)). Sin un conector de este tipo, personagent solo habla dentro de la solicitud que contenía un mensaje. Los bucles proactivos omiten esas conversaciones, y la pregunta y la disculpa no se envían.
+
+La página local también recoge la bandeja de salida, solo para su propio chat. Un evento de un programa que no recoge la bandeja de salida, como un asistente de programación que habla en un chat, no quita ese chat a un conector que la recoge (consulte [el protocolo de conectores](connectors.es.md#bandeja-de-salida-post-v1outbox)).
 
 `PROACTIVE_PLATFORMS` limita dónde puede hablar primero el bucle proactivo. `PROACTIVE_PLATFORMS=qq_official` lo limita al bot oficial de QQ, y `qq` a QQ a través de NapCat. `CONNECTOR_OUTBOX_ENABLED=false` desactiva por completo la bandeja de salida.
 

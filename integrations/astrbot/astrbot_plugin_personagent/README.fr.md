@@ -7,7 +7,7 @@ Ce plugin [AstrBot](https://github.com/AstrBotDevs/AstrBot) relie AstrBot à [pe
 
 ## En avez-vous besoin ?
 
-Il n'est pas nécessaire pour QQ, WeChat, Telegram ou Discord. personagent connecte lui-même ces plateformes, sans AstrBot. Exécutez `personagent` pour ouvrir sa page locale et ajoutez-les sous **Connecter des plateformes**.
+Il n'est pas nécessaire pour QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK ou Stoat. personagent connecte lui-même ces plateformes, sans AstrBot. Exécutez `personagent` pour ouvrir sa page locale et ajoutez-les sous **Connecter des plateformes**, ou exécutez `personagent connect <plateforme>` dans un terminal.
 
 Ce plugin est nécessaire lorsque AstrBot achemine la conversation, ce qui se produit dans deux cas.
 

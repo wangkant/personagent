@@ -46,7 +46,7 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 API는 에이전트 서비스의 `/api/dashboard/` 아래에 있습니다.
 
 - `GET conversations`와 `GET conversation?id=<chat id>`는 서비스가 알고 있는 채팅과 채팅 하나의 세부 내용을 읽습니다.
-- `POST candidates/<id>/promote`, `replace`, `reject`, `rollback`은 학습한 내용을 바꿉니다. 각 변경은 `personagent learned`와 같은 장부에 행위자 `dashboard`로 기록됩니다.
+- `POST candidates/<id>/promote`, `replace`, `reject`, `rollback`은 학습한 내용을 바꿉니다. 각 변경은 `personagent learned`와 같은 학습 기록에 행위자 `dashboard`로 기록됩니다.
 - `POST memory/forget`은 본문 `{"conv": "<chat id>", "note": "<note id>"}`로 기억 메모 하나를 삭제합니다. `conv`와 id는 `GET conversation`의 `memories` 항목에 있는 값입니다. `note`가 없으면 그 채팅의 핵심 메모를 삭제합니다.
 
 모든 호출에는 런타임 폴더(`AGENT_RUNTIME_DIR`로 옮기지 않으면 `<home>/runtime/`)의 `dashboard.token`에 있는 토큰을 `X-Personagent-Dashboard-Token` 헤더에 담아야 합니다. 이 파일은 소유자만 읽을 수 있고, 서비스가 시작할 때 만듭니다. 헤더가 없는 호출은 401(`dashboard_token`), 잘못된 토큰은 403(`wrong_token`)을 받습니다. `CONNECTOR_TOKEN`과 `X-Personagent-Token`으로는 열 수 없습니다. 이들은 커넥터와 `/health/details` 전용입니다.
@@ -69,6 +69,8 @@ API는 에이전트 서비스의 `/api/dashboard/` 아래에 있습니다.
 ## 플랫폼 연결하기
 
 로컬 페이지의 **플랫폼 연결**에서 플랫폼을 추가하십시오. personagent는 무언가를 저장하기 전에 자격 증명을 플랫폼에 확인합니다. 플랫폼이 거부하면 페이지에 거부 내용이 표시되고 아무것도 남지 않습니다.
+
+디스플레이가 없는 서버에서는 personagent가 직접 연결하는 플랫폼을 터미널에서 `personagent connect <platform>`(예: `personagent connect telegram`)으로 연결하십시오. 이 명령은 페이지와 같은 단계와 확인을 거쳐 값을 같은 형식으로 저장합니다. QQ와 WeChat은 터미널에 QR 코드를 표시하고, Twitch는 링크와 코드를 출력합니다. `--no-input`을 지정하고 모든 값을 옵션으로 주면 명령은 아무것도 묻지 않으며, 필수 값이 없으면 코드 2로 종료합니다. 그런 다음 `personagent up`이 personagent를 연결된 플랫폼과 함께 시작합니다. [명령과 옵션](guide.ko.md#터미널에서-플랫폼-연결하기)은 사용자 가이드에서 설명합니다.
 
 **personagent가 직접 연결하는 것.** QQ, 개인 WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat는 하나의 "direct" 프로세스에서 실행되며 AstrBot도 NapCat도 필요하지 않습니다. 불러올 수 없는 플랫폼은 건너뛰고 나머지 플랫폼은 그대로 시작합니다. 아래 표는 처음 네 개 플랫폼을 다룹니다. 나머지 여섯 개 플랫폼에 필요한 사항과 제한은 사용자 가이드의 [해당 절](guide.ko.md#personagent가-직접-연결하는-플랫폼)에 나와 있습니다.
 
@@ -123,7 +125,7 @@ Docker나 다른 호스트의 AstrBot은 [사용자 가이드](guide.ko.md#직�
 
 관리형 AstrBot에서는 로컬 페이지에서 **고급 > OneBot v11 (NapCat)**을 추가하고 NapCat을 `ws://127.0.0.1:6199/ws`로 지정하십시오. [중국어 가이드](deploy.zh-CN.md)에 단계별 설명이 있습니다. 직접 운영하는 AstrBot에서는 플러그인의 `excluded_platforms`에서 `aiocqhttp`를 빼고, `CONNECTOR_QQ_PLATFORMS=aiocqhttp`를 설정하고(`--qq`가 둘 다 해 줍니다), `QQ_BOT_ID`를 설정하십시오(`personagent connect astrbot`이 묻습니다).
 
-**여기서는 `CONNECTOR_QQ_PLATFORMS`가 필수입니다.** 없으면 QQ ID가 네임스페이스가 붙은 채(`aiocqhttp:123456`) 도착해 모든 대화가 새것처럼 보입니다. 기억, 기록, 학습한 예시는 접두사 없는 ID를 키로 쓰고, 장부는 대화 ID에서 행 ID를 만들기 때문에 갈라진 것은 나중에 복구할 수 없습니다.
+**여기서는 `CONNECTOR_QQ_PLATFORMS`가 필수입니다.** 없으면 QQ ID가 네임스페이스가 붙은 채(`aiocqhttp:123456`) 도착해 모든 대화가 새것처럼 보입니다. 기억, 기록, 학습한 예시는 접두사 없는 ID를 키로 쓰고, 학습 기록은 대화 ID에서 행 ID를 만들기 때문에 갈라진 것은 나중에 복구할 수 없습니다.
 
 접두사 없는 ID는 QQ 권한을 가지므로, `ADMIN_IDS`, `ACCESS_GROUPS`, `ACCESS_DM_USERS`의 QQ 항목은 플러그인 허용 목록 위에 추가로 적용됩니다. QQ DM은 `dm_users`에 있고 *동시에* 관리자나 `ACCESS_DM_USERS` 항목에서 와야 합니다. `ACCESS_GROUPS`에 QQ 그룹이 있으면 QQ 그룹은 양쪽에 모두 있어야 합니다. 그 권한을 커넥터에 맡길 수 있을 때만 플랫폼을 `CONNECTOR_QQ_PLATFORMS`에 넣으십시오.
 
@@ -149,9 +151,11 @@ Docker나 다른 호스트의 AstrBot은 [사용자 가이드](guide.ko.md#직�
 
 direct 프로세스와 여기 있는 세 커넥터는 봇이 먼저 보낼 수 있는 플랫폼에서 아웃박스를 가져옵니다. QQ는 공식 봇의 자발적 메시지에 속도 제한을 두며, 상대방이 끌 수도 있습니다. 직접 만든 커넥터는 이벤트와 함께 `connector_id`, `reply_handle`, `"capabilities": ["outbox"]`를 보내고 `/v1/outbox`를 롱 폴링합니다([커넥터 프로토콜](connectors.ko.md) 참고). 그런 커넥터가 없으면 personagent는 메시지를 가져온 요청 안에서만 말합니다. 자발 루프는 그 대화를 건너뛰고, 질문과 변명은 보내지지 않습니다.
 
+로컬 페이지도 아웃박스를 가져오지만, 페이지 자체의 채팅에 대해서만 가져옵니다. 아웃박스를 가져오지 않는 프로그램(채팅에서 말하는 코딩 어시스턴트 등)에서 온 이벤트 때문에 아웃박스를 가져오는 커넥터가 그 채팅을 잃지는 않습니다([커넥터 프로토콜](connectors.ko.md#아웃박스-post-v1outbox) 참고).
+
 `PROACTIVE_PLATFORMS`는 자발 루프가 먼저 말할 수 있는 곳을 제한합니다. `PROACTIVE_PLATFORMS=qq_official`은 QQ 공식 봇으로, `qq`는 NapCat을 통한 QQ로 한정합니다. `CONNECTOR_OUTBOX_ENABLED=false`는 아웃박스를 완전히 끕니다.
 
-아웃박스 없이 DM에서 먼저 말하려면, 직접 운영하는 스케줄러(AstrBot 플러그인 작업, cron 항목)가 `"proactive": true`를 표시한 DM 이벤트를 보낼 수 있습니다. [아웃박스 없이 먼저 말하기](connectors.ko.md#아웃박스-없이-먼저-말하기)를 참고하십시오.
+아웃박스 없이 DM에서 먼저 발언하려면, 직접 운영하는 스케줄러(AstrBot 플러그인 작업, cron 항목)가 `"proactive": true`를 표시한 DM 이벤트를 보낼 수 있습니다. [아웃박스 없이 먼저 발언하기](connectors.ko.md#아웃박스-없이-먼저-발언하기)를 참고하십시오.
 
 ## 엔드포인트 공개하기
 
@@ -178,11 +182,11 @@ direct 프로세스와 여기 있는 세 커넥터는 봇이 먼저 보낼 수 �
 
 ## 비용
 
-- **점검은 크레딧을 씁니다.** `personagent doctor`와 `/health/details`는 설정된 각 모델 엔드포인트(채팅, DM, 평가, 비전)에 아주 작은 채팅 완성을 한 번 보냅니다. `EMBEDDING_MODEL`이 있으면 임베딩을 한 번, `TAVILY_API_KEY`가 있으면 Tavily 검색을 한 번 보냅니다. `/health`와 설정 및 장부 확인은 무료입니다.
+- **점검은 크레딧을 씁니다.** `personagent doctor`와 `/health/details`는 설정된 각 모델 엔드포인트(채팅, DM, 평가, 비전)에 아주 작은 채팅 완성을 한 번 보냅니다. `EMBEDDING_MODEL`이 있으면 임베딩을 한 번, `TAVILY_API_KEY`가 있으면 Tavily 검색을 한 번 보냅니다. `/health`와 설정 및 학습 기록 확인은 무료입니다.
 - **`tools/`의 스크립트**는 제각각입니다. 무료인 것도 모델을 호출하는 것도 있습니다. [tools.md](tools.ko.md)의 표에 나와 있습니다.
 - **`personagent eval`**은 케이스마다 모델을 호출합니다. 페르소나와 학습 스위트에는 판정용 두 번째 모델(`BENCH_JUDGE_MODEL`)도 필요합니다.
-- **메모리.** 네임스페이스가 붙은(QQ 외) 대화가 256개를 넘으면 가장 오래 활동이 없던 유휴 대화가 최근 기록과 대기 중인 반응을 잃습니다. 장기 기억, 핵심 메모, 장부는 남습니다. 요청 처리 중인 대화는 절대 밀려나지 않습니다. 장기 기억은 시작할 때 디스크에서 불러오며 이 상한의 대상이 아닙니다.
-- **디스크.** `runtime/`의 증거 로그와 후보 장부는 추가 전용이고 잘리지 않습니다. `personagent doctor`는 어느 쪽이든 50MB를 넘으면 경고합니다(`LEDGER_EVIDENCE_WARN_BYTES`, `LEDGER_CANDIDATES_WARN_BYTES`). 봇이 배운 모든 것이 들어 있으니 `runtime/`을 백업하십시오.
+- **메모리.** 네임스페이스가 붙은(QQ 외) 대화가 256개를 넘으면 가장 오래 활동이 없던 유휴 대화가 최근 기록과 대기 중인 반응을 잃습니다. 장기 기억, 핵심 메모, 학습 기록은 남습니다. 요청 처리 중인 대화는 절대 밀려나지 않습니다. 장기 기억은 시작할 때 디스크에서 불러오며 이 상한의 대상이 아닙니다.
+- **디스크.** `runtime/`의 증거 로그와 후보 학습 기록은 추가 전용이고 잘리지 않습니다. `personagent doctor`는 어느 쪽이든 50MB를 넘으면 경고합니다(`LEDGER_EVIDENCE_WARN_BYTES`, `LEDGER_CANDIDATES_WARN_BYTES`). 봇이 배운 모든 것이 들어 있으니 `runtime/`을 백업하십시오.
 
 ## 봇이 조용해졌을 때
 

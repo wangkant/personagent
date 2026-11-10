@@ -7,7 +7,7 @@
 
 ## 是否需要此外掛程式
 
-QQ、微信、Telegram、Discord 不需要此外掛程式。personagent 會直接連線這些平台，不經過 AstrBot。執行 `personagent` 開啟本機頁面，在 **連接平台** 中新增即可。
+QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 不需要此外掛程式。personagent 會直接連線這些平台，不經過 AstrBot。執行 `personagent` 開啟本機頁面，在 **連接平台** 中新增即可；也可以在終端機中執行 `personagent connect <平台>`。
 
 只有由 AstrBot 負責收發訊息時才需要此外掛程式，分為兩種情況。
 

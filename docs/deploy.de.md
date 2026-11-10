@@ -68,7 +68,9 @@ Der Dienst liefert keine Seite aus. `GET /` antwortet mit einem kurzen Hinweis, 
 
 ## Plattformen verbinden
 
-Fügen Sie Plattformen unter **Apps verbinden** auf der lokalen Seite hinzu. personagent prüft die Zugangsdaten bei der Plattform, bevor es etwas speichert. Lehnt die Plattform sie ab, zeigt die Seite die Ablehnung an und speichert nichts.
+Fügen Sie Plattformen unter **Plattformen verbinden** auf der lokalen Seite hinzu. personagent prüft die Zugangsdaten bei der Plattform, bevor es etwas speichert. Lehnt die Plattform sie ab, zeigt die Seite die Ablehnung an und speichert nichts.
+
+Auf einem Server ohne Bildschirm verbinden Sie die Plattformen, die personagent selbst verbindet, im Terminal mit `personagent connect <platform>`, zum Beispiel `personagent connect telegram`. Der Befehl führt dieselben Schritte und Prüfungen aus wie die Seite und speichert die Werte in derselben Form. QQ und WeChat geben ihren QR-Code im Terminal aus, Twitch gibt einen Link und einen Code aus. Mit `--no-input` und allen Werten als Optionen stellt der Befehl keine Fragen und beendet sich mit Code 2, wenn ein erforderlicher Wert fehlt. Anschließend startet `personagent up` personagent mit seinen verbundenen Plattformen. Das Benutzerhandbuch beschreibt [den Befehl und seine Optionen](guide.de.md#eine-plattform-im-terminal-verbinden).
 
 **Von personagent selbst verbunden.** QQ, persönliches WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK und Stoat laufen in einem „direct“-Prozess, ohne AstrBot und ohne NapCat. Eine Plattform, die sich nicht laden lässt, wird übersprungen; die übrigen starten trotzdem. Die Tabelle behandelt die ersten vier; das Benutzerhandbuch beschreibt, [was die anderen sechs benötigen und welche Einschränkungen gelten](guide.de.md#plattformen-die-personagent-selbst-verbindet).
 
@@ -148,6 +150,8 @@ Mehrere Konnektoren können nebeneinander gegen ein personagent laufen, weil jed
 Nachrichten, die nicht auf eine Anfrage antworten, erreichen eine Plattform über einen Konnektor, der personagents Outbox abruft. Das sind proaktive Einstiege, die Frage nach einer Ablehnung und die Ausrede, wenn der Modellaufruf in einer Gruppe fehlschlägt. Die Ausrede in einer DM wird in der Response auf die Anfrage zurückgegeben, die die Nachricht übermittelt hat.
 
 Der direct-Prozess und die drei hier beschriebenen Konnektoren rufen alle die Outbox ab, auf Plattformen, auf denen ein Bot zuerst schreiben darf. QQ begrenzt die Rate unaufgeforderter Nachrichten eines offiziellen Bots, und eine Person kann sie deaktivieren. Ein eigener Konnektor sendet `connector_id`, `reply_handle` und `"capabilities": ["outbox"]` mit seinen Ereignissen und macht Long-Polling auf `/v1/outbox` (siehe [das Konnektor-Protokoll](connectors.de.md)). Ohne einen solchen Konnektor antwortet personagent nur innerhalb der Anfrage, die eine Nachricht übermittelt hat. Die proaktiven Schleifen überspringen diese Gespräche, und die Frage und die Ausrede werden nicht gesendet.
+
+Auch die lokale Seite ruft die Outbox ab, jedoch nur für ihren eigenen Chat. Ein Ereignis von einem Programm, das die Outbox nicht abruft, etwa von einem Programmierassistenten, der in einem Chat spricht, nimmt diesen Chat keinem Konnektor weg, der die Outbox abruft (siehe [das Konnektor-Protokoll](connectors.de.md#outbox-post-v1outbox)).
 
 `PROACTIVE_PLATFORMS` begrenzt, wo die proaktive Schleife zuerst sprechen darf. `PROACTIVE_PLATFORMS=qq_official` beschränkt sie auf den offiziellen QQ-Bot, `qq` auf QQ über NapCat. `CONNECTOR_OUTBOX_ENABLED=false` deaktiviert die Outbox vollständig.
 

@@ -70,6 +70,8 @@ Le service ne sert aucune page. `GET /` répond par une courte note qui renvoie 
 
 Ajoutez des plateformes sous **Connecter des plateformes** sur la page locale. personagent vérifie les identifiants auprès de la plateforme avant d'enregistrer quoi que ce soit. Si la plateforme les refuse, la page affiche le refus et ne conserve rien.
 
+Sur un serveur sans écran, connectez depuis un terminal les plateformes que personagent connecte lui-même avec `personagent connect <plateforme>`, par exemple `personagent connect telegram`. La commande effectue les mêmes étapes et les mêmes vérifications que la page et enregistre les valeurs sous la même forme. QQ et WeChat affichent leur QR code dans le terminal, et Twitch affiche un lien et un code. Avec `--no-input` et toutes les valeurs passées en options, elle ne pose aucune question et sort avec le code 2 lorsqu'une valeur obligatoire manque. `personagent up` démarre ensuite personagent avec ses plateformes connectées. Le guide d'utilisation décrit [la commande et ses options](guide.fr.md#connecter-une-plateforme-dans-le-terminal).
+
 **Connectées par personagent lui-même.** QQ, WeChat personnel, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK et Stoat fonctionnent dans un seul processus « direct », sans AstrBot ni NapCat. Une plateforme qui ne peut pas être chargée est ignorée, et les autres démarrent malgré tout. Le tableau ci-dessous couvre les quatre premières ; le guide d'utilisation indique [ce dont les six autres ont besoin et leurs limites](guide.fr.md#plateformes-connectées-par-personagent-lui-même).
 
 | Plateforme | Ce que vous faites | Limites |
@@ -148,6 +150,8 @@ Plusieurs connecteurs peuvent fonctionner côte à côte avec un seul personagen
 Les messages que personne n'a demandés atteignent une plateforme via un connecteur qui récupère la boîte d'envoi de personagent. Ce sont les prises de parole proactives, la question après un rejet et l'excuse quand l'appel au modèle échoue dans un groupe. L'excuse d'un message privé repart dans la réponse à la requête qui a apporté le message.
 
 Le processus direct et les trois connecteurs de ce dépôt récupèrent tous la boîte d'envoi, sur les plateformes où un bot peut écrire en premier. QQ limite le débit des messages spontanés d'un bot officiel, et une personne peut les désactiver. Votre propre connecteur envoie `connector_id`, `reply_handle` et `"capabilities": ["outbox"]` avec ses événements et fait une interrogation longue de `/v1/outbox` (voir [le protocole des connecteurs](connectors.fr.md)). Sans un tel connecteur, personagent ne parle qu'à l'intérieur de la requête qui a apporté un message. Les boucles proactives ignorent ces conversations, et la question et l'excuse ne sont pas envoyées.
+
+La page locale récupère elle aussi la boîte d'envoi, uniquement pour sa propre discussion. Un événement provenant d'un programme qui ne récupère pas la boîte d'envoi, comme un assistant de programmation qui s'exprime dans une discussion, ne retire pas cette discussion à un connecteur qui la récupère (voir [le protocole des connecteurs](connectors.fr.md#boîte-denvoi--post-v1outbox)).
 
 `PROACTIVE_PLATFORMS` limite où la boucle proactive peut parler en premier. `PROACTIVE_PLATFORMS=qq_official` la garde sur le bot QQ officiel, et `qq` sur QQ via NapCat. `CONNECTOR_OUTBOX_ENABLED=false` désactive complètement la boîte d'envoi.
 

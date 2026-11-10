@@ -6,9 +6,10 @@ personagent は [PolyForm Noncommercial License 1.0.0](../LICENSE) で公開さ�
 
 ## チャットプラットフォームとあなたのアカウント
 
-personagent がチャットプラットフォームにつながる方法は 2 つあります。QQ 公式ボット、個人の WeChat、Telegram、Discord には自分で接続します。それ以外のプラットフォームはサードパーティのブリッジを経由し、通常は personagent がダウンロードして動かす AstrBot を使います。リスクは、その接続が何としてログインするかで決まります。
+personagent がチャットプラットフォームにつながる方法は 2 つあります。QQ 公式ボット、個人の WeChat、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat の 10 個のプラットフォームには自分で接続します。それ以外のプラットフォームはサードパーティのブリッジを経由し、通常は personagent がダウンロードして動かす AstrBot を使います。リスクは、その接続が何としてログインするかで決まります。
 
-- **公式ボット API** はボットのために作られています。QQ 公式ボット API、個人の WeChat 向けの Tencent iLink ボット API、Telegram、Discord、Slack、KOOK、Feishu/Lark、DingTalk、WeCom などのプラットフォームが該当します。それでも、各プラットフォームの開発者規約とレート制限には従う必要があります。
+- **公式ボット API** はボットのために作られています。QQ 公式ボット API、個人の WeChat 向けの Tencent iLink ボット API、Telegram と Discord のボット API、Zulip の Generic bot、コミュニティのアクセスキーを使う VK コミュニティの Bots Long Poll API、Stoat のボット、そして Slack、KOOK、Feishu/Lark、DingTalk、WeCom などのプラットフォームが該当します。それでも、各プラットフォームの開発者規約とレート制限には従う必要があります。
+- **オープンなネットワーク上の専用アカウント。** Matrix、Twitch、IRC では、ボットはあなたがボットのために作成する普通のアカウントです。personagent はそのネットワークの文書化されたインターフェースを使います。Matrix ではボットのアカウントがあるホームサーバーの Matrix Client-Server API を使い、Twitch ではあなたが登録したアプリケーションに対してキャラクターのアカウントが承認したサインインで Twitch API を使い、IRC ではボット自身のニックネームで TLS 上の IRC プロトコルを使います。そのホームサーバー、Twitch、各 IRC ネットワークの規約が適用され、各ルームと各チャンネルのルールも適用されます。ボットが参加する前に許可を求めるところもあります。たとえば Libera.Chat では、AI ボットがチャンネルに参加する前に、そのチャンネルのオペレーターの明示的な許可が必要です。
 - **非公式クライアント** は普通のユーザーアカウントとしてログインし、ソフトウェアで操作します。プラットフォームはこれを認めておらず、規約で禁じている場合もあります。アカウントの制限、凍結、永久停止につながることがあります。次のものが該当します。
   - **NapCat、LLOneBot、Lagrange などの OneBot 実装を使う QQ**。これは上級者向けの OneBot v11 オプションです。QQ 公式ボットにはどれも必要ありません。Tencent はこれらを認めておらず、クラウドや海外の IP アドレスからはリスクが最も高くなります。
   - **mautrix ブリッジ経由の WhatsApp、Signal、Messenger、Instagram、Google Messages など**。Matrix コネクターはこの方法でこれらにつながります。ブリッジは各ネットワークの非公式クライアントであり、自動メッセージについて規約で定めているネットワークもあります。[Matrix コネクターの注記](../integrations/matrix/README.ja.md#各ネットワークの規約)を参照してください。

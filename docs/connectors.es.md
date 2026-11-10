@@ -159,7 +159,9 @@ El agente retiene la solicitud durante un máximo de `wait_s` segundos (30 como 
 }
 ```
 
-`items` tiene la misma estructura que `replies`. `reason` es `proactive`, `follow_up` o `excuse`, y `conversation_type` es `group` o `dm`. `conversation_key` es la clave con la que el agente guarda la conversación, como `private:telegram:42` para un mensaje directo. `conversation_id` es el id sin procesar que incluía el evento, que en un mensaje directo es el id de usuario. El agente recuerda `reply_handle`, `connector_id` y `capabilities` del último evento admitido en cada conversación, por lo que una conversación es accesible en cuanto ha enviado un mensaje.
+`items` tiene la misma estructura que `replies`. `reason` es `proactive`, `follow_up` o `excuse`, y `conversation_type` es `group` o `dm`. `conversation_key` es la clave con la que el agente guarda la conversación, como `private:telegram:42` para un mensaje directo. `conversation_id` es el id sin procesar que incluía el evento, que en un mensaje directo es el id de usuario. El agente recuerda `reply_handle`, `connector_id` y `capabilities` del último evento admitido en cada conversación, por lo que una conversación es accesible en cuanto ha enviado un mensaje. Una excepción mantiene en su lugar a un conector que recoge la bandeja de salida: un evento de un conector sin la capacidad `outbox` no sustituye lo que otro conector con esa capacidad guardó para la misma conversación. Por tanto, un conector que recoge la bandeja de salida sigue pudiendo acceder a la conversación después de que otro programa, como un asistente de programación, haya hablado en ella. Un evento del mismo conector, o de cualquier conector que declare `outbox`, sustituye los valores guardados como hasta ahora.
+
+La página local es en sí misma un conector de bandeja de salida, con el `connector_id` `local-welcome`. Solo recibe las entregas del chat de la propia página y las muestra en la vista Chat.
 
 Informe de cada entrega en `acks` en la siguiente consulta:
 

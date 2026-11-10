@@ -7,7 +7,7 @@
 
 ## 必要ですか？
 
-QQ、WeChat、Telegram、Discord には必要ありません。personagent が AstrBot なしで直接つなぎます。`personagent` を実行してローカルページを開き、**プラットフォーム連携** で追加してください。
+QQ、WeChat、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat には必要ありません。personagent が AstrBot なしで直接つなぎます。`personagent` を実行してローカルページを開き、**プラットフォーム連携** で追加するか、ターミナルで `personagent connect <platform>` を実行してください。
 
 このプラグインが必要なのは、AstrBot が会話を運ぶときです。次の 2 つの場合があります。
 

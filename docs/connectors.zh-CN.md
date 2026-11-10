@@ -159,7 +159,9 @@ agent 最多将请求挂起 `wait_s` 秒（上限 30），直到有内容排队�
 }
 ```
 
-`items` 的结构与 `replies` 相同。`reason` 是 `proactive`、`follow_up` 或 `excuse`，`conversation_type` 是 `group` 或 `dm`。`conversation_key` 是 agent 存储该会话所用的键，例如私聊的 `private:telegram:42`。`conversation_id` 是事件带来的原始 id，私聊时即为用户 id。agent 记录每个会话最近一条被接纳事件中的 `reply_handle`、`connector_id` 和 `capabilities`，因此会话只要发送过一条消息，即可被联系到。
+`items` 的结构与 `replies` 相同。`reason` 是 `proactive`、`follow_up` 或 `excuse`，`conversation_type` 是 `group` 或 `dm`。`conversation_key` 是 agent 存储该会话所用的键，例如私聊的 `private:telegram:42`。`conversation_id` 是事件带来的原始 id，私聊时即为用户 id。agent 记录每个会话最近一条被接纳事件中的 `reply_handle`、`connector_id` 和 `capabilities`，因此会话只要发送过一条消息，即可被联系到。有一项例外，用于保留拉取 outbox 的连接器：来自不具备 `outbox` 能力的连接器的事件，不会替换另一个具备该能力的连接器为同一会话保存的信息。因此，即使其他程序（例如编程助手）在该会话中发过言，拉取 outbox 的连接器仍可联系到该会话。来自同一连接器的事件，或来自任何声明了 `outbox` 的连接器的事件，仍照常替换已保存的信息。
+
+本地页面本身也是一个 outbox 连接器，其 `connector_id` 为 `local-welcome`。它只接收发往本页面对话的投递，并将其显示在「开始聊天」视图中。
 
 请在下一次拉取的 `acks` 中报告每次投递：
 

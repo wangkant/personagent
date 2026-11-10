@@ -7,7 +7,7 @@
 
 ## 是否需要本插件
 
-QQ、微信、Telegram、Discord 不需要本插件。personagent 会直接连接这些平台，不经过 AstrBot。运行 `personagent` 打开本地页面，在 **连接平台** 中添加即可。
+QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 不需要本插件。personagent 会直接连接这些平台，不经过 AstrBot。运行 `personagent` 打开本地页面，在 **连接平台** 中添加即可；也可以在终端中运行 `personagent connect <平台>`。
 
 只有在由 AstrBot 负责收发消息时才需要本插件，分为两种情况。
 

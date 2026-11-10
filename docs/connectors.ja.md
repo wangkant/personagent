@@ -159,7 +159,9 @@ QQ は唯一の例外で、互換性のために残しています。ID はそ�
 }
 ```
 
-`items` は `replies` と同じ形です。`reason` は `proactive`、`follow_up`、`excuse` のいずれかで、`conversation_type` は `group` か `dm` です。`conversation_key` はエージェントが会話を保存するキーで、DM なら `private:telegram:42` のようになります。`conversation_id` はイベントが運んだ生の ID で、DM ではユーザー ID です。エージェントは各会話で最後に受け入れたイベントの `reply_handle`、`connector_id`、`capabilities` を覚えているので、会話は 1 通送れば到達可能になります。
+`items` は `replies` と同じ形です。`reason` は `proactive`、`follow_up`、`excuse` のいずれかで、`conversation_type` は `group` か `dm` です。`conversation_key` はエージェントが会話を保存するキーで、DM なら `private:telegram:42` のようになります。`conversation_id` はイベントが運んだ生の ID で、DM ではユーザー ID です。エージェントは各会話で最後に受け入れたイベントの `reply_handle`、`connector_id`、`capabilities` を覚えているので、会話は 1 通送れば到達可能になります。ただし、取得するコネクターを維持するための例外が 1 つあります。`outbox` 機能を持たないコネクターからのイベントは、その機能を持つ別のコネクターが同じ会話について保存した値を置き換えません。したがって、アウトボックスを取得するコネクターは、コーディングアシスタントなどの別のプログラムがその会話で発言した後も、その会話に到達し続けます。同じコネクターからのイベント、または `outbox` を宣言しているコネクターからのイベントは、これまでどおり保存された値を置き換えます。
+
+ローカルページ自体も、`connector_id` が `local-welcome` のアウトボックスコネクターです。ページ自身のチャット宛ての配信だけを受け取り、それをチャットビューに表示します。
 
 次の取得の `acks` で各配信を報告してください。
 

@@ -159,7 +159,9 @@ agent 最多會將請求保留 `wait_s` 秒（上限為 30），直到有內容�
 }
 ```
 
-`items` 的格式與 `replies` 相同。`reason` 為 `proactive`、`follow_up` 或 `excuse`，`conversation_type` 為 `group` 或 `dm`。`conversation_key` 是 agent 儲存此對話所用的鍵，例如私訊的 `private:telegram:42`。`conversation_id` 是事件帶來的原始 id，私訊時即為使用者 id。agent 會記住每個對話中最近一則被接受事件的 `reply_handle`、`connector_id` 和 `capabilities`，因此對話只要傳送過一則訊息，即可聯繫。
+`items` 的格式與 `replies` 相同。`reason` 為 `proactive`、`follow_up` 或 `excuse`，`conversation_type` 為 `group` 或 `dm`。`conversation_key` 是 agent 儲存此對話所用的鍵，例如私訊的 `private:telegram:42`。`conversation_id` 是事件帶來的原始 id，私訊時即為使用者 id。agent 會記住每個對話中最近一則被接受事件的 `reply_handle`、`connector_id` 和 `capabilities`，因此對話只要傳送過一則訊息，即可聯繫。有一項例外，用於保留拉取 outbox 的聯結器：來自不具備 `outbox` 能力之聯結器的事件，不會取代另一個具備此能力的聯結器為同一對話儲存的資訊。因此，即使其他程式（例如程式設計助理）曾在該對話中發言，拉取 outbox 的聯結器仍可聯繫該對話。來自同一聯結器的事件，或來自任何宣告了 `outbox` 之聯結器的事件，仍照常取代已儲存的資訊。
+
+本機頁面本身也是一個 outbox 聯結器，其 `connector_id` 為 `local-welcome`。它只接收送往本頁面對話的投遞，並將其顯示在「開始聊天」檢視中。
 
 請在下一次拉取的 `acks` 中回報每次投遞：
 

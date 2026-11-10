@@ -5,7 +5,7 @@
 本文依序說明如何將角色接入 QQ 群組：安裝、填寫金鑰、以手機 QQ 掃描。QQ 官方機器人由 personagent 直接連線，不需要 AstrBot，也不需要 NapCat 和 QQ 次要帳號。微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 同樣由它直接連線。如需使用個人 QQ 次要帳號，請參閱後文的[第三方路線：AstrBot + NapCat](#第三方路線astrbot--napcat)。
 
 ```text
-QQ 群  ⇄  personagent（直連程序 + 角色服務）  ⇄  AI 模型
+QQ 群  ⇄  personagent（直連處理程序 + 角色服務）  ⇄  AI 模型
 ```
 
 每一步都註明了「你應該看到」的結果。如果結果不符，請勿繼續，直接參閱[機器人未回覆](#機器人未回覆)。
@@ -58,7 +58,7 @@ personagent
 - **personagent 直接連線**：QQ、個人微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat。個人微信以手機微信掃描登入（使用騰訊的 iLink 機器人介面），僅支援私訊，因為微信不會將群組訊息轉交給這類機器人。Telegram 需要貼上 @BotFather 提供的 Token；Discord 需要貼上機器人 Token，並開啟 Message Content Intent。其餘六個平台需要填寫的內容與使用限制，請參閱[使用手冊](guide.zh-TW.md#personagent-直接連線的平台)。
 - **透過託管的 AstrBot 連線**：其餘平台。首次連接這類平台時，personagent 會下載 AstrBot 和獨立的 Python 3.12，並在背景執行。它沒有網頁管理後台，也不需要另外登入帳號。只需貼上一至兩項即可連接的平台有：KOOK、飛書（長連線）、釘釘（Stream 模式）、Slack（Socket Mode，頁面上的連結會預先填好應用程式設定）、企業微信智慧機器人（長連線）、Mattermost、Misskey。「進階」分組中的平台需要公開網址或本機的其他軟體：企業微信應用、微信公眾號、QQ（Webhook）、OneBot v11（NapCat）、Satori。暫不提供 LINE。
 
-已連接的平台預設會回覆所有群組與私訊。如果只想開放其中一部分，請在 `.env` 中設定 `ACCESS_GROUPS` 或 `ACCESS_DM_USERS`（格式為 `平臺:ID`，請參閱[下文](#透過你已在執行的-astrbot)）。
+已連接的平台預設會回覆所有群組與私訊。如果只想開放其中一部分，請在 `.env` 中設定 `ACCESS_GROUPS` 或 `ACCESS_DM_USERS`（格式為 `平台:ID`，請參閱[下文](#透過你已在執行的-astrbot)）。
 
 ## 日常使用
 
@@ -133,7 +133,7 @@ AstrBot 透過外掛程式 `astrbot_plugin_personagent` 將訊息交給 personag
 
 安裝完成後，請重新啟動 AstrBot（或在外掛程式頁面重新載入外掛程式），然後以 `personagent run` 啟動角色服務並保持執行。在 AstrBot 中新增 OneBot v11 機器人（反向 WebSocket 連接埠 `6199`），再依上一節第 3 步讓 NapCat 指向它。AstrBot 的介面以[其官方文件](https://docs.astrbot.app)為準。
 
-如果 AstrBot 在 Docker 中執行，`127.0.0.1` 指的是容器本身，而外掛程式會拒絕傳送至其他位址的明文 `http://`。可擇一處理：讓 AstrBot（以及同一個 compose 中的 NapCat）使用主機網路（`network_mode: host`，`docker run` 時使用 `--network host`；Docker Desktop 需要 4.34 以上版本，並開啟 `Enable host networking`）；或為 personagent 提供一個 HTTPS 位址，再執行 `personagent connect astrbot <data 資料夾> --url https://你的地址`。
+如果 AstrBot 在 Docker 中執行，`127.0.0.1` 指的是容器本身，而外掛程式會拒絕傳送至其他位址的明文 `http://`。可擇一處理：讓 AstrBot（以及同一個 compose 中的 NapCat）使用主機網路（`network_mode: host`，`docker run` 時使用 `--network host`；Docker Desktop 需要 4.34 以上版本，並開啟 `Enable host networking`）；或為 personagent 提供一個 HTTPS 位址，再執行 `personagent connect astrbot <data 資料夾> --url https://你的位址`。
 
 ### 第三方路線排查
 
@@ -170,9 +170,9 @@ LLM_MODEL=openrouter/free
 頁面還會寫入 `PERSONA_NAME`、`AGENT_LANG` 和一個 `CONNECTOR_TOKEN`。從頁面連接的平台不需要在 `.env` 中另外寫入任何內容。其憑證存放於 `<home>/platforms/`：`direct.json` 儲存 personagent 直接連線的平台，其餘平台由託管的 AstrBot 儲存在其本身的設定中。選用的補充設定：
 
 ```
-ADMIN_IDS=telegram:12345             # 管理員的賬號，<platform>:<id>
+ADMIN_IDS=telegram:12345             # 管理員的帳號，<platform>:<id>
 # 只有經 NapCat（OneBot）接 QQ 時才需要
-QQ_BOT_ID=...                        # 機器人賬號的號碼
+QQ_BOT_ID=...                        # 機器人帳號的號碼
 CONNECTOR_QQ_PLATFORMS=aiocqhttp
 ```
 
@@ -220,6 +220,8 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 ### 連接平台
 
 在本機頁面的「連接平台」中新增平台。personagent 在儲存之前會先向平台驗證憑證。平台拒絕時，頁面會顯示拒絕原因，且不保留任何內容。
+
+在沒有顯示器的伺服器上，可以在終端機中使用 `personagent connect <平台>` 連接 personagent 直接連線的平台，例如 `personagent connect telegram`。此指令執行與頁面相同的步驟和驗證，並以相同的格式儲存。QQ 和微信會在終端機中顯示 QR 碼，Twitch 會顯示一個連結和一組代碼。加上 `--no-input` 並以參數提供全部內容時，指令不會提出任何詢問；缺少必填項目時以結束代碼 2 結束。接著執行 `personagent up`，即可啟動 personagent 及其已連接的平台。[此指令及其參數](guide.zh-TW.md#在終端機中連接平台)的說明請參閱使用手冊。
 
 **由 personagent 直接連線。** QQ、個人微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 執行於同一個「直連」處理程序中，不需要 AstrBot 和 NapCat。某個平台無法載入時會被略過，其餘平台仍會正常啟動。下表列出前四個平台；其餘六個平台需要填寫的內容與使用限制，請參閱使用手冊中的[personagent 直接連線的平台](guide.zh-TW.md#personagent-直接連線的平台)。
 
@@ -299,6 +301,8 @@ AstrBot 位於 Docker 中或另一台主機上時，請參閱[使用手冊](guid
 非由請求觸發的訊息，會經由拉取 personagent outbox 的聯結器送達平台。這些訊息包括主動開場、被否定後的追問，以及群組中模型呼叫失敗時的致歉。私訊的致歉則隨帶來該訊息之請求的回應傳回。
 
 直連處理程序和此處的三個聯結器都會拉取 outbox，前提是平台允許機器人主動發言。QQ 會限制官方機器人主動傳送訊息的頻率，使用者也可以關閉這類訊息。你自己的聯結器應在事件中傳送 `connector_id`、`reply_handle` 和 `"capabilities": ["outbox"]`，並長輪詢 `/v1/outbox`（請參閱[聯結器協定](connectors.zh-TW.md)）。沒有此類聯結器時，personagent 只能在帶來訊息的請求中回覆。主動發言迴圈會略過這些對話，追問和致歉也不會傳送。
+
+本機頁面也會拉取 outbox，但僅限其自身的對話。不拉取 outbox 的程式（例如在某個對話中發言的程式設計助理）所傳送的事件，不會使拉取 outbox 的聯結器失去該對話（請參閱[聯結器協定](connectors.zh-TW.md#outboxpost-v1outbox)）。
 
 `PROACTIVE_PLATFORMS` 限制主動發言迴圈可以主動開口的平台。`PROACTIVE_PLATFORMS=qq_official` 限定於 QQ 官方機器人，`qq` 限定於經由 NapCat 的 QQ。`CONNECTOR_OUTBOX_ENABLED=false` 會完全關閉 outbox。
 

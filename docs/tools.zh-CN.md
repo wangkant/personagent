@@ -20,6 +20,7 @@
 | `sticker_holdout_eval.py` | 使用你手工标注的表情包衡量表情包审批门的稳定性和准确度 | `runtime/holdout.jsonl`（格式见 `tools/holdout.example.jsonl`）和三个 `VISION_*` 设置 | 是，图片数 × `--runs`（默认 5）次视觉调用，30 张图约 150 次 | 实验性 |
 | `package_smoke.py` | 端到端检查已安装的 `personagent` 命令：版本、`init --no-input`、`chat`、带 `/health` 的 `run`，以及 `doctor --json` | 一个已安装的 `personagent`（`--personagent PATH`），无其他要求 | 否，由替身服务器应答 | 受支持。CI 在 Linux 和 Windows 上运行 |
 | `welcome_smoke.py` | 端到端检查已安装的本地页面：`start --no-browser`、保存密钥、与真实角色进行一次聊天、第二次启动复用页面、正常退出 | 一个已安装的 `personagent`（`--personagent PATH`），无其他要求 | 否，由同一个替身服务器应答 | 受支持。CI 在 Linux 和 Windows 上运行 |
+| `window_smoke.py` | 在临时主目录上打开真实的应用窗口，在窗口中完成页面设置并进行聊天，然后关闭窗口 | 在 macOS 和 Linux 上，须以应用扩展安装 `personagent`（`pip install "personagent[app]"`）；在 Linux 上还需要显示环境，例如 `xvfb-run` | 否，由同一个替身服务器应答 | 受支持。CI 在 Linux、macOS 和 Windows 上运行 |
 | `release_notes.py` | 对照 `pyproject.toml` 检查发布标签，并打印该版本的 CHANGELOG 段落 | 标签，例如 `v1.1.0` | 否 | 受支持。发布工作流会运行它 |
 | `locale_gaps.py` | 统计 `persona_agent/locales/` 中每种语言已翻译的句数，范围为终端设置向导、终端聊天和演示所用的句子。指定语言代码（例如 `ja`）时，列出尚未翻译、将以英文显示的句子 | 无 | 否 | 受支持。有缺漏时 `tests/test_locales.py` 会失败 |
 

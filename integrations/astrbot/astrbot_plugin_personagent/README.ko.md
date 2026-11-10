@@ -7,7 +7,7 @@
 
 ## 필요합니까?
 
-QQ, WeChat, Telegram, Discord에는 필요 없습니다. personagent가 AstrBot 없이 직접 연결합니다. `personagent`를 실행해 로컬 페이지를 열고 **플랫폼 연결**에서 추가하십시오.
+QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat에는 필요 없습니다. personagent가 AstrBot 없이 직접 연결합니다. `personagent`를 실행해 로컬 페이지를 열고 **플랫폼 연결**에서 추가하거나, 터미널에서 `personagent connect <platform>`을 실행하십시오.
 
 이 플러그인은 AstrBot이 대화를 중계할 때 필요합니다. 두 가지 경우가 있습니다.
 
@@ -135,7 +135,7 @@ QQ 공식 봇은 personagent가 AstrBot 없이 직접 연결합니다. 이 절�
 
 `personagent connect astrbot <data dir> --qq`는 `excluded_platforms`에서 `aiocqhttp`를 빼고 `CONNECTOR_QQ_PLATFORMS`를 설정합니다. 폴더 없이 실행하면 `QQ_BOT_ID`도 묻습니다. 배포 가이드도 이 경로를 다룹니다: [docs/deploy.md](https://github.com/wangkant/personagent/blob/main/docs/deploy.ko.md#napcatonebot을-통한-qq).
 
-`CONNECTOR_QQ_PLATFORMS=aiocqhttp`를 건너뛰지 마십시오. 이것이 없으면 에이전트는 QQ 채팅을 `aiocqhttp:` 접두사가 붙은 ID로 기록하고, 접두사 없는 QQ ID로 배운 것은 더 이상 일치하지 않으며, 장부는 나중에 키를 바꿀 수 없습니다.
+`CONNECTOR_QQ_PLATFORMS=aiocqhttp`를 건너뛰지 마십시오. 이것이 없으면 에이전트는 QQ 채팅을 `aiocqhttp:` 접두사가 붙은 ID로 기록하고, 접두사 없는 QQ ID로 배운 것은 더 이상 일치하지 않으며, 학습 기록은 나중에 키를 바꿀 수 없습니다.
 
 QQ ID는 접두사 없이 유지되므로 에이전트 자체의 QQ 설정이 그대로 적용됩니다. `ACCESS_GROUPS`의 QQ 항목이 그룹을 제한하고(항목이 없으면 모든 QQ 그룹), DM은 `ADMIN_IDS`의 관리자나 `ACCESS_DM_USERS`의 사람에게만 답합니다. 마법사는 입력한 QQ 그룹을 에이전트의 `.env`에 씁니다. 나중에 QQ 그룹을 추가하려면 `groups`와 `ACCESS_GROUPS` 양쪽에 넣거나, `ACCESS_GROUPS`에 QQ 그룹을 하나도 쓰지 마십시오.
 

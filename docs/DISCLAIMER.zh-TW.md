@@ -6,9 +6,10 @@ personagent 以 [PolyForm Noncommercial License 1.0.0](../LICENSE) 發布：可�
 
 ## 聊天平台和你的帳號
 
-personagent 有兩種方式接入聊天平台。QQ 官方機器人、個人微信、Telegram 和 Discord 由它直接連線；其他平台透過第三方橋接程式接入，通常是 personagent 代為下載並執行的 AstrBot。風險高低取決於連線時以何種身分登入。
+personagent 有兩種方式接入聊天平台。QQ 官方機器人、個人微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 這十個平台由它直接連線；其他平台透過第三方橋接程式接入，通常是 personagent 代為下載並執行的 AstrBot。風險高低取決於連線時以何種身分登入。
 
-- **官方機器人介面**原本即為機器人而設計，包括 QQ 官方機器人介面、騰訊為個人微信提供的 iLink 機器人介面，以及 Telegram、Discord、Slack、KOOK、飛書、釘釘、企業微信等平台的介面。使用時仍須遵守各平台的開發者條款和頻率限制。
+- **官方機器人介面**原本即為機器人而設計，包括 QQ 官方機器人介面、騰訊為個人微信提供的 iLink 機器人介面、Telegram 和 Discord 的機器人介面、Zulip 的通用機器人（Generic bot）、VK 社群的 Bots Long Poll API（使用社群存取金鑰）、Stoat 的機器人，以及 Slack、KOOK、飛書、釘釘、企業微信等平台的介面。使用時仍須遵守各平台的開發者條款和頻率限制。
+- **開放網路上的獨立帳號。** 在 Matrix、Twitch 和 IRC 上，機器人是你為其另外建立的一般帳號，personagent 使用該網路公開文件中的介面：在機器人帳號所在的伺服器上使用 Matrix Client-Server API；使用 Twitch API，並由角色的帳號為你註冊的開發者應用程式核准登入；使用透過 TLS 連線的 IRC 協定及機器人自己的暱稱。該伺服器、Twitch 和各 IRC 網路的條款均適用，各聊天室和頻道的規則同樣適用。部分網路要求機器人加入前須取得許可，例如 Libera.Chat 規定，AI 機器人加入頻道前須取得該頻道管理員的明確許可。
 - **非官方用戶端**以一般使用者帳號登入，再由軟體代為操作。平台不認可此種做法，條款中可能明令禁止，帳號可能因此遭到限制、凍結乃至永久停權。這類方式包括：
   - **透過 NapCat、LLOneBot、Lagrange 或其他 OneBot 實作接入 QQ**，即進階選項中的 OneBot v11。使用 QQ 官方機器人則完全不需要它們。騰訊不認可這些實作，從雲端伺服器或境外 IP 登入時風險最高。
   - **透過 mautrix 橋接接入 WhatsApp、Signal、Messenger、Instagram、Google Messages 等**，即 Matrix 聯結器的接入方式。橋接程式是這些網路的非官方用戶端，其中部分網路的條款對自動傳送訊息另有規定。詳見 [Matrix 聯結器的說明](../integrations/matrix/README.zh-TW.md#各網路的條款)。
