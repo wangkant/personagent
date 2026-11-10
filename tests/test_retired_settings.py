@@ -29,6 +29,7 @@ def _clean_env() -> dict:
     env = {k: v for k, v in os.environ.items()
            if k not in preflight.RENAMED and not k.startswith(("LLM_", "AGENT_", "ACCESS_"))}
     env["PYTHONIOENCODING"] = "utf-8"
+    env["AGENT_LANG"] = "en"  # or the subprocess answers in the system language
     return env
 
 

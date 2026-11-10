@@ -4,6 +4,8 @@
 # and the interruption that atomicity exists for is exactly what leaves it
 # behind — where `git add -A` would stage it.
 .env.tmp
+# `doctor --fix` keeps the old file, keys included.
+.env.bak
 .env.local
 .env.*.local
 
