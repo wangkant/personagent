@@ -111,14 +111,45 @@ def utf8_console() -> None:
             pass
 
 
+def interactive() -> bool:
+    """A person at a terminal. On Windows NUL is a character device too, so
+    `isatty` alone says yes to a script that gave no input."""
+    stdin = sys.stdin
+    if stdin is None or not stdin.isatty():
+        return False
+    if os.name != "nt":
+        return True
+    import ctypes
+    import msvcrt
+    try:
+        handle = msvcrt.get_osfhandle(stdin.fileno())
+    except (AttributeError, OSError, ValueError):
+        return True  # no real handle to ask: a stand-in that says it is one
+    return bool(ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(ctypes.c_uint32())))
+
+
+_terminal_lang: dict = {}
+
+
 def terminal_lang() -> str:
     """AGENT_LANG from the environment or the home's `.env`, else the system's."""
     from . import home
     from .setup_wizard import detect_lang, env_get
 
-    return (normalize(os.environ.get("AGENT_LANG"))
-            or normalize(env_get(home.find_home() / ".env", "AGENT_LANG"))
-            or detect_lang())
+    named = normalize(os.environ.get("AGENT_LANG"))
+    if named:
+        return named
+    # Asked once per sentence: the file is read again only after it changes.
+    path = home.find_home() / ".env"
+    try:
+        stat = path.stat()
+        key = (str(path), stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        key = (str(path), 0, 0)
+    if key not in _terminal_lang:
+        _terminal_lang.clear()
+        _terminal_lang[key] = normalize(env_get(path, "AGENT_LANG")) or detect_lang()
+    return _terminal_lang[key]
 
 
 def term(text: str) -> str:

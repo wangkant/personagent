@@ -1,18 +1,29 @@
 :root {
+  /* Fills, lightest to darkest. */
+  --lift: #ffffff;
   --bg: #ffffff;
-  --side: #f9f9f8;
+  --side: #f8f8f7;
+  --field: #f3f3f1;
+  --hover: #eeeeeb;
+  --deep: #e8e8e4;
   --ink: #1c1c1a;
+  --ink-soft: #33332f;
   --text: #2d2d2a;
-  --muted: #74736e;
-  --faint: #a6a5a0;
+  --muted: #5f5e59;
+  --faint: #6c6b66;
   --line: #ebeae6;
-  --line-strong: #d9d8d3;
-  --hover: #f3f3f1;
-  --fill: #f4f4f2;
-  --ok: #2f9a5a;
-  --warn: #c98510;
-  --error: #c2412d;
-  --error-bg: #fbf1ef;
+  --line-strong: #8a8984;
+  --accent: #ad4e2b;
+  --ok: #3f8a57;
+  --warn: #b0761c;
+  --warn-bg: #f8ecd2;
+  --warn-soft: #f8f1e2;
+  --warn-text: #85560f;
+  --error: #a3352c;
+  --error-bg: #f8e6e2;
+  --select: #1c1c1a24;
+  --veil: #ffffffeb;
+  --shadow: 0 1px 2px #1c1c1a14, 0 10px 28px #1c1c1a1f;
   --radius: 10px;
   font-family:
     "Inter",
@@ -37,7 +48,7 @@ body {
   margin: 0;
 }
 ::selection {
-  background: #1c1c1a1f;
+  background: var(--select);
 }
 button,
 input,
@@ -56,7 +67,7 @@ summary {
 button:focus-visible,
 a:focus-visible,
 summary:focus-visible {
-  outline: 2px solid #1c1c1a59;
+  outline: 2px solid var(--ink);
 }
 button {
   cursor: pointer;
@@ -69,11 +80,11 @@ button {
     border-color 0.12s;
 }
 button:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: wait;
 }
 a {
-  color: var(--ink);
+  color: var(--accent);
   text-decoration: underline;
   text-decoration-color: var(--line-strong);
   text-underline-offset: 3px;
@@ -120,7 +131,11 @@ a:hover {
   width: 24px;
   height: 24px;
 }
+.brand-mark rect {
+  fill: var(--side);
+}
 .nav {
+  position: relative;
   width: 100%;
   height: 32px;
   display: flex;
@@ -148,9 +163,20 @@ a:hover {
   color: var(--ink);
 }
 .nav.active {
-  background: #ededeb;
+  background: var(--deep);
   color: var(--ink);
   font-weight: 500;
+}
+.nav.active::before,
+.activity-row.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 .sidebar-bottom {
   margin-top: auto;
@@ -191,6 +217,7 @@ main {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
+  background: var(--bg);
   border-bottom: 1px solid var(--line);
   font-size: 13px;
   font-weight: 500;
@@ -209,10 +236,22 @@ main {
   height: 28px;
   padding: 0 4px;
   border: 0;
+  border-radius: 6px;
   background: transparent;
+  box-shadow: none;
   color: var(--muted);
   font-size: 13px;
   cursor: pointer;
+}
+.top-actions select:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.top-actions select:focus {
+  box-shadow: none;
+}
+.top-actions select:focus-visible {
+  outline: 2px solid var(--ink);
 }
 .status-pill {
   display: inline-flex;
@@ -278,16 +317,13 @@ p {
 .setup-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(240px, 0.8fr);
-  gap: 20px;
+  gap: 48px;
   align-items: start;
 }
+/* Sections sit on the page: whitespace and hairlines, no boxes. */
 .card {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-.setup-card {
-  padding: 24px;
+  background: none;
+  border: 0;
 }
 .card-heading {
   margin-bottom: 8px;
@@ -304,19 +340,31 @@ label {
   font-weight: 500;
   color: var(--ink);
 }
+/* Fields: a tinted fill and one bottom line, drawn inside the box. */
+input,
+select,
+textarea,
+.key-field,
+.composer {
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: var(--field);
+  box-shadow: inset 0 -1px 0 var(--line-strong);
+  color: var(--ink);
+  transition:
+    background 0.12s,
+    box-shadow 0.12s;
+}
 input,
 select {
   width: 100%;
-  height: 36px;
-  padding: 0 11px;
-  border: 1px solid var(--line-strong);
-  background: #fff;
-  border-radius: 7px;
-  color: var(--ink);
+  height: 40px;
+  padding: 0 12px;
   font-size: 13.5px;
-  transition:
-    border-color 0.12s,
-    box-shadow 0.12s;
+}
+/* A select insets its text 4px by itself. */
+select {
+  padding: 0 8px;
 }
 input::placeholder,
 textarea::placeholder {
@@ -324,14 +372,16 @@ textarea::placeholder {
 }
 input:hover,
 select:hover {
-  border-color: #c8c7c1;
+  background: var(--hover);
 }
+/* The line thickens inside the box, so nothing moves. */
 input:focus,
 select:focus,
-textarea:focus {
+textarea:focus,
+.key-field:focus-within,
+.composer:focus-within {
   outline: none;
-  border-color: #8f8e88;
-  box-shadow: 0 0 0 3px #1c1c1a0d;
+  box-shadow: inset 0 -2px 0 var(--ink);
 }
 .label-line {
   display: flex;
@@ -342,38 +392,29 @@ textarea:focus {
 .label-line a {
   font-size: 12.5px;
   margin-top: 10px;
-  color: var(--muted);
 }
 .key-field {
   display: flex;
-  background: #fff;
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  transition:
-    border-color 0.12s,
-    box-shadow 0.12s;
+}
+.key-field:hover {
+  background: var(--hover);
 }
 .key-field input {
   border: 0;
+  height: 40px;
   min-width: 0;
   background: none;
-  box-shadow: none;
-}
-.key-field:focus-within {
-  border-color: #8f8e88;
-  box-shadow: 0 0 0 3px #1c1c1a0d;
-}
-.key-field input:focus {
   box-shadow: none;
 }
 .key-field button {
   font-size: 12.5px;
   padding: 0 12px;
   white-space: nowrap;
-  color: var(--muted);
+  color: var(--ink);
+  text-underline-offset: 3px;
 }
 .key-field button:hover {
-  color: var(--ink);
+  text-decoration: underline;
 }
 .field-note {
   font-size: 12.5px;
@@ -383,32 +424,34 @@ textarea:focus {
 }
 .primary {
   background: var(--ink);
-  color: #fff;
-  height: 36px;
-  padding: 0 16px;
+  color: var(--bg);
+  height: 40px;
+  padding: 0 18px;
   border-radius: 7px;
   font-size: 13.5px;
   font-weight: 500;
 }
 .primary:hover {
-  background: #3a3a37;
+  background: var(--ink-soft);
 }
 .full {
   width: 100%;
   margin-top: 20px;
 }
 .secondary {
-  border: 1px solid var(--line-strong);
-  background: #fff;
   height: 30px;
-  padding: 0 12px;
-  border-radius: 7px;
+  padding: 0 10px;
+  border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
   color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
 }
 .secondary:hover {
   background: var(--hover);
+  text-decoration-color: currentColor;
 }
 .footnote {
   font-size: 12px;
@@ -439,7 +482,6 @@ details[open] summary {
   padding: 28px 24px 22px;
   border-radius: var(--radius);
   background: var(--side);
-  border: 1px solid var(--line);
 }
 .avatar {
   position: relative;
@@ -447,9 +489,9 @@ details[open] summary {
   height: 36px;
   display: grid;
   place-items: center;
-  background: #e9e8e4;
+  background: var(--deep);
   border-radius: 50%;
-  color: #3b3a36;
+  color: var(--text);
   font-size: 15px;
   font-weight: 500;
   flex-shrink: 0;
@@ -544,7 +586,7 @@ details[open] summary {
   gap: 2px;
   padding: 4px 5px;
   border-radius: 999px;
-  background: var(--fill);
+  background: var(--deep);
   box-shadow: 0 0 0 2px var(--bg);
 }
 .avatar.thinking .dots {
@@ -585,8 +627,7 @@ details[open] summary {
   text-align: left;
   line-height: 1.6;
   padding: 9px 13px;
-  background: #fff;
-  border: 1px solid var(--line);
+  background: var(--deep);
   border-radius: 16px 16px 16px 5px;
   width: fit-content;
 }
@@ -594,11 +635,6 @@ details[open] summary {
   font-size: 12px;
   color: var(--faint);
   margin-top: 18px;
-}
-.fan-note {
-  font-size: 12px;
-  color: var(--faint);
-  margin-top: 2px;
 }
 .trio {
   margin-top: 20px;
@@ -631,7 +667,7 @@ details[open] summary {
 .trio-pick[aria-pressed="true"] {
   box-shadow:
     0 0 0 2px var(--side),
-    0 0 0 3.5px var(--ink);
+    0 0 0 4px var(--accent);
 }
 .small-note {
   margin: 16px 4px;
@@ -646,9 +682,11 @@ details[open] summary {
   color: var(--muted);
   margin: 2px 0;
 }
-.persona-card {
-  margin-top: 20px;
-  padding: 24px;
+.persona-card,
+.side-card {
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
 }
 .persona-card label {
   margin: 0;
@@ -661,16 +699,9 @@ details[open] summary {
   width: 100%;
   min-height: 260px;
   padding: 12px 14px;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--ink);
   font-size: 13.5px;
   line-height: 1.75;
   resize: vertical;
-  transition:
-    border-color 0.12s,
-    box-shadow 0.12s;
 }
 .persona-actions {
   display: flex;
@@ -684,10 +715,6 @@ details[open] summary {
   font-size: 12px;
   color: var(--faint);
   font-variant-numeric: tabular-nums;
-}
-.side-card {
-  margin-top: 20px;
-  padding: 24px;
 }
 .side-card h2 {
   margin-bottom: 4px;
@@ -735,10 +762,31 @@ label.check {
   cursor: pointer;
 }
 label.check input {
-  width: 16px;
-  height: 16px;
+  appearance: none;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
   margin: 0;
-  accent-color: var(--ink);
+  padding: 0;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--field);
+  box-shadow: none;
+  cursor: pointer;
+}
+label.check input:focus {
+  border-color: var(--ink);
+  box-shadow: none;
+}
+label.check input:focus-visible {
+  outline: 2px solid var(--ink);
+}
+/* The tick is drawn in --bg; a data URI cannot read the token. */
+label.check input:checked {
+  border-color: var(--ink);
+  background: var(--ink)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.6 8.4l2.9 2.9 5.9-6.2' fill='none' stroke='%23faf7f2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 14px no-repeat;
 }
 #vision-fields label.check {
   margin-top: 12px;
@@ -757,7 +805,6 @@ label.check input {
   gap: 8px;
   margin-top: 12px;
   padding: 8px 8px 8px 14px;
-  border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--side);
   font-size: 13px;
@@ -794,7 +841,7 @@ label.check input {
   margin-left: 14px;
   text-align: left;
   font-size: 11px;
-  color: var(--ok);
+  color: var(--accent);
 }
 .update-link:hover {
   text-decoration: underline;
@@ -802,7 +849,6 @@ label.check input {
 .update-bar {
   margin-top: 12px;
   padding: 6px 8px 10px 14px;
-  border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--side);
   font-size: 13px;
@@ -832,7 +878,7 @@ label.check input {
   white-space: pre;
   padding: 6px 8px;
   border-radius: 6px;
-  background: var(--fill);
+  background: var(--deep);
   color: var(--ink);
   font: 12px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
   user-select: all;
@@ -891,17 +937,16 @@ label.check input {
   margin-top: 22px;
 }
 .suggestions button {
-  border: 1px solid var(--line);
   border-radius: 8px;
-  height: 32px;
-  padding: 0 12px;
+  height: 34px;
+  padding: 0 13px;
   font-size: 13px;
-  background: #fff;
+  background: var(--side);
   color: var(--text);
 }
 .suggestions button:hover {
   background: var(--hover);
-  border-color: var(--line-strong);
+  color: var(--ink);
 }
 .bubble {
   max-width: 76%;
@@ -914,13 +959,14 @@ label.check input {
   overflow-wrap: anywhere;
 }
 .bubble.user {
-  background: #2a2a27;
-  color: #f7f7f5;
+  background: var(--ink);
+  color: var(--bg);
   margin-left: auto;
   border-radius: 18px 18px 5px 18px;
 }
-.bubble.bot {
-  background: var(--fill);
+.bubble.bot,
+.bubble.failed {
+  background: var(--field);
   color: var(--text);
   border-radius: 18px 18px 18px 5px;
 }
@@ -935,46 +981,50 @@ label.check input {
   color: var(--error);
   background: var(--error-bg);
 }
+.bubble.failed .quiet {
+  height: auto;
+  margin-top: 4px;
+  padding: 0;
+  color: var(--error);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.bubble.failed .quiet:hover {
+  background: none;
+  color: var(--ink);
+}
 .composer {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 7px 7px 7px 14px;
-  background: #fff;
-  border: 1px solid var(--line-strong);
-  border-radius: 12px;
-  transition:
-    border-color 0.12s,
-    box-shadow 0.12s;
-}
-.composer:focus-within {
-  border-color: #8f8e88;
-  box-shadow: 0 0 0 3px #1c1c1a0d;
+  padding: 6px 6px 6px 14px;
+  border-radius: 10px 10px 0 0;
 }
 .composer textarea {
   border: 0;
   outline: none !important;
+  box-shadow: none;
   resize: none;
   flex: 1;
   max-height: 140px;
-  min-height: 28px;
-  padding: 5px 0;
+  min-height: 34px;
+  padding: 6px 0;
   background: none;
   font-size: 14px;
   line-height: 1.6;
-  color: var(--ink);
 }
 .composer button {
-  border-radius: 8px;
+  border-radius: 50%;
   background: var(--ink);
-  color: #fff;
-  width: 30px;
-  height: 30px;
+  color: var(--bg);
+  width: 34px;
+  height: 34px;
   font-size: 16px;
   flex-shrink: 0;
 }
 .composer button:hover {
-  background: #3a3a37;
+  background: var(--ink-soft);
 }
 .composer-note {
   text-align: center;
@@ -986,7 +1036,6 @@ label.check input {
   max-width: 880px;
 }
 .connected-card {
-  padding: 4px 16px;
   margin-bottom: 36px;
 }
 .connected-head {
@@ -1052,7 +1101,8 @@ label.check input {
   background: var(--error);
 }
 .state[data-state="paused"]::before {
-  background: var(--faint);
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--faint);
 }
 @keyframes pulse {
   50% {
@@ -1067,8 +1117,7 @@ label.check input {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  background: #fff;
-  border: 1px solid var(--line);
+  background: var(--side);
   color: var(--brand);
   font-size: 13px;
   font-weight: 600;
@@ -1131,8 +1180,7 @@ label.check input {
 }
 .tile {
   --brand: var(--ink);
-  background: #fff;
-  border: 1px solid var(--line);
+  background: var(--side);
   border-radius: var(--radius);
   padding: 11px 12px;
   display: flex;
@@ -1142,12 +1190,10 @@ label.check input {
   min-width: 0;
 }
 .tile:hover {
-  border-color: var(--line-strong);
-  background: #fcfcfb;
+  background: var(--hover);
 }
-.tile:focus-visible {
-  outline: 2px solid #1c1c1a59;
-  outline-offset: 2px;
+.tile .badge {
+  background: var(--lift);
 }
 .tile-text {
   display: flex;
@@ -1194,7 +1240,6 @@ label.check input {
 }
 .platform-card {
   --brand: var(--ink);
-  padding: 16px 24px 24px;
   max-width: 560px;
   margin: 0 auto;
 }
@@ -1223,7 +1268,6 @@ label.check input {
 }
 .howto {
   background: var(--side);
-  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 11px 13px;
   margin-bottom: 4px;
@@ -1267,7 +1311,7 @@ label.check input {
   height: 48px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--line);
+  background: var(--side);
   color: var(--ok);
   border-radius: 50%;
   font-size: 20px;
@@ -1281,9 +1325,11 @@ label.check input {
   height: 200px;
   max-width: 100%;
   border-radius: 10px;
-  border: 1px solid var(--line);
+  /* A QR code needs its white quiet zone; the tint frames it. */
   background: #fff;
+  box-shadow: 0 0 0 8px var(--side);
   padding: 8px;
+  margin: 8px;
 }
 #qr-box p {
   font-size: 13px;
@@ -1322,19 +1368,21 @@ label.check input {
   transform: translateX(-50%);
   max-width: 80vw;
   background: var(--ink);
-  color: #fff;
+  color: var(--bg);
   border-radius: 8px;
   padding: 9px 14px;
   font-size: 13px;
-  box-shadow:
-    0 1px 2px #0000001a,
-    0 8px 24px #0000001f;
+  box-shadow: var(--shadow);
   z-index: 5;
+}
+/* Clear of the composer. */
+#chat-view:not([hidden]) ~ #toast {
+  bottom: 104px;
 }
 .closed-overlay {
   position: fixed;
   inset: 0;
-  background: #ffffffee;
+  background: var(--veil);
   display: grid;
   place-items: center;
   z-index: 10;
@@ -1342,6 +1390,9 @@ label.check input {
 .closed-overlay > .card {
   padding: 32px 40px;
   text-align: center;
+  border-radius: 14px;
+  background: var(--lift);
+  box-shadow: var(--shadow);
 }
 .closed-overlay p {
   font-size: 13.5px;
@@ -1375,6 +1426,7 @@ label.check input {
   top: 16px;
 }
 .activity-row {
+  position: relative;
   width: 100%;
   display: flex;
   align-items: center;
@@ -1388,7 +1440,7 @@ label.check input {
   background: var(--hover);
 }
 .activity-row.active {
-  background: #ededeb;
+  background: var(--deep);
 }
 .row-text {
   flex: 1;
@@ -1419,15 +1471,15 @@ label.check input {
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: var(--fill);
+  background: var(--field);
   color: var(--muted);
   font-size: 11.5px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 .count.review {
-  background: #fbf0dc;
-  color: #94600a;
+  background: var(--warn-bg);
+  color: var(--warn-text);
 }
 .activity-chat {
   min-width: 0;
@@ -1472,15 +1524,13 @@ label.check input {
   color: var(--error);
 }
 .change {
-  background: #fff;
-  border: 1px solid var(--line);
+  background: var(--side);
   border-radius: var(--radius);
   padding: 12px 14px;
   margin-bottom: 8px;
 }
 .change.waiting {
-  border-color: #eedfc2;
-  background: #fffcf7;
+  background: var(--warn-soft);
 }
 .change-top {
   display: flex;
@@ -1521,7 +1571,7 @@ label.check input {
 .change-line.was p {
   color: var(--muted);
   text-decoration: line-through;
-  text-decoration-color: #c9c8c3;
+  text-decoration-color: var(--line-strong);
 }
 .change-line.now p,
 .change-reply {
@@ -1536,8 +1586,16 @@ label.check input {
   gap: 4px;
   margin-top: 10px;
 }
+.change-actions > .secondary:first-child,
+.feature > .quiet {
+  margin-left: -10px;
+}
+.feature > .quiet {
+  margin-top: 6px;
+  padding: 0 10px;
+}
 .primary.small {
-  height: 28px;
+  height: 30px;
   padding: 0 12px;
   font-size: 13px;
 }
@@ -1606,7 +1664,7 @@ label.check input {
   color: var(--faint);
 }
 .activity-empty {
-  border: 1px dashed var(--line-strong);
+  background: var(--side);
   border-radius: var(--radius);
   padding: 32px 24px;
   text-align: center;
@@ -1655,10 +1713,7 @@ label.check input {
   }
   .setup-grid {
     grid-template-columns: minmax(0, 1.2fr) minmax(205px, 0.8fr);
-    gap: 16px;
-  }
-  .setup-card {
-    padding: 20px;
+    gap: 28px;
   }
   #toast {
     left: calc(50% + 98px);
@@ -1681,7 +1736,7 @@ label.check input {
   }
   .nav {
     justify-content: center;
-    height: 38px;
+    height: 40px;
     padding: 0;
   }
   .icon {
@@ -1736,22 +1791,80 @@ label.check input {
   .page {
     padding: 24px 16px;
   }
-  .setup-card {
-    padding: 18px;
+  /* Tap targets on a phone. */
+  .quiet,
+  .secondary,
+  .gs-step,
+  .suggestions button,
+  .primary.small,
+  .top-actions select {
+    height: auto;
+    min-height: 40px;
   }
-  .platform-card {
-    padding: 14px 16px 20px;
+  .composer button {
+    width: 40px;
+    height: 40px;
+  }
+  .composer textarea {
+    min-height: 40px;
+    padding: 9px 0;
+  }
+  label.check {
+    min-height: 40px;
+  }
+  details {
+    padding-top: 2px;
+  }
+  summary,
+  details[open] summary {
+    margin-bottom: 0;
+    padding: 12px 0;
   }
   .connected-head {
     flex-wrap: wrap;
   }
+  /* One row: the step wraps inside itself before the close button drops. */
   .getting-started {
-    flex-wrap: wrap;
+    gap: 2px;
+    padding-left: 12px;
   }
+  .gs-step {
+    min-width: 0;
+    padding: 0 6px;
+    text-align: left;
+  }
+  .update-head {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .update-head strong {
+    flex: 1;
+    min-width: 0;
+  }
+  .update-head a {
+    order: 1;
+    flex-basis: 100%;
+  }
+  /* Name and state on one line, the two actions on the next. */
   #connected-list li {
     flex-wrap: wrap;
+    row-gap: 0;
     height: auto;
-    padding: 10px 0;
+    padding: 10px 0 4px;
+  }
+  #connected-list li::after {
+    content: "";
+    flex-basis: 100%;
+    order: 1;
+  }
+  #connected-list .state {
+    margin-right: 0;
+  }
+  #connected-list .quiet {
+    order: 2;
+  }
+  #connected-list .state + .quiet {
+    margin-left: 31px;
   }
   .chat-page {
     padding-bottom: 12px;
@@ -1762,6 +1875,21 @@ label.check input {
   .suggestions {
     flex-direction: column;
     align-items: center;
+  }
+}
+/* Fills and shadows vanish in forced colours; a real line stands in. */
+@media (forced-colors: active) {
+  input,
+  select,
+  textarea,
+  .key-field,
+  .composer {
+    border-bottom: 1px solid;
+  }
+  input:focus,
+  select:focus,
+  textarea:focus {
+    outline: 2px solid;
   }
 }
 @media (prefers-reduced-motion: reduce) {

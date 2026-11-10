@@ -40,9 +40,9 @@ ASSETS = Path(__file__).with_name("static") / "welcome"
 # ASSETS/i18n/<code>.json. The character still speaks en or zh prompts.
 PAGE_LANGUAGES = ("zh-TW", "ja", "ko", "es", "fr", "de", "pt-BR", "ru")
 TOKEN_HEADER = "x-personagent-setup-token"
-MAX_BODY = 16_384
-# Characters; the shipped personas are under 800, and 4000 CJK characters
-# still fit in MAX_BODY.
+# Bytes; a chat message may be 8000 characters, three bytes each in Chinese.
+MAX_BODY = 32_768
+# Characters; the shipped personas are under 800.
 PERSONA_LIMIT = 4000
 # Platforms a setting may name: the ones the page knows, or QQ through NapCat.
 PLATFORM_KINDS = frozenset(p.kind for p in conn.PLATFORMS) | {"qq"}
@@ -149,7 +149,8 @@ class Workspace:
                     "model": values.get("LLM_MODEL", ""), "baseUrl": values.get("LLM_BASE_URL", ""),
                     "keyHint": sw.mask_secret(values["LLM_API_KEY"]) if values.get("LLM_API_KEY") else "",
                     "name": values.get("PERSONA_NAME", ""), "lang": langs.normalize(values.get("AGENT_LANG")),
-                    "character": origin[0] if origin else ("custom" if card.is_file() else "warm-listener"),
+                    # An earlier release's template is on no menu: it maps to the plain one.
+                    "character": sw.default_character(origin) if origin else ("custom" if card.is_file() else "warm-listener"),
                     "avatar": avatar,
                     "platformInstalled": installation.python.is_file(),
                     "platforms": platforms, "platformStatus": status,
@@ -553,7 +554,9 @@ class Workspace:
     async def chat(self, text: str) -> dict:
         if not self.config().get("LLM_API_KEY"):
             raise ValueError("key_required")
-        if not text.strip() or len(text) > 8000:
+        if not text.strip():
+            raise ValueError("generic")
+        if len(text) > 8000:
             raise ValueError("invalid_message")
         async with self._chat_lock:
             await asyncio.to_thread(self.services.start_agent)
@@ -944,7 +947,11 @@ def main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
         stopped = stop_leftovers(home)
         if stopped:
             print(langs.term(f"Stopped what an earlier personagent left running: {', '.join(stopped)}."))
-        sock.bind(("127.0.0.1", args.port))
+        try:
+            sock.bind(("127.0.0.1", args.port))
+        except (OSError, OverflowError):
+            print(langs.term(f"Port {args.port} is in use. Leave --port out to pick a free one."))
+            return 1
         sock.listen(128)
         port = sock.getsockname()[1]
         url = f"http://127.0.0.1:{port}/#token={token}"
@@ -952,9 +959,10 @@ def main(argv: list[str] | None = None, prog: str = "personagent start") -> int:
         print(langs.term(f"personagent {__version__}\n\n  {url}\n\nKeep this window open. Press Ctrl+C to stop."), flush=True)
         notice = updates.line(updates.notice(home))
         if notice:
-            print(notice, flush=True)
+            print(langs.term(notice), flush=True)
         if not args.no_browser:
-            timer = threading.Timer(0.8, webbrowser.open, args=(url,))
+            # The socket already listens, so an early request waits its turn.
+            timer = threading.Timer(0, webbrowser.open, args=(url,))
             timer.daemon = True
             timer.start()
         app = create_app(home, token)

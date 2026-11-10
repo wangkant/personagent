@@ -80,6 +80,7 @@
 "Lark / Feishu app id": "ID de la app de Lark / Feishu",
 "Lark / Feishu app secret": "secreto de la app de Lark / Feishu",
 "the address the plugin posts to, such as an https:// one (default http://127.0.0.1:<SERVER_PORT>)": "la dirección a la que envía el plugin, por ejemplo una https:// (por defecto http://127.0.0.1:<SERVER_PORT>)",
+"Port {0} is in use. Leave --port out to pick a free one.": "El puerto {0} está en uso. Quita --port para que se elija uno libre.",
 "--provider other needs --base-url": "--provider other necesita --base-url",
 "--base-url needs https:// or http:// in front, such as https://api.deepseek.com": "--base-url necesita https:// o http:// delante, como https://api.deepseek.com",
 "Which service is this key for? Add --provider, such as --provider openrouter": "¿De qué servicio es esta clave? Añade --provider, como --provider openrouter",

@@ -80,6 +80,7 @@
 "Lark / Feishu app id": "飛書 / Lark 應用 ID",
 "Lark / Feishu app secret": "飛書 / Lark 應用金鑰",
 "the address the plugin posts to, such as an https:// one (default http://127.0.0.1:<SERVER_PORT>)": "外掛傳送請求的地址，例如一個 https:// 地址（預設 http://127.0.0.1:<SERVER_PORT>）",
+"Port {0} is in use. Leave --port out to pick a free one.": "埠 {0} 已被佔用。去掉 --port 可以自動選一個空閒的埠。",
 "--provider other needs --base-url": "--provider other 需要同時給 --base-url",
 "--base-url needs https:// or http:// in front, such as https://api.deepseek.com": "--base-url 前面要有 https:// 或 http://，例如 https://api.deepseek.com",
 "Which service is this key for? Add --provider, such as --provider openrouter": "這個金鑰是哪家服務的？請加上 --provider，例如 --provider openrouter",

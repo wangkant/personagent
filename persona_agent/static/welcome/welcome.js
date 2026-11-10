@@ -129,8 +129,7 @@ const translations = {
     previewText: "性格决定它说话的语气。",
     sample: "今天怎么样？有什么想和我说的吗？",
     changeLater: "名字和性格，随时都能改。",
-    trioLabel: "也可以选拟人版 ChatGPT、DeepSeek 和 Claude",
-    fanNote: "同人角色，不是官方产品。",
+    trioLabel: "也可以选 GPT 娘、鲸鱼娘或 Claude 娘",
     qqLater: "也可以把它带到 QQ、微信、Telegram…",
     qqLaterHint: "先聊起来。想接入时，在「连接平台」里选一个，扫码或填一两项就好。",
     chatHint: "本机对话",
@@ -235,6 +234,8 @@ const translations = {
     field_required: "请填写所有必填项。",
     invalid_field: "有一项格式不对，请检查地址或端口。",
     invalid_platform: "暂不支持这个平台。",
+    invalid_message: "这条消息太长了，缩短一些再发。",
+    too_large: "这条消息太长了，缩短一些再发。",
     permission_required: "需要允许角色在这个平台回复。",
     forbidden: "页面授权已失效，请重新打开启动窗口里的本地链接。",
     generic: "操作没有完成，请重试。",
@@ -376,8 +377,7 @@ const translations = {
     previewText: "The personality sets how it talks.",
     sample: "How was your day? Anything you want to talk about?",
     changeLater: "You can change the name and personality anytime.",
-    trioLabel: "Or meet ChatGPT, DeepSeek and Claude as people",
-    fanNote: "A fan-made character, not the official product.",
+    trioLabel: "Or pick the GPT dragon girl, the DeepSeek whale girl or the Claude lady",
     qqLater: "Bring your character to QQ, WeChat, Telegram…",
     qqLaterHint:
       "Start with a chat. Then pick an app under Connect apps: a scan or one or two values.",
@@ -489,6 +489,8 @@ const translations = {
     field_required: "Fill in every required field.",
     invalid_field: "One value isn't valid. Check the address or port.",
     invalid_platform: "This app isn't supported.",
+    invalid_message: "That message is too long. Shorten it and send again.",
+    too_large: "That message is too long. Shorten it and send again.",
     permission_required: "Your character needs permission to reply in this app.",
     forbidden:
       "This page's authorization expired. Reopen the link in the launch window.",
@@ -675,7 +677,6 @@ function updateNames() {
   $("chat-name").textContent = state.name || name;
   const preview = previewPortrait();
   paintAvatar($("preview-avatar"), preview, name);
-  $("fan-note").hidden = !preview;
   for (const id of ["chat-avatar", "empty-avatar"])
     paintAvatar($(id), portraitOf(state.avatar), state.name || name);
   $("chat-greeting").textContent = t("greeting", { name: state.name || name });
@@ -1660,6 +1661,8 @@ async function send(text, repeat = false) {
     retry.className = "quiet";
     retry.textContent = t("retryChat");
     retry.addEventListener("click", () => {
+      // send() ignores a call while another reply is on its way.
+      if (chatting) return;
       pending.remove();
       send(text, true);
     });
@@ -1982,6 +1985,8 @@ $("exit").addEventListener("click", async () => {
   if (!token) {
     renderText();
     toast(t("auth"));
+    // No view can open, so the message stays up.
+    clearTimeout(toastTimer);
     return;
   }
   try {
@@ -2008,5 +2013,7 @@ $("exit").addEventListener("click", async () => {
     activityLoop();
   } catch (error) {
     toast(t(error.message));
+    // Nothing loaded and no view is open: keep the message up.
+    if (!state) clearTimeout(toastTimer);
   }
 })();

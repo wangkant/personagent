@@ -60,7 +60,7 @@
             ><button class="quiet" id="exit" data-t="exit">退出</button>
           </div>
         </header>
-        <section id="setup-view" class="page setup-page">
+        <section id="setup-view" class="page setup-page" hidden>
           <h1 data-t="hero">设置你的角色</h1>
           <p class="lead" data-t="intro">
             填一个模型密钥就能开始聊天，其他都有默认值。
@@ -147,9 +147,6 @@
                 <div class="avatar big" id="preview-avatar" aria-hidden="true"></div>
                 <div class="eyebrow" data-t="yourCharacter">预览</div>
                 <h2 id="preview-name">小夏</h2>
-                <div class="fan-note" id="fan-note" data-t="fanNote" hidden>
-                  同人角色，不是官方产品。
-                </div>
                 <p data-t="previewText">
                   性格决定它说话的语气。
                 </p>
@@ -158,7 +155,7 @@
                 </div>
                 <div class="trio" id="trio" hidden>
                   <div class="trio-label" data-t="trioLabel">
-                    也可以选拟人版 ChatGPT、DeepSeek 和 Claude
+                    也可以选 GPT 娘、鲸鱼娘或 Claude 娘
                   </div>
                   <div class="trio-row" id="trio-row"></div>
                 </div>

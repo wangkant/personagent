@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import getpass
 import hashlib
 import json
@@ -442,7 +443,7 @@ def provider_for_base(base_url: str) -> Provider | None:
 
 def _read_secret(prompt: str) -> str:
     """getpass in a terminal; a plain read otherwise (tests, IDE consoles)."""
-    if sys.stdin is not None and sys.stdin.isatty():
+    if langs.interactive():
         return getpass.getpass(prompt)
     return input(prompt)
 
@@ -647,12 +648,12 @@ CHARACTERS: tuple[Character, ...] = (
                         "游戏搭子：合作射击和肉鸽，爱互相嘴几句")),
     Character("bookworm", ("Bookworm: careful words, recommends books when asked",
                            "文艺书虫：用词讲究，被问到才推荐书")),
-    Character("chatgpt", ("ChatGPT as a person: upbeat all-rounder, always offers one more thing",
-                          "拟人版 ChatGPT：热情的全能型，总想再多帮一点"), name="ChatGPT"),
-    Character("deepseek", ("DeepSeek as a person: thinks it through first, quiet maths and code nerd",
-                           "拟人版 DeepSeek：先把问题想透，安静的理工宅"), name="DeepSeek"),
-    Character("claude", ("Claude as a person: warm, candid, careful with words",
-                         "拟人版 Claude：温和坦诚，说话有分寸"), name="Claude"),
+    Character("chatgpt", ("The GPT dragon girl: proud, well-read, fond of treasure",
+                          "GPT 娘（白龙）：傲娇自信，博学，爱财宝"), name="ChatGPT"),
+    Character("deepseek", ("The DeepSeek whale girl: clever, a bit lazy, lives on white rice",
+                           "DeepSeek 鲸鱼娘：聪明但爱偷懒，傲娇嘴甜，主食白饭"), name="DeepSeek"),
+    Character("claude", ("The Claude lady: well-bred, gentle and candid, strict house rules",
+                         "Claude 娘（豪门圣女）：温柔端庄，坦诚，家规很严"), name="Claude"),
     Character(TEMPLATE, ("Write my own later: a plain starting character to edit",
                          "以后自己写：先放一个朴素的起步角色，之后再改")),
 )
@@ -730,22 +731,32 @@ def shipped_persona(text: str) -> tuple[str, str, str] | None:
     norm = _normal(text)
     if hashlib.sha256(norm.encode("utf-8")).hexdigest() in _LEGACY_PERSONA_SHA256:
         return ("legacy", "", "")
+    for key, lang, raw, pattern in _shipped_shapes(str(homes.resource("data"))):
+        if norm == raw:
+            return (key, lang, "")
+        found = pattern.fullmatch(norm)
+        if found:
+            return (key, lang, found.group(1))
+    return None
+
+
+@functools.lru_cache(maxsize=2)
+def _shipped_shapes(data_dir: str) -> tuple:
+    """Every shipped character under `data_dir` as (key, lang, its text, its
+    text with a name slot). Read once: the local page asks on every poll."""
     sentinel = "\x00NAME\x00"
+    shapes = []
     for lang in LANGS:
         for character in CHARACTERS:
             source = persona_source(character.key, lang)
             if not source.is_file():
                 continue
             raw = source.read_text(encoding="utf-8")
-            if norm == _normal(raw):
-                return (character.key, lang, "")
             shape = _normal(render_persona(raw, name=sentinel, lang=lang))
             pattern = re.escape(shape).replace(re.escape(sentinel), r"(.+?)", 1)
             pattern = pattern.replace(re.escape(sentinel), r"\1")
-            found = re.fullmatch(pattern, norm)
-            if found:
-                return (character.key, lang, found.group(1))
-    return None
+            shapes.append((character.key, lang, _normal(raw), re.compile(pattern)))
+    return tuple(shapes)
 
 
 def short_label(character: Character) -> str:
@@ -1726,7 +1737,7 @@ def run(argv: list[str] | None, prog: str, *, python: str | None = None,
     args = args if args is not None else init_parser(prog).parse_args(argv)
     home = homes.find_home()
     launcher = Launcher(python=python or sys.executable, home=home)
-    tty = sys.stdin is not None and sys.stdin.isatty()
+    tty = langs.interactive()
     flags = any((args.provider, args.base_url, args.model, args.key_env,
                  args.name, args.lang, args.persona))
     if tty and not args.no_input and not getattr(args, "terminal", False) and not flags:
@@ -1886,7 +1897,7 @@ def connect_main(argv: list[str] | None = None, prog: str = "personagent connect
                                          url=args.url)
     if args.qq is not None or args.platform or args.url:
         raise SystemExit(langs.term("--qq, --no-qq, --platform and --url need DATA_DIR"))
-    if not (sys.stdin is not None and sys.stdin.isatty()):
+    if not langs.interactive():
         raise SystemExit(langs.term(f"{prog}: give AstrBot's folder (DATA_DIR), or run this in a terminal"))
     try:
         env_path = copy_env_template(home)
@@ -1907,7 +1918,7 @@ def start_main(argv: list[str] | None = None, prog: str = "personagent start") -
     """A small front door; each action runs in a fresh process to reload settings."""
     argparse.ArgumentParser(prog=prog, description=langs.term("Open the personagent start menu")).parse_args(argv)
     _prepare_output()
-    if sys.stdin is None or not sys.stdin.isatty():
+    if not langs.interactive():
         print(langs.term("Open this menu in a terminal: personagent start"))
         return 2
     home = homes.find_home()

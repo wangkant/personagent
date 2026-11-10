@@ -204,7 +204,7 @@ def test_changing_the_api_endpoint_never_sends_the_saved_key(client, workspace, 
 
 
 def test_large_and_malformed_posts_are_rejected(client):
-    assert client.post("/api/config", headers=HEADERS, content="x" * 20_000).status_code == 413
+    assert client.post("/api/config", headers=HEADERS, content="x" * (welcome.MAX_BODY + 1)).status_code == 413
     assert client.post("/api/config", headers=HEADERS, content="[]").status_code == 400
     assert client.post("/api/config", headers=HEADERS, content="{").status_code == 400
 
