@@ -163,7 +163,10 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         # A trailing [style] block is stripped from the prose and kept as knobs.
         self.persona_style, self.persona = parse_persona_style(raw_persona)
         self.reply_style = dataclasses.replace(
-            ReplyStyle.from_card(_load_persona_card()), own_name=s.persona_name)
+            ReplyStyle.from_card(_load_persona_card()),
+            # Its name, and the shipped character it was set up as: renamed or
+            # not, the whale girl may say she is DeepSeek's.
+            own_names=(s.persona_name, s.persona_avatar))
         # Both are evidence scope; lineage.py keeps edits of one document in it.
         self.persona_version = s.persona_version
         self.persona_hash = hashlib.sha256(
@@ -227,6 +230,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self.model_calls: deque = deque()
         # Error-driven fallback, per model name, for every mode.
         self._fallback_until: dict[str, float] = {}
+        # Armed only by throttling and outages, never by one refused request.
+        self._unreachable_until: dict[str, float] = {}
         # Frequency self-throttle, self-initiated modes only.
         self._freq_fallback_until: float = 0.0
         self._http_pool: dict = {}

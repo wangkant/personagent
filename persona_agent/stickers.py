@@ -551,6 +551,10 @@ class StickerLibrary:
                         score += 1.2
                 if probe in meaning_lc:
                     score += 1.0
+            # A sticker has to match by tag or meaning; how popular or new it
+            # is only ranks the ones that do.
+            if score < 1.0:
+                continue
             score += min(v.get("use_count", 0), 20) * 0.02
             # Freshness: up to +0.6, gone after 30 days; well below an exact tag.
             first_seen = v.get("first_seen", 0)

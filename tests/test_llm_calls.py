@@ -953,8 +953,18 @@ async def test_the_fallback_model_calls_its_own_endpoint(tmp: Path) -> None:
     check("every other model name stays on the primary endpoint",
           seen == [(*primary, "dm-model")], repr(seen))
 
+    # The failed primary is cooling down, for every caller and not only a
+    # group reply: the next call starts on the fallback without the retries.
+    seen.clear()
+    await agent._call_llm("sys", [{"role": "user", "content": "hi"}],
+                          model="primary", max_tokens=100, enable_search=False)
+    check("cooldown: a call for the cooling model goes straight to the fallback",
+          seen == [(*fallback, "fallback")], repr(seen))
+
     # Unset: the fallback shares the primary's endpoint, as it always did.
     agent.llm_fallback_base_url = agent.llm_fallback_api_key = ""
+    agent._fallback_until.clear()
+    agent._unreachable_until.clear()
     seen.clear()
     await agent._call_llm("sys", [{"role": "user", "content": "hi"}],
                           model="primary", max_tokens=100, enable_search=False)
@@ -1284,3 +1294,57 @@ async def test_a_separate_fallback_endpoint_is_probed_at_startup(tmp: Path) -> N
           == [("https://primary.example/v1/chat/completions", "primary"),
               ("https://fallback.example/v1/chat/completions", "fallback")],
           repr(seen))
+
+
+async def test_one_refused_request_does_not_take_a_model_out(tmp: Path) -> None:
+    """A provider's 400 for one message (a content filter, say) is about that
+    message. The next call still starts on the model it asked for; and when a
+    model is skipped while it cools down and the fallback then fails, the
+    skipped model gets its one try."""
+    agent = _two_model_agent(tmp)
+    posts: list = []
+    refuse = {"primary"}
+
+    class _Resp:
+        def __init__(self, model: str) -> None:
+            self._model = model
+
+        def raise_for_status(self) -> None:
+            if self._model in refuse:
+                raise RuntimeError("400 bad request (status 400)")
+            if self._model in throttled:
+                raise RuntimeError("429 too many requests (status 429)")
+
+        def json(self):
+            return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]}
+
+    class _Http:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, headers=None, json=None):
+            posts.append(json["model"])
+            return _Resp(json["model"])
+
+    throttled: set = set()
+    agent._http = lambda **kw: _Http()
+    ask = dict(model="primary", max_tokens=100, enable_search=False)
+    await agent._call_llm("sys", [{"role": "user", "content": "hi"}], **ask)
+    check("a refused request is answered by the fallback", posts == ["primary", "fallback"], repr(posts))
+    refuse.clear()
+    posts.clear()
+    await agent._call_llm("sys", [{"role": "user", "content": "hi"}], **ask)
+    check("and the next call asks the same model again", posts == ["primary"], repr(posts))
+
+    throttled.add("primary")
+    posts.clear()
+    await agent._call_llm("sys", [{"role": "user", "content": "hi"}], **ask)
+    throttled.clear()
+    throttled.add("fallback")
+    posts.clear()
+    await agent._call_llm("sys", [{"role": "user", "content": "hi"}], **ask)
+    check("a skipped model still gets a try when the fallback fails",
+          posts == ["fallback", "primary"], repr(posts))

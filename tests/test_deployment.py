@@ -71,7 +71,7 @@ class DeploymentTests(unittest.TestCase):
                 return _JSONResponse(b'{"data": {}}')
             return _open
 
-        with patch.object(health._DIRECT, 'open', side_effect=opener('direct')), \
+        with patch.object(health._direct(), 'open', side_effect=opener('direct')), \
                 patch.object(health.urllib.request, 'urlopen', side_effect=opener('env')):
             health._get('http://127.0.0.1:3000/get_login_info')
             health._get('https://example.org/x')

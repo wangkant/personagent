@@ -349,19 +349,38 @@ class ModelCalls:
         # auth gets one last try on the fallback.
         async def _call_with_recovery():
             cur_model = model
+            # A model that was throttled or unreachable is skipped by every
+            # caller while it cools down: a DM would otherwise sit through the
+            # retries each turn. One refused request does not count.
+            skipped, last_try = "", False
+            if (self.llm_fallback_model and cur_model != self.llm_fallback_model
+                    and self._unreachable_until.get(cur_model, 0.0) > time.time()):
+                skipped, cur_model = cur_model, self.llm_fallback_model
             attempt = 0
             while True:
                 try:
                     return (await _do_call(max_tokens, cur_model)), cur_model
                 except Exception as e:
                     kind = self._classify_api_error(e)
+                    if kind in ("transient", "rate_limit") and self.llm_fallback_model:
+                        self._unreachable_until[cur_model] = time.time() + (
+                            self.llm_rate_limit_cooldown_s if kind == "rate_limit"
+                            else self.llm_fallback_duration_s)
+                    # The fallback it started on failed too: the model that was
+                    # cooling down gets its one try after all.
+                    if skipped and kind != "fatal_auth" and (
+                            kind == "fatal_request" or attempt >= self.api_max_retries):
+                        cur_model, skipped, attempt = skipped, "", self.api_max_retries
+                        last_try = True
+                        self._unreachable_until.pop(cur_model, None)
+                        continue
                     # Throttled: cool down whichever model failed (the short,
                     # metering window) and switch to a distinct fallback now.
                     if kind == "rate_limit" and self.llm_fallback_model:
                         self._fallback_until[cur_model] = max(
                             self._fallback_until.get(cur_model, 0.0),
                             time.time() + self.llm_rate_limit_cooldown_s)
-                        if cur_model != self.llm_fallback_model:
+                        if cur_model != self.llm_fallback_model and not last_try:
                             logger.warning(
                                 "[Agent] throttled (model=%s); cooldown %ds, switching to fallback=%s: %s",
                                 cur_model, self.llm_rate_limit_cooldown_s, self.llm_fallback_model, e)
@@ -384,7 +403,7 @@ class ModelCalls:
                         self._fallback_until[cur_model] = max(
                             self._fallback_until.get(cur_model, 0.0),
                             time.time() + self.llm_fallback_duration_s)
-                        if cur_model != self.llm_fallback_model:
+                        if cur_model != self.llm_fallback_model and not last_try:
                             logger.warning(
                                 "[Agent] model=%s failed (%s); last attempt on fallback=%s",
                                 cur_model, kind, self.llm_fallback_model)

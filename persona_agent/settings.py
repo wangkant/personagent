@@ -98,6 +98,8 @@ class AgentSettings:
     # ---- identity ---------------------------------------------------------
     qq_bot_id: str = ""
     persona_name: str = ""
+    #: The shipped character the persona was set up as (chatgpt, deepseek, claude).
+    persona_avatar: str = ""
     #: NapCat's HTTP server. Blank = none: no missed-mention sweep, and QQ
     #: messages nobody asked for go out only through a connector's outbox.
     qq_onebot_url: str = ""
@@ -336,6 +338,7 @@ class AgentSettings:
             model=_str("LLM_MODEL", DEFAULT_LLM_MODEL),
             qq_bot_id=_str("QQ_BOT_ID"),
             persona_name=_str("PERSONA_NAME"),
+            persona_avatar=_str("PERSONA_AVATAR"),
             llm_dm_model=_str("LLM_DM_MODEL"),
             qq_onebot_url=_str("QQ_ONEBOT_URL", strip=True),
             chat_trigger_count=env_int(

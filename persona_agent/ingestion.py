@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import functools
 import hashlib
 import io
 import ipaddress
@@ -187,11 +188,17 @@ class _PinnedNetworkBackend(httpcore.AsyncNetworkBackend):
         await self._backend.sleep(seconds)
 
 
+@functools.lru_cache(maxsize=1)
+def _default_ssl_context() -> ssl.SSLContext:
+    """Shared: creating one loads the system's certificates, 10 ms a fetch."""
+    return ssl.create_default_context()
+
+
 class _PinnedAsyncHTTPTransport(httpx.AsyncHTTPTransport):
     """httpx transport that pins TCP while retaining the original Host/SNI."""
 
     def __init__(self, hostname: str, pinned_ip: str) -> None:
-        ssl_context = ssl.create_default_context()
+        ssl_context = _default_ssl_context()
         backend = _PinnedNetworkBackend(hostname, pinned_ip)
         super().__init__(
             verify=ssl_context,
@@ -1307,14 +1314,17 @@ class ContentIngestion:
             return ""
 
         ocr_text = await self._ocr_image(url)
+        # A failed vision call means "not now": what OCR cached under the same
+        # key would answer for this image from here on, so it is not kept.
+        if vision_failed:
+            self.image_caption_cache.pop(cache_key, None)
         if ocr_text and len(ocr_text) >= 4:
             tokens = ocr_text.split()
             avg_token_len = sum(len(t) for t in tokens) / max(len(tokens), 1)
             if avg_token_len >= 2:
                 return ocr_text
-        # Cache the miss only when both channels answered: a failed vision call
-        # means "not now", and cached it would blind this image for good.
-        if not vision_failed and cache_key in self.image_caption_cache:
+        # Both channels answered and neither read anything: cache the miss.
+        if cache_key in self.image_caption_cache:
             self.image_caption_cache[cache_key] = ""
             self._gc_image_cache()
         return ""

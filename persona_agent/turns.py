@@ -16,7 +16,6 @@ from . import decision_log
 from .connector import (ConnectorSink, current_sink,
                       event_connector, event_prefiltered,
                       synthesize_onebot_payload)
-from .prompts import MODEL_FAILURE_EXCUSES
 from .textproc import (
     TextProcessing,
     _clean_prompt_source,
@@ -178,7 +177,7 @@ class Turns:
         """A line for when the model call failed, in the language `text`, the
         message waiting for an answer, was written in."""
         code = chatlangs.detect(text, self.chat_lang) if text else self.chat_lang
-        return random.choice(MODEL_FAILURE_EXCUSES[code])
+        return random.choice(chatlangs.spec(code).failure_excuses)
 
     async def _handle_inner(self, payload: dict, *,
                             proactive: bool = False) -> bool:

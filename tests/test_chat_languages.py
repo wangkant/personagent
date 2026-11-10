@@ -162,3 +162,10 @@ def test_the_failure_line_answers_in_the_language_asked(tmp: Path, code: str) ->
     asked = next(c["text"] for c in cases["detect"] if c["code"] == code)
     check(f"{code}: a failed model call answers {asked!r} in {code}",
           agent._model_failure_excuse(asked) in chatlangs.SPECS[code].failure_excuses)
+
+
+def test_a_language_outside_the_ten_still_has_a_failure_line(tmp: Path) -> None:
+    agent = _agent(tmp, "en", "Nova")
+    agent.chat_lang = "it"   # settings keep an unknown code, with a warning
+    check("an unknown language falls back to the English lines",
+          agent._model_failure_excuse("???") in chatlangs.SPECS["en"].failure_excuses)

@@ -2076,9 +2076,9 @@ def test_no_persona_introduces_itself_as_its_vendor() -> None:
 def test_a_character_named_after_a_vendor_may_say_its_own_name() -> None:
     """The shipped ChatGPT, DeepSeek and Claude characters introduce themselves
     by name; only that exact name is set aside, so other vendor claims still drop."""
-    claude = ReplyStyle(own_name="Claude")
-    deepseek = ReplyStyle(own_name="DeepSeek")
-    gpt = ReplyStyle(own_name="ChatGPT")
+    claude = ReplyStyle(own_names=("Claude",))
+    deepseek = ReplyStyle(own_names=("DeepSeek",))
+    gpt = ReplyStyle(own_names=("ChatGPT",))
     passes = (
         ("Hi! I'm Claude.", claude), ("I'm Claude. Nice to meet you", claude),
         ("我是Claude呀，很高兴认识你", claude), ("我叫Claude啦", claude),
@@ -2114,7 +2114,7 @@ def test_a_character_named_after_a_vendor_may_say_its_own_name() -> None:
         check(f"a vendor claim still drops: {raw[:24]}…",
               TP._sanitize_reply(raw, "zh", style) == "", repr(raw))
     check("a name that is not a vendor sets nothing aside",
-          TP._sanitize_reply("I'm DeepSeek", "en", ReplyStyle(own_name="Mira")) == "")
+          TP._sanitize_reply("I'm DeepSeek", "en", ReplyStyle(own_names=("Mira",))) == "")
     # A model id's tail used to run on into the Chinese after it and hide this.
     check("a customer of a vendor with an id tail keeps flowing",
           TP._sanitize_reply("作为DeepSeek的老用户我觉得还行", "zh") != "")
@@ -2124,7 +2124,7 @@ def test_the_agent_hands_its_name_to_the_vendor_gate(tmp_path) -> None:
     from helpers import isolated_agent
     agent = isolated_agent(tmp_path, persona_name="DeepSeek")
     check("the agent's reply style carries its name",
-          agent.reply_style.own_name == "DeepSeek", repr(agent.reply_style))
+          "DeepSeek" in agent.reply_style.own_names, repr(agent.reply_style))
     check("so its self-introduction is sent",
           TP._sanitize_reply("我就是DeepSeek，等等我再想想", "zh", agent.reply_style) != "")
 
@@ -2984,3 +2984,13 @@ def test_a_superscript_unit_is_delivered_not_dropped() -> None:
     ok, reason = TP._validate_reply_safe(raw, "zh")
     check("the whitelist was not widened: the validator alone still refuses ²",
           not ok and "U+00B2" in reason, repr((ok, reason)))
+
+
+def test_a_renamed_shipped_character_may_still_say_whose_she_is(tmp_path) -> None:
+    from helpers import isolated_agent
+    agent = isolated_agent(tmp_path, persona_name="Nova", persona_avatar="deepseek")
+    for raw in ("I'm DeepSeek's whale girl", "我是 DeepSeek 的鲸鱼娘，叫我小夏就行"):
+        check(f"the portrait's name is hers too: {raw[:24]}",
+              TP._sanitize_reply(raw, "zh", agent.reply_style) != "", repr(raw))
+    check("another vendor is still a claim",
+          TP._sanitize_reply("我是 Claude", "zh", agent.reply_style) == "")
