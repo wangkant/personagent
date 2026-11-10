@@ -981,6 +981,48 @@ label.check input:checked {
 .bubble.pending {
   color: var(--muted);
 }
+/* A sticker or picture stands on its own, without the bubble's fill. */
+.bubble.picture {
+  padding: 0;
+  background: none;
+  line-height: 0;
+}
+.bubble.picture img {
+  display: block;
+  max-width: min(220px, 100%);
+  max-height: 220px;
+  width: auto;
+  height: auto;
+  border-radius: 12px;
+}
+.bubble.picture.loading {
+  width: 120px;
+  height: 120px;
+  border-radius: 12px;
+  background: var(--field);
+}
+.bubble.picture.gone {
+  padding: 8px 13px;
+  line-height: 1.6;
+  color: var(--muted);
+  font-style: italic;
+  background: var(--field);
+}
+/* Something the character sent on its own eases in, so it is noticed. */
+.bubble.arrived {
+  animation: bubble-arrive 0.35s ease-out;
+}
+@keyframes bubble-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bubble.arrived {
+    animation: none;
+  }
+}
 .bubble.failed {
   color: var(--error);
   background: var(--error-bg);

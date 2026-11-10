@@ -666,17 +666,22 @@ def test_chat_posts_to_the_real_character_connector_and_is_serialised(workspace,
             pass
     monkeypatch.setattr(welcome, "_connector_type", lambda: Connector)
     import asyncio
-    assert asyncio.run(workspace.chat("hello")) == {"reply": "hello"}
+    answer = asyncio.run(workspace.chat("hello"))
+    assert answer["reply"] == "hello"
+    assert [(m["role"], m["text"]) for m in answer["messages"]] == [("user", "hello"), ("assistant", "hello")]
     assert events[0]["platform"] == "browser" and events[0]["conversation_type"] == "dm"
+    # The page pulls the outbox for its own chat under its own connector id.
+    assert events[0]["capabilities"] == ["outbox"] and events[0]["reply_handle"] == workspace._conversation
     from persona_agent.server import _validate_event_payload
     assert _validate_event_payload(events[0], connector=True)
-    assert workspace.history()["messages"][-1] == {"role": "assistant", "text": "hello"}
+    assert workspace.history()["messages"][-1] == {"role": "assistant", "text": "hello", "seq": 2}
     restored = welcome.Workspace(workspace.home)
     try:
         assert restored._conversation == workspace._conversation
         assert restored.history() == workspace.history()
         restored.reset_chat()
-        assert restored.history() == {"messages": []}
+        assert restored.history()["messages"] == []
+        assert restored.history()["chat"] != workspace.history()["chat"]
         assert restored._conversation != workspace._conversation
     finally:
         restored.close()

@@ -165,6 +165,7 @@ const translations = {
     howAdvanced: "需额外准备",
     reachAll: "群聊和私聊",
     reachDm: "仅私聊",
+    reachChannels: "仅频道",
     groupAdvanced: "高级：需要公网地址或本机其他软件",
     back: "← 返回",
     guide: "前往平台后台获取 ↗",
@@ -295,6 +296,8 @@ const translations = {
     generic: "操作未能完成，请重试。",
     stopped: "聊天平台已暂停。",
     retryChat: "重新发送",
+    chatPicture: "{name} 发送的图片",
+    chatPictureGone: "该图片已不存在。",
     closing: "正在关闭…",
   },
   en: {
@@ -466,6 +469,7 @@ const translations = {
     howAdvanced: "Needs setup",
     reachAll: "Groups and DMs",
     reachDm: "DMs only",
+    reachChannels: "Channels only",
     groupAdvanced: "Advanced: needs a public address or other software",
     back: "← Back",
     guide: "Get these from the app's console ↗",
@@ -613,6 +617,8 @@ const translations = {
     generic: "The operation did not complete. Try again.",
     stopped: "Chat platform paused.",
     retryChat: "Send again",
+    chatPicture: "Picture sent by {name}",
+    chatPictureGone: "This picture is no longer available.",
     closing: "Closing…",
   },
 };
@@ -742,6 +748,7 @@ function renderText() {
   for (const node of document.querySelectorAll("[data-t]"))
     label(node, t(node.dataset.t));
   $("message").placeholder = t("message");
+  for (const image of document.querySelectorAll("#messages .picture img")) image.alt = pictureAlt();
 }
 function renderLanguage() {
   renderText();
@@ -919,6 +926,7 @@ function showView(next) {
     renderActivity();
     activityLoop();
   }
+  chatLoop();
   for (const shown of panelHooks.show[setup ? "settings" : next] || []) shown();
 }
 // The persona as last loaded or saved; edits are compared with it.
@@ -1058,6 +1066,8 @@ function badge(kind, size = "") {
   mark(node, kind);
   return node;
 }
+// Platforms where the character takes no direct messages: Twitch whispers are not supported.
+const NO_DMS = new Set(["twitch"]);
 function describe(item) {
   const how =
     item.group === "scan"
@@ -1067,7 +1077,8 @@ function describe(item) {
         : t("howPaste", {
             n: String(item.fields.filter((f) => f.required).length),
           });
-  return [how, t(item.groups ? "reachAll" : "reachDm")];
+  const reach = NO_DMS.has(item.id) ? "reachChannels" : item.groups ? "reachAll" : "reachDm";
+  return [how, t(reach)];
 }
 function tiles() {
   for (const box of document.querySelectorAll(".tiles")) {
@@ -1780,6 +1791,115 @@ function bubble(text, kind) {
   $("messages").scrollTop = $("messages").scrollHeight;
   return node;
 }
+// The newest message the chat shows, and which chat it is: a new chat starts over.
+let chatSeen = 0,
+  chatTag = "",
+  chatTimer = null,
+  chatPolling = false,
+  chatPolled = 0;
+// What the character sends on its own is looked for this often while the chat is on screen.
+const CHAT_POLL_MS = 3000;
+const pictureAlt = () => t("chatPicture", { name: state?.name || defaultName() });
+function pictureGone(node) {
+  node.classList.remove("loading");
+  node.classList.add("gone");
+  node.dataset.t = "chatPictureGone";
+  node.textContent = t("chatPictureGone");
+}
+// The picture route needs the page's token, which an <img> cannot send.
+async function showPicture(node, name) {
+  try {
+    const response = await fetch(`/api/chat/picture/${encodeURIComponent(name)}`, {
+      headers: { "X-Personagent-Setup-Token": token },
+      credentials: "omit",
+    });
+    if (!response.ok) throw new Error("gone");
+    const blob = await response.blob();
+    const url = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    const image = document.createElement("img");
+    image.alt = pictureAlt();
+    image.addEventListener(
+      "load",
+      () => {
+        node.classList.remove("loading");
+        $("messages").scrollTop = $("messages").scrollHeight;
+      },
+      { once: true },
+    );
+    image.addEventListener("error", () => pictureGone(node), { once: true });
+    image.src = url;
+    node.replaceChildren(image);
+  } catch {
+    pictureGone(node);
+  }
+}
+function showMessage(item, arrived = false) {
+  const node =
+    item.picture !== undefined
+      ? bubble("", "bot picture loading")
+      : bubble(item.text, item.role === "user" ? "user" : "bot");
+  if (item.picture !== undefined) {
+    if (item.picture) showPicture(node, item.picture);
+    else pictureGone(node);
+  }
+  if (arrived) node.classList.add("arrived");
+  chatSeen = Math.max(chatSeen, item.seq || 0);
+  $("chat-empty").hidden = true;
+  return node;
+}
+function showHistory(history) {
+  for (const node of $("messages").querySelectorAll(".bubble")) node.remove();
+  chatSeen = 0;
+  chatTag = history.chat || "";
+  $("chat-empty").hidden = history.messages.length > 0;
+  for (const item of history.messages) showMessage(item);
+  chatSeen = Math.max(chatSeen, history.last || 0);
+}
+async function chatLoop() {
+  clearTimeout(chatTimer);
+  chatTimer = null;
+  if (ended || view !== "chat" || document.hidden || !state?.configured) return;
+  // Opening the chat again soon after does not look sooner than the interval allows.
+  const wait = chatPolled + CHAT_POLL_MS - Date.now();
+  if (wait > 0) {
+    chatTimer = setTimeout(chatLoop, wait);
+    return;
+  }
+  if (!chatting && !chatPolling) {
+    chatPolling = true;
+    chatPolled = Date.now();
+    try {
+      const value = await api(`chat/history?after=${chatSeen}`);
+      // A reply that started meanwhile brings these messages itself.
+      if (!chatting) {
+        if (value.chat !== chatTag) showHistory(await api("chat/history"));
+        else {
+          const fresh = value.messages.filter((item) => item.seq > chatSeen);
+          for (const item of fresh) showMessage(item, true);
+          const said = fresh.filter((item) => item.role !== "user");
+          if (said.length)
+            avatarMood("talking", said.reduce((n, item) => n + Array.from(item.text || "").length, 0));
+        }
+      }
+    } catch {
+      // The next look tries again; a lasting problem shows when a message is sent.
+    } finally {
+      chatPolling = false;
+    }
+  }
+  clearTimeout(chatTimer);
+  if (!ended && view === "chat" && !document.hidden)
+    chatTimer = setTimeout(chatLoop, CHAT_POLL_MS);
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) clearTimeout(chatTimer);
+  else chatLoop();
+});
 let talkTimer = null;
 // The chat avatar thinks while a reply is on its way, then talks for a
 // while that grows with the reply.
@@ -1794,20 +1914,27 @@ function avatarMood(mood, length = 0) {
       Math.min(3200, Math.max(900, 45 * length)),
     );
 }
-async function send(text, repeat = false) {
+async function send(text, mine = null) {
   if (chatting || !text.trim()) return;
   chatting = true;
   $("send").disabled = true;
   $("chat-empty").hidden = true;
   $("message").value = "";
-  if (!repeat) bubble(text, "user");
+  mine ||= bubble(text, "user");
   const pending = bubble(t("thinking"), "bot pending");
   avatarMood("thinking");
   try {
-    const value = await api("chat", { text });
-    pending.textContent = value.reply || t("noReply");
-    pending.classList.remove("pending");
-    avatarMood(value.reply ? "talking" : "", Array.from(value.reply || "").length);
+    const value = await api("chat", { text, after: chatSeen });
+    // The chat as recorded, in order: anything the character sent on its own
+    // meanwhile, this message and the reply.
+    mine.remove();
+    pending.remove();
+    if (value.chat !== chatTag) showHistory(await api("chat/history"));
+    else for (const item of value.messages) if (item.seq > chatSeen) showMessage(item);
+    const own = value.messages.filter((item) => item.role === "user").pop();
+    const answered = value.messages.some((item) => item.role !== "user" && own && item.seq > own.seq);
+    if (!answered) bubble(t("noReply"), "bot");
+    avatarMood(answered ? "talking" : "", Array.from(value.reply || "").length);
   } catch (error) {
     avatarMood("");
     pending.textContent = t(error.message);
@@ -1819,7 +1946,7 @@ async function send(text, repeat = false) {
       // send() ignores a call while another reply is on its way.
       if (chatting) return;
       pending.remove();
-      send(text, true);
+      send(text, mine);
     });
     pending.append(document.createElement("br"), retry);
   } finally {
@@ -1827,6 +1954,7 @@ async function send(text, repeat = false) {
     $("send").disabled = false;
     $("message").focus();
     $("messages").scrollTop = $("messages").scrollHeight;
+    chatLoop();
   }
 }
 for (const button of document.querySelectorAll(".nav"))
@@ -2081,8 +2209,7 @@ $("forget-chat").addEventListener("click", async () => {
   $("forget-chat").disabled = true;
   try {
     const done = await api("chat/forget", {});
-    for (const node of $("messages").querySelectorAll(".bubble")) node.remove();
-    $("chat-empty").hidden = false;
+    showHistory(await api("chat/history"));
     toast(done.forgotten ? t("forgetChatDone", { count: String(done.forgotten) }) : t("forgetChatNone"));
   } catch (error) {
     toast(t(error.message));
@@ -2094,8 +2221,7 @@ $("reset-chat").addEventListener("click", async () => {
   if (chatting) return;
   try {
     await api("chat/reset", {});
-    for (const node of $("messages").querySelectorAll(".bubble")) node.remove();
-    $("chat-empty").hidden = false;
+    showHistory(await api("chat/history"));
   } catch (error) {
     toast(t(error.message));
   }
@@ -2238,14 +2364,7 @@ window.PA = {
     state = await api("state");
     populate();
     renderLanguage();
-    for (const node of $("messages").querySelectorAll(".bubble")) node.remove();
-    $("chat-empty").hidden = false;
-    const history = await api("chat/history");
-    if (history.messages.length) {
-      $("chat-empty").hidden = true;
-      for (const item of history.messages)
-        bubble(item.text, item.role === "user" ? "user" : "bot");
-    }
+    showHistory(await api("chat/history"));
   },
 };
 (async () => {
@@ -2271,12 +2390,8 @@ window.PA = {
     populate();
     renderLanguage();
     showView("chat");
-    const history = await api("chat/history");
-    if (history.messages.length) {
-      $("chat-empty").hidden = true;
-      for (const item of history.messages)
-        bubble(item.text, item.role === "user" ? "user" : "bot");
-    }
+    showHistory(await api("chat/history"));
+    chatLoop();
     poll();
     activityLoop();
   } catch (error) {
