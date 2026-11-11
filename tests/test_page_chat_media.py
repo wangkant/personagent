@@ -300,6 +300,12 @@ def test_after_a_coding_assistant_speaks_the_character_still_reaches_the_page(mo
         try:
             page = await workspace.chat("hello")
             assert page["reply"] == "hi back"
+            # The page keeps its route only while it is seen pulling: wait for its first pull.
+            for _ in range(250):
+                if agent.outbox.live(welcome.PAGE_CONNECTOR):
+                    break
+                await asyncio.sleep(0.02)
+            assert agent.outbox.live(welcome.PAGE_CONNECTOR)
             coding = await welcome.send_chat_items(
                 workspace.services.agent_url, "token", workspace._conversation, "from the terminal",
                 connector_id="coding-agent", timeout_s=5)
