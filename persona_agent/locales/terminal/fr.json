@@ -113,7 +113,7 @@
 "direct: running {0}": "direct : en cours {0}",
 "Connect the stored platforms directly": "Connecte directement les plateformes enregistrées",
 "No direct platforms are connected.": "Aucune plateforme connectée directement.",
-"Measure speaking, persona and learning on labelled cases, through the real agent.": "Mesure la prise de parole, la fidélité au personnage et l'apprentissage sur des cas annotés, avec le véritable agent.",
+"Measure speaking, persona, learning and memory on labelled cases, through the real agent.": "Mesure la prise de parole, la fidélité au personnage, l'apprentissage et la mémoire sur des cas annotés, avec le véritable agent.",
 "en or zh (default: AGENT_LANG, else en)": "en ou zh (par défaut : AGENT_LANG, sinon en)",
 "cases per suite, spread across modes and labels (0: all)": "cas par suite, répartis entre modes et étiquettes (0 : tous)",
 "report path (default: <home>/benchmark_runs/behavior-eval-<lang>-<time>.json)": "chemin du rapport (par défaut : <home>/benchmark_runs/behavior-eval-<lang>-<time>.json)",

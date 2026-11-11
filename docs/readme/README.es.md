@@ -38,6 +38,7 @@ Una ráfaga de mensajes recibe una sola respuesta.
 <td valign="top">
 Lo que enseña una corrección, como el nombre que el grupo da al gimnasio, se aplica a todas las respuestas posteriores en ese chat.<br>
 Un troll o un simple espectador no pueden volver a entrenarlo.<br>
+Cuando las reacciones no pueden resolver un cambio, decide por sí mismo y registra el motivo; nadie tiene que aprobar nada.<br>
 Cada cambio queda registrado y cualquiera de ellos puede revertirse.
 </td>
 </tr>
@@ -57,7 +58,7 @@ Puede modificar el perfil del personaje en cualquier momento. Lo que ha aprendid
 </tr>
 </table>
 
-Cada chat tiene su propia memoria, que olvida lo que se le pide: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([comandos de memoria](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md#comandos-de-memoria)).
+Cada chat tiene su propia memoria: mensajes recientes que se conservan tras un reinicio, un resumen de la conversación anterior, acontecimientos con fecha y hechos sobre las personas, que el personaje mantiene actualizados por sí mismo. Olvida lo que se le pide: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([comandos de memoria](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md#comandos-de-memoria)). La vista Actividad muestra todo lo que recuerda, y cualquier elemento puede olvidarse o recuperarse desde allí ([memoria](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md#memoria)).
 
 ## Primeros pasos
 

@@ -113,7 +113,7 @@
 "direct: running {0}": "直连：正在运行 {0}",
 "Connect the stored platforms directly": "直接连接已保存的平台",
 "No direct platforms are connected.": "当前没有已连接的直连平台。",
-"Measure speaking, persona and learning on labelled cases, through the real agent.": "通过真实的 agent，在已标注的用例上评估发言、人设和学习表现。",
+"Measure speaking, persona, learning and memory on labelled cases, through the real agent.": "通过真实的 agent，在已标注的用例上评估发言、人设、学习和记忆表现。",
 "en or zh (default: AGENT_LANG, else en)": "en 或 zh（默认：AGENT_LANG，否则 en）",
 "cases per suite, spread across modes and labels (0: all)": "每个测试集的用例数，按模式和标签均匀分配（0：全部）",
 "report path (default: <home>/benchmark_runs/behavior-eval-<lang>-<time>.json)": "报告路径（默认：<home>/benchmark_runs/behavior-eval-<lang>-<time>.json）",

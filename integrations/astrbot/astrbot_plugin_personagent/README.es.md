@@ -201,7 +201,7 @@ Cuando `connector_token` está definido, cada solicitud incluye cuatro cabeceras
 
 El cuerpo es JSON canónico: UTF-8, claves ordenadas, separadores compactos y caracteres no ASCII sin escapar. La firma cubre exactamente esos bytes, por lo que un proxy no debe reescribir el cuerpo. El agente rechaza una firma incorrecta, un nonce reutilizado o una marca de tiempo que difiera más de cinco minutos de su propio reloj. Mantenga ambos relojes sincronizados.
 
-El cuerpo también incluye la hora del mensaje según el adaptador como `sent_at`. El agente la comprueba por separado con `CONNECTOR_MAX_EVENT_AGE_S` (24 horas de forma predeterminada), de modo que un evento antiguo reenviado con una firma nueva se sigue rechazando. El complemento no reenvía un mensaje cuyo adaptador no proporciona una marca de tiempo válida, y AstrBot lo gestiona de la forma habitual.
+El cuerpo también incluye la hora del mensaje según el adaptador como `sent_at`. El agente la comprueba por separado con `CONNECTOR_MAX_EVENT_AGE_S` (24 horas de forma predeterminada), de modo que un evento antiguo reenviado con una firma nueva se sigue rechazando. El complemento no reenvía un mensaje cuyo adaptador no proporciona una marca de tiempo válida, y AstrBot lo gestiona de la forma habitual. El personaje ve cada mensaje con esa hora, y un mensaje de grupo que tiene más de 10 minutos de antigüedad al llegar, como los mensajes acumulados que AstrBot entrega tras un reinicio, se conserva como contexto y no se responde.
 
 ## Identidades en el lado del agente
 

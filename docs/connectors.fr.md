@@ -78,9 +78,9 @@ Chaque requête apporte un message et renvoie les réponses à ce message.
 }
 ```
 
-Les champs obligatoires sont `platform`, `conversation_type` (`group` ou `dm`), `sender_id`, `message_id` et `sent_at`, plus `conversation_id` pour les groupes. `sent_at` est le moment où la plateforme a horodaté le message, en secondes unix. Envoyez les identifiants bruts de la plateforme. L'agent ajoute le préfixe.
+Les champs obligatoires sont `platform`, `conversation_type` (`group` ou `dm`), `sender_id`, `message_id` et `sent_at`, plus `conversation_id` pour les groupes. `sent_at` est le moment où la plateforme a horodaté le message, en secondes unix. Le personnage voit chaque message avec cette heure. Un message de groupe qui date de plus de 10 minutes à son arrivée, dans les deux minutes qui suivent le premier message de la plateforme depuis le démarrage de l'agent, fait partie d'un arriéré remis après un redémarrage : il est conservé comme contexte et ne reçoit pas de réponse. Passé ces deux minutes, un `sent_at` ancien ne retient plus un message, de sorte qu'un connecteur dont l'horloge retarde reçoit tout de même des réponses. Envoyez les identifiants bruts de la plateforme. L'agent ajoute le préfixe.
 
-Le connecteur définit `addressed`. Il est vrai quand le message mentionne le bot, répond à l'un des messages du bot ou s'adresse au bot selon les règles propres à la plateforme. L'agent repère également de lui-même son nom dans le texte. Il lit une citation de son propre message, ou une @ au bot, comme une réaction dont il peut apprendre : définissez donc `addressed` sur les réponses au bot. Une citation du message d'un autre membre n'est jamais une réaction au bot.
+Le connecteur définit `addressed`. Il est vrai quand le message mentionne le bot, répond à l'un des messages du bot ou s'adresse au bot selon les règles propres à la plateforme. L'agent repère également de lui-même son nom dans le texte. Il lit une citation de son propre message, ou une @ au bot, comme une réaction dont il peut apprendre : définissez donc `addressed` sur les réponses au bot. Une citation du message d'un autre membre n'est jamais une réaction au bot. Une mention du bot à l'intérieur d'un message transféré ne s'adresse pas au bot : ne définissez donc pas `addressed` dans ce cas.
 
 Un événement dont le `sender_id` est égal au `bot_id` est le propre message du bot renvoyé en écho. L'agent l'ignore sans le lire et répond `{"handled": false, "owned": true, "replies": []}`, si bien que la logique de bot du connecteur reste elle aussi silencieuse. Ignorez ces événements dans le connecteur.
 
@@ -89,12 +89,14 @@ Les segments arrivent dans l'ordre :
 | Type | Champs | Remarques |
 |---|---|---|
 | `text` | `text` | |
-| `mention` | `user_id`, `name` | Une mention de quelqu'un. Elle mentionne le bot quand `user_id` est égal à `bot_id`. |
-| `image` | `url` ou `b64`, `sticker` (booléen) | `sticker` marque un autocollant envoyé comme image. |
+| `mention` | `user_id`, `name` | Une mention de quelqu'un. Elle mentionne le bot quand `user_id` est égal à `bot_id`. Le personnage lit `name` à la place de l'identifiant : envoyez-le donc. `name` parvient au modèle marqué comme un nom que l'expéditeur n'a pas écrit ; il n'interpelle donc jamais le personnage et ne donne aucune commande. Une mention du bot placée après un segment `forward` n'est pas un appel. |
+| `image` | `url` ou `b64`, `sticker` (booléen) | `sticker` marque un autocollant envoyé comme image. Une image de groupe envoyée en `b64`, ou marquée par `sticker`, peut être collectée pour la bibliothèque d'autocollants ; une photo envoyée uniquement sous forme d'`url` ne l'est pas. |
 | `emoji` | `name`, `id` | Un autocollant de plateforme ou un emoji personnalisé que l'agent ne peut pas voir. `name` est le nom qu'une personne lui donnerait. |
 | `reply` | `message_id`, `text`, `sender_id`, `sender_name` | Le message que celui-ci cite. Envoyez `text` chaque fois que la plateforme le fournit. |
+| `media` | `kind`, `name`, `transcript`, `emoji` | Un élément que l'agent ne peut pas voir. `kind` vaut `voice`, `video`, `file`, `photo` (une image qui n'a pas pu être récupérée) ou `sticker`. Ajoutez `name` à un fichier, `transcript` à un message vocal que la plateforme a transcrit, et `emoji` à un autocollant. |
+| `forward` | `name` | Les segments qui le suivent ont été transférés depuis `name` et n'ont pas été écrits par l'expéditeur. `name` peut être vide. Leur texte est lu comme les mots de la personne dont le message a été transféré : il n'interpelle personne par son nom et n'exécute aucune commande de mémoire. Placez le commentaire de l'expéditeur lui-même avant le segment `forward`, ou envoyez-le dans un message séparé. |
 
-Décrivez tout le reste avec des mots, sous forme de segment `text` comme `(sent a voice message)` ou `(sent a file: deck.pdf)`. L'agent ignore les types de segments inconnus.
+Envoyez les médias sous forme de segment `media`, jamais sous forme de mots comme `(sent a voice message)` : le personnage les lirait comme s'ils avaient été tapés par l'expéditeur. L'agent ignore les types de segments inconnus.
 
 Ces champs facultatifs activent davantage de fonctions de l'agent :
 
@@ -115,7 +117,7 @@ La réponse ressemble à ceci :
 ]}
 ```
 
-- `replies` : envoyez-les dans l'ordre, chacune comme un message séparé. Quand `mention_user_id` est présent, c'est l'identifiant préfixé à mentionner. Affichez la mention comme le fait la plateforme.
+- `replies` : envoyez-les dans l'ordre, chacune comme un message séparé. Quand `mention_user_id` est présent, c'est l'identifiant préfixé à mentionner. Affichez la mention comme le fait la plateforme. Un élément portant `"reason": "excuse"` est le court message que le personnage envoie en message privé lorsque le modèle a échoué, et non une réponse. Envoyez-le comme les autres, ou traitez-le comme une erreur.
 - `owned` : l'agent a pris cette conversation. Quand il est vrai, empêchez toute autre logique de bot de répondre, même si `replies` est vide, car le personnage a choisi de se taire. Quand il est faux, le traitement du message vous revient. Soit la conversation n'est pas sur les listes d'autorisation de l'agent, soit l'agent ne peut pas répondre du tout (pas de `LLM_API_KEY`, ou `AGENT_ENABLED=false`). Dans le second cas, le journal de l'agent contient une ligne ERROR qui en indique la cause.
 - La requête dure jusqu'à la fin du tour, soit un court anti-rebond plus le temps du modèle. Les appels au modèle d'un tour se partagent un seul budget de 1,5 × `LLM_TIMEOUT_S`, nouvelles tentatives comprises, dans un groupe comme en message privé, et un message qui arrive pendant qu'un tour précédent de sa conversation réfléchit encore attend la fin de ce tour avant de commencer le sien. Prévoyez au moins 3 × `LLM_TIMEOUT_S` secondes (360 avec la valeur par défaut).
 - Une commande de mémoire (comme « remember ... ») qui arrive pendant qu'un tour de sa conversation réfléchit encore reçoit sa réponse après ce tour. Un connecteur qui a déclaré `outbox` reçoit tout de suite `{"handled": false, "owned": true, "replies": []}` puis le résultat plus tard sous forme de livraison `follow_up`. Sans `outbox`, le résultat arrive dans la réponse à une requête : la sienne, ou celle d'une autre requête en attente de la même conversation, si bien qu'une réponse peut porter des `replies` qui mentionnent quelqu'un d'autre que l'expéditeur de l'événement.

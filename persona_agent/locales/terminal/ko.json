@@ -113,7 +113,7 @@
 "direct: running {0}": "직접 연결: {0} 실행 중",
 "Connect the stored platforms directly": "저장된 플랫폼을 직접 연결합니다",
 "No direct platforms are connected.": "직접 연결된 플랫폼이 없습니다.",
-"Measure speaking, persona and learning on labelled cases, through the real agent.": "실제 에이전트로 레이블된 사례에서 발언, 페르소나, 학습을 측정합니다.",
+"Measure speaking, persona, learning and memory on labelled cases, through the real agent.": "실제 에이전트로 레이블된 사례에서 발언, 페르소나, 학습, 기억을 측정합니다.",
 "en or zh (default: AGENT_LANG, else en)": "en 또는 zh (기본값: AGENT_LANG, 없으면 en)",
 "cases per suite, spread across modes and labels (0: all)": "스위트당 사례 수, 모드와 레이블에 고르게 분배 (0: 전체)",
 "report path (default: <home>/benchmark_runs/behavior-eval-<lang>-<time>.json)": "보고서 경로 (기본값: <home>/benchmark_runs/behavior-eval-<lang>-<time>.json)",

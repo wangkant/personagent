@@ -38,6 +38,7 @@ Auf eine Flut von Nachrichten kommt eine einzige Antwort.
 <td valign="top">
 Was eine Korrektur lehrt, etwa wie die Gruppe das Fitnessstudio nennt, fließt in jede spätere Antwort in diesem Chat ein.<br>
 Ein Störer oder ein Unbeteiligter kann sie nicht umerziehen.<br>
+Wo Reaktionen eine Änderung nicht klären können, entscheidet die Figur selbst und hält fest, warum; niemand muss etwas genehmigen.<br>
 Jede Änderung wird festgehalten, und jede lässt sich zurücknehmen.
 </td>
 </tr>
@@ -57,7 +58,7 @@ Sie können die Persona jederzeit umschreiben. Was die Figur gelernt hat, bleibt
 </tr>
 </table>
 
-Jeder Chat hat sein eigenes Gedächtnis, und auf Wunsch vergisst die Figur Gespeichertes wieder: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([Gedächtnis-Befehle](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis-befehle)).
+Jeder Chat hat sein eigenes Gedächtnis: letzte Nachrichten, die einen Neustart überstehen, eine Zusammenfassung des bisherigen Gesprächs, datierte Ereignisse und Fakten über Personen, die die Figur selbst aktuell hält. Auf Wunsch vergisst die Figur Gespeichertes wieder: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([Gedächtnis-Befehle](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis-befehle)). Die Ansicht **Aktivität** zeigt alles, was sie sich merkt, und jeder Eintrag dort lässt sich vergessen oder zurückholen ([Gedächtnis](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis)).
 
 ## Erste Schritte
 

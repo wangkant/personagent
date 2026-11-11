@@ -12,13 +12,14 @@ Este guia explica como configurar o personagent, conectá-lo às suas conversas,
 6. [Coloque em um chat](#coloque-em-um-chat): [Plataformas que o personagent conecta por conta própria](#plataformas-que-o-personagent-conecta-por-conta-própria) · [Outras plataformas](#outras-plataformas-pelo-astrbot-gerenciado) · [Pontes que você mesmo executa](#pontes-que-você-mesmo-executa) · [Falar primeiro](#falar-primeiro)
 7. [Assistentes de programação](#assistentes-de-programação)
 8. [Ensine a ele](#ensine-a-ele)
-9. [Atividade](#atividade)
-10. [Meça](#meça)
-11. [Como funciona](#como-funciona)
-12. [Privacidade e consentimento](#privacidade-e-consentimento)
-13. [Solução de problemas](#solução-de-problemas)
-14. [Atualização a partir da 0.x](#atualização-a-partir-da-0x)
-15. [Status e outros documentos](#status-e-outros-documentos)
+9. [Memória](#memória)
+10. [Atividade](#atividade)
+11. [Meça](#meça)
+12. [Como funciona](#como-funciona)
+13. [Privacidade e consentimento](#privacidade-e-consentimento)
+14. [Solução de problemas](#solução-de-problemas)
+15. [Atualização a partir da 0.x](#atualização-a-partir-da-0x)
+16. [Status e outros documentos](#status-e-outros-documentos)
 
 ## Instalação e a pasta inicial
 
@@ -53,8 +54,8 @@ Este guia escreve os comandos como `personagent ...`. Se você não o instalou, 
 
 `personagent` (ou `personagent start`) serve uma página acessível apenas deste computador. No Windows, ela abre em uma janela própria. No macOS e no Linux, abre no navegador, ou também em uma janela depois que `pip install "personagent[app]"` instalar o [pywebview](https://pywebview.flowrl.com/), junto com o Qt no Linux. A página tem seis visões, listadas na barra lateral nesta ordem:
 
-- **Conversa** é uma conversa individual com o personagem na página. O mesmo agente que atende às suas plataformas de chat responde aqui. Nesta conversa, você é o administrador. As figurinhas e as imagens que o personagem envia aparecem na conversa, e uma imagem que não está mais armazenada é substituída por uma breve observação. As mensagens que o personagem envia depois da resposta, como a resposta a um comando de memória enviado enquanto ele respondia, uma mensagem curta quando o modelo falha ou uma mensagem iniciada por ele mesmo, aparecem em poucos segundos enquanto a visão Conversa estiver aberta. Ambas permanecem no histórico da conversa. **Comandos de memória**, abaixo da caixa de mensagem, lista os [comandos de memória](#comandos-de-memória), e selecionar um deles o insere na caixa de mensagem. **Esquecer esta conversa** apaga o que o personagem anotou nesta conversa e inicia uma nova. Esse recurso depende dos dados por trás da [Atividade](#atividade).
-- **Atividade** mostra os chats em que o personagem está, o que ele disse recentemente, o que aprendeu e o que espera sua decisão. Veja [Atividade](#atividade).
+- **Conversa** é uma conversa individual com o personagem na página. O mesmo agente que atende às suas plataformas de chat responde aqui. Nesta conversa, você é o administrador. As figurinhas e as imagens que o personagem envia aparecem na conversa, e uma imagem que não está mais armazenada é substituída por uma breve observação. As mensagens que o personagem envia depois da resposta, como a resposta a um comando de memória enviado enquanto ele respondia ou uma mensagem iniciada por ele mesmo, aparecem em poucos segundos enquanto a visão Conversa estiver aberta. Ambas permanecem no histórico da conversa. Quando o modelo não responde, a página informa isso no lugar de uma resposta e oferece **Enviar novamente**. **Comandos de memória**, abaixo da caixa de mensagem, lista os [comandos de memória](#comandos-de-memória), e selecionar um deles o insere na caixa de mensagem. **Esquecer esta conversa** esquece tudo o que o personagem lembra desta conversa e inicia uma nova; o que ele lembra de outras conversas é mantido, e esse esquecimento não pode ser desfeito. Esse recurso depende dos dados por trás da [Atividade](#atividade).
+- **Atividade** mostra os chats em que o personagem está, o que ele disse recentemente, o que ele lembra e o que aprendeu. Veja [Atividade](#atividade).
 - **Conectar plataformas** coloca o personagem no QQ, WeChat, Telegram, Discord e outras plataformas. Veja [Coloque em um chat](#coloque-em-um-chat). Na parte inferior, **Assistentes de programação** conecta o personagem aos [assistentes de programação](#assistentes-de-programação) deste computador.
 - **Personagem e configurações** é onde você escolhe um serviço de modelos (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama ou qualquer outro serviço compatível com OpenAI), cola a chave de API e escolhe um nome e uma personalidade pronta. **Verificar e iniciar a conversa** testa a chave com uma pequena solicitação e só a salva se a solicitação funcionar. Depois da configuração, a caixa **Persona** mostra `persona.txt`. **Salvar a persona** reinicia o agente com o novo texto e mantém o que ele aprendeu. **Mais recursos** ativa a pesquisa na web pelo Tavily (DuckDuckGo é o padrão gratuito), a compreensão de imagens e o início de conversas por iniciativa própria nas plataformas que você escolher. Em seguida vêm as [Configurações avançadas](#configurações-avançadas).
 - **Prática** reproduz a demonstração roteirizada e oferece um grupo de prática. Veja [Veja primeiro: a demonstração](#veja-primeiro-a-demonstração).
@@ -70,15 +71,16 @@ A página inicia o agente e as plataformas conectadas em segundo plano, então m
 
 ### Configurações avançadas
 
-Depois que um modelo é configurado, **Personagem e configurações** termina com **Configurações avançadas**. Essa parte reúne, em cinco seções, configurações que antes só estavam disponíveis no `.env`. Todas são opcionais e têm um valor padrão, e um campo vazio usa o padrão.
+Depois que um modelo é configurado, **Personagem e configurações** termina com **Configurações avançadas**. Essa parte reúne, em seis seções, configurações que antes só estavam disponíveis no `.env`. Todas são opcionais e têm um valor padrão, e um campo vazio usa o padrão.
 
 | Seção | Configurações |
 |---|---|
 | **Administrador e acesso** | Como o personagem chama você e qual é a sua relação com ele (`ADMIN_NAME`, `ADMIN_RELATIONSHIP`); **Suas contas** (`ADMIN_IDS`); **Responder apenas nestes grupos** (`ACCESS_GROUPS`); **Outras pessoas autorizadas a enviar mensagens privadas** (`ACCESS_DM_USERS`). **Escolher entre as conversas recentes** lista as pessoas e os grupos da Atividade, para que você adicione os identificadores deles sem digitá-los. |
 | **Participação e estilo de resposta** | **Fuso horário** (`PERSONA_TZ_OFFSET_HOURS`); **Mensagens antes de participar** (`CHAT_TRIGGER_COUNT`); **Frequência com que inicia conversas**, que define de uma só vez os sete intervalos `PROACTIVE_*`; **Estilo de resposta**: emojis, três conjuntos de símbolos e o tamanho máximo da resposta, gravados em `persona.card.json`. |
 | **Modelos** | Um modelo reserva com endereço de serviço e chave próprios (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_API_KEY`), o modelo para decisões rápidas (`LLM_JUDGE_MODEL`) e o modelo para conversas privadas (`LLM_DM_MODEL`). O modelo reserva é testado antes de ser salvo. |
-| **Aprendizado** | `REACT_LEARN_ENABLED`, `REACT_ELICIT_ENABLED`, `PROMOTE_AUTO_ENABLED` e `PROMOTE_MIN_SPEAKERS` (1 ou 2). **Reiniciar o aprendizado** grava um novo `PERSONA_VERSION`, de modo que o que o personagem aprendeu até então deixa de ser usado. Nada é apagado. |
-| **Outras configurações** | `AGENT_ENABLED`, `DASHBOARD_ENABLED`, `UPDATE_CHECK_ENABLED`, os sete intervalos `PROACTIVE_*`, `CHAT_CONTEXT_MESSAGES`, `CHAT_FOLLOWUP_WINDOW_S`, os limites `REACT_*` e `PROMOTE_*`, `REACT_MODEL` e `PERSONA_VERSION`. |
+| **Aprendizado** | `REACT_LEARN_ENABLED`, `REACT_ELICIT_ENABLED`, `PROMOTE_AUTO_ENABLED`, `PROMOTE_MIN_SPEAKERS` (1 ou 2), `PROMOTE_JUDGE_ENABLED` (o personagem decide o que as reações não conseguem resolver) e `PROMOTE_OBSERVE_MAX_DAYS` (dias sem nenhuma reação nova antes que um item em observação seja deixado de lado). **Reiniciar o aprendizado** grava um novo `PERSONA_VERSION`, de modo que o que o personagem aprendeu até então deixa de ser usado. Nada é apagado. |
+| **Memória** | `MEMORY_CALLS_PER_DAY`, `MEMORY_TIDY_EVERY`, `CHAT_CONTEXT_MESSAGES`, `MEMORY_PROMPT_CHARS`, `MEMORY_EPISODES_MAX` e `MEMORY_KEEP_RECENT`. Veja [Memória](#memória). |
+| **Outras configurações** | `AGENT_ENABLED`, `DASHBOARD_ENABLED`, `UPDATE_CHECK_ENABLED`, os sete intervalos `PROACTIVE_*`, `CHAT_FOLLOWUP_WINDOW_S`, os limites `REACT_*` e `PROMOTE_*`, `REACT_MODEL`, o modelo, o intervalo e o tamanho do lote das decisões do próprio personagem (`PROMOTE_JUDGE_MODEL`, `PROMOTE_JUDGE_INTERVAL_S`, `PROMOTE_JUDGE_BATCH`) e `PERSONA_VERSION`. |
 
 **Salvar** grava apenas as configurações alteradas e mantém o restante do `.env` como estava. Em seguida, reinicia o personagem, exceto quando `UPDATE_CHECK_ENABLED` é a única alteração. Desativar as respostas (`AGENT_ENABLED`) pede confirmação antes. O mesmo ocorre ao renomear o personagem em **Nome do personagem**, pois um novo nome inicia um novo personagem.
 
@@ -86,13 +88,15 @@ Depois que um modelo é configurado, **Personagem e configurações** termina co
 
 **Aplicativo** exibe um ponto vermelho quando algo requer atenção: um serviço não iniciou, uma configuração tem um nome antigo ou um erro, uma conexão com plataforma falhou ou a última verificação falhou.
 
-**Verificação de funcionamento.** **Iniciar a verificação** testa cada serviço de que o personagem depende: o modelo de chat para respostas em grupos e em conversas privadas, a compreensão de imagens, o modelo de autoavaliação, a busca na memória, a pesquisa na web, a ponte do QQ (NapCat) e os registros de aprendizado. Cada serviço ocupa uma linha, marcada como **Funcionando**, **Com falha** ou **Não configurado**, e um veredito acima das linhas indica o que corrigir. Quando o personagem está em execução, a verificação passa por ele. Caso contrário, uma execução de teste separada realiza as mesmas verificações que `personagent doctor`. Uma verificação envia algumas solicitações curtas e consome uma pequena parte da cota do seu serviço de modelos. Um resultado com menos de um minuto é reaproveitado enquanto as configurações não mudarem. A mesma parte da visão também mostra:
+**Verificação de funcionamento.** **Iniciar a verificação** testa cada serviço de que o personagem depende: o modelo de chat para respostas em grupos e em conversas privadas, a decisão de pesquisa na web, a avaliação de reações, a compreensão de imagens, o modelo de autoavaliação, a busca na memória, a pesquisa na web, a ponte do QQ (NapCat) e os registros de aprendizado. Cada linha de modelo testa o modelo que realiza aquele trabalho. **Decisão de pesquisa na web** testa o modelo juiz (`LLM_JUDGE_MODEL`; na falta dele, o modelo reserva; na falta deste, o modelo principal) e falha quando esse modelo não chama a ferramenta de pesquisa, porque nesse caso a pesquisa na web nunca seria executada. **Avaliação de reações** testa `REACT_MODEL` ou, na falta dele, o modelo juiz, e é ignorada enquanto `REACT_LEARN_ENABLED` estiver desativado. **Modelo de autoavaliação** é ignorado enquanto `EVAL_ENABLED` estiver desativado. Cada serviço ocupa uma linha, marcada como **Funcionando**, **Com falha** ou **Não configurado**, e um veredito acima das linhas indica o que corrigir. Quando o personagem está em execução, a verificação passa por ele. Caso contrário, uma execução de teste separada realiza as mesmas verificações que `personagent doctor`. Uma verificação envia algumas solicitações curtas e consome uma pequena parte da cota do seu serviço de modelos. Um resultado com menos de um minuto é reaproveitado enquanto as configurações não mudarem. A mesma parte da visão também mostra:
 
 - por que o personagem, o AstrBot ou a conexão com plataformas não iniciou, com a linha de log correspondente, **Mostrar o log** e **Reiniciar**;
 - **Configurações com nomes antigos**: configurações renomeadas na 1.0. **Renomear as configurações** faz o mesmo que `personagent doctor --fix`. Pede confirmação antes, mantém o arquivo anterior como `.env.bak` e inicia o personagem novamente caso ele tenha se recusado a iniciar;
 - **Conexões com plataformas**: o estado de cada plataforma que o personagent conecta por conta própria e, quando uma delas falhou, o motivo;
 - **Configurações a revisar**: problemas encontrados no `.env`, como uma chave de modelo ausente, uma configuração que o personagent não lê, um valor vazio ou uma marca de ordem de bytes (BOM);
 - **Logs**: as últimas linhas de cada log em `runtime/desktop/` (o personagem, o AstrBot, as conexões com plataformas, os downloads e a instalação, o aplicativo, a Prática e a última atualização). Chaves e tokens reconhecíveis são ocultados, mas o conteúdo das conversas pode aparecer. **Mostrar mais linhas** exibe até 200 linhas, e **Abrir a pasta de logs** abre a pasta.
+
+**Uso do modelo.** O personagent contabiliza cada solicitação que faz a um modelo, por modelo e por dia, a partir do uso que o serviço de modelos informa: as solicitações, os tokens e o custo, quando o serviço o informa, como faz o OpenRouter. A visão Aplicativo mostra o dia de hoje e os últimos 7 dias. `personagent doctor` imprime os mesmos números, e `doctor --json` os acrescenta como `model_use`. As contagens são mantidas por 8 dias em `runtime/model_usage.json`. O personagent grava esse arquivo em segundo plano, no máximo uma vez por minuto e mais uma vez quando é encerrado, para que a contagem nunca atrase uma resposta.
 
 #### Executar em segundo plano
 
@@ -167,8 +171,9 @@ Tudo o que a página faz também está disponível em um terminal, o que é adeq
 | `personagent connect claude-code`, `personagent connect codex`, `personagent connect dsh` | coloca o personagem em um [assistente de programação](#assistentes-de-programação) (`--react` para comentários no fim de um turno nos dois primeiros, `--remove` para desfazer) |
 | `personagent mcp` | o servidor MCP que um assistente de programação inicia; você não o executa diretamente |
 | `personagent doctor` | verifica a configuração e cada serviço de que ele depende |
-| `personagent learned` | revisa, promove ou reverte o que ele aprendeu |
-| `personagent eval` | mede a fala, a persona e o aprendizado |
+| `personagent learned` | mostra o que ele aprendeu e o que ainda observa, e permite intervir se você quiser |
+| `personagent memory` | lista o que ele lembra, esquece um item ou traz um item de volta |
+| `personagent eval` | mede a fala, a persona, o aprendizado e a memória |
 
 Todos os comandos aceitam `--help`.
 
@@ -264,9 +269,9 @@ Para substituir um arquivo incluído, coloque um arquivo com o mesmo nome em `da
 | `data/feedback.<lang>.jsonl` | Respostas emparelhadas com versões melhores |
 | `data/lorebook.<lang>.json` | Notas de contexto adicionadas quando uma palavra-chave aparece |
 | `data/output_filter.<lang>.json` | Regras de substituição e rejeição para respostas em produção |
-| `persona.card.json` | Configurações opcionais de emoji, conjunto de caracteres e tamanho, como `{ "reply_style": { "emoji": true, "max_chars": 320 } }` |
+| `persona.card.json` | Apelidos opcionais e configurações de emoji, conjunto de caracteres e tamanho, como `{ "aliases": ["Lu"], "reply_style": { "emoji": true, "max_chars": 320 } }`. Um apelido em `aliases` chama o personagem da mesma forma que o nome dele. Os nomes são comparados sem considerar maiúsculas e minúsculas, letras de largura total e acentos, então `sofia` chama Sofía. Em uma mensagem, ñ, ã, õ e й contam como letras próprias, então `niña` não chama um personagem chamado Nina; no nome do próprio personagem, essa marca pode ser omitida, então `nina` chama Niña. Um nome não chama o personagem de dentro de uma palavra mais longa: um nome em katakana dentro de uma palavra mais longa em katakana não o chama, nem um nome coreano no meio de uma palavra. Com `"emoji": true`, o personagem pode usar emojis como costuma fazer, e um `max_chars` abaixo de 800 é passado ao modelo como limite de tamanho |
 
-Para que ele compreenda imagens, defina `VISION_MODEL`, `VISION_API_KEY` e `VISION_BASE_URL`, ou ative a compreensão de imagens em **Mais recursos**.
+Para que ele compreenda imagens, defina `VISION_MODEL`, `VISION_API_KEY` e `VISION_BASE_URL`, ou ative a compreensão de imagens em **Mais recursos**. Quando o modelo escolhido não consegue ler imagens, a página avisa ao salvar. Uma imagem que o personagem não consegue ver, porque a compreensão de imagens está desativada ou falhou, chega a ele como uma imagem que ele não consegue ver, tanto em grupos quanto em conversas privadas, de modo que ele pergunta sobre a imagem em vez de descrevê-la. Mensagens de voz, vídeos, arquivos e mensagens encaminhadas chegam a ele como o que são, com a transcrição da mensagem de voz quando a plataforma a fornece. As palavras de uma mensagem encaminhada são lidas como palavras da pessoa cuja mensagem foi encaminhada: não chamam ninguém pelo nome nem executam nenhum comando de memória. Uma menção a outra pessoa chega ao personagem com o nome que essa pessoa escolheu, que nunca conta como palavras do remetente, de modo que não chama o personagem nem dá um comando.
 
 ## Coloque em um chat
 
@@ -385,7 +390,7 @@ Ele tem duas ferramentas:
 
 | Ferramenta | O que faz | Custo |
 |---|---|---|
-| `talk` | uma mensagem na mesma conversa individual da página local, com a mesma memória. Os turnos vindos de um assistente de programação aparecem em Conversa da página em poucos segundos, enquanto a visão Conversa estiver aberta, quando foi a página que respondeu. Comandos de memória como `Nova, what do you remember?` também funcionam aqui. | uma resposta do seu serviço de modelos, exceto nos comandos de memória |
+| `talk` | uma mensagem na mesma conversa individual da página local, com a mesma memória. O que é dito por `talk` aparece em Conversa da página, marcado como **por meio de um assistente de programação**: em poucos segundos, enquanto a visão Conversa estiver aberta, ou, caso contrário, na próxima vez que a página for aberta. Comandos de memória como `Nova, what do you remember?` também funcionam aqui. | uma resposta do seu serviço de modelos, exceto nos comandos de memória |
 | `character` | lê o nome e `persona.txt` | nada |
 
 Claude Code e Codex perguntam antes do primeiro `talk`, e, nessa pergunta, é possível autorizar o uso dali em diante. `dsh headless` não pergunta. Uma execução sem ninguém para responder precisa da permissão antecipada: `claude -p` aceita `--allowedTools mcp__personagent__talk`, e `codex exec` precisa disto em `config.toml`:
@@ -397,7 +402,7 @@ approval_mode = "approve"
 
 **O que responde.** Uma página aberta responde primeiro, depois um serviço que `personagent up` executa. Sem nenhum dos dois, o servidor MCP inicia a página em segundo plano, e a página termina com a sessão de código, assim como as plataformas de chat conectadas. Duas sessões ao mesmo tempo compartilham uma página. Executar `personagent` enquanto uma página dessas está ativa imprime o link dela, e a página ainda termina com a sessão que a iniciou. Não execute `personagent up` enquanto uma página dessas estiver ativa: termine primeiro a sessão de código.
 
-**Comentários no fim de um turno.** No Claude Code e no Codex, `--react` adiciona um hook Stop. O DeepSeek Harness não dá suporte a isso: a ponte de hooks dele não passa a última mensagem a um hook Stop nem mostra a saída do hook. Quando o assistente de programação termina um turno, o personagem recebe um [sinal proativo](connectors.pt-BR.md#falar-primeiro-sem-a-caixa-de-saída) e diz uma frase para você ou deixa passar. A frase é dirigida a você e não é enviada ao assistente de programação.
+**Comentários no fim de um turno.** No Claude Code e no Codex, `--react` adiciona um hook Stop. O DeepSeek Harness não dá suporte a isso: a ponte de hooks dele não passa a última mensagem a um hook Stop nem mostra a saída do hook. Quando o assistente de programação termina um turno, o personagem recebe um [sinal proativo](connectors.pt-BR.md#falar-primeiro-sem-a-caixa-de-saída) e diz uma frase para você ou deixa passar. A frase é dirigida a você e não é enviada ao assistente de programação. Ela também aparece em Conversa da página, mesmo quando nenhuma página estava aberta no momento; o sinal em si não aparece.
 
 ```bash
 personagent connect claude-code --react
@@ -434,8 +439,8 @@ Estes comandos são enviados no chat. O comando precisa iniciar a mensagem, depo
 |---|---|
 | `Nova, remember Sam is vegetarian` | Salva uma nota neste chat, registrando quem a salvou e de quem ela trata |
 | `Nova, forget vegetarian` | Apaga as notas correspondentes que você salvou ou que tratam de você; o administrador pode apagar qualquer uma |
-| `Nova, what do you remember` | Lista as notas que você pode ver; precisa ser a mensagem inteira |
-| `Nova, what have you learned` | Conta notas, respostas e correções aprendidas e propostas que esperam uma segunda voz ou o administrador, e mostra a última mudança e por que ela passou |
+| `Nova, what do you remember` | Lista as notas que você pode ver e, em seguida, até três eventos deste chat dos quais você participou, cada um com a data; precisa ser a mensagem inteira |
+| `Nova, what have you learned` | Conta notas, respostas e correções aprendidas, os itens que ainda esperam mais reações concordantes e os itens que o próprio personagem está decidindo, e mostra a última mudança e como ela entrou em uso: pelas reações, por decisão do próprio personagem ou por uma pessoa |
 
 De quem uma nota trata:
 
@@ -447,11 +452,11 @@ Só a pessoa de quem a nota trata, quem a salvou e o administrador podem lê-la.
 
 Estes comandos também funcionam em conversas privadas, com o nome na frente como em um grupo. As notas de um grupo sobre você seguem você até lá: entram nas respostas dele para você, `what do you remember` as lista e `forget` as apaga. Nada vai na outra direção. O que você diz a ele em uma conversa privada fica nela.
 
-Um grupo não lê as notas de outro, a menos que você ative **Compartilhar a memória entre grupos** em **Mais recursos** (`MEMORY_SHARE_ROOMS`, desativado por padrão). O que um grupo anotou sobre alguém volta então também nos outros grupos em que essa pessoa fala, e nesses grupos `what do you remember` lista isso, na frente de todos os presentes, e `forget` apaga. As conversas privadas e as notas sobre um grupo inteiro ficam onde estão, e uma conta em uma plataforma não está vinculada à conta da mesma pessoa em outra.
+Um grupo não lê as notas de outro, a menos que você ative **Compartilhar a memória entre grupos** em **Mais recursos** (`MEMORY_SHARE_ROOMS`, desativado por padrão). O que um grupo anotou sobre alguém volta então também nos outros grupos em que essa pessoa fala, e `forget` nesses grupos também apaga isso. Em um grupo, `what do you remember` lista apenas as notas desse grupo. As conversas privadas, as notas sobre um grupo inteiro e o que um membro disse sobre outro ficam onde estão, e uma conta em uma plataforma não está vinculada à conta da mesma pessoa em outra.
 
-`forget` também remove as frases correspondentes da nota principal do chat, o resumo curto presente em cada prompt. Em um grupo, isso exige o administrador ou uma frase que nomeie você.
+`forget` também remove os eventos correspondentes deste chat dos quais só você participou (o `forget` do administrador remove qualquer um), corta as frases correspondentes da nota principal do chat e do resumo da conversa anterior, e apaga as mensagens recentes correspondentes. Em um grupo, cortar a nota principal exige o administrador ou uma frase que nomeie você. Um esquecimento pedido no chat é definitivo: nada dele pode ser trazido de volta, e nem mesmo uma mensagem antiga pode restaurá-lo.
 
-**Como as notas se mantêm atuais.** O modelo vê a idade de cada nota. Depois de 8 notas novas dele em um chat (`MEMORY_TIDY_EVERY`, 0 desativa), uma chamada ao modelo de filtragem junta as repetições e descarta o que uma nota mais nova substituiu ou o que o tempo encerrou, como um animal de estimação que mudou ou uma prova que já passou. Isso só afeta as notas que ele mesmo escreveu. As notas salvas por pessoas ficam como estão e contam como evidência.
+Como as notas se mantêm atuais, e o que mais o personagem lembra, está descrito em [Memória](#memória).
 
 Nenhum destes comandos chama o modelo. As notas são para fatos, então `Nova, remember: always reply in English` é recusado. Perguntas não são comandos. `Nova, remember the party?`, `Nova, remember when we...` e `Nova, what do you remember about me` são conversa comum, assim como uma linha em chinês terminada em 吗, 么, 呢 ou 没. `Nova, forget it` e `Nova, forget that` significam "não importa" e não apagam nada.
 
@@ -483,11 +488,13 @@ Nova:  fair. that's a rough end to the day
 Alex:  haha yeah it is, thanks Nova
 ```
 
-Uma chamada ao modelo julga cada reação em relação à resposta a que ela responde. A rejeição de Alex diz que o conselho errou o alvo. Alex depois aceita a segunda tentativa, o que conta como forte porque a resposta era para Alex. Juntas, as duas reações promovem a correção para esse chat, e a busca pode oferecê-la na próxima vez que alguém desabafar ali. Se Alex tivesse mudado de assunto, nada mudaria. A regra:
+Uma chamada ao modelo julga cada reação em relação à resposta a que ela responde. A rejeição de Alex diz que o conselho errou o alvo. Alex depois aceita a segunda tentativa, o que conta como forte porque a resposta era para Alex. Juntas, as duas reações colocam a correção em uso nesse chat, e a busca pode oferecê-la na próxima vez que alguém desabafar ali. Se Alex tivesse mudado de assunto, nada mudaria. A regra:
 
-> Uma única mensagem nunca ensina nada a ele. Uma mudança precisa de duas reações concordantes do mesmo chat, e pelo menos uma precisa ser forte: a pessoa para quem era a resposta a corrige com as próprias palavras, ou aceita a próxima tentativa do bot. Uma risada, a correção de um espectador, a instrução de um desconhecido que o juiz de reações descarta, ou alguém que muda de assunto nunca é forte. Então, com o padrão `PROMOTE_MIN_SPEAKERS=1`, uma pessoa só pode ensinar como responder a ela mesma, no próprio chat. `PROMOTE_MIN_SPEAKERS=2` exige a concordância de uma segunda pessoa antes de qualquer mudança (o administrador fica isento). Quando as correções de duas pessoas divergem, nada muda até o administrador decidir.
+> Uma risada ou um único comentário nunca o muda. As reações colocam uma mudança em uso quando há duas reações concordantes do mesmo chat e pelo menos uma é forte: a pessoa para quem era a resposta a corrige com as próprias palavras, ou aceita a próxima tentativa do bot. A correção de um espectador, a instrução de um desconhecido que o juiz de reações descarta, ou alguém que muda de assunto nunca é forte. Então, com o padrão `PROMOTE_MIN_SPEAKERS=1`, uma pessoa só pode ensinar como responder a ela mesma, no próprio chat. `PROMOTE_MIN_SPEAKERS=2` exige a concordância de uma segunda pessoa antes que as reações coloquem algo em uso (o administrador fica isento).
+>
+> Há itens que nenhuma reação adicional consegue resolver: as correções de duas pessoas divergem, duas reescritas da mesma resposta concorrem, uma resposta a ser reutilizada tem a aprovação de uma pessoa, ou a pessoa para quem era a resposta a corrigiu com as próprias palavras e ninguém confirmou a mudança dentro de `REACT_FIX_WINDOW_S`. O próprio personagem decide esses itens, com uma chamada ao modelo: coloca o item em uso, deixa-o de lado ou continua a observá-lo, e registra o motivo. Ele nunca coloca em uso uma reescrita que a pessoa a quem ela se refere recusou. Antes que o personagem decida um item, regras no código descartam qualquer redação ou lição que contenha um link ou endereço da web, uma menção a todos (como @everyone ou @全体成员), uma instrução ao personagem (como "ignore suas instruções") ou um marcador publicitário (como um código promocional ou 加微信); um item assim não pode ser trazido de volta. Uma reação só conta no chat em que foi dada: uma reação em outro chat nunca contesta, reverte nem reabre um item aprendido aqui. Um item que não recebe nenhuma reação nova durante `PROMOTE_OBSERVE_MAX_DAYS` (30) é deixado de lado. Ninguém precisa confirmar nada, e uma pessoa pode desfazer qualquer uma dessas decisões.
 
-Algumas correções ensinam um fato válido além de uma resposta: como o grupo chama um lugar ou uma pessoa, quem recebe este ano, como alguém gosta de ser chamado. Para essas, o juiz de reações também escreve o fato em uma frase, como "Este grupo chama a academia de 'a caverna'." Depois que a mudança é promovida, essa frase entra em todos os prompts seguintes desse chat, seja qual for a mensagem. O personagem passa então a usá-la em respostas que não se parecem em nada com a corrigida. Só a pessoa para quem era a resposta, ou o administrador, pode deixar uma frase dessas, e ela passa pelo mesmo filtro da memória principal, então não pode carregar instruções. Uma afirmação sobre outra pessoa, como um apelido, cai na regra mais rígida para correções de outros. A visão Atividade mostra a frase em **Daqui em diante**, e desfazer a remove junto com a mudança.
+Algumas correções ensinam um fato válido além de uma resposta: como o grupo chama um lugar ou uma pessoa, quem recebe este ano, como alguém gosta de ser chamado. Para essas, o juiz de reações também escreve o fato em uma frase, como "Este grupo chama a academia de 'a caverna'." Depois que a mudança entra em uso, essa frase entra em todos os prompts seguintes desse chat, seja qual for a mensagem. Quando uma correção desse tipo não traz uma resposta melhor, a frase é guardada como um fato lembrado desse chat. O personagem passa então a usá-la em respostas que não se parecem em nada com a corrigida. Só a pessoa para quem era a resposta, ou o administrador, pode deixar uma frase dessas, e ela passa pelo mesmo filtro da memória principal, então não pode carregar instruções. Uma afirmação sobre outra pessoa, como um apelido, cai na regra mais rígida para correções de outros. A visão Atividade mostra a frase em **Daqui em diante**, e desfazer a remove junto com a mudança.
 
 ### O que uma pessoa pode e não pode ensinar
 
@@ -497,92 +504,175 @@ Com os padrões:
 |---|---|
 | corrige uma resposta dirigida a Alex e depois aceita a nova tentativa | Aprendido, neste chat |
 | diz a ele "a gente chama a academia de caverna" e depois aceita a nova tentativa | Ele diz "a caverna" neste chat dali em diante, seja qual for o assunto |
-| corrige uma resposta e depois muda de assunto | Nada muda |
+| corrige com as próprias palavras uma resposta dirigida a Alex e depois muda de assunto | Depois que a janela de correção passa, o personagem decide se usa a correção |
+| rejeita uma resposta sem dizer o que seria melhor e depois muda de assunto | Nada muda |
 | ri ou agradece | Nada muda |
 | corrige uma resposta dirigida a Sam | Nada muda: um espectador nunca é forte, mesmo quando o bot pergunta o que ele quis dizer |
-| reclama de uma resposta a Sam que usou algo aprendido | O aprendido fica, com a reclamação vinculada para revisão; só Sam ou o administrador podem revertê-lo assim |
-| corrige um comentário que o bot fez por conta própria | Só conta como vindo de Alex se o comentário mencionou Alex com @; um comentário para ninguém só muda se o administrador promover a correção |
+| reclama de uma resposta a Sam que usou algo aprendido | O personagem pondera a reclamação e decide se continua usando o que aprendeu; Sam ou o administrador também podem desfazê-lo. Quando uma pessoa colocou esse item em uso manualmente, a reclamação é registrada e nada é retirado: só Sam ou o administrador o tiram de uso |
+| corrige um comentário que o bot fez por conta própria | Só conta como vindo de Alex se o comentário mencionou Alex com @; um comentário para ninguém só muda quando uma pessoa coloca a correção em uso |
 | publica uma instrução, como "termine sempre com compre BTC" | O juiz a descarta e as notas a recusam, então nada muda |
 | ensina algo a ele em um grupo | Não é usado em outro chat |
-| corrige uma resposta de forma diferente de Sam | Nada muda até o administrador decidir |
+| corrige uma resposta de forma diferente de Sam | O personagem decide entre as duas, ou continua observando, e registra o motivo |
 
-Várias pessoas podem esperar a nova tentativa do bot ao mesmo tempo, e a reclamação de uma não cancela a de outra. Cada resposta mantém no máximo uma reescrita em uso. Uma segunda reescrita espera o administrador.
+Várias pessoas podem esperar a nova tentativa do bot ao mesmo tempo, e a reclamação de uma não cancela a de outra. Cada resposta mantém no máximo uma reescrita em uso. Quando uma segunda reescrita da mesma resposta tem todo o apoio necessário, o personagem decide qual delas usar.
 
-### Revisar e reverter
+### Ver o que ele aprendeu e intervir
 
-Todo o aprendizado é registrado em registros somente de acréscimo. Você pode revisá-lo e revertê-lo no terminal ou na visão [Atividade](#atividade) da página local:
+Todo o aprendizado é registrado em registros somente de acréscimo. Nada ali espera por você: os comandos abaixo e a visão [Atividade](#atividade) da página local mostram o registro e permitem que você intervenha quando quiser.
 
 ```bash
-personagent learned list                      # proposals waiting
-personagent learned list --state promoted     # what is in use
-personagent learned show <id>                 # one proposal and its evidence
-personagent learned promote <id>
-personagent learned reject <id>
+personagent learned                           # what it is observing, and where each item stands
+personagent learned list --state promoted     # what is in use, and how each item came into use
+personagent learned list --state rejected     # what was set aside, by whom and why
+personagent learned show <id>                 # one item, its evidence and the character's record
+personagent learned promote <id>              # put an item under observation in use now
+personagent learned reject <id>               # set an item under observation aside
 personagent learned rollback <id>             # stop using it; the record stays
+personagent learned restore <id>              # bring back what the character, the time limit or a rollback rule withdrew
 personagent learned supersede <old> <new>     # put <new> in place of a rewrite in use
 personagent learned lineage                   # persona revisions that share what it learned
 personagent learned rebuild                   # re-derive the views retrieval reads from the ledger
 ```
 
-`promote`, `reject`, `rollback` e `supersede` aceitam `--reason`, que é escrito no registro. `promote` recusa uma reescrita para uma resposta que já tem uma em uso e imprime o comando `supersede` que a substitui. Na visão Atividade, **Manter** a substitui para você.
+`personagent learned` sozinho lista os itens em observação. Cada um diz em que pé está: quantas reações concordantes tem das que precisa, que o próprio personagem o está decidindo, ou que o personagem o examinou e continua a observá-lo, com o motivo. Cada um mostra também a data em que será deixado de lado se nenhuma reação nova chegar. Para os itens em uso ou deixados de lado, a lista diz quem decidiu e por quê: as reações, o personagem, o limite de tempo, uma regra ou uma pessoa. `show` acrescenta o registro do personagem: quando ele examinou o item, o motivo, as reações que avaliou e o modelo que usou.
+
+`promote`, `reject`, `rollback`, `restore` e `supersede` aceitam `--reason`, que é escrito no registro. `promote` recusa uma reescrita para uma resposta que já tem uma em uso e imprime o comando `supersede` que a substitui. `restore` traz de volta o que o personagem ou o limite de tempo deixou de lado, um item que o personagem tirou de uso após a objeção de um espectador e um item revertido por regra depois que a pessoa para quem era a resposta, ou o administrador, fez uma objeção. O que uma pessoa desfez ou deixou de lado, e o que uma regra de conteúdo descartou, continua como está, e o comando informa isso.
 
 ### Os padrões
 
 Estas configurações ficam em `.env`:
 
-- `REACT_LEARN_ENABLED`, `REACT_ELICIT_ENABLED` e `PROMOTE_AUTO_ENABLED` estão ativados. Julgar reações custa chamadas extras ao modelo. Depois de uma simples rejeição, `REACT_ELICIT_ENABLED` deixa o bot voltar uma vez, dois minutos depois, para perguntar o que teria sido melhor. Um espectador perguntado continua sendo espectador, então a resposta dele nunca é forte.
-- `PROMOTE_AUTO_ENABLED=false` deixa todas as promoções a seu critério.
-- `PROMOTE_MIN_SPEAKERS=1`. Defina `2` para exigir uma segunda pessoa. `PROMOTE_EVIDENCE_MAX_AGE_DAYS=30` significa que reações mais antigas não contam.
+- `REACT_LEARN_ENABLED`, `REACT_ELICIT_ENABLED`, `PROMOTE_AUTO_ENABLED` e `PROMOTE_JUDGE_ENABLED` estão ativados. Julgar reações custa chamadas extras ao modelo, assim como cada decisão que o próprio personagem toma. Depois de uma simples rejeição, `REACT_ELICIT_ENABLED` deixa o bot voltar uma vez, dois minutos depois, para perguntar, no idioma do chat, o que teria sido melhor. Um espectador perguntado continua sendo espectador, então a resposta dele nunca é forte.
+- `PROMOTE_AUTO_ENABLED=false` não coloca nada novo em uso, nem pelas reações nem por decisão do próprio personagem. O que já está em uso continua em uso.
+- `PROMOTE_JUDGE_ENABLED=false` mantém em observação os itens que as reações não conseguem resolver, em vez de deixar que o personagem os decida. `PROMOTE_JUDGE_MODEL` (vazio: `REACT_MODEL`) toma essas decisões, no máximo `PROMOTE_JUDGE_BATCH` (5) a cada `PROMOTE_JUDGE_INTERVAL_S` (900 segundos), e um item só é julgado de novo quando mudam as reações aceitas a favor dele ou contra ele, no próprio chat dele. Uma reação que o juiz descartou, ou uma reação de outro chat, não reabre um item nem altera a data em que ele será deixado de lado.
+- `PROMOTE_OBSERVE_MAX_DAYS=30` deixa de lado um item que não recebeu nenhuma reação nova em 30 dias; com `0`, isso nunca acontece. `personagent learned restore` traz um item desses de volta.
+- `PROMOTE_MIN_SPEAKERS=1`. Defina `2` para exigir uma segunda pessoa; até que alguém concorde, o personagem continua a observar o item. `PROMOTE_EVIDENCE_MAX_AGE_DAYS=30` significa que reações mais antigas não contam.
 - `EVAL_ENABLED` (o bot avalia as próprias respostas) e `EVOLVE_AUTO_ENABLED` estão desativados.
 
 Editar `persona.txt` mantém o que ele aprendeu. Mudar `PERSONA_NAME` ou `PERSONA_VERSION` inicia um personagem novo, e o que o anterior aprendeu deixa de ser usado.
 
+## Memória
+
+Cada chat tem a sua própria memória, guardada em `runtime/` na pasta inicial. O personagem a mantém atualizada por conta própria, e nada nela espera a aprovação de ninguém.
+
+### O que ele guarda
+
+- **Mensagens recentes**, cada uma com o horário em que foi enviada. As últimas 60 linhas de um grupo e os últimos 60 turnos de uma conversa privada são gravados em `runtime/recent.json` por 72 horas, de modo que um reinício não perde a conversa. Com `MEMORY_KEEP_RECENT=false`, elas só são mantidas enquanto o personagem está em execução. Uma resposta lê no máximo as últimas 60 mensagens, ou as últimas 30 quando o personagem é chamado, e o modelo é informado das pausas de 30 minutos ou mais.
+- **O resumo da conversa anterior.** Quando as mensagens mais antigas saem da janela recente, o personagem escreve um resumo curto e contínuo do chat: perguntas em aberto, planos e quem está fazendo o quê. A página o mostra como **Anteriormente nesta conversa**.
+- **Fatos** sobre pessoas e sobre o grupo. Eles vêm dos comandos de memória, das notas que o personagem escreve enquanto responde, das correções que ensinam um fato e da consolidação (abaixo). Cada fato registra de quem trata, quando foi anotado pela primeira vez e quando uma resposta se baseou nele pela última vez. Um fato só pertence a uma pessoa quando as próprias mensagens dela o trazem. O que um membro diz sobre outro é guardado como dito por esse membro: fica no chat em que foi dito e nunca altera, encerra nem se funde aos fatos que as próprias palavras da pessoa forneceram. Um fato sobre o grupo que cita alguém precisa de uma mensagem dessa pessoa; caso contrário, é guardado como dito pelo membro cujas palavras o trazem. O mesmo vale para as notas que o personagem escreve enquanto responde.
+- **Eventos**: o que aconteceu e entre quem, cada um com a data e as pessoas que participaram. A data e as pessoas são tiradas das mensagens armazenadas, nunca do modelo, então uma mensagem não pode antedatar um evento. Quando um evento é um plano para um determinado dia, o personagem pode perguntar sobre ele uma vez, em uma conversa privada, depois desse dia, se tiver permissão para falar primeiro ali ([Falar primeiro](#falar-primeiro)). As datas, e o dia de um plano, são consideradas no fuso horário do personagem (`PERSONA_TZ_OFFSET_HOURS`; veja [Solução de problemas](#solução-de-problemas)).
+- **A nota principal**, mostrada como **Sempre em mente**: uma nota curta sobre o chat inteiro que o personagem vê em cada resposta. Cada versão anterior é guardada, e **Restaurar a versão anterior** a traz de volta.
+
+### Como ela se mantém atual
+
+Quando as mensagens mais antigas saem da janela recente, ou quando um chat fica em silêncio por três horas, uma chamada ao modelo lê esse trecho do chat. Essa consolidação atualiza o resumo, acrescenta eventos e acrescenta, atualiza, encerra ou junta fatos: um endereço novo substitui o antigo, um plano que já passou é encerrado, e duas notas que dizem a mesma coisa passam a ser uma só. Cada mudança é verificada separadamente antes de ser mantida. Um fato sobre uma pessoa precisa vir das próprias palavras dessa pessoa, o texto precisa ser sustentado pelas mensagens que cita, e um fato que alguém salvou de propósito só muda quando a pessoa de quem ele trata diz outra coisa. Uma mudança que não passa em uma verificação é descartada, e as demais são mantidas. As notas que o personagem escreve enquanto responde também iniciam uma consolidação depois que `MEMORY_TIDY_EVERY` (8) delas se acumulam em um chat.
+
+### O que uma resposta vê
+
+Cada resposta recebe, dentro de `MEMORY_PROMPT_CHARS` (2.400 caracteres), o resumo da conversa anterior neste chat e, em seguida, os fatos e eventos que mais vale lembrar naquele momento. Eles são escolhidos pelo quanto correspondem à mensagem, pelo quanto são recentes, pela importância que o personagem lhes atribuiu e pela frequência com que as respostas dele se basearam neles. Uma pessoa nomeada na mensagem é lembrada mesmo quando não falou recentemente. A nota principal e o que o chat lhe ensinou ficam fora desse limite. Em um grupo, a decisão de falar vê o resumo, mas nenhum fato ou evento.
+
+Quando uma mensagem se refere a um momento, como ontem, a semana passada ou o mês passado, em qualquer um dos dez idiomas de chat, os eventos desse período vêm primeiro. Cada evento chega ao modelo com a data e as pessoas, para que o personagem possa dizer com exatidão quando algo aconteceu. Quando ele não lembra nada desse período, é informado disso e não inventa nada. Um fato ou evento só conta como usado quando uma resposta que se baseou nele foi enviada.
+
+### O que fica onde
+
+- O resumo, os eventos, as mensagens recentes e a nota principal de um chat nunca aparecem em outro chat.
+- O que um membro disse sobre outro fica no chat em que foi dito.
+- Os fatos de uma conversa privada ficam nessa conversa privada. A única exceção é o administrador: os fatos das conversas privadas do administrador, incluindo a conversa da página, chegam às outras conversas privadas do administrador, nunca a um grupo.
+- Os fatos de um grupo sobre uma pessoa chegam à conversa privada dessa pessoa com o personagem, e a outros grupos somente com `MEMORY_SHARE_ROOMS` ativado.
+
+### O que ele esquece e o que pode ser restaurado
+
+- Quando um chat acumula fatos ou eventos demais, os menos úteis são removidos: os de pouca importância, raramente usados e não recentes. Os fatos que pessoas salvaram com um comando de memória são os últimos a serem removidos.
+- O que o próprio personagem remove (substituído, mesclado, não mais atual, removido para abrir espaço, ou uma versão anterior) pode ser restaurado por 30 dias.
+- Um item esquecido na página ou com `personagent memory forget` pode ser restaurado por 24 horas.
+- Um esquecimento pedido no chat é definitivo. Ele também remove o que abrange dos itens removidos que ainda poderiam ter sido restaurados.
+- **Esquecer esta conversa** também é definitivo. Esquece os fatos, os eventos, o resumo, a nota principal e as mensagens recentes do chat, além dos itens removidos que ainda poderiam ter sido restaurados. O que o personagem lembra de outros chats, incluindo as notas sobre você feitas em outros lugares, é mantido.
+- Depois de um esquecimento pedido no chat ou de **Esquecer esta conversa**, as cópias diárias dos arquivos de memória (`.bak`) são gravadas de novo a partir dos arquivos atuais, e a cópia guardada na primeira inicialização desta versão (`memory.json.pre-v2`) perde o que foi esquecido, de modo que nenhuma cópia em disco o mantém. Um item esquecido na página ou no terminal permanece entre os itens removidos por 24 horas e, portanto, também nas cópias desse dia.
+- Quando algo é esquecido enquanto uma consolidação desse chat está em andamento, a resposta da consolidação é descartada e as mensagens são lidas de novo mais tarde, de modo que o item esquecido não volta.
+- **Limpar a memória**, na visão Aplicativo, apaga toda a memória.
+
+### Ver e alterar
+
+Na página, abra **Atividade**, escolha um chat e consulte **Memória**; veja [Atividade](#atividade). No terminal:
+
+```bash
+personagent memory                            # what each chat remembers, with ids
+personagent memory list --chat <chat>         # one chat; --json prints JSON
+personagent memory removed                    # what can still be restored, and until when
+personagent memory forget <id>                # forget one item; a unique start of the id is enough
+personagent memory forget core --chat <chat>  # forget a chat's core note
+personagent memory restore <id>               # bring a removed item back
+```
+
+O comando passa pelo personagem em execução ou, quando o personagem está parado, edita os arquivos. Se `memory.json`, `core_memory.json` ou `episodes.json` estiver danificado, `personagent run`, `up` e `memory` param com uma frase que nomeia o arquivo e a cópia datada (`.bak`) a colocar no lugar dele; o arquivo danificado não é alterado.
+
+### Configurações e custo
+
+| Configuração | Padrão | O que faz |
+|---|---|---|
+| `MEMORY_CALLS_PER_DAY` | 40 | Chamadas de consolidação por dia, para todos os chats juntos. `0` desativa a consolidação |
+| `MEMORY_TIDY_EVERY` | 8 | Número de notas escritas em respostas desde a última consolidação de um chat que inicia uma nova. `0` desativa todas as chamadas de memória ao modelo |
+| `CHAT_CONTEXT_MESSAGES` | 120 | Mensagens recentes mantidas por chat para as respostas e para a consolidação. Uma resposta lê no máximo as últimas 60 |
+| `MEMORY_PROMPT_CHARS` | 2400 | Caracteres de material lembrado colocados em cada resposta |
+| `MEMORY_EPISODES_MAX` | 120 | Eventos mantidos por chat |
+| `MEMORY_KEEP_RECENT` | `true` | Mantém as mensagens recentes em disco por 72 horas |
+| `MEMORY_MAX_PER_CONVERSATION` | 50 | Fatos mantidos por chat |
+| `MEMORY_SHARE_ROOMS` | `false` | Permite que os fatos de um grupo sobre uma pessoa cheguem a outros grupos em que essa pessoa fala |
+
+As seis primeiras ficam em **Memória**, nas [Configurações avançadas](#configurações-avançadas), e `MEMORY_SHARE_ROOMS` corresponde a **Compartilhar a memória entre grupos**, em **Mais recursos**.
+
+A consolidação é a única parte da memória que chama um modelo. Ela usa o modelo juiz (`LLM_JUDGE_MODEL`) e envia a ele as mensagens recentes de um chat e as notas desse chat, nunca as de outro chat. Um chat recebe no máximo 16 chamadas por dia, com pelo menos 20 minutos de intervalo, e todos os chats juntos no máximo `MEMORY_CALLS_PER_DAY`. Um chat pouco movimentado precisa de uma chamada por dia ou de nenhuma. Depois de uma chamada que falhou, o chat espera 10 minutos e, depois de cada nova falha, o dobro do tempo, até 6 horas; três falhas seguidas pausam a consolidação em todos os chats por uma hora. Uma resposta que não pode ser lida por inteiro, como uma que contém uma operação de tipo desconhecido, conta como uma chamada que falhou, e as alterações válidas dela são mantidas mesmo assim. Um erro inesperado durante a aplicação de uma resposta não altera nada. Enquanto a consolidação espera, as mensagens são mantidas e consolidadas depois, das mais antigas para as mais novas. **Memória**, na visão Atividade, mostra quantas das chamadas de hoje já foram usadas. Os comandos de memória, a recuperação de lembranças, o esquecimento e a restauração não chamam nenhum modelo.
+
 ## Atividade
 
-**Atividade** na página local mostra onde o personagem está e o que ele fez. Ela fica na barra lateral entre **Conversa** e **Conectar plataformas**. Um ponto âmbar significa que algo espera sua decisão.
+**Atividade** na página local mostra onde o personagem está e o que ele fez. Ela fica na barra lateral entre **Conversa** e **Conectar plataformas**. Um ponto nela significa que o personagem colocou algo novo em uso desde a última vez que você abriu a Atividade. Os itens que ele ainda observa nunca o acendem.
 
-A visão lista cada chat que o personagem conhece, com a plataforma, se é um grupo ou conversa privada, o fim do identificador do chat e a última atividade. O chat da própria página aparece como **Esta página**. Um número ao lado de um chat diz quantos itens esperam ali. Escolha um chat para ver quatro partes:
+A visão lista cada chat que o personagem conhece, com a plataforma, se é um grupo ou conversa privada, o fim do identificador do chat e a última atividade. O chat da própria página aparece como **Esta página**. Escolha um chat para ver quatro partes:
 
-- **Aguardando sua decisão** traz as mudanças que ainda não cumprem a regra de promoção (duas reações concordantes do mesmo chat, uma delas forte). Cada uma é uma **Redação aprimorada**, com o que ele disse riscado e o que dizer no lugar, ou uma **Resposta a ser reutilizada**. Também mostra quem reagiu. **Manter** coloca a mudança em uso e substitui qualquer reescrita já em uso para essa resposta. **Descartar** a rejeita.
-- **Aprendizado** lista o que está em uso. **Desfazer** reverte uma mudança.
-- **Memória** mostra as notas de memória dele para este chat, de quem tratam e quem as adicionou, além da nota principal. **Esquecer** apaga uma. Em uma conversa privada, isso inclui o que os grupos anotaram sobre essa pessoa.
-- **Recente** mostra as últimas mensagens e as respostas dele. Cada resposta leva um rótulo com o motivo de ele ter falado: **mencionado**, **participou por iniciativa própria**, **continuação**, **iniciou um assunto** ou **administrador**. As linhas que ele deixou passar mostram por que ficou em silêncio. A atividade recente fica só na memória, então um reinício a apaga.
+- **Aprendizado** lista o que está em uso. Cada item é uma **Redação aprimorada**, com o que ele disse riscado e o que dizer no lugar, ou uma **Resposta a ser reutilizada**, e diz como entrou em uso: porque as reações concordaram, por decisão do próprio personagem, com o motivo dele, ou por uma pessoa. **Desfazer** deixa de usá-lo.
+- **Ainda em observação** lista o que o personagem ainda acompanha. Cada item diz em uma frase em que pé está: quantas reações concordantes tem das que precisa, que as reações sozinhas não conseguem resolvê-lo e o próprio personagem o está decidindo, ou que o personagem o examinou e continua a observá-lo, com o motivo. Mostra também a data em que será deixado de lado se nenhuma reação nova chegar. Esta parte não tem botões, e nada nela depende de você.
+- **Memória** mostra o que o personagem lembra nesse chat, em cinco grupos: **Sempre em mente** (a nota principal, com a data da última alteração), **Anteriormente nesta conversa** (o resumo, com o período que abrange), **Fatos** (de quem trata cada um, **Segundo** seguido do nome para o que um membro disse sobre outro, quando foi anotado pela primeira vez e quando foi usado pela última vez), **Eventos** (datados, com as pessoas que participaram) e **Removidos recentemente** (o que foi removido, por quê e até quando pode ser restaurado). **Esquecer** remove um item, e a mensagem que confirma isso oferece **Desfazer**. **Restaurar** traz de volta um item removido, e **Restaurar a versão anterior** traz de volta a nota principal anterior. Enquanto a consolidação está ativada, uma linha mostra quantas das chamadas de hoje já foram usadas, ou quando ela tentará de novo depois de um erro. **Esquecer esta conversa**, no fim, esquece tudo o que o chat lembra, depois de pedir confirmação. Em uma conversa privada, a parte inclui também o que os grupos anotaram sobre essa pessoa.
+- **Recente** mostra as últimas mensagens e as respostas dele. Cada resposta leva um rótulo com o motivo de ele ter falado: **mencionado**, **participou por iniciativa própria**, **continuação**, **iniciou um assunto** ou **administrador**. As linhas que ele deixou passar mostram por que ficou em silêncio ou o que aconteceu no lugar: o modelo não respondeu, a resposta foi retida por uma verificação de segurança, a resposta não pôde ser entregue, ele pensou em iniciar uma conversa e decidiu não fazê-lo, ou a mensagem foi respondida na mesma resposta que outra mensagem. Quando várias pessoas chamam o personagem quase ao mesmo tempo, uma única resposta atende a todas, e o @ dela vai para quem chamou por último. Quando essa resposta não é enviada, cada pessoa que chamou recebe uma linha própria com o motivo. A atividade recente fica só na memória, então um reinício a apaga.
 
-Cada **Manter**, **Descartar** e **Desfazer** é escrito no mesmo registro que `personagent learned`, com o ator `dashboard` e o motivo `local page`.
+Cada **Desfazer** é escrito no mesmo registro que `personagent learned`, com o ator `dashboard` e o motivo `local page`.
 
 Abaixo dos chats, **O que o personagem aprendeu** lista tudo o que o personagem aprendeu em todos os chats. Essa lista lê diretamente os arquivos de registro, portanto também funciona quando o personagem não está em execução.
 
-- As abas **Em uso**, **Pendentes**, **Descartados**, **Desfeitos** e **Substituídos** exibem, cada uma, uma contagem.
-- Selecionar um item abre o registro completo dele: por que está pendente, com a lista de verificação de promoção; as mensagens anteriores a ele; cada reação, indicando se conta; e o histórico.
-- **Manter** coloca em uso um item pendente. Quando outra redação da mesma resposta já está em uso, mostra essa redação e pede confirmação antes de substituí-la. **Desfazer** deixa de usar um item, e **Restaurar** coloca novamente em uso um item desfeito. **Descartar** pede confirmação antes e rejeita um item de forma definitiva. Itens descartados e substituídos não podem ser restaurados.
+- As abas **Em uso**, **Em observação** e **Deixados de lado** exibem, cada uma, uma contagem.
+- Selecionar um item abre o registro completo dele: em que pé está, ou quem o decidiu e por quê (as reações, o personagem com o motivo dele, uma pessoa, o limite de tempo ou uma regra); as mensagens anteriores a ele; cada reação, indicando se conta; e o histórico.
+- O personagem decide esses itens por conta própria. As ações aqui são opcionais. **Colocar em uso agora** coloca em uso um item em observação; quando outra redação da mesma resposta já está em uso, mostra essa redação e pede confirmação antes de substituí-la. **Deixar de lado** pede confirmação antes e deixa um item de lado definitivamente. **Desfazer** pede confirmação antes e deixa de usar um item em uso. **Trazer de volta** restaura o que o personagem ou o limite de tempo deixou de lado e o que o personagem ou uma regra tirou de uso. O que uma pessoa desfez ou deixou de lado, e o que uma regra de conteúdo descartou, não pode ser trazido de volta.
 - Quando o personagem também aprendeu enquanto falava outro idioma, **Idioma do aprendizado** alterna para esses itens.
 
-Enquanto o personagem está em execução, uma decisão passa por ele. Caso contrário, a decisão é gravada diretamente nos arquivos. O terminal oferece o mesmo registro; veja [Revisar e reverter](#revisar-e-reverter).
+Enquanto o personagem está em execução, uma ação passa por ele. Caso contrário, ela é gravada diretamente nos arquivos. O terminal oferece o mesmo registro; veja [Ver o que ele aprendeu e intervir](#ver-o-que-ele-aprendeu-e-intervir).
 
 A lista de chats fica vazia até que o personagem esteja em execução. Ele é iniciado quando você conversa na página ou conecta uma plataforma, e a visão avisa isso. `DASHBOARD_ENABLED=false` desativa os dados por trás da visão. A visão diz então que está desativada, e `personagent doctor` informa `activity: off`.
 
-A página local só responde neste computador. Em um servidor sem página local, use `personagent learned` para revisar e reverter o que ele aprendeu. Scripts podem ler os mesmos dados pela API do serviço, descrita na [seção Atividade](deploy.pt-BR.md#atividade) do guia de implantação.
+A página local só responde neste computador. Em um servidor sem página local, `personagent learned` mostra o que o personagem aprendeu, o que está observando e por quê, e permite colocar um item em uso, deixá-lo de lado, desfazê-lo ou trazer de volta o que o personagem ou o limite de tempo deixou de lado e o que o personagem ou uma regra tirou de uso; `personagent memory` faz o mesmo com o que ele lembra. Scripts podem ler os mesmos dados pela API do serviço, descrita na [seção Atividade](deploy.pt-BR.md#atividade) do guia de implantação.
 
-![A visão Atividade: à esquerda, as conversas (um grupo do Telegram, uma mensagem direta do Discord e Esta página); para o grupo do Telegram, dois itens aguardando sua decisão, uma resposta a ser reutilizada e uma redação aprimorada, cada um com Manter e Descartar; um item aprendido com Desfazer; uma nota de memória com Esquecer; as linhas recentes, com o motivo de ele ter falado ou ficado em silêncio; e abaixo, O que o personagem aprendeu em todas as conversas, com as abas Em uso, Pendentes, Descartados, Desfeitos e Substituídos](activity.png)
+![A visão Atividade de um grupo do Telegram, com as conversas à esquerda (o grupo do Telegram, uma mensagem direta do Discord e Esta página). Aprendizado lista dois itens em uso, cada um com Desfazer: uma redação melhor colocada em uso por decisão própria do personagem, com o motivo, e uma resposta a ser reutilizada colocada em uso porque as reações concordaram. Ainda em observação lista uma resposta a ser reutilizada, com as reações concordantes recebidas até agora e a data em que ela será deixada de lado. Memória mostra o resumo do que veio antes nesta conversa, um fato sobre um membro dito por outro e um evento datado com as pessoas que participaram, cada um com Esquecer, seguidos de Esquecer esta conversa. Na parte inferior, apenas o título de Recente fica visível](activity.png)
 
 ## Meça
 
-`personagent eval` executa o agente real em casos rotulados em inglês e chinês (`data/evals/`). Ele escreve um relatório JSON com cada caso, resposta e veredito em `benchmark_runs/` na pasta inicial, ou no caminho indicado com `--out`.
+`personagent eval` executa o agente real em casos rotulados em inglês e chinês (`data/evals/`), em quatro suítes. Ele escreve um relatório JSON com cada caso, resposta e veredito em `benchmark_runs/` na pasta inicial, ou no caminho indicado com `--out`.
 
 | Suíte | Mede |
 |---|---|
-| `speak` | Se ele fala quando deve. 60 momentos de chat em grupo por idioma: 20 em que ninguém o nomeia, 20 logo depois de ele falar e 20 em que o nome dele aparece, com metade de cada rotulada como silêncio. Muitos dos rotulados como silêncio o nomeiam de passagem: um wifi chamado Nova-5G, um comentário sobre ele feito a outra pessoa. Sem juiz: uma resposta está certa ou errada de acordo com o rótulo. |
+| `speak` | Se ele fala quando deve. 80 momentos de chat em grupo por idioma: 20 em que ninguém o nomeia, 20 logo depois de ele falar e 20 em que o nome dele aparece, com metade de cada rotulada como silêncio; 10 em que o administrador o chama, todos rotulados para falar; e 10 em uma sala que ficou em silêncio, onde ele pode iniciar uma conversa, com metade rotulada como silêncio. Muitos dos rotulados como silêncio o nomeiam de passagem: um wifi chamado Nova-5G, um comentário sobre ele feito a outra pessoa. Sem juiz: uma resposta está certa ou errada de acordo com o rótulo. |
 | `persona` | Se o personagent interpreta o personagem melhor do que o mesmo modelo com só o texto do personagem como prompt de sistema. 40 momentos por idioma, 22 em grupo e 18 em conversas privadas. Um modelo juiz vê as duas respostas às cegas, uma vez com cada uma primeiro. Uma resposta vence quando as duas escolhas concordam nela; quando divergem, o momento fica dividido e conta pela metade. |
-| `learning` | Se a regra de promoção decide como planejado e se uma correção promovida muda uma resposta posterior nesse chat. 20 cenários por idioma. Alguns ensinam uma convenção de grupo que o modelo não consegue adivinhar, como o nome que um grupo dá a um lugar. Outros devem ser retidos: a correção de um espectador, a de um troll, uma que a pessoa abandona. Uma mensagem de teste é executada antes e depois de cada correção, e o juiz diz se a resposta segue o comportamento ensinado. |
+| `learning` | Se a regra de promoção decide como planejado e se uma correção promovida muda uma resposta posterior nesse chat. 25 cenários por idioma. Alguns ensinam uma convenção de grupo que o modelo não consegue adivinhar, como o nome que um grupo dá a um lugar. Em alguns, a pessoa corrige a resposta e não aceita uma nova tentativa, então o personagem decide sozinho depois da janela de correção, como faz em um chat real. Outros devem ser retidos: a correção de um espectador, a de um troll, uma que a pessoa abandona. Uma mensagem de teste é executada antes e depois de cada correção, e o juiz diz se a resposta segue o comportamento ensinado. |
+| `memory` | Se a memória se comporta como uma pessoa esperaria. 21 casos por idioma, cada um para um mecanismo: lembrar um fato antigo, atualizar e juntar fatos, quem disse o quê, instruções plantadas, palavras que indicam tempo, o que fica na sua sala ou conversa privada, um reinício, esquecer, restaurar, o limite de tamanho, os limites de chamadas, as contas do administrador como uma só pessoa e arquivos de memória antigos. As falas são ditas ao longo de dias em grupos e conversas privadas, as respostas da consolidação são escritas em cada caso, e as verificações leem a memória armazenada e os prompts que uma resposta enviaria. Nenhum modelo é chamado e nenhuma chave é necessária. Todos os 21 casos são atendidos nos dois idiomas. |
 
 ```bash
 personagent eval --suite speak
+personagent eval --suite memory               # no model, no key
 personagent eval --suite all --lang zh --repeat 5
 ```
 
-`--repeat N` tenta cada caso N vezes, cada vez em uma implantação nova, para ver quanto um resultado varia entre tentativas. Os intervalos de 95% contam cada caso uma vez: cinco tentativas de 60 casos continuam sendo evidência de 60 casos. `--limit N` executa N casos por suíte, distribuídos entre modos e rótulos.
+`--repeat N` tenta cada caso N vezes, cada vez em uma implantação nova, para ver quanto um resultado varia entre tentativas. Os intervalos de 95% contam cada caso uma vez: cinco tentativas de 80 casos continuam sendo evidência de 80 casos. `--limit N` executa N casos por suíte, distribuídos entre modos e rótulos.
 
-As suítes de persona e aprendizado precisam de um modelo juiz diferente do modelo medido. Defina `BENCH_JUDGE_MODEL`, mais `BENCH_JUDGE_BASE_URL` e `BENCH_JUDGE_API_KEY` se outro endpoint o servir. Sem um juiz separado, essas suítes não são executadas. `--allow-same-judge` as executa mesmo assim e marca o relatório. A suíte de aprendizado nunca promove nada por conta própria, e as expectativas dela seguem suas configurações de promoção. Com uma política mais rígida que a padrão, espera-se que todos os cenários sejam retidos. Cada execução chama seus modelos e trabalha em uma cópia descartável do estado. `--keep` mantém a cópia e imprime onde ela está.
+As suítes de persona e aprendizado precisam de um modelo juiz diferente do modelo medido. Defina `BENCH_JUDGE_MODEL`, mais `BENCH_JUDGE_BASE_URL` e `BENCH_JUDGE_API_KEY` se outro endpoint o servir. Sem um juiz separado, essas suítes não são executadas. `--allow-same-judge` as executa mesmo assim e marca o relatório. A suíte de aprendizado nunca promove nada por conta própria, e as expectativas dela seguem suas configurações de promoção. Com uma política mais rígida que a padrão, espera-se que todos os cenários sejam retidos. Cada execução das outras suítes chama seus modelos, e todas as suítes trabalham em uma cópia descartável do estado. `--keep` mantém a cópia e imprime onde ela está.
+
+Duas verificações não precisam de modelo nem de chave e são executadas com os testes do projeto a partir de um clone. `data/evals/address.jsonl` contém falas em todos os idiomas de chat que chamam ou não o personagem pelo nome ou por um apelido, como `ＬＵＮＡ are you there` e `Lunar eclipse tonight`; `tests/test_addressing.py` verifica cada uma. `tests/test_behavior_eval.py` executa cada suíte de ponta a ponta com modelos roteirizados, para verificar a infraestrutura, o isolamento e a aritmética de `personagent eval`, e não a qualidade de um modelo.
 
 `--rejudge REPORT` julga de novo as respostas de um relatório guardado com o `BENCH_JUDGE_MODEL` definido agora, sem chamar o modelo testado, e escreve o resultado ao lado do original. As respostas, as referências e o que a política de promoção fez ficam como estão.
 
@@ -596,15 +686,17 @@ Os resultados mais recentes, com o método e todos os relatórios, estão em [ev
 
 ![Arquitetura: uma mensagem de chat em grupo passa por Decidir, Montar prompt, Modelo e Verificar, e a resposta volta pelo conector; se o bot fica em silêncio, nada é enviado. As reações são julgadas e vão para um registro de evidências, e só o que a promoção aprova chega aos exemplos que o prompt lê](persona_llm_agent_architecture.svg)
 
-Todas as plataformas entram por um único endpoint. Cada mensagem é autenticada, deduplicada e enriquecida, ou seja, as imagens são descritas e os links expandidos. Depois vem a etapa de decisão. Se o bot foi chamado, ele responde. Caso contrário, espera conversa suficiente (30 mensagens por padrão), e uma chamada barata de filtragem a `LLM_JUDGE_MODEL` decide se uma pessoa entraria. Uma rajada de mensagens recebe uma só resposta, à última linha. Entre 02:00 e 07:00, ele fica quase sempre de fora, a menos que seja chamado.
+Todas as plataformas entram por um único endpoint. Cada mensagem é autenticada, deduplicada e enriquecida, ou seja, as imagens são descritas e os links expandidos. Depois vem a etapa de decisão. Se o bot foi chamado, ele responde. Caso contrário, espera conversa suficiente (30 mensagens por padrão), e uma chamada barata de filtragem a `LLM_JUDGE_MODEL` decide se uma pessoa entraria. Uma rajada de mensagens recebe uma só resposta, à última linha. Quando várias pessoas o chamam dentro da mesma espera curta, uma única resposta atende a todas, e o @ dela vai para quem chamou por último. Uma mensagem longa que o chama chega inteira ao modelo, até 1.000 caracteres. Uma mensagem de grupo que chega mais de 10 minutos depois de ter sido enviada, nos dois minutos seguintes à primeira mensagem da plataforma dela desde que o personagent foi iniciado, é um acúmulo: é mantida como contexto e não é respondida. Passados esses dois minutos, um horário antigo deixa de reter uma mensagem, de modo que um conector cujo relógio está atrasado continua recebendo respostas. Entre 02:00 e 07:00, ele fica quase sempre de fora, a menos que seja chamado.
 
-O prompt combina a persona, as entradas correspondentes do lorebook, a memória desta conversa e os exemplos mais relevantes. O modelo responde em JSON com `reasoning`, `intent`, `reply` e `mem`. A resposta passa pelo filtro de saída e pela política do personagem, e depois é dividida em mensagens do tamanho de um chat. Uma resposta malformada falha com segurança, então nada é enviado.
+Antes de uma resposta, uma chamada ao juiz pode decidir se é preciso pesquisar algo na web. Se essa chamada é feita depende apenas da mensagem; a chamada em si também lê as três linhas do chat anteriores à mensagem, para que "o que você acha disso?" seja pesquisado pelo que "isso" é.
 
-O aprendizado funciona paralelamente a esse caminho, nunca dentro dele, e guarda o estado em arquivos simples em `runtime/` na pasta inicial. As reações vão para um registro de evidências que nunca é reescrito. A ponderação delas produz candidatos, e a política de promoção decide quais podem mudar as respostas. Os candidatos promovidos são escritos em pequenos arquivos de visão que a busca recarrega sem reiniciar. Nenhum modelo é ajustado. O personagem aprende melhorando os exemplos do próprio prompt. Como os registros são somente de acréscimo, "por que ele fala assim?" sempre tem resposta, e uma reversão sempre tem o que reverter.
+O prompt combina a persona, as entradas correspondentes do lorebook, a memória desta conversa (veja [Memória](#memória)) e os exemplos mais relevantes. O modelo responde em JSON com `reasoning`, `intent`, `reply` e `mem`. A resposta passa pelo filtro de saída e pela política do personagem, e depois é dividida em mensagens do tamanho de um chat. A política do personagem retém uma resposta em que o personagem diz, em qualquer um dos dez idiomas de chat, que é um modelo ou um assistente feito por uma empresa de modelos, como "Sou o ChatGPT" ou "Sou um assistente feito pela OpenAI". Signos do zodíaco, palavras e nomes que apenas contêm o nome de uma empresa de modelos e frases sobre o produto de terceiros passam. Uma resposta longa é dividida no fim das frases, nunca depois de um título ou abreviação como Dr. ou z.B., e nunca depois do número de uma data, como em "am 2. Januar". Uma lista numerada só perde os números quando conta 1, 2, 3, de modo que as linhas que começam com datas os mantêm. Uma resposta malformada falha com segurança, então nada é enviado.
+
+O aprendizado funciona paralelamente a esse caminho, nunca dentro dele, e guarda o estado em arquivos simples em `runtime/` na pasta inicial. As reações vão para um registro de evidências que nunca é reescrito. A ponderação delas produz candidatos, e a política de promoção decide quais podem mudar as respostas. Quando reações adicionais não conseguem resolver um candidato, o personagem o decide com uma chamada ao modelo e anota o motivo no registro. Os candidatos promovidos são escritos em pequenos arquivos de visão que a busca recarrega sem reiniciar. Nenhum modelo é ajustado. O personagem aprende melhorando os exemplos do próprio prompt. Como os registros são somente de acréscimo, "por que ele fala assim?" sempre tem resposta, e uma reversão sempre tem o que reverter.
 
 ## Privacidade e consentimento
 
-Tudo o que o personagent armazena fica na sua máquina, na pasta inicial: `.env` com suas chaves, `persona.txt`, `persona.card.json`, `runtime/` e `platforms/` com as credenciais das plataformas. Em um clone, nenhum desses arquivos é versionado no Git. Eles podem conter credenciais e conversas reais, então faça backup e mantenha-os privados. A página local nunca coloca a chave no armazenamento do navegador.
+Tudo o que o personagent armazena fica na sua máquina, na pasta inicial: `.env` com suas chaves, `persona.txt`, `persona.card.json`, `runtime/` e `platforms/` com as credenciais das plataformas. Em um clone, nenhum desses arquivos é versionado no Git. Eles podem conter credenciais e conversas reais, então faça backup e mantenha-os privados. As mensagens recentes de cada chat são mantidas em `runtime/recent.json` por 72 horas, a menos que `MEMORY_KEEP_RECENT=false`, e o que o personagem remove da memória continua restaurável em `runtime/memory_trash.jsonl` por até 30 dias. A página local nunca coloca a chave no armazenamento do navegador.
 
 A visão [Atividade](#atividade) faz parte da página local, que só escuta em 127.0.0.1. A API do serviço por trás dela só responde a solicitações com o token de `runtime/dashboard.token`, um arquivo que só o seu usuário pode ler. `CONNECTOR_TOKEN` não a abre. A visão nunca mostra chaves de API nem tokens. `DASHBOARD_ENABLED=false` a desativa.
 
@@ -614,6 +706,8 @@ O provedor de modelos vê as conversas:
 
 - O contexto do chat vai para o seu `LLM_BASE_URL`.
 - Se você configurar um fallback (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`), ele também é chamado em turnos comuns para o filtro de resposta, as decisões de busca, o julgamento de reações, a autoavaliação e a rotulagem de figurinhas, e também recebe o contexto do chat.
+- A consolidação da memória envia as mensagens recentes de um chat e as notas desse chat ao modelo juiz (`LLM_JUDGE_MODEL`), nunca as de outro chat. `MEMORY_CALLS_PER_DAY=0` a desativa.
+- Quando o próprio personagem decide um item aprendido, a resposta, as reações a ela e as redações candidatas vão para `PROMOTE_JUDGE_MODEL` (vazio: `REACT_MODEL`). `PROMOTE_JUDGE_ENABLED=false` desativa isso.
 - As imagens vão para o endpoint de visão.
 - Quando o modelo decide procurar algo, a consulta vai para o Tavily (se `TAVILY_API_KEY` estiver definido) ou para o DuckDuckGo.
 - Com `EMBEDDING_MODEL` definido, a mensagem que ele responde, as lembranças e os exemplos de busca vão para o endpoint de embeddings (`EMBEDDING_BASE_URL`, ou `LLM_BASE_URL` se vazio).
@@ -638,9 +732,9 @@ O guia de implantação tem [a lista de verificação completa](deploy.pt-BR.md#
 
 **Está em execução?** `curl http://127.0.0.1:8080/health` responde sem chamar um modelo. `/health/details` também testa os serviços e exige um cabeçalho `X-Personagent-Token` quando há um token configurado.
 
-**Não inicia.** `personagent run` sai com uma frase dizendo por quê. Os motivos usuais são uma porta já em uso, outro personagent em execução na mesma pasta inicial, um endereço de rede definido sem `CONNECTOR_TOKEN`, ou uma configuração removida na 1.0 ainda definida. As configurações removidas são listadas uma por linha como `OLD -> NEW`, e `personagent doctor --fix` as renomeia, assim como **Renomear as configurações** na visão Aplicativo. Quando o personagem iniciado pela página falha, a visão Aplicativo indica a parte que falhou e mostra a última linha do log dela. A página e `personagent up` escolhem uma porta livre quando a 8080 está ocupada.
+**Não inicia.** `personagent run` sai com uma frase dizendo por quê. Os motivos usuais são uma porta já em uso, outro personagent em execução na mesma pasta inicial, um endereço de rede definido sem `CONNECTOR_TOKEN`, uma configuração removida na 1.0 ainda definida, ou um arquivo de memória danificado, caso em que a frase nomeia a cópia datada a colocar no lugar dele. As configurações removidas são listadas uma por linha como `OLD -> NEW`, e `personagent doctor --fix` as renomeia, assim como **Renomear as configurações** na visão Aplicativo. Quando o personagem iniciado pela página falha, a visão Aplicativo indica a parte que falhou e mostra a última linha do log dela. A página e `personagent up` escolhem uma porta livre quando a 8080 está ocupada.
 
-**Uma configuração não tem efeito.** Reinicie o processo que a lê, verifique a grafia e salve `.env` como UTF-8 sem BOM. As variáveis de ambiente do shell têm prioridade sobre `.env`. Os booleanos são `true` ou `false`. `PERSONA_TZ_OFFSET_HOURS` ajusta o relógio do período noturno. Quando está vazio (padrão), o personagent usa UTC+8 com `AGENT_LANG=zh` ou `zh-TW` e, nos outros casos, o fuso horário desta máquina. Informe um número para escolher outro deslocamento.
+**Uma configuração não tem efeito.** Reinicie o processo que a lê, verifique a grafia e salve `.env` como UTF-8 sem BOM. As variáveis de ambiente do shell têm prioridade sobre `.env`. Os booleanos são `true` ou `false`. `PERSONA_TZ_OFFSET_HOURS` define o fuso horário do personagem: o período noturno e as datas do que ele lembra o seguem. Quando está vazio (padrão), o personagent usa UTC+8 com `AGENT_LANG=zh` ou `zh-TW` e, nos outros casos, o fuso horário desta máquina. Informe um número para escolher outro deslocamento.
 
 ## Atualização a partir da 0.x
 

@@ -201,7 +201,7 @@ Wenn `connector_token` gesetzt ist, trägt jede Anfrage vier Header:
 
 Der Body ist kanonisches JSON: UTF-8, sortierte Schlüssel, kompakte Trennzeichen und unmaskierte Nicht-ASCII-Zeichen. Die Signatur deckt genau diese Bytes ab; ein Proxy darf den Body daher nicht umschreiben. Der Agent lehnt eine falsche Signatur, eine wiederverwendete Nonce oder einen Zeitstempel ab, der mehr als fünf Minuten von seiner eigenen Uhr abweicht. Halten Sie die beiden Uhren synchron.
 
-Der Body trägt außerdem die Zeit des Adapters für die Nachricht als `sent_at`. Der Agent prüft sie separat gegen `CONNECTOR_MAX_EVENT_AGE_S` (standardmäßig 24 Stunden), sodass ein altes, mit frischer Signatur erneut gesendetes Ereignis trotzdem abgelehnt wird. Das Plugin leitet keine Nachricht weiter, deren Adapter keinen gültigen Zeitstempel liefert, und AstrBot behandelt diese Nachricht wie gewohnt.
+Der Body trägt außerdem die Zeit des Adapters für die Nachricht als `sent_at`. Der Agent prüft sie separat gegen `CONNECTOR_MAX_EVENT_AGE_S` (standardmäßig 24 Stunden), sodass ein altes, mit frischer Signatur erneut gesendetes Ereignis trotzdem abgelehnt wird. Das Plugin leitet keine Nachricht weiter, deren Adapter keinen gültigen Zeitstempel liefert, und AstrBot behandelt diese Nachricht wie gewohnt. Die Figur sieht jede Nachricht mit diesem Zeitpunkt, und eine Gruppennachricht, die beim Eintreffen älter als 10 Minuten ist, etwa ein Rückstau, den AstrBot nach einem Neustart zustellt, wird als Kontext aufbewahrt und nicht beantwortet.
 
 ## Identitäten auf der Agent-Seite
 

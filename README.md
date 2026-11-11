@@ -36,6 +36,7 @@ A burst of messages gets one reply.
 <td valign="top">
 What a correction teaches, like what the group calls the gym, carries into every later reply in that chat.<br>
 A troll or a bystander cannot retrain it.<br>
+Where reactions cannot settle a change, it decides itself and records why; nobody has to approve anything.<br>
 Every change is on record, and any of them can be rolled back.
 </td>
 </tr>
@@ -55,7 +56,7 @@ Rewrite the persona whenever you like. What the character learned is kept.
 </tr>
 </table>
 
-Each chat has its own memory, and it forgets when asked: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([memory commands](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory-commands)).
+Each chat has its own memory: recent messages that survive a restart, a summary of earlier conversation, dated events and facts about people, which the character keeps current by itself. It forgets when asked: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([memory commands](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory-commands)). The Activity view shows everything it remembers, and any item there can be forgotten or brought back ([memory](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory)).
 
 ## Start here
 

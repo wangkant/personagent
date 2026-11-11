@@ -38,6 +38,7 @@ Uma rajada de mensagens recebe uma única resposta.
 <td valign="top">
 O que uma correção ensina, como o nome que o grupo dá para a academia, vale para todas as respostas seguintes naquela conversa.<br>
 Um troll ou alguém de fora não consegue retreiná-lo.<br>
+Quando as reações não conseguem resolver uma mudança, ele mesmo decide e registra o motivo; ninguém precisa aprovar nada.<br>
 Toda mudança fica registrada, e qualquer uma pode ser desfeita.
 </td>
 </tr>
@@ -57,7 +58,7 @@ Reescreva a persona quando quiser. O que o personagem aprendeu é mantido.
 </tr>
 </table>
 
-Cada conversa tem sua própria memória, e ele esquece o que lhe for solicitado: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([comandos de memória](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#comandos-de-memória)).
+Cada conversa tem sua própria memória: mensagens recentes que sobrevivem a um reinício, um resumo da conversa anterior, eventos datados e fatos sobre as pessoas, que o personagem mantém atualizados por conta própria. Ele esquece o que lhe for solicitado: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([comandos de memória](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#comandos-de-memória)). A visão Atividade mostra tudo o que ele lembra, e qualquer item ali pode ser esquecido ou trazido de volta ([memória](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#memória)).
 
 ## Comece aqui
 

@@ -68,40 +68,46 @@ personagent
 - 如需直接修改 `.env`，可以使用記事本編輯，儲存為 UTF-8（不含 BOM），然後重新啟動 `personagent`。
 - 有新版本時，「開始聊天」頁面和終端機會顯示與你的安裝方式對應的更新指令。頁面和 `personagent up` 每天最多向 pypi.org 查詢一次，請求中只包含版本號；在 `.env` 中設定 `UPDATE_CHECK_ENABLED=false` 即可關閉此項檢查。
 - 手動更新：`python -m pip install -U personagent`（以 uv 安裝時，請執行 `uv tool upgrade personagent`）。從 0.x 升級時，如果啟動時提示存在舊的設定名稱，請執行 `personagent doctor --fix`，它會將 `.env` 中的舊名稱改為新名稱，並將原檔案另存為 `.env.bak`。
-- 命令列：`personagent init --terminal`（終端機設定精靈）、`chat`（在終端機中聊天）、`demo`（無須金鑰的示範）、`run`（只啟動角色服務）、`doctor`（檢查設定和各項服務）、`learned`（檢視及撤回學到的內容）、`eval`（評測）。
+- 命令列：`personagent init --terminal`（終端機設定精靈）、`chat`（在終端機中聊天）、`demo`（無須金鑰的示範）、`run`（只啟動角色服務）、`doctor`（檢查設定和各項服務）、`learned`（檢視學到的內容，必要時介入）、`memory`（檢視記住的內容，刪除或還原某一項）、`eval`（評測）。
 
 ## 動態
 
-本機頁面側欄中的「動態」會列出角色所在的每個群組與私訊。選取一個聊天後，可以看到待你確認的變更、它學到的內容、記住的事項，以及近期的訊息：包括它每次發言的原因，以及未發言時的理由。詳見[使用手冊](guide.zh-TW.md#動態)。
+本機頁面側欄中的「動態」會列出角色所在的每個群組與私訊。選取一個聊天後，可以看到它學到的內容及各自的投入使用方式、仍在觀察的內容及各自的進展、它記住的內容，以及近期的訊息：包括它每次發言的原因，以及未發言時的理由。這裡沒有任何內容需要你確認。詳見[使用手冊](guide.zh-TW.md#動態)。
 
-「動態」的資料來自本機頁面所啟動的角色服務，取自它在 `/api/dashboard/` 下的 JSON 介面。僅以 `personagent run` 啟動服務時，請查看服務記錄檔，並使用 `personagent learned` 檢視學到的內容。每次呼叫都須帶有 `X-Personagent-Dashboard-Token` 請求標頭，其值為執行目錄（預設 `<主目錄>/runtime/`，可用 `AGENT_RUNTIME_DIR` 修改）中 `dashboard.token` 檔案的內容。此檔案在服務啟動時產生，僅限本人讀取。修改操作還須帶有 `X-Personagent-Dashboard: 1` 和 `Content-Type: application/json`；如果請求帶有 `Origin`，則必須是服務本身的位址。跨站的瀏覽器請求一律拒絕，`CONNECTOR_TOKEN` 也無法存取此介面。傳回內容中的金鑰都會被遮蔽。腳本也可以依相同方式呼叫。設定 `DASHBOARD_ENABLED=false` 會關閉此介面，「動態」也將不顯示內容，`personagent doctor` 會輸出 `activity: off (...)`。
+「動態」的資料來自本機頁面所啟動的角色服務，取自它在 `/api/dashboard/` 下的 JSON 介面。僅以 `personagent run` 啟動服務時，請查看服務記錄檔，並使用 `personagent learned` 檢視學到的內容、`personagent memory` 檢視記住的內容。每次呼叫都須帶有 `X-Personagent-Dashboard-Token` 請求標頭，其值為執行目錄（預設 `<主目錄>/runtime/`，可用 `AGENT_RUNTIME_DIR` 修改）中 `dashboard.token` 檔案的內容。此檔案在服務啟動時產生，僅限本人讀取。修改操作還須帶有 `X-Personagent-Dashboard: 1` 和 `Content-Type: application/json`；如果請求帶有 `Origin`，則必須是服務本身的位址。跨站的瀏覽器請求一律拒絕，`CONNECTOR_TOKEN` 也無法存取此介面。傳回內容中的金鑰都會被遮蔽。腳本也可以依相同方式呼叫。設定 `DASHBOARD_ENABLED=false` 會關閉此介面，「動態」也將不顯示內容，`personagent doctor` 會輸出 `activity: off (...)`。
 
-角色服務本身不提供網頁，存取 `http://127.0.0.1:8080/` 只會看到一段說明，指向本機頁面和 `personagent learned`；以往的 `?token=` 連結現在也只會開啟這段說明。本機頁面只監聽 127.0.0.1。在沒有本機頁面的伺服器上，請使用 `personagent learned` 檢視及撤銷它學到的內容。
+角色服務本身不提供網頁，存取 `http://127.0.0.1:8080/` 只會看到一段說明，指向本機頁面和 `personagent learned`；以往的 `?token=` 連結現在也只會開啟這段說明。本機頁面只監聽 127.0.0.1。在沒有本機頁面的伺服器上，可使用 `personagent learned` 檢視角色學到的內容、正在觀察的內容及原因，並可立即啟用、擱置、撤回某項，或恢復由角色或時限擱置、由角色或規則停止使用的內容；`personagent memory` 可列出角色記住的內容，並刪除或還原某一項。
 
 ## 學習方式
 
-機器人不會因為一句話就改變。一項改變須同時滿足兩個條件：同一聊天中出現兩次一致的反應，且其中至少一次足夠「明確」，即**被回覆者以自己的話糾正了它，或接受了它的第二次回答**。一句「哈哈」、旁觀者的糾正（即使機器人回頭詢問了對方）、陌生人的指示，或有人直接轉換話題，都不予計入。因此在預設設定下，一個人只能教它如何回覆自己，且僅在其本人所在的聊天中生效。旁觀者的抱怨也無法撤銷它學到的內容，只有原回覆的對象或管理員才能撤回。
+一聲「哈哈」或單獨一句話不會改變機器人。同一聊天中出現兩次一致的反應，且其中至少一次足夠「明確」時，反應即可讓變更投入使用。「明確」是指**被回覆者以自己的話糾正了它，或接受了它的第二次回答**。旁觀者的糾正（即使機器人回頭詢問了對方）、陌生人的指示，或有人直接轉換話題，都不予計入。因此在預設設定下，一個人只能教它如何回覆自己，且僅在其本人所在的聊天中生效。
 
-學到的所有內容都記錄在僅可追加的學習紀錄中，可隨時撤銷：
+後續反應無法確定的項目，由角色自行判斷：例如兩人的糾正互相矛盾、同一則回覆的兩種改寫並存，或被回覆者作了糾正但無人確認。角色每次判斷呼叫一次模型，決定投入使用、擱置或繼續觀察，並記錄理由。旁觀者對學到內容的抱怨，同樣由角色權衡後決定是否繼續使用。連續 30 天（`PROMOTE_OBSERVE_MAX_DAYS`）沒有新反應的項目會被擱置。任何內容都無須你確認。
 
-- 在「動態」中，「待你確認」下的每項變更都有「保留」和「捨棄」兩個按鈕。「保留」會使其生效；如果同一則回覆已有生效中的改寫，則會取代該項。「學習紀錄」下的每一項都有「復原」按鈕。下方的「角色學到的內容」列出全部學到的內容，角色未執行時也可以在此處理。
-- 也可以使用指令：`personagent learned list`、`personagent learned show <編號>`、`personagent learned rollback <編號>`。
+學到的所有內容都記錄在僅可追加的學習紀錄中，可隨時介入：
 
-如果希望它更加保守，請在 `.env` 中加入 `PROMOTE_MIN_SPEAKERS=2`，如此一來，須經兩位不同的人認可才會改變。
+- 在「動態」中，「學習紀錄」下的每一項都說明了其投入使用的方式，並附有「復原」按鈕；「仍在觀察」下的每一項都說明了目前的進展，沒有按鈕。下方的「角色學到的內容」列出全部學到的內容，並可選擇「立即投入使用」「擱置」「復原」，或對由角色或時限擱置、由角色或規則停止使用的項目選擇「恢復使用」；角色未執行時也可以在此操作。
+- 也可以使用指令：`personagent learned`（正在觀察的內容）、`personagent learned show <編號>`、`personagent learned rollback <編號>`、`personagent learned restore <編號>`。
+
+如果希望它更加保守，請在 `.env` 中加入 `PROMOTE_MIN_SPEAKERS=2`，如此一來，須經兩位不同的人認可，反應才會讓變更投入使用；在此之前角色會繼續觀察。設定 `PROMOTE_JUDGE_ENABLED=false` 後，角色不再自行判斷，反應無法確定的項目維持觀察中；設定 `PROMOTE_AUTO_ENABLED=false` 後，不會再有新的內容投入使用。
 
 在群組中對它傳送 `小夏 記住 …`、`小夏 忘掉 …`、`小夏 你都記得什麼`，即可直接管理它的記憶；`小夏 學到了什麼` 會列出它學到的內容。指令必須位於訊息開頭。以「嗎」「呢」「沒」等結尾的問句（例如 `小夏 記住了嗎`）只會被當作一般聊天；`小夏 忘掉這個` 的意思是「算了」，不會刪除任何內容。每則筆記都會記錄由誰記下、內容涉及何人；未針對特定人物的筆記全群組可見，列出時會標註「來自某某」。
 
 修改人設不會清空它學到的內容。
 
+## 記憶
+
+角色會為每個聊天保存近期訊息（在 `runtime/recent.json` 中保留 72 小時，重新啟動不會遺失）、此前對話的摘要、附日期的事件、關於成員和群組的事實，以及常駐記憶。較早的訊息離開近期訊息的範圍時，會呼叫一次判斷模型進行記憶整理，更新摘要、事件和事實，每項變更都單獨檢查。每個聊天每天最多整理 16 次，所有聊天合計不超過 `MEMORY_CALLS_PER_DAY`（預設 40）次；設為 0 即關閉。角色自行移除的內容可在 30 天內還原，在頁面或終端機中刪除的內容可在 24 小時內還原；在聊天中要求忘記的內容和「清除此聊天的記憶」都無法還原。在「動態」中選取一個聊天，「記憶」區塊會列出全部內容；在終端機中可使用 `personagent memory`。詳見[使用手冊的記憶一節](guide.zh-TW.md#記憶)。
+
 ## 機器人未回覆
 
-請依序排查，越前面的原因越常見。角色服務由本機頁面啟動時，請先查看「動態」：聊天是否出現、是否收到訊息、它為何沒有發言，都可以在此查看。在伺服器上，請查看服務記錄檔，學到的內容請以 `personagent learned` 檢視。接著查看主目錄下 `runtime/desktop/` 中的記錄檔：`agent.log`（角色服務）、`direct.log`（personagent 直接連線的平台）、`astrbot.log`（其他平台）。
+請依序排查，越前面的原因越常見。角色服務由本機頁面啟動時，請先查看「動態」：聊天是否出現、是否收到訊息、它為何沒有發言，都可以在此查看。在伺服器上，請查看服務記錄檔，學到的內容請以 `personagent learned` 檢視，記住的內容請以 `personagent memory` 檢視。接著查看主目錄下 `runtime/desktop/` 中的記錄檔：`agent.log`（角色服務）、`direct.log`（personagent 直接連線的平台）、`astrbot.log`（其他平台）。
 
 1. **訊息未送達。** 在「連接平台」中確認該平台顯示為「已連接」。QQ 機器人必須已在群組中，它在群組中可收到哪些訊息由 QQ 的設定決定；個人微信僅支援私訊。使用第三方 AstrBot 時，請參閱[第三方路線排查](#第三方路線排查)。
 2. **角色服務未啟動，或缺少金鑰。** 在「角色與設定」中重新填寫金鑰並儲存。如果 `.env` 中設定了 `AGENT_ENABLED=false`，請改為 `true` 後重新啟動。
 3. **未點名它。** 在群組中，它只回應包含其名稱（`PERSONA_NAME`）或 @ 它的訊息。其他情況下，它要等群組中累計 `CHAT_TRIGGER_COUNT` 則訊息（預設 30 則）才會考慮加入對話，考慮後也可能選擇不發言。凌晨 2 點至 7 點它較少主動發言。`AGENT_LANG` 為 `zh` 或 `zh-TW` 時以 UTC+8 計算，如需變更時區，請在 `.env` 中設定 `PERSONA_TZ_OFFSET_HOURS`。測試時請先以名稱點名它。
 4. **被 personagent 本身的允許清單攔下。** `.env` 中的 `ACCESS_GROUPS`、`ACCESS_DM_USERS` 一旦列出某個平台的項目，該平台就只會開放所列的項目。被攔下的對話會在 `agent.log` 中記錄一行。
-5. **模型呼叫失敗。** 金鑰無效或餘額用盡時，`agent.log` 中會有一行 ERROR，註明是哪個服務、應修改哪項設定。執行 `personagent doctor` 會向每個模型傳送一個很小的請求，並直接顯示狀態碼。
+5. **模型呼叫失敗。** 金鑰無效或餘額用盡時，`agent.log` 中會有一行 ERROR，註明是哪個服務、應修改哪項設定。執行 `personagent doctor` 會向每個模型傳送一個很小的請求，並直接顯示狀態碼。主模型逾時或連線中斷，且 `LLM_FALLBACK_MODEL` 指定了不同的模型時，本次呼叫會立即改用備用模型；服務方在正常回應中傳回的錯誤（如 OpenRouter 的上游故障）依相應的 HTTP 錯誤處理。「動態」會將這一回合標為「模型未作出回應」。
 6. **設定名稱有誤。** 寫錯的設定名稱不會產生錯誤，程式只會繼續使用預設值。`personagent doctor` 和啟動記錄檔會列出無法識別的設定名稱。
 7. **`.env` 含有 BOM。** 以記事本另存時選錯編碼，會導致第一行設定失效。`personagent doctor` 會回報此問題，改以「UTF-8」（不含 BOM）重新儲存即可。
 8. **可以回覆，但遺失了學過的內容。** 修改 `PERSONA_NAME` 或 `PERSONA_VERSION` 會使它被視為新角色；在「人設」欄位中修改人設則不會。
@@ -192,13 +198,15 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 
 #### 動態介面
 
-[動態](guide.zh-TW.md#動態)是本機頁面中的一個檢視。它不需要額外安裝，不從網際網路載入任何內容，也從不顯示金鑰或權杖。它讀取本機頁面所啟動之角色服務的 JSON 介面。僅使用 `personagent run` 時，請查看服務記錄檔，並使用 `personagent learned`。`DASHBOARD_ENABLED=false` 會關閉此介面，此時檢視會說明情況，`personagent doctor` 會輸出 `activity: off (...)`。
+[動態](guide.zh-TW.md#動態)是本機頁面中的一個檢視。它不需要額外安裝，不從網際網路載入任何內容，也從不顯示金鑰或權杖。它讀取本機頁面所啟動之角色服務的 JSON 介面。僅使用 `personagent run` 時，請查看服務記錄檔，並使用 `personagent learned` 和 `personagent memory`。`DASHBOARD_ENABLED=false` 會關閉此介面，此時檢視會說明情況，`personagent doctor` 會輸出 `activity: off (...)`。
 
 介面位於角色服務的 `/api/dashboard/` 下：
 
-- `GET conversations` 和 `GET conversation?id=<chat id>` 讀取服務已知的聊天，以及特定聊天的詳細資料。
-- `POST candidates/<id>/promote`、`replace`、`reject` 和 `rollback` 修改它學到的內容。每次修改與 `personagent learned` 寫入同一份學習紀錄，操作者記為 `dashboard`。
-- `POST memory/forget` 帶上請求本文 `{"conv": "<chat id>", "note": "<note id>"}`，刪除一則記憶筆記，`conv` 和 id 取自 `GET conversation` 所傳回之 `memories` 中的對應項目。未帶 `note` 時，刪除該聊天的核心筆記。
+- `GET conversations` 和 `GET conversation?id=<chat id>` 讀取服務已知的聊天，以及特定聊天的詳細資料。`conversations` 中的每個聊天帶有 `learned`、`observing`（觀察中的項目數）和 `latest`（最近一次有內容投入使用的時間）。`conversation` 傳回 `learned` 和 `observing` 兩份清單：觀察中的項目帶有 `standing`（所處階段、尚缺的條件、角色的理由，以及將被擱置的日期）；使用中的項目帶有 `by`（`reactions`、`character` 或 `person`）和 `why`。它還會傳回該聊天記住的內容：`memories`、`core_note` 與 `core_at`、`thread`、`episodes`、`removed` 和 `memory_status`。
+- `POST candidates/<id>/promote`、`replace`、`reject`、`rollback` 和 `restore` 是人工可選的操作。每次操作都與 `personagent learned` 寫入同一份學習紀錄，操作者記為 `dashboard`。`restore` 可以恢復由角色或時限擱置的內容，以及由角色或規則停止使用的內容；由人工撤銷或擱置的內容、被內容規則捨棄的內容維持不變；`promote` 不能恢復已復原的內容。
+- `POST memory/forget` 帶上請求本文 `{"conv": "<chat id>", "kind": "note", "id": "<id>"}`，刪除一項記憶，並傳回 `tid`；將 `{"tid": "<tid>"}` 傳送給 `POST memory/restore` 即可還原。`kind` 可以是 `note`、`episode`、`thread` 或 `core`。原有的請求本文 `{"conv": "<chat id>", "note": "<note id>"}` 仍然可用，未帶 `note` 時刪除該聊天的核心筆記。
+- `POST memory/forget_chat` 帶上 `{"conv": "<chat id>"}`，清除該聊天記住的全部內容，無法復原。
+- `GET memory/list?conv=<chat id>` 列出各聊天記住的內容以及仍可還原的內容；服務執行時，`personagent memory` 透過它讀取。
 
 每次呼叫都須帶有 `X-Personagent-Dashboard-Token` 請求標頭，其值為執行目錄（預設為 `<home>/runtime/`，除非已由 `AGENT_RUNTIME_DIR` 變更）中 `dashboard.token` 檔案內的權杖。此檔案僅限本人讀取，於服務啟動時產生。未帶此請求標頭的呼叫會收到 401（`dashboard_token`），權杖錯誤則收到 403（`wrong_token`）。`CONNECTOR_TOKEN` 和 `X-Personagent-Token` 無法存取此介面，兩者僅用於聯結器和 `/health/details`。
 
@@ -207,7 +215,7 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 - 回應中的所有憑證都會替換為 `***`。啟動檢查中的 URL 還會遮蔽使用者名稱、密碼和查詢字串。
 - 同一台電腦上的腳本可以採用與本機頁面相同的方式呼叫此介面。
 
-服務本身不提供頁面。`GET /` 會傳回一段簡短說明，指向本機頁面和 `personagent learned`；以往的 `?token=` 連結現在也會開啟這段說明。本機頁面只繫結 127.0.0.1。在沒有本機頁面的伺服器上，請使用 `personagent learned` 檢視及撤銷學到的內容。
+服務本身不提供頁面。`GET /` 會傳回一段簡短說明，指向本機頁面和 `personagent learned`；以往的 `?token=` 連結現在也會開啟這段說明。本機頁面只繫結 127.0.0.1。在沒有本機頁面的伺服器上，可使用 `personagent learned` 檢視角色學到的內容、正在觀察的內容及原因，並可立即啟用、擱置、撤回某項，或恢復由角色或時限擱置、由角色或規則停止使用的內容；`personagent memory` 可列出角色記住的內容，並刪除或還原某一項。
 
 ### 主機需求
 
@@ -216,6 +224,8 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 3. **可用的連接埠。** 連接埠已被佔用或遭到禁止時也會結束，並以一句話說明原因。請以 `--port` 或 `SERVER_PORT` 改用其他連接埠。
 
 `AGENT_RUNTIME_DIR` 必須解析至主目錄之內，否則啟動失敗。相對路徑的 `PERSONA_FILE` 或 `PERSONA_CARD_FILE` 也以主目錄為基準解析，因此存放於其他位置的人設須使用絕對路徑。
+
+`memory.json`、`core_memory.json` 或 `episodes.json` 損毀時，啟動會以結束代碼 2 停止，並以一句話指出損毀的檔案，以及應換上的 `.bak` 副本。損毀的檔案維持原樣。
 
 ### 連接平台
 
@@ -291,8 +301,9 @@ AstrBot 位於 Docker 中或另一台主機上時，請參閱[使用手冊](guid
 **所有聯結器方式均不提供的功能**（直連、AstrBot 或其他聯結器），無法透過任何設定恢復：
 
 - 針對未經視覺模型描述之圖片的 OCR 備用方案；
-- 經由 NapCat 查詢引用。引用改由 personagent 本身的近期訊息索引，以及聯結器隨引用傳送的被引用文字解析；
-- 從群組中傳送的圖片收集新的表情圖片。
+- 經由 NapCat 查詢引用。引用改由 personagent 本身的近期訊息索引，以及聯結器隨引用傳送的被引用文字解析。
+
+所有路徑都會收集新的表情圖片，與 QQ 相同：來源是群組中傳送、直接附帶圖片或標為表情的圖片。聯結器僅以連結形式傳送的照片不會被收集。
 
 ### 同時連接多個平台
 
@@ -333,22 +344,24 @@ AstrBot 位於 Docker 中或另一台主機上時，請參閱[使用手冊](guid
 
 ### 費用
 
-- **探測會產生費用。** `personagent doctor` 和 `/health/details` 會向每個已設定的模型介面（聊天、私訊、評測和視覺）傳送一個很小的聊天請求。設定了 `EMBEDDING_MODEL` 時還會傳送一次嵌入請求，設定了 `TAVILY_API_KEY` 時還會進行一次 Tavily 搜尋。`/health` 以及設定和學習紀錄檢查均為免費。
+- **探測會產生費用。** `personagent doctor` 和 `/health/details` 會向角色實際呼叫的每個模型傳送一個很小的聊天請求：群組和私訊回覆、網路搜尋判斷、反應判斷（`REACT_LEARN_ENABLED` 開啟時）、自我審查（`EVAL_ENABLED` 開啟時）和視覺。設定了 `EMBEDDING_MODEL` 時還會傳送一次嵌入請求，設定了 `TAVILY_API_KEY` 時還會進行一次 Tavily 搜尋。`/health` 以及設定和學習紀錄檢查均為免費。
+- **模型用量會被統計。** 每次模型請求都按模型、按日統計，依據是服務方回傳的用量，服務方提供費用時一併記錄。`personagent doctor` 輸出今日與近 7 日的用量，本機頁面的「應用程式」頁面也顯示相同的數據。統計檔案在背景寫入，每分鐘最多一次，停止執行時再寫入一次。
+- **學習與記憶。** 角色每次自行判斷學習項目時，呼叫一次 `PROMOTE_JUDGE_MODEL`，每隔 `PROMOTE_JUDGE_INTERVAL_S` 最多 `PROMOTE_JUDGE_BATCH` 次。記憶整理每處理一段聊天呼叫一次 `LLM_JUDGE_MODEL`，每個聊天每天最多 16 次，所有聊天合計每天不超過 `MEMORY_CALLS_PER_DAY`（40）次。設定 `PROMOTE_JUDGE_ENABLED=false` 和 `MEMORY_CALLS_PER_DAY=0` 即可分別關閉。
 - **`tools/` 中的腳本**各不相同，部分免費，部分會呼叫模型。[tools.zh-TW.md](tools.zh-TW.md) 的表格逐一註明。
-- **`personagent eval`** 對每個測試案例都會呼叫模型。人設和學習兩組測試案例還需要第二個模型擔任裁判（`BENCH_JUDGE_MODEL`）。
-- **記憶。** 帶命名空間（非 QQ）的對話超過 256 個時，閒置最久的對話會失去近期歷史和待處理的反應。長期記憶、核心筆記和學習紀錄會保留。正在處理請求的對話不會被清除。長期記憶在啟動時從磁碟載入，不受此上限限制。
-- **磁碟。** `runtime/` 中的證據記錄檔和候選項目記錄檔只會追加，從不截斷。任一檔案超過 50 MB 時，`personagent doctor` 會加以標示（`LEDGER_EVIDENCE_WARN_BYTES`、`LEDGER_CANDIDATES_WARN_BYTES`）。請備份 `runtime/`，因為機器人學到的所有內容都在其中。
+- **`personagent eval`** 對每個測試案例都會呼叫模型，`memory` 測試集除外：它以預設的回答離線執行。人設和學習兩組測試案例還需要第二個模型擔任裁判（`BENCH_JUDGE_MODEL`）。
+- **記憶。** 帶命名空間（非 QQ）的對話超過 256 個時，閒置最久的對話會從記憶體中移除，並失去待處理的反應。移除前會先整理其尚未整理的訊息；除非設定 `MEMORY_KEEP_RECENT=false`，其近期訊息會在 `runtime/recent.json` 中保留 72 小時。事實、事件、核心筆記和學習紀錄會保留。正在處理請求的對話不會被清除。長期記憶在啟動時從磁碟載入，不受此上限限制。
+- **磁碟。** `runtime/` 中的證據記錄檔和候選項目記錄檔只會追加，從不截斷。任一檔案超過 50 MB 時，`personagent doctor` 會加以標示（`LEDGER_EVIDENCE_WARN_BYTES`、`LEDGER_CANDIDATES_WARN_BYTES`）。記憶檔案始終較小：`recent.json` 只保存最近 72 小時內活躍的聊天，`memory_trash.jsonl` 中被移除的內容最多保留 30 天。每天第一次修改之前，`memory.json`、`core_memory.json` 和 `episodes.json` 會複製為同名的 `.bak` 檔案；本版本首次啟動時，會將舊的記憶檔案保留為 `memory.json.pre-v2`。使用「清除此聊天的記憶」或在聊天中要求忘記之後，`.bak` 副本會依目前的檔案重新寫入，`memory.json.pre-v2` 也會刪去被忘記的內容，因此磁碟上不會留下任何副本。請備份 `runtime/`，因為機器人學到和記住的所有內容都在其中。
 
 ### 完整排查清單
 
-這是[機器人未回覆](#機器人未回覆)的完整版，最常見的原因列於前面。本機頁面執行角色服務時，[動態](guide.zh-TW.md#動態)會顯示訊息是否送達、它為何沒有發言。在伺服器上，請查看服務記錄檔，學到的內容請以 `personagent learned` 檢視。
+這是[機器人未回覆](#機器人未回覆)的完整版，最常見的原因列於前面。本機頁面執行角色服務時，[動態](guide.zh-TW.md#動態)會顯示訊息是否送達、它為何沒有發言。在伺服器上，請查看服務記錄檔，學到的內容請以 `personagent learned` 檢視，記住的內容請以 `personagent memory` 檢視。
 
 1. **訊息未送達。** 在本機頁面確認平台顯示為「已連接」，並查看 `runtime/desktop/direct.log` 或 `astrbot.log`。QQ 官方機器人必須在群組中，它可收到哪些群組訊息由 QQ 決定。個人微信機器人無法接收群組訊息。在你自行執行的 AstrBot 中，請填寫外掛程式的 `groups`（私訊填寫 `dm_users`），使用 NapCat 時還須將 `aiocqhttp` 從 `excluded_platforms` 中移除。Satori 和 Matrix 聯結器在各自的 `.env` 中有獨立的允許清單，請參閱其 README。在此情況下，聊天不會出現在「動態」中。
 2. **角色服務未啟動。** `personagent run` 的啟動資訊會顯示 `agent: OFF`，並說明原因和解決方式。未設定 `LLM_API_KEY` 時，請在本機頁面新增金鑰（或設定 `LLM_API_KEY`）並重新啟動。`AGENT_ENABLED=false` 時，請在 `<home>/.env` 中改為 `true` 並重新啟動。在此之前，每個事件都會收到 `owned: false`，第一個事件會記錄一行內容相同的 ERROR。
 3. **AstrBot 內建的模型代為回覆。** 外掛程式已改用備用方式，原因是請求失敗、personagent 拒絕了此訊息（第 5 項），或角色服務未啟動（第 2 項）。AstrBot 的記錄檔會顯示 `refusing unsafe personagent_url`、`agent refused the request (403): <message>`（或其他狀態，請參閱下表）或 `timed out waiting for the agent`。`timeout_s` 必須涵蓋防彈跳時間和回合內的模型呼叫，還須計入訊息抵達時仍在思考的那一回合。無論群組或私訊，一個回合的所有模型呼叫共用 1.5 × `LLM_TIMEOUT_S`，因此請讓 3 × `LLM_TIMEOUT_S` 低於此值。其預設值（420）涵蓋角色服務的預設值（3 × 120 = 360 秒）。調高 `LLM_TIMEOUT_S` 時也須一併調高此值。
-4. **未點名它。** 在群組中，它會回應自己的名稱（`PERSONA_NAME`）或 @。其他情況下，它要等訊息累積足夠（`CHAT_TRIGGER_COUNT`，預設 30 則）才會考慮發言，且仍可能不發言。在其所在時區的 02:00 至 07:00，它大多不參與未點名它的聊天。時區由 `PERSONA_TZ_OFFSET_HOURS` 設定。留空時，`AGENT_LANG` 為 `zh` 或 `zh-TW` 時採用 UTC+8，其他語言採用本機時區。「動態」會顯示近期每個回合的原因。如需離線觀察相同的判斷，請執行 `personagent chat --trigger 4`。
+4. **未點名它。** 在群組中，它會回應自己的名稱（`PERSONA_NAME`）或 @。其他情況下，它要等訊息累積足夠（`CHAT_TRIGGER_COUNT`，預設 30 則）才會考慮發言，且仍可能不發言。在其所在時區的 02:00 至 07:00，它大多不參與未點名它的聊天。時區由 `PERSONA_TZ_OFFSET_HOURS` 設定。留空時，`AGENT_LANG` 為 `zh` 或 `zh-TW` 時採用 UTC+8，其他語言採用本機時區。personagent 啟動後，在某個平台的第一則訊息到達起兩分鐘內，距傳送時已超過 10 分鐘才到達的群組訊息視為積壓訊息：只作為上下文保留，不予回覆，服務記錄檔會加以記錄。「動態」會顯示近期每個回合的原因。如需離線觀察相同的判斷，請執行 `personagent chat --trigger 4`。
 5. **personagent 本身的允許清單。** `ACCESS_GROUPS` 和 `ACCESS_DM_USERS` 在每種方式下均會生效，不帶前綴 ID 的 QQ 私訊還須來自管理員或列有項目。被攔下的訊息不會被接管，因此經由 AstrBot 時，其內建的模型可能會回覆。personagent 會對每個被拒絕的對話以 INFO 記錄一次，並註明拒絕它的設定。
-6. **模型呼叫失敗。** 金鑰遭拒（401 或 403）或餘額耗盡（402 或配額用盡）時，會記錄一行 ERROR，註明服務商主機和應修改的設定。執行 `personagent doctor`，它會向每個模型介面傳送一個很小的請求並顯示狀態，也能找出錯誤的 `LLM_BASE_URL` 或 `LLM_MODEL`。模型無法使用期間，角色被點名時會傳送一句符合人設的簡短致歉，每個對話每五分鐘最多一次。
+6. **模型呼叫失敗。** 金鑰遭拒（401 或 403）或餘額耗盡（402 或配額用盡）時，會記錄一行 ERROR，註明服務商主機和應修改的設定。執行 `personagent doctor`，它會向每個模型介面傳送一個很小的請求並顯示狀態，也能找出錯誤的 `LLM_BASE_URL` 或 `LLM_MODEL`。主模型逾時或連線中斷，且 `LLM_FALLBACK_MODEL` 指定了不同的模型時，本次呼叫會立即改用備用模型，因此本回合仍能在時限內作答。服務方在正常回應中傳回的錯誤（如 OpenRouter 的上游故障）依相應的 HTTP 錯誤處理。模型無法使用期間，角色被點名時會傳送一句符合人設的簡短致歉，每個對話每五分鐘最多一次；「動態」會將這一回合標為「模型未作出回應」。
 7. **設定名稱有誤。** 啟動記錄檔和 `personagent doctor` 會列出 `.env.example` 無法識別的所有鍵，以及任何以 `#` 開頭的值。
 8. **`.env` 含有 BOM。** 第一項設定的名稱帶有 BOM，因此程式無法讀取該設定。啟動時和 `personagent doctor` 都會回報此問題。請將檔案重新儲存為不含 BOM 的 UTF-8。
 9. **使用 NapCat 時 `QQ_BOT_ID` 未設定或有誤。** 經由 AstrBot 時 @ 仍然有效，但補回遺漏的 @ 需要依靠它比對。在 OneBot 直連入口上，@ 永遠無法被識別：機器人正常啟動，不記錄任何內容，也從不回應。`QQ_BOT_ID` 為空但設定了其他 QQ 設定時，`personagent doctor` 會發出警告。QQ 官方機器人不使用此設定。

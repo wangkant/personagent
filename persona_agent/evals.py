@@ -1884,7 +1884,7 @@ async def run(args, env=None) -> dict:
 
 def parse_args(argv=None, prog: str | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        prog=prog, description=langs.term("Measure speaking, persona and learning on "
+        prog=prog, description=langs.term("Measure speaking, persona, learning and memory on "
                                "labelled cases, through the real agent."))
     p.add_argument("--suite", choices=(*SUITES, "all"), default="all")
     from persona_agent.setup_wizard import lang_option

@@ -38,6 +38,7 @@ Une rafale de messages reçoit une seule réponse.
 <td valign="top">
 Ce qu'une correction lui apprend, comme le nom que le groupe donne à la salle de sport, se retrouve dans toutes ses réponses suivantes dans cette discussion.<br>
 Un troll ou un simple spectateur ne peut pas le rééduquer.<br>
+Lorsque les réactions ne permettent pas de trancher un changement, il décide lui-même et consigne pourquoi ; personne n'a rien à approuver.<br>
 Chaque changement est consigné, et chacun peut être annulé.
 </td>
 </tr>
@@ -57,7 +58,7 @@ Vous pouvez réécrire la fiche du personnage à tout moment. Ce qu'il a appris 
 </tr>
 </table>
 
-Chaque discussion a sa propre mémoire, et il oublie quand on le lui demande : `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([commandes de mémoire](https://github.com/wangkant/personagent/blob/main/docs/guide.fr.md#commandes-de-mémoire)).
+Chaque discussion a sa propre mémoire : des messages récents qui survivent à un redémarrage, un résumé de la conversation antérieure, des événements datés et des faits concernant les personnes, que le personnage tient à jour lui-même. Il oublie quand on le lui demande : `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([commandes de mémoire](https://github.com/wangkant/personagent/blob/main/docs/guide.fr.md#commandes-de-mémoire)). La vue **Activité** montre tout ce dont il se souvient, et chaque élément peut y être oublié ou rétabli ([mémoire](https://github.com/wangkant/personagent/blob/main/docs/guide.fr.md#mémoire)).
 
 ## Pour commencer
 

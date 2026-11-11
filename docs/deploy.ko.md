@@ -41,13 +41,15 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 
 ### 활동
 
-[활동](guide.ko.md#활동)은 로컬 페이지의 보기 중 하나입니다. 추가 설치가 필요 없고, 인터넷에서 아무것도 불러오지 않으며, 키나 토큰을 보여 주지 않습니다. 로컬 페이지가 시작한 에이전트 서비스의 JSON API를 읽습니다. `personagent run`만 쓴다면 서비스 로그를 읽고 대신 `personagent learned`를 사용하십시오. `DASHBOARD_ENABLED=false`는 API를 끕니다. 그러면 보기에 그렇게 표시되고, `personagent doctor`는 `activity: off (...)`를 출력합니다.
+[활동](guide.ko.md#활동)은 로컬 페이지의 보기 중 하나입니다. 추가 설치가 필요 없고, 인터넷에서 아무것도 불러오지 않으며, 키나 토큰을 보여 주지 않습니다. 로컬 페이지가 시작한 에이전트 서비스의 JSON API를 읽습니다. `personagent run`만 쓴다면 서비스 로그를 읽고 대신 `personagent learned`와 `personagent memory`를 사용하십시오. `DASHBOARD_ENABLED=false`는 API를 끕니다. 그러면 보기에 그렇게 표시되고, `personagent doctor`는 `activity: off (...)`를 출력합니다.
 
 API는 에이전트 서비스의 `/api/dashboard/` 아래에 있습니다.
 
-- `GET conversations`와 `GET conversation?id=<chat id>`는 서비스가 알고 있는 채팅과 채팅 하나의 세부 내용을 읽습니다.
-- `POST candidates/<id>/promote`, `replace`, `reject`, `rollback`은 학습한 내용을 바꿉니다. 각 변경은 `personagent learned`와 같은 학습 기록에 행위자 `dashboard`로 기록됩니다.
-- `POST memory/forget`은 본문 `{"conv": "<chat id>", "note": "<note id>"}`로 기억 메모 하나를 삭제합니다. `conv`와 id는 `GET conversation`의 `memories` 항목에 있는 값입니다. `note`가 없으면 그 채팅의 핵심 메모를 삭제합니다.
+- `GET conversations`와 `GET conversation?id=<chat id>`는 서비스가 알고 있는 채팅과 채팅 하나의 세부 내용을 읽습니다. `conversations`의 각 채팅에는 `learned`, `observing`(관찰 중인 항목 수), `latest`(마지막으로 무언가가 사용되기 시작한 시각)가 들어 있습니다. `conversation`은 `learned`와 `observing` 목록을 돌려줍니다. 관찰 중인 항목에는 `standing`(단계, 아직 부족한 것, 캐릭터의 이유, 제외되는 날짜)이 있고, 사용 중인 항목에는 `by`(`reactions`, `character`, `person`)와 `why`가 있습니다. 또한 채팅이 기억하는 것으로 `memories`, `core_note`와 `core_at`, `thread`, `episodes`, `removed`, `memory_status`를 돌려줍니다.
+- `POST candidates/<id>/promote`, `replace`, `reject`, `rollback`, `restore`는 학습한 내용에 대해 사람이 선택적으로 하는 조작입니다. 각 조작은 `personagent learned`와 같은 학습 기록에 행위자 `dashboard`로 기록됩니다. `restore`는 캐릭터나 시간 제한이 제외한 항목과, 캐릭터나 규칙이 사용을 중지한 항목을 복원합니다. 사람이 되돌리거나 제외한 항목과 내용 규칙이 버린 항목은 그대로 남습니다. `promote`는 롤백된 항목을 복원하지 않습니다.
+- `POST memory/forget`은 본문 `{"conv": "<chat id>", "kind": "note", "id": "<id>"}`로 항목 하나를 삭제하고, `POST memory/restore`(`{"tid": "<tid>"}`)로 그 항목을 복원할 때 쓰는 `tid`를 응답합니다. `kind`는 `note`, `episode`, `thread`, `core` 중 하나입니다. 이전 본문 `{"conv": "<chat id>", "note": "<note id>"}`도 계속 동작하며, `note`가 없으면 그 채팅의 핵심 메모를 삭제합니다.
+- `POST memory/forget_chat`은 `{"conv": "<chat id>"}`로 그 채팅이 기억하는 모든 것을 삭제합니다. 되돌릴 수 없습니다.
+- `GET memory/list?conv=<chat id>`는 각 채팅이 기억하는 것과 아직 복원할 수 있는 것을 나열합니다. 서비스가 실행 중이면 `personagent memory`가 이것을 읽습니다.
 
 모든 호출에는 런타임 폴더(`AGENT_RUNTIME_DIR`로 옮기지 않으면 `<home>/runtime/`)의 `dashboard.token`에 있는 토큰을 `X-Personagent-Dashboard-Token` 헤더에 담아야 합니다. 이 파일은 소유자만 읽을 수 있고, 서비스가 시작할 때 만듭니다. 헤더가 없는 호출은 401(`dashboard_token`), 잘못된 토큰은 403(`wrong_token`)을 받습니다. `CONNECTOR_TOKEN`과 `X-Personagent-Token`으로는 열 수 없습니다. 이들은 커넥터와 `/health/details` 전용입니다.
 
@@ -56,7 +58,7 @@ API는 에이전트 서비스의 `/api/dashboard/` 아래에 있습니다.
 - 응답에서는 모든 자격 증명이 `***`로 바뀝니다. 시작 점검의 URL은 사용자 이름, 비밀번호, 쿼리도 가려집니다.
 - 같은 컴퓨터의 스크립트는 로컬 페이지와 같은 방식으로 API를 호출할 수 있습니다.
 
-서비스는 페이지를 제공하지 않습니다. `GET /`은 로컬 페이지와 `personagent learned`를 안내하는 짧은 메모를 돌려주며, 예전 `?token=` 링크도 이제 이것을 엽니다. 로컬 페이지는 127.0.0.1에만 바인딩됩니다. 로컬 페이지가 없는 서버에서는 `personagent learned`로 학습 내용을 검토하고 뒤집으십시오.
+서비스는 페이지를 제공하지 않습니다. `GET /`은 로컬 페이지와 `personagent learned`를 안내하는 짧은 메모를 돌려주며, 예전 `?token=` 링크도 이제 이것을 엽니다. 로컬 페이지는 127.0.0.1에만 바인딩됩니다. 로컬 페이지가 없는 서버에서는 `personagent learned`가 캐릭터가 배운 것, 관찰 중인 것과 그 이유를 보여 주며, 항목을 사용하기 시작하거나, 제외하거나, 되돌리거나, 캐릭터나 시간 제한이 제외한 항목과 캐릭터나 규칙이 사용을 중지한 항목을 복원할 수 있게 합니다. `personagent memory`는 기억하는 것을 나열하고 항목을 삭제하거나 복원합니다.
 
 ## 호스트가 제공해야 하는 것
 
@@ -65,6 +67,8 @@ API는 에이전트 서비스의 `/api/dashboard/` 아래에 있습니다.
 3. **비어 있는 포트.** 사용 중이거나 금지된 포트도 한 문장으로 알리고 종료합니다. `--port`나 `SERVER_PORT`로 다른 포트를 고르십시오.
 
 `AGENT_RUNTIME_DIR`은 홈 아래로 해석되어야 하며, 그렇지 않으면 시작에 실패합니다. 상대 경로의 `PERSONA_FILE`이나 `PERSONA_CARD_FILE`도 홈 아래로 해석되므로, 다른 곳에 둔 페르소나에는 절대 경로가 필요합니다.
+
+`memory.json`, `core_memory.json`, `episodes.json`이 손상되었으면 시작이 종료 코드 2로 멈추고, 해당 파일과 그 자리에 넣을 `.bak` 사본을 알려 주는 한 문장을 출력합니다. 손상된 파일은 건드리지 않습니다.
 
 ## 플랫폼 연결하기
 
@@ -141,7 +145,8 @@ Docker나 다른 호스트의 AstrBot은 [사용자 가이드](guide.ko.md#직�
 
 - 비전 모델이 설명하지 못한 이미지의 OCR 대체 처리
 - NapCat을 통한 인용 조회. 인용은 personagent 자체의 최근 메시지 색인과, 커넥터가 인용과 함께 보내는 인용 텍스트로 해석합니다
-- 그룹에 올라온 이미지에서 새 스티커 수집
+
+새 스티커는 QQ에서와 마찬가지로 모든 경로에서 수집됩니다. 그룹에 올라온 이미지 중 본문에 포함되어 도착하거나 스티커로 표시된 것에서 수집합니다. 커넥터가 링크로만 보내는 사진은 수집하지 않습니다.
 
 ## 플랫폼 여러 개
 
@@ -182,11 +187,13 @@ direct 프로세스와 여기 있는 세 커넥터는 봇이 먼저 보낼 수 �
 
 ## 비용
 
-- **점검은 크레딧을 씁니다.** `personagent doctor`와 `/health/details`는 설정된 각 모델 엔드포인트(채팅, DM, 평가, 비전)에 아주 작은 채팅 완성을 한 번 보냅니다. `EMBEDDING_MODEL`이 있으면 임베딩을 한 번, `TAVILY_API_KEY`가 있으면 Tavily 검색을 한 번 보냅니다. `/health`와 설정 및 학습 기록 확인은 무료입니다.
+- **점검은 크레딧을 씁니다.** `personagent doctor`와 `/health/details`는 에이전트가 작업을 보내는 각 모델에 아주 작은 채팅 완성을 한 번 보냅니다. 대상은 그룹 및 개인 답장, 웹 검색 여부 판단, 반응 판단(`REACT_LEARN_ENABLED`가 켜져 있는 동안), 자체 검토(`EVAL_ENABLED`가 켜져 있는 동안), 비전입니다. `EMBEDDING_MODEL`이 있으면 임베딩을 한 번, `TAVILY_API_KEY`가 있으면 Tavily 검색을 한 번 보냅니다. `/health`와 설정 및 학습 기록 확인은 무료입니다.
+- **모델 사용량을 집계합니다.** 모든 모델 요청은 제공업체가 보고하는 사용량에 따라 모델별, 날짜별로 집계되며, 제공업체가 비용을 보고하면 비용도 함께 집계됩니다. `personagent doctor`는 오늘과 최근 7일의 수치를 출력하고, 로컬 페이지의 앱 보기에도 같은 수치가 표시됩니다. 집계 파일은 백그라운드에서 많아야 1분에 한 번, 그리고 종료할 때 한 번 더 기록됩니다.
+- **학습과 기억.** 캐릭터가 스스로 내리는 학습 결정은 각각 `PROMOTE_JUDGE_MODEL` 호출 한 번의 비용이 들며, `PROMOTE_JUDGE_INTERVAL_S`마다 많아야 `PROMOTE_JUDGE_BATCH`개입니다. 기억 통합은 채팅의 한 구간마다 `LLM_JUDGE_MODEL` 호출 한 번의 비용이 들며, 하루에 채팅당 많아야 16번, 모든 채팅을 합쳐 많아야 `MEMORY_CALLS_PER_DAY`(40)번입니다. `PROMOTE_JUDGE_ENABLED=false`와 `MEMORY_CALLS_PER_DAY=0`으로 각각 끕니다.
 - **`tools/`의 스크립트**는 제각각입니다. 무료인 것도 모델을 호출하는 것도 있습니다. [tools.md](tools.ko.md)의 표에 나와 있습니다.
-- **`personagent eval`**은 케이스마다 모델을 호출합니다. 페르소나와 학습 스위트에는 판정용 두 번째 모델(`BENCH_JUDGE_MODEL`)도 필요합니다.
-- **메모리.** 네임스페이스가 붙은(QQ 외) 대화가 256개를 넘으면 가장 오래 활동이 없던 유휴 대화가 최근 기록과 대기 중인 반응을 잃습니다. 장기 기억, 핵심 메모, 학습 기록은 남습니다. 요청 처리 중인 대화는 절대 밀려나지 않습니다. 장기 기억은 시작할 때 디스크에서 불러오며 이 상한의 대상이 아닙니다.
-- **디스크.** `runtime/`의 증거 로그와 후보 학습 기록은 추가 전용이고 잘리지 않습니다. `personagent doctor`는 어느 쪽이든 50MB를 넘으면 경고합니다(`LEDGER_EVIDENCE_WARN_BYTES`, `LEDGER_CANDIDATES_WARN_BYTES`). 봇이 배운 모든 것이 들어 있으니 `runtime/`을 백업하십시오.
+- **`personagent eval`**은 케이스마다 모델을 호출합니다. 단, `memory` 스위트는 스크립트로 된 답으로 오프라인에서 실행됩니다. 페르소나와 학습 스위트에는 판정용 두 번째 모델(`BENCH_JUDGE_MODEL`)도 필요합니다.
+- **메모리.** 네임스페이스가 붙은(QQ 외) 대화가 256개를 넘으면 가장 오래 활동이 없던 유휴 대화가 메모리에서 제외되고 대기 중인 반응을 잃습니다. 아직 통합되지 않은 메시지는 먼저 통합되며, 최근 메시지는 `MEMORY_KEEP_RECENT=false`가 아니면 `runtime/recent.json`에 72시간 동안 남습니다. 사실, 사건, 핵심 메모, 학습 기록은 남습니다. 요청 처리 중인 대화는 절대 밀려나지 않습니다. 장기 기억은 시작할 때 디스크에서 불러오며 이 상한의 대상이 아닙니다.
+- **디스크.** `runtime/`의 증거 로그와 후보 학습 기록은 추가 전용이고 잘리지 않습니다. `personagent doctor`는 어느 쪽이든 50MB를 넘으면 경고합니다(`LEDGER_EVIDENCE_WARN_BYTES`, `LEDGER_CANDIDATES_WARN_BYTES`). 기억 파일은 작게 유지됩니다. `recent.json`은 최근 72시간 안에 활동한 채팅만 보관하고, `memory_trash.jsonl`은 삭제된 항목을 많아야 30일 동안 보관합니다. 매일 첫 변경 전에 `memory.json`, `core_memory.json`, `episodes.json`은 이름 끝에 `.bak`이 붙은 같은 이름의 파일로 복사되며, 이 버전을 처음 시작할 때 이전 기억 파일을 `memory.json.pre-v2`로 보관합니다. **이 채팅의 기억 삭제**나 채팅에서 요청한 삭제 후에는 `.bak` 사본이 현재 파일에서 다시 기록되고 `memory.json.pre-v2`에서도 삭제된 내용이 지워지므로, 디스크의 어떤 사본에도 남지 않습니다. 봇이 배우고 기억하는 모든 것이 들어 있으니 `runtime/`을 백업하십시오.
 
 ## 봇이 조용해졌을 때
 
@@ -195,9 +202,9 @@ direct 프로세스와 여기 있는 세 커넥터는 봇이 먼저 보낼 수 �
 1. **아무것도 도착하지 않습니다.** 로컬 페이지에서 플랫폼이 연결됨으로 표시되는지 확인하고 `runtime/desktop/direct.log`나 `astrbot.log`를 읽으십시오. QQ 공식 봇은 그룹에 있어야 하고, 어떤 그룹 메시지를 받을지는 QQ가 정합니다. 개인 WeChat 봇은 그룹을 받지 않습니다. 직접 실행하는 AstrBot에서는 플러그인의 `groups`(DM은 `dm_users`도)를 채우고, NapCat이라면 `excluded_platforms`에서 `aiocqhttp`를 빼십시오. Satori와 Matrix 커넥터는 각자의 `.env`에 자체 허용 목록이 있습니다. 각 README를 참고하십시오. 이 경우 채팅은 활동에 나타나지 않습니다.
 2. **에이전트가 꺼져 있습니다.** `personagent run` 배너에 `agent: OFF`와 이유, 해결법이 표시됩니다. `LLM_API_KEY`가 없으면 로컬 페이지에서 키를 추가하고(또는 `LLM_API_KEY`를 설정하고) 재시작하십시오. `AGENT_ENABLED=false`라면 `<home>/.env`에서 `true`로 바꾸고 재시작하십시오. 그때까지 모든 이벤트는 `owned: false`를 받고, 첫 이벤트에서 같은 조언을 담은 ERROR 줄이 한 번 기록됩니다.
 3. **대신 AstrBot 자체 모델이 답합니다.** 요청이 실패했거나, personagent가 메시지를 돌려보냈거나(항목 5), 에이전트가 꺼져 있어서(항목 2) 플러그인이 대체 동작을 했습니다. AstrBot 로그에 `refusing unsafe personagent_url`, `agent refused the request (403): <message>`(또는 다른 상태, 아래 표 참고), `timed out waiting for the agent`가 나옵니다. `timeout_s`는 디바운스와 턴 안의 모델 호출에 더해, 메시지가 도착했을 때 생각 중이던 턴까지 포함해야 합니다. 그룹이든 DM이든 한 턴의 모델 호출은 모두 합쳐 1.5 × `LLM_TIMEOUT_S`까지이므로 3 × `LLM_TIMEOUT_S`를 그보다 작게 유지하십시오. 기본값(420)은 에이전트 기본값(3 × 120 = 360초)을 포함합니다. `LLM_TIMEOUT_S`를 올리면 이것도 올리십시오.
-4. **부르지 않았습니다.** 그룹에서는 이름(`PERSONA_NAME`)이나 @에 답합니다. 그렇지 않으면 대화가 충분히 쌓이기를 기다리고(`CHAT_TRIGGER_COUNT`, 기본값 30개 메시지) 그래도 넘어갈 수 있습니다. 해당 시간대의 02:00부터 07:00까지는 부르지 않은 채팅에 대부분 끼어들지 않습니다. 시간대는 `PERSONA_TZ_OFFSET_HOURS`입니다. 비워 두면 `AGENT_LANG`이 `zh`나 `zh-TW`일 때 UTC+8, 그 외에는 이 컴퓨터의 오프셋입니다. 활동에 최근 각 턴의 이유가 표시됩니다. 같은 판단을 오프라인으로 보려면 `personagent chat --trigger 4`를 실행하십시오.
+4. **부르지 않았습니다.** 그룹에서는 이름(`PERSONA_NAME`)이나 @에 답합니다. 그렇지 않으면 대화가 충분히 쌓이기를 기다리고(`CHAT_TRIGGER_COUNT`, 기본값 30개 메시지) 그래도 넘어갈 수 있습니다. 해당 시간대의 02:00부터 07:00까지는 부르지 않은 채팅에 대부분 끼어들지 않습니다. 시간대는 `PERSONA_TZ_OFFSET_HOURS`입니다. 비워 두면 `AGENT_LANG`이 `zh`나 `zh-TW`일 때 UTC+8, 그 외에는 이 컴퓨터의 오프셋입니다. 시작 후 해당 플랫폼의 첫 메시지로부터 2분 이내에 도착한 그룹 메시지 가운데 보낸 지 10분이 넘은 것은 밀린 메시지로 취급됩니다. 이런 메시지는 맥락으로 보관되며 답장 대상이 되지 않고, 서비스 로그에 그 사실이 기록됩니다. 활동에 최근 각 턴의 이유가 표시됩니다. 같은 판단을 오프라인으로 보려면 `personagent chat --trigger 4`를 실행하십시오.
 5. **personagent의 허용 목록.** `ACCESS_GROUPS`와 `ACCESS_DM_USERS`는 모든 경로에 적용되고, 접두사 없는 ID의 QQ DM에는 관리자나 항목도 필요합니다. 이들이 돌려보낸 메시지는 처리되지 않은 채 돌아가므로 AstrBot을 통하면 그 모델이 답할 수 있습니다. personagent는 거부한 각 대화를 거부한 설정과 함께 INFO로 한 번 기록합니다.
-6. **모델 호출이 실패합니다.** 거부된 키(401 또는 403)나 잔액 부족(402 또는 할당량 소진)은 제공업체 호스트와 고칠 설정을 알려 주는 ERROR 줄을 한 번 기록합니다. `personagent doctor`를 실행하십시오. 각 모델 엔드포인트에 아주 작은 요청을 보내 상태를 보여 주므로 잘못된 `LLM_BASE_URL`이나 `LLM_MODEL`도 잡아냅니다. 모델이 내려가 있는 동안 페르소나는 불리면 캐릭터다운 짧은 변명을 보냅니다. 대화당 5분에 한 번까지입니다.
+6. **모델 호출이 실패합니다.** 거부된 키(401 또는 403)나 잔액 부족(402 또는 할당량 소진)은 제공업체 호스트와 고칠 설정을 알려 주는 ERROR 줄을 한 번 기록합니다. `personagent doctor`를 실행하십시오. 각 모델 엔드포인트에 아주 작은 요청을 보내 상태를 보여 주므로 잘못된 `LLM_BASE_URL`이나 `LLM_MODEL`도 잡아냅니다. 주 모델이 시간 초과되거나 연결이 끊겼을 때 `LLM_FALLBACK_MODEL`이 다른 모델을 지정하고 있으면 호출이 즉시 대체 모델로 넘어가므로, 턴은 시간 예산 안에 답을 받습니다. OpenRouter의 업스트림 실패처럼 제공업체가 정상 응답 안에 담아 보내는 오류는 해당하는 HTTP 오류와 같이 처리됩니다. 모델이 내려가 있는 동안 페르소나는 불리면 캐릭터다운 짧은 변명을 보냅니다. 대화당 5분에 한 번까지이며, 활동에는 그 턴이 "모델이 응답하지 않음"으로 표시됩니다.
 7. **설정 이름 오타.** 시작 로그와 `personagent doctor`는 `.env.example`이 모르는 모든 키와 `#`으로 시작하는 값을 나열합니다.
 8. **`.env`의 BOM.** 첫 번째 설정의 이름에 BOM이 붙어 프로세스에 도달하지 못합니다. 시작할 때와 `personagent doctor`가 알려 줍니다. BOM 없는 UTF-8로 다시 저장하십시오.
 9. **NapCat에서 `QQ_BOT_ID`가 없거나 틀렸습니다.** AstrBot을 통하면 @ 멘션은 동작하지만, 놓친 멘션 훑기가 이것으로 대조합니다. 직접 OneBot 수신에서는 @ 멘션이 인식되지 않습니다. 봇은 문제없이 시작하고, 아무것도 기록하지 않고, 답하지 않습니다. `personagent doctor`는 `QQ_BOT_ID`가 비어 있고 다른 QQ 설정이 있으면 경고합니다. QQ 공식 봇은 이것을 쓰지 않습니다.

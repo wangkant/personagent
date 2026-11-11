@@ -78,9 +78,9 @@ QQ 是唯一的例外，为兼容而保留。其 id 存储时不带前缀（`123
 }
 ```
 
-必填字段是 `platform`、`conversation_type`（`group` 或 `dm`）、`sender_id`、`message_id` 和 `sent_at`，群聊还须包含 `conversation_id`。`sent_at` 是平台为消息标记的时间，单位为 unix 秒。请发送平台原始 id，前缀由 agent 添加。
+必填字段是 `platform`、`conversation_type`（`group` 或 `dm`）、`sender_id`、`message_id` 和 `sent_at`，群聊还须包含 `conversation_id`。`sent_at` 是平台为消息标记的时间，单位为 unix 秒。角色看到的每条消息都附有这一时间。agent 启动后，在某个平台的第一条消息到达起两分钟内，如果群聊消息到达时已超过 10 分钟，即视为重启后补发的积压消息：只作为上下文保留，不予回复。两分钟之后，较早的 `sent_at` 不再使消息被搁下，因此时钟偏慢的连接器发来的消息仍会得到回复。请发送平台原始 id，前缀由 agent 添加。
 
-`addressed` 由连接器设置。消息提及机器人、回复机器人的某条消息，或按平台自身规则是对机器人说的，该字段即为 true。agent 本身也会留意文本中出现的名称。它将对自身消息的引用或对机器人的 @ 视为可供学习的反应，因此回复机器人消息时须设置 `addressed`。对其他成员消息的引用从不视为对机器人的反应。
+`addressed` 由连接器设置。消息提及机器人、回复机器人的某条消息，或按平台自身规则是对机器人说的，该字段即为 true。agent 本身也会留意文本中出现的名称。它将对自身消息的引用或对机器人的 @ 视为可供学习的反应，因此回复机器人消息时须设置 `addressed`。对其他成员消息的引用从不视为对机器人的反应。转发消息中对机器人的提及不算对机器人说话，因此不要为此设置 `addressed`。
 
 `sender_id` 等于 `bot_id` 的事件，是机器人自身消息的回传。agent 不读取即丢弃，并返回 `{"handled": false, "owned": true, "replies": []}`，以便连接器自身的机器人逻辑同样保持沉默。请在连接器中跳过此类事件。
 
@@ -89,12 +89,14 @@ QQ 是唯一的例外，为兼容而保留。其 id 存储时不带前缀（`123
 | 类型 | 字段 | 说明 |
 |---|---|---|
 | `text` | `text` | |
-| `mention` | `user_id`, `name` | 提及某人。`user_id` 等于 `bot_id` 时，即提及机器人。 |
-| `image` | `url` 或 `b64`，`sticker`（布尔值） | `sticker` 标记以图片形式发送的表情包。 |
+| `mention` | `user_id`, `name` | 提及某人。`user_id` 等于 `bot_id` 时，即提及机器人。角色读到的是 `name` 而不是 id，因此请发送 `name`。`name` 交给模型时标明为并非发送者所写的名字，因此永远不会点名角色或构成命令。`forward` 片段之后对机器人的提及不算点名。 |
+| `image` | `url` 或 `b64`，`sticker`（布尔值） | `sticker` 标记以图片形式发送的表情包。以 `b64` 发送或标有 `sticker` 的群聊图片可被收入表情包库；仅以 `url` 发送的照片不会被收入。 |
 | `emoji` | `name`, `id` | agent 看不到的平台贴纸或自定义表情。`name` 是人们对它的通常称呼。 |
+| `media` | `kind`, `name`, `transcript`, `emoji` | agent 看不到的内容。`kind` 为 `voice`、`video`、`file`、`photo`（无法获取的图片）或 `sticker`。文件请附上 `name`，平台已转写的语音请附上 `transcript`，表情请附上 `emoji`。 |
+| `forward` | `name` | 其后的片段转发自 `name`，而非发送者本人所写。`name` 可以为空。这些片段中的文字视为被转发者的话：其中的名字不算点名，也不会执行记忆命令。发送者自己的评论请放在 `forward` 片段之前，或作为单独的消息发送。 |
 | `reply` | `message_id`, `text`, `sender_id`, `sender_name` | 该消息所引用的消息。平台提供 `text` 时一律发送。 |
 
-其他内容以文字描述，作为 `text` 片段，例如 `(sent a voice message)` 或 `(sent a file: deck.pdf)`。agent 会丢弃未知类型的片段。
+媒体内容请以 `media` 片段发送，不要写成 `(sent a voice message)` 这样的文字：角色会把这些文字当作发送者本人输入的内容。agent 会丢弃未知类型的片段。
 
 以下可选字段可启用 agent 的更多功能：
 
@@ -115,7 +117,7 @@ QQ 是唯一的例外，为兼容而保留。其 id 存储时不带前缀（`123
 ]}
 ```
 
-- `replies`：按顺序发送，每条作为单独的消息。存在 `mention_user_id` 时，其值为要提及的带前缀 id。请按平台的方式呈现提及。
+- `replies`：按顺序发送，每条作为单独的消息。存在 `mention_user_id` 时，其值为要提及的带前缀 id。请按平台的方式呈现提及。带有 `"reason": "excuse"` 的条目是模型出错时角色在私聊中发送的简短说明，而非回复；可以照常发送，也可以作为错误处理。
 - `owned`：agent 已接管该会话。为 true 时，即使 `replies` 为空，也须阻止其他机器人逻辑回答，因为这是人设选择了保持沉默。为 false 时，该消息由你处理：要么该会话不在 agent 的允许列表中，要么 agent 根本无法回答（没有 `LLM_API_KEY`，或 `AGENT_ENABLED=false`）。第二种情况下，agent 的日志中会有一行 ERROR 注明原因。
 - 请求会持续到该轮结束，即一小段防抖时间加上模型的用时。不论群聊还是私聊，一轮的所有模型调用（含重试）共用一份 1.5 × `LLM_TIMEOUT_S` 的时间预算；如果消息到达时同一会话的上一轮仍在思考，它会先等待那一轮结束。请至少预留 3 × `LLM_TIMEOUT_S` 秒（默认为 360 秒）。
 - 如果记忆命令（例如“记住……”）到达时，同一会话的某一轮仍在思考，该命令会等待那一轮结束后才得到回答。声明了 `outbox` 的连接器会立即收到 `{"handled": false, "owned": true, "replies": []}`，回答稍后作为 `follow_up` 投递送达。没有 `outbox` 时，回答随某个响应返回：可能是该命令自身的响应，也可能是同一会话中另一个正在等待的请求的响应，因此一个响应中可能包含提及事件发送者以外的人的回复。

@@ -113,7 +113,7 @@
 "direct: running {0}": "напрямую: работает {0}",
 "Connect the stored platforms directly": "Напрямую подключает сохранённые платформы",
 "No direct platforms are connected.": "Напрямую подключённых платформ нет.",
-"Measure speaking, persona and learning on labelled cases, through the real agent.": "Измеряет речь, персону и обучение на размеченных случаях, с настоящим агентом.",
+"Measure speaking, persona, learning and memory on labelled cases, through the real agent.": "Измеряет речь, персону, обучение и память на размеченных случаях, с настоящим агентом.",
 "en or zh (default: AGENT_LANG, else en)": "en или zh (по умолчанию AGENT_LANG, иначе en)",
 "cases per suite, spread across modes and labels (0: all)": "случаев на набор, с распределением по режимам и меткам (0: все)",
 "report path (default: <home>/benchmark_runs/behavior-eval-<lang>-<time>.json)": "путь к отчёту (по умолчанию <home>/benchmark_runs/behavior-eval-<lang>-<time>.json)",

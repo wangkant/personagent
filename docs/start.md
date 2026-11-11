@@ -35,6 +35,8 @@ Below it, **More features** turns on web search, image understanding and speakin
 
 Two more views need no app. **Practice** plays a scripted demo and runs a practice group chat, where you can see why the character replies or stays silent. **App** checks every service the character relies on, shows the logs, and holds updates, backups and the desktop icon.
 
+**Activity** shows the chats the character is in, what it said lately, what it remembers and what it has learned. The character decides by itself what it learns and keeps its memory current; nothing there waits for you. You can still undo anything it learned, and forget or restore anything it remembers.
+
 ## Bring it to other apps
 
 1. Click **Connect apps** and pick an app. Once connected, your character replies to that app's group chats and DMs.

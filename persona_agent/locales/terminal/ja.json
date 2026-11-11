@@ -113,7 +113,7 @@
 "direct: running {0}": "直接接続：{0} を実行中",
 "Connect the stored platforms directly": "保存済みのプラットフォームに直接接続します",
 "No direct platforms are connected.": "直接接続のプラットフォームはありません。",
-"Measure speaking, persona and learning on labelled cases, through the real agent.": "実際のエージェントで、ラベル付きケースを使って発言、ペルソナ、学習を測定します。",
+"Measure speaking, persona, learning and memory on labelled cases, through the real agent.": "実際のエージェントで、ラベル付きケースを使って発言、ペルソナ、学習、記憶を測定します。",
 "en or zh (default: AGENT_LANG, else en)": "en または zh（既定：AGENT_LANG、なければ en）",
 "cases per suite, spread across modes and labels (0: all)": "スイートごとのケース数。モードとラベルに分散します（0：すべて）",
 "report path (default: <home>/benchmark_runs/behavior-eval-<lang>-<time>.json)": "レポートのパス（既定：<home>/benchmark_runs/behavior-eval-<lang>-<time>.json）",

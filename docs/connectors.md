@@ -108,15 +108,23 @@ Each request carries one message in and returns the replies to it.
 
 The required fields are `platform`, `conversation_type` (`group` or `dm`),
 `sender_id`, `message_id` and `sent_at`, plus `conversation_id` for groups.
-`sent_at` is when the platform stamped the message, in unix seconds. Send
-raw platform ids. The agent adds the prefix.
+`sent_at` is when the platform stamped the message, in unix seconds. The
+character sees each message with this time. A group message that is more
+than 10 minutes old when it arrives, within two minutes of the platform's
+first message since the agent started, is a backlog delivered after a
+restart: it is kept as context and not answered. After those two minutes
+an old `sent_at` no longer holds a message back, so a connector whose clock
+runs behind is still answered. Send raw platform ids. The agent adds the
+prefix.
 
 The connector sets `addressed`. It is true when the message mentions the
 bot, replies to one of the bot's messages, or is addressed to the bot under
 the platform's own rules. The agent also notices its name in the text on its
 own. It reads a quote of its own message, or an @ of the bot, as a reaction it
 may learn from, so set `addressed` on replies to the bot. A quote of another
-member's message is never a reaction to the bot.
+member's message is never a reaction to the bot. A mention of the bot inside
+a forwarded message does not address the bot, so do not set `addressed` for
+it.
 
 An event whose `sender_id` equals its `bot_id` is the bot's own message
 echoed back. The agent drops it unread and answers
@@ -128,14 +136,16 @@ Segments come in order:
 | Type | Fields | Notes |
 |---|---|---|
 | `text` | `text` | |
-| `mention` | `user_id`, `name` | A mention of someone. It mentions the bot when `user_id` equals `bot_id`. |
-| `image` | `url` or `b64`, `sticker` (bool) | `sticker` marks a sticker sent as an image. |
+| `mention` | `user_id`, `name` | A mention of someone. It mentions the bot when `user_id` equals `bot_id`. The character reads `name` in place of the id, so send it. `name` reaches the model marked as a name the sender did not write, so it never calls the character or gives a command. A mention of the bot after a `forward` segment is not a call. |
+| `image` | `url` or `b64`, `sticker` (bool) | `sticker` marks a sticker sent as an image. A group picture sent as `b64`, or marked with `sticker`, can be collected for the sticker library; a photo sent only as a `url` is not. |
 | `emoji` | `name`, `id` | A platform sticker or custom emoji the agent cannot see. `name` is what a person would call it. |
+| `media` | `kind`, `name`, `transcript`, `emoji` | Something the agent cannot see. `kind` is `voice`, `video`, `file`, `photo` (an image that could not be fetched) or `sticker`. Add `name` to a file, `transcript` to a voice message the platform transcribed, and `emoji` to a sticker. |
+| `forward` | `name` | The segments after it were forwarded from `name`, not written by the sender. `name` may be empty. Their text is read as the forwarded person's words: it calls no one by name and runs no memory command. Put the sender's own comment before the `forward` segment, or send it as a separate message. |
 | `reply` | `message_id`, `text`, `sender_id`, `sender_name` | The message this one quotes. Send `text` whenever the platform provides it. |
 
-Describe anything else in words, as a `text` segment such as `(sent a voice
-message)` or `(sent a file: deck.pdf)`. The agent drops unknown segment
-types.
+Send media as a `media` segment, never as words such as `(sent a voice
+message)`: the character would read them as typed by the sender. The agent
+drops unknown segment types.
 
 These optional fields turn on more of the agent:
 
@@ -158,7 +168,9 @@ The response looks like this:
 
 - `replies`: send them in order, each as a separate message. When
   `mention_user_id` is present, it is the prefixed id to mention. Render the
-  mention the way the platform does.
+  mention the way the platform does. An item with `"reason": "excuse"` is
+  the short message the character sends in a DM when the model failed, not a
+  reply. Send it like the others, or handle it as an error.
 - `owned`: the agent has taken this conversation. When it is true, stop any
   other bot logic from answering, even if `replies` is empty, because the
   persona chose to stay quiet. When it is false, the message is yours to
