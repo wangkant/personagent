@@ -1001,6 +1001,19 @@ _NUMBERED_RUN_RE = re.compile(
     r'(?m)^\d+\.[ \t]+.*(?:\n\d+\.[ \t]+.*)+|(?<=[:：]\n)\d+\.[ \t]+.*')
 # Where an over-long bubble prefers to wrap: after ". ", "! ", "? " or a CJK end.
 _SENTENCE_END_RE = re.compile(r"[.!?]+(?=\s)|[。！？]+")
+# A period that ends no sentence: a date's ordinal ("am 2. Januar"), a title.
+_NOT_AN_END_RE = re.compile(
+    r"(?<![^\W_])(?:\d{1,2}|mrs?|ms|dr|prof|st|vs|etc|ca|bzw|usw|nr|sra?|srta"
+    r"|z\.\s?b|d\.\s?h|u\.\s?a|т\.\s?[едкп]|др|ул|см)\.\Z", re.IGNORECASE)
+
+
+def _counted_list(run: str) -> str:
+    """A numbered run without its numbers when it counts 1, 2, 3...; dates
+    ("24. Dezember", "31. Dezember") stay as written."""
+    numbers = [int(n) for n in re.findall(r"(?m)^\d+(?=\.)", run)]
+    if numbers != list(range(1, len(numbers) + 1)):
+        return run
+    return re.sub(r"(?m)^\d+\.[ \t]+", "", run)
 
 # Cap on messages per reply: a runaway of one-word lines would otherwise send
 # one message per line. `_delivery_units` says what the overflow becomes.
@@ -1012,35 +1025,55 @@ MAX_REPLY_MESSAGES = 24
 # over recall, since a false positive silences a legitimate answer.
 # A model id's tail (-V3, -3.5-sonnet): ASCII only, since \w would swallow the
 # Chinese after a name, and always taken whole, so a lookahead after it holds.
-_ID_TAIL = r"(?:[A-Za-z0-9]|[.-](?=[A-Za-z0-9]))*(?![A-Za-z0-9]|[.-][A-Za-z0-9])"
+# It starts with a digit or a separator, so "llamativa" is no Llama.
+_ID_TAIL = (r"(?:(?=[0-9]|[.-][A-Za-z0-9])"
+            r"(?:[A-Za-z0-9]|[.-](?=[A-Za-z0-9]))*(?![A-Za-z0-9]|[.-][A-Za-z0-9]))?")
 _VENDOR_NAMES = (
     rf"(?:deep\s?seek{_ID_TAIL}|深度求索|open\s?ai|chat\s?gpt|gpt[-\d]{_ID_TAIL}|"
     rf"anthropic|claude{_ID_TAIL}|gemini|通义千问|通义|qwen{_ID_TAIL}|"
     rf"kimi|月之暗面|moonshot|智谱|chatglm|glm-{_ID_TAIL}|文心一言|ernie|"
     rf"llama{_ID_TAIL}|mistral|grok|豆包|doubao|minimax|混元|hunyuan)"
+    # A whole word only: geminiano, llamativa, Kimis, grokking are not vendors.
+    r"(?![a-zà-öø-ÿ])"
 )
+# What may stand between "I am" and the name: an article, an adverb, a title.
+_EN_SELF_ID_FILLER = (
+    r"(?:just|literally|actually|really|basically|simply|truly|honestly|in\s+fact|"
+    r"still|the|an?|your|real|actual|true|original|official|called|named|known\s+as|"
+    r"powered\s+by|built\s+on|based\s+on|running\s+on|from)")
+# A noun that makes the speaker a product: "I am a language MODEL by ...".
+_MODEL_NOUN = (
+    r"(?<![\w-])(?:[\w-]*(?:model|modell|modelo|modèle|модел|assistent|assistant|"
+    r"asistente|ассистент|помощни|chatbot|programm|programa|программ|нейросет|"
+    r"intelligen[cz]|intelig[eê]ncia|интеллект)[\w-]*|ia|ai|ki|ии|llm|bot|бот)(?![\w-])")
 _VENDOR_SELF_ID_PATTERNS = (
-    # 我是DeepSeek / 我叫Kimi. 是 refuses questions, instrumentals and 是说;
-    # 叫 refuses a pronoun object (我叫他别用kimi了); a rival or fan is not one.
-    rf"(?:我|本人)(?:就是|叫(?!他|她|它|你|您|我|咱)|"
-    rf"是(?!不是|否|用|在|帮|给|拿|说))"
-    rf"[^。！？，,\n]{{0,10}}{_VENDOR_NAMES}"
-    rf"(?!的?(?:老|最大的?|头号|忠实)?(?:对手|竞争对手|死对头|粉丝))",
+    # 我是DeepSeek / 我叫Kimi: only an article or "based on" may come between;
+    # 叫 refuses a pronoun object (我叫他别用kimi了); a rival, fan or user is not one,
+    # nor asking it to do something (我叫Kimi帮我查).
+    rf"(?:我|本人)(?:就是|其实是|叫(?!他|她|它|你|您|我|咱)|是)"
+    rf"(?:一个|一個|一款|个|個|那个|那個|真正的|真的|基于|基於|来自|來自|由)?\s*"
+    rf"{_VENDOR_NAMES}"
+    rf"(?!的?(?:老|最大的?|头号|頭號|忠实|忠實|重度|资深|資深)?"
+    rf"(?:对手|對手|竞争对手|競爭對手|死对头|死對頭|粉丝|粉絲|用户|用戶|会员|會員|客户|客戶))"
+    rf"(?!\s*(?:帮|幫|给|給|去|来|來|写|寫|查|算|做|把|替|陪))",
     # 作为DeepSeek..., but not the customer reading (作为智谱的老用户).
-    rf"作为[^。！？，,\n]{{0,6}}{_VENDOR_NAMES}"
-    rf"(?!的?(?:老|重度|忠实)?(?:用户|粉丝|客户|使用者))",
+    rf"(?:作为|作為)[^。！？，,\n]{{0,6}}{_VENDOR_NAMES}"
+    rf"(?!的?(?:老|重度|忠实|忠實)?(?:用户|用戶|粉丝|粉絲|客户|客戶|使用者))",
     # 我(是一个)由深度求索(开发/训练)的… — the full-dress introduction.
-    rf"(?:我|本人)[^。！？\n]{{0,8}}由[^。！？\n]{{0,10}}{_VENDOR_NAMES}"
-    rf"[^。！？\n]{{0,6}}(?:开发|训练|打造|创造)",
+    rf"(?:我|本人)(?:就是|其实是|是)?(?:一个|一個|一款|个|個)?由[^。！？\n]{{0,10}}"
+    rf"{_VENDOR_NAMES}[^。！？\n]{{0,6}}(?:开发|開發|训练|訓練|打造|创造|創造)",
     # I'm DeepSeek. The negation guard keeps "I'm not ChatGPT, I'm Mira",
-    # the denial this rule exists to allow.
-    rf"\bI(?:'m| am)\b(?!\s+not\b)[^.!?,\n]{{0,12}}\b{_VENDOR_NAMES}"
-    rf"(?!['’]s\s+(?:\w+\s+){{0,2}}(?:rival|competitor|fan)s?\b)",
+    # the denial this rule exists to allow; "I'm a Gemini" is a star sign.
+    rf"\bI(?:'m| am)\b(?!\s+not\b)(?:\s+{_EN_SELF_ID_FILLER})*\s+"
+    rf"(?!(?<=\ba\s)gemini\b){_VENDOR_NAMES}"
+    rf"(?!['’]s\s+(?:\w+\s+){{0,2}}(?:rival|competitor|fan)s?\b)"
+    rf"(?![\s-]+(?:user|customer|fan|subscriber|addict)s?\b)",
     # I am a (large language) model ... by/from DeepSeek.
-    rf"\bI(?:'m| am) an? [^.!?\n]{{0,40}}\b(?:by|from|of) {_VENDOR_NAMES}",
-    # as a DeepSeek model, minus the customer reading.
-    rf"\bas an? [^.!?\n]{{0,12}}{_VENDOR_NAMES}"
-    rf"(?!\s+(?:user|customer|fan|subscriber))",
+    rf"\bI(?:'m| am) an? [^.!?\n]{{0,30}}?{_MODEL_NOUN}[^.!?\n]{{0,25}}?"
+    rf"\b(?:by|from|of|at) {_VENDOR_NAMES}",
+    # as a DeepSeek model, minus the customer reading and "as a kid, ...".
+    rf"\bas an? (?:[\w-]+\s+){{0,2}}?{_VENDOR_NAMES}"
+    rf"(?:[\s-]+(?:[\w-]+\s+)?{_MODEL_NOUN}|\s*,)",
 )
 
 
@@ -1055,19 +1088,29 @@ _NOT_A_MAKER = (r"fans?\b|fã|usuari[oa]|utilisat(?:eur|rice)|nutzer|kunde|clien
                 r"фанат|пользовател|ファン|ユーザー|팬|사용자")
 
 
+# One word of what the maker made, before the copula: no particle, so
+# "OpenAIが作ったアプリが好きです" (likes an app) is not "is an app".
+_MADE_THING = r"[^\s.,!?。！？、，をがにはもでと가를을는은도에]{1,20}"
+
+
 def _chatlang_self_id_patterns() -> list[str]:
-    """"I am <vendor>" and "I am ... made by <vendor>" in each chat language."""
-    made_by = _union("made_by")
+    """"I am <vendor>" and "I am a model made by <vendor>" in each chat language.
+    The made-by claim needs the speaker to be the thing made: a model noun right
+    after "I am", or, where the maker comes first, the copula ending the clause."""
     out = []
     for spec in chatlangs.SPECS.values():
         if not spec.self_id:
             continue
         end = f"(?={spec.name_end})" if spec.name_end else ""
-        out.append(rf"(?:{spec.self_id}){_SELF_ID_GAP}{_VENDOR_NAMES}{end}")
-    if out:
-        self_id = _union("self_id")
-        out.append(rf"(?:{self_id})(?:(?!{_NOT_A_MAKER})[^.!?。！？\n]){{0,40}}?"
-                   rf"(?:(?:{made_by})\s*{_VENDOR_NAMES}|{_VENDOR_NAMES}\s*(?:{made_by}))")
+        out.append(rf"(?:{spec.self_id}){_SELF_ID_GAP}{_VENDOR_NAMES}{end}"
+                   rf"(?![\s-]*(?:{_NOT_A_MAKER}))")
+        if spec.maker_first and spec.made_by and spec.name_end:
+            out.append(rf"(?:{spec.self_id}){_SELF_ID_GAP}{_VENDOR_NAMES}\s*"
+                       rf"(?:{spec.made_by})(?:\s*{_MADE_THING}){{1,2}}?(?={spec.name_end})")
+        elif spec.made_by:
+            maker = f"{spec.made_by}|{spec.from_maker}" if spec.from_maker else spec.made_by
+            out.append(rf"(?:{spec.self_id})(?:\s+[^\s.,!?]+)?\s+{_MODEL_NOUN}"
+                       rf"[^.!?\n]{{0,20}}?(?:{maker})\s*{_VENDOR_NAMES}")
     return out
 
 
@@ -1550,10 +1593,9 @@ class TextProcessing:
         text = re.sub(r'__(.+?)__', r'\1', text)
         text = re.sub(r'(?m)^#{1,6}\s+', '', text)
         text = re.sub(r'(?m)^[\-\*]\s+', '', text)
-        # A list is two numbered lines in a row, or one after "steps:"; one
-        # alone is a date ("3. Oktober").
-        text = _NUMBERED_RUN_RE.sub(
-            lambda m: re.sub(r'(?m)^\d+\.[ \t]+', '', m.group(0)), text)
+        # A list is two numbered lines in a row, or one after "steps:", counting
+        # from 1; one alone, or numbers that do not count, are dates ("3. Oktober").
+        text = _NUMBERED_RUN_RE.sub(lambda m: _counted_list(m.group(0)), text)
         text = re.sub(r'`+([^`]+)`+', r'\1', text)
         text = re.sub(r'(?m)^>\s+', '', text)
         text = re.sub(r'(?m)^---+\s*$', '', text)
@@ -1847,7 +1889,8 @@ class TextProcessing:
             while len(body) > wrap_at:
                 window = body[:wrap_at]
                 # A sentence end first, so a spaced script is not cut mid-clause.
-                ends = [m.end() for m in _SENTENCE_END_RE.finditer(window)]
+                ends = [m.end() for m in _SENTENCE_END_RE.finditer(window)
+                        if not _NOT_AN_END_RE.search(window, 0, m.start() + 1)]
                 if ends and ends[-1] >= wrap_at // 4:
                     wrapped.append((body[:ends[-1]].strip(), True))
                     body = body[ends[-1]:].strip()

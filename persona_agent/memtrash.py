@@ -3,7 +3,8 @@ record of why something went (runtime/memory_trash.jsonl).
 
 One row per removal, appended (locked, fsync) before the store it came from
 is rewritten, and one marker row when a removal is restored. A forget a
-person asked for in chat, Forget this chat and Clear memory write nothing."""
+person asked for in chat and Forget this chat write nothing, and take their
+older versions out of it."""
 from __future__ import annotations
 
 import json
@@ -121,6 +122,15 @@ class MemoryTrash:
                   for tid, at in restored.items() if tid in tids]
         atomic_write_text(self.path, "".join(line + "\n" for line in lines))
         return len(rows) - len(kept)
+
+    def drop_where(self, gone: Callable[[dict], bool]) -> list[dict]:
+        """A final forget: the removal rows `gone` accepts leave the file,
+        restored or not. Returns them."""
+        rows, _restored = self._read()
+        out = [row for row in rows if gone(row)]
+        if out:
+            self._rewrite(lambda row: not gone(row))
+        return out
 
     def drop_conv(self, conv: str) -> int:
         """Forget this chat: its removals are no longer restorable."""

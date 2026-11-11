@@ -149,6 +149,12 @@ def test_every_dataset_has_a_valid_schema_and_balanced_labels() -> None:
         check(f"{lang}: some corrections are never confirmed, and still expected learned",
               sum(not c.get("acceptance") and c.get("expect") == "promoted"
                   for c in learning) >= 5)
+        memory = Counter(c["mechanism"] for c in be.load_cases("memory", lang))
+        check(f"{lang}: memory measures every mechanism",
+              set(memory) == set(be.MEMORY_MECHANISMS), str(memory))
+    check("memory: en and zh measure the same mechanisms case for case",
+          [(c["id"], c["mechanism"]) for c in be.load_cases("memory", "en")]
+          == [(c["id"], c["mechanism"]) for c in be.load_cases("memory", "zh")])
     for suite in be.SUITES:
         check(f"{suite}: en and zh measure the same number of cases",
               len(be.load_cases(suite, "en")) == len(be.load_cases(suite, "zh")))

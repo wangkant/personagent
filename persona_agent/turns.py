@@ -42,6 +42,9 @@ BARE_CALL_DEBOUNCE_S = 5.0
 # A connector message older than this (a backlog handed over after a restart)
 # joins the window but opens no turn: it is not answered as if just said.
 STALE_MESSAGE_S = 600.0
+# ...but only this soon after a platform's first message since the start:
+# later, a constant lag is that connector's clock, and every message would be old.
+STARTUP_BACKLOG_S = 120.0
 
 # A turn's whole model time, in LLM_TIMEOUT_S: one full-length call and half
 # of another, however many calls, retries and models it goes through.
@@ -527,6 +530,13 @@ class Turns:
             raise TimeoutError(
                 f"no answer within the turn's {budget:g} s budget") from None
 
+    def _in_startup_backlog(self, payload: dict) -> bool:
+        """Whether this message's platform first spoke under STARTUP_BACKLOG_S ago."""
+        first = self.__dict__.setdefault("_platform_first_seen", {})
+        now = time.time()
+        return now - first.setdefault(str(payload.get("_platform") or ""), now) \
+            < STARTUP_BACKLOG_S
+
     async def _handle_inner(self, payload: dict, *,
                             proactive: bool = False) -> bool:
         if not self.enabled:
@@ -693,7 +703,8 @@ class Turns:
         caller = user_id  # a sticky call rebinds user_id further down
         sent_at = message_time(payload)
         stale = (via_connector and sent_at is not None
-                 and time.time() - sent_at > STALE_MESSAGE_S)
+                 and time.time() - sent_at > STALE_MESSAGE_S
+                 and self._in_startup_backlog(payload))
 
         async def say(outcome: tuple, *, background: bool = False) -> bool:
             return await self._say_memory_answer(
@@ -811,6 +822,13 @@ class Turns:
                     by_uid[entry[1]] = entry
             together = list(by_uid.values()) if len(by_uid) > 1 else []
 
+            def note_together(why: str) -> None:
+                # The others who called see the same outcome in Activity.
+                for caller_nick, caller_uid, said in together:
+                    if caller_uid != caller:
+                        decision_log.record(group_id, mode, False, why, said,
+                                            sender=caller_nick)
+
             skip = pacing_skip(mode, first_appearance=never_replied,
                                sleep_hour=TextProcessing._is_sleep_hour())
             if skip == SLEEP_WINDOW:
@@ -818,11 +836,13 @@ class Turns:
                             mode, time.localtime().tm_hour, group_id)
                 decision_log.record(group_id, mode, False, skip, ctrl_text,
                                     sender=sender_name)
+                note_together(skip)
                 return False
             if skip:
                 logger.info("[Agent] PASS via spontaneous skip (mode=judge, group=%s)", group_id)
                 decision_log.record(group_id, mode, False, skip, ctrl_text,
                                     sender=sender_name)
+                note_together(skip)
                 return False
 
             # The reply reserves its place before the model is asked: what
@@ -862,6 +882,7 @@ class Turns:
                 logger.warning("[Agent] LLM call failed (mode=%s): %s", mode, e)
                 decision_log.record(group_id, mode, False, "model failed",
                                     ctrl_text, sender=sender_name)
+                note_together("model failed")
                 # Sent from a background task under the send lock, like a reply.
                 if mode in ("called", access.ADMIN_MODE) and self._excuse_begin(group_id):
                     fallback = self._model_failure_excuse(text)
@@ -898,11 +919,13 @@ class Turns:
             if final.verdict == BLOCKED:
                 decision_log.record(group_id, mode, False, "blocked", ctrl_text,
                                     sender=sender_name)
+                note_together("blocked")
                 return False
             if final.verdict == PASS:
                 logger.info("[Agent] PASS (mode=%s, group=%s)", mode, group_id)
                 decision_log.record(group_id, mode, False, "passed", ctrl_text,
                                     sender=sender_name)
+                note_together("passed")
                 if mode == "followup":
                     self._followup_pass(group_id, user_id)
                 return False
@@ -919,6 +942,7 @@ class Turns:
                                mode, group_id)
                 decision_log.record(group_id, mode, False, "delivery failed",
                                     ctrl_text, sender=sender_name)
+                note_together("delivery failed")
                 return False
 
             # A partial send is committed as delivered; core note, auto-memory
@@ -945,10 +969,7 @@ class Turns:
         logger.info("[Agent] reply (mode=%s, group=%s): %s", mode, group_id, reply[:60])
         decision_log.record(group_id, mode, True, why, committed,
                             answered=ctrl_text, sender=sender_name)
-        for caller_nick, caller_uid, said in together:
-            if caller_uid != user_id:
-                decision_log.record(group_id, mode, False, "answered together",
-                                    said, sender=caller_nick)
+        note_together("answered together")
 
         # Reactions are judged against what was actually delivered.
         if self.react_learn_enabled and committed:

@@ -652,13 +652,26 @@ def test_recall_lists_the_callers_events_as_dated_lines(tmp: Path) -> None:
                       "who": who})
     a._save_episodes()
     out = a._handle_memory_command(g, "Luna what do you remember", "7", "Sam") or ""
-    day = datetime.fromtimestamp(base).strftime("%Y-%m-%d")
+    day = datetime.fromtimestamp(base, a._prompt_tz()).strftime("%Y-%m-%d")
     lines = out.splitlines()
     check("facts first, as before", lines[1] == "the room likes jazz", out)
     check("then the caller's three newest events, dated",
           lines[2:] == [f"{day} Sam baked bread", f"{day} Sam won the quiz",
                         f"{day} Sam lost his keys"], out)
     check("never someone else's", "fixed the bike" not in out, out)
+
+
+def test_recall_dates_events_in_the_characters_zone(tmp: Path, monkeypatch) -> None:
+    from datetime import datetime, timezone
+
+    a = make_agent(tmp)
+    g = "g-zone"
+    t0 = datetime(2026, 1, 1, 23, 30, tzinfo=timezone.utc).timestamp()
+    a.episode_store.add(g, {"text": "Sam baked bread", "t0": t0, "t1": t0 + 60, "who": ["7"]})
+    for hours, day in (("-11", "2026-01-01"), ("13", "2026-01-02")):
+        monkeypatch.setenv("PERSONA_TZ_OFFSET_HOURS", hours)
+        out = a._handle_memory_command(g, "Luna what do you remember", "7", "Sam") or ""
+        check(f"UTC{hours}: the date of that zone", f"{day} Sam baked bread" in out, out)
 
 
 def test_forget_deletes_an_event_only_its_sole_participant_owns(tmp: Path) -> None:

@@ -67,8 +67,9 @@ def _overlaps(ep: dict, span: tuple[float, float]) -> bool:
     return bool(t0) and t0 < span[1] and t1 >= span[0]
 
 
-def _person_header(person: str) -> str:
-    return f"About {_fence_user_data(_clean_prompt_source(person))}:"
+def _person_header(person: str, namesake: bool = False) -> str:
+    other = " (a different member with the same name)" if namesake else ""
+    return f"About {_fence_user_data(_clean_prompt_source(person))}{other}:"
 
 
 class Retrieval:
@@ -443,6 +444,8 @@ class Retrieval:
             out.append({
                 "kind": "note", "conv": key, "row": it, "when": written,
                 "person": (str(it.get("user_name") or "") or uid) if uid else "",
+                # One header per person, not per display name.
+                "who": min(self._same_person(uid)) if uid else "",
                 "match": False,
                 "score": _score(it["text"], max(written, _num(it.get("used"))), it, False)})
         for ep in events:
@@ -479,10 +482,12 @@ class Retrieval:
         events_max = _EVENTS_MAX + (1 if span else 0)
         group: list[str] = []
         persons: dict[str, list[str]] = {}
+        heads: dict[str, str] = {}
         events: list[str] = []
         placed: list[tuple[str, str, str]] = []
         for c in candidates:
             row, person = c["row"], c["person"]
+            key = c.get("who") or person
             header = 0
             if c["kind"] == "episode":
                 if len(events) >= events_max:
@@ -493,13 +498,17 @@ class Retrieval:
                     continue
                 line = self._fact_line(row, "", now)
             else:
-                lines = persons.get(person)
+                lines = persons.get(key)
                 if lines is None and len(persons) >= _PERSONS_MAX:
                     continue
                 if lines is not None and len(lines) >= _PERSON_FACTS_MAX:
                     continue
                 if lines is None:
-                    header = len(_person_header(person)) + 1
+                    # Two members may share a display name; never one header.
+                    namesake = any(k != key and c2 == person
+                                   for k, c2 in heads.items())
+                    head = _person_header(person, namesake)
+                    header = len(head) + 1
                 line = self._fact_line(row, person, now)
             cost = len(line) + 1 + header
             # A smaller item further down may still fit.
@@ -511,7 +520,10 @@ class Retrieval:
             elif not person:
                 group.append(line)
             else:
-                persons.setdefault(person, []).append(line)
+                if key not in persons:
+                    heads[key] = person
+                    persons[key] = [head]
+                persons[key].append(line)
             if row.get("id"):
                 placed.append((c["conv"], c["kind"], str(row["id"])))
 
@@ -523,8 +535,8 @@ class Retrieval:
         if group:
             head = "Things noted in this chat:" if reader else "Things noted about the group:"
             parts.append(head + "\n" + "\n".join(group))
-        for person, lines in persons.items():
-            parts.append(_person_header(person) + "\n" + "\n".join(lines))
+        for lines in persons.values():
+            parts.append("\n".join(lines))
         if events:
             parts.append("What happened:\n" + "\n".join(events))
         if not parts and not nothing_from:

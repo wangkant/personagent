@@ -128,6 +128,26 @@ def test_an_at_takes_only_the_senders_own_reply() -> None:
           hit is not None and hit["reply"] == "to all", repr(hit))
 
 
+def test_a_bystanders_quote_and_at_on_a_connector_takes_nothing() -> None:
+    """Without message ids a quote cannot name its reply, so the @ decides as
+    it does alone: bob never takes carol's reply from her."""
+    p = reactions.PendingReplies(ttl_sec=600)
+    p.record("c1", **_entry_kwargs(reply="R1 for alice", target_uid="alice", mids=[]))
+    p.record("c1", **_entry_kwargs(reply="R2 for carol", target_uid="carol", mids=[]))
+    seen = p.match("c1", sender_uid="bob", quote_mid="x", at_bot=True, now=110,
+                   quote_by_bot=True)
+    check("bob reacts to the latest reply as a bystander",
+          seen is not None and seen["reply"] == "R2 for carol", repr(seen))
+    check("without taking it",
+          [e["reply"] for e in p._by_conv["c1"]] == ["R1 for alice", "R2 for carol"])
+    hit = p.match("c1", sender_uid="carol", quote_mid="y", at_bot=True, now=111,
+                  quote_by_bot=True)
+    check("carol's own quote and @ still finds hers",
+          hit is not None and hit["reply"] == "R2 for carol", repr(hit))
+    hit = p.match("c1", sender_uid="alice", at_bot=True, now=112)
+    check("and alice's @ hers", hit is not None and hit["reply"] == "R1 for alice", repr(hit))
+
+
 def test_only_a_reply_to_the_complainant_is_their_retry() -> None:
     p = reactions.PendingReplies(fix_window_sec=100)
     bad = dict(reply="just restart it", ctx_lines=["a: down"], mode="called",

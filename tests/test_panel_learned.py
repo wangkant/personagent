@@ -174,8 +174,8 @@ def test_decided_items_explain_who_and_why(client, ids):
     assert done["history"][0]["by"] == "auto" and done["history"][0]["why"] == {"key": "agreed", "n": "2"}
     assert done["history"][1]["why"]["key"] == "disagreed"
     assert done["tab"] == "set_aside" and done["decided"] == {"by": "reactions", "why": ""}
-    # Only what the character or the time limit set aside comes back.
-    assert done["actions"] == [] and done["standing"] is None
+    # What a rule or the character withdrew comes back; a person's own undo does not.
+    assert done["actions"] == ["bring_back"] and done["standing"] is None
     gone = client.get(f"/api/learned/item?id={ids['discarded']}", headers=HEADERS).json()
     assert gone["history"][0]["by"] == "terminal" and gone["decided"]["by"] == "person"
     assert gone["history"][0]["why"] == {"key": "note", "n": "", "text": "too rude"}
@@ -466,7 +466,9 @@ def test_an_item_only_the_character_can_settle_is_being_decided_then_observed(cl
     assert history[-1]["state"] == "review" and history[-1]["by"] == "character"
     # New evidence: the character looks again.
     log = evidence.EvidenceLog(workspace.home / "runtime" / "evidence.en.jsonl")
-    log.append(_event("lol same", "so true", rtype="positive", speaker="u3", name="u3"))
+    fresh = _event("lol same", "so true", rtype="positive", speaker="u3", name="u3")
+    log.append(fresh)
+    _ledger(workspace).link_evidence(cid, [fresh["event_id"]], ts="2026-11-10T11:00:00")
     assert client.get(url, headers=HEADERS).json()["standing"]["stage"] == "deciding"
     _env_add(workspace, "PROMOTE_JUDGE_ENABLED=false\n")
     stand = client.get(url, headers=HEADERS).json()["standing"]

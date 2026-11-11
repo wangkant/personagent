@@ -1,6 +1,6 @@
 """`personagent eval`: measure how the real Agent behaves.
 
-Three suites, each reporting numbers:
+Four suites, each reporting numbers:
 
 - speak: labelled group-chat moments. Runs the real `_think` on each and
   counts how often it speaks when it should stay quiet and stays quiet when it
@@ -14,6 +14,10 @@ Three suites, each reporting numbers:
   (adjudication, evidence, the automatic promotion policy, the rebuilt views).
   A held-out probe in the same conversation runs before and after, and the
   judge says whether each follows a target behaviour.
+- memory: lines said over days in rooms and private chats, consolidations
+  with scripted answers, forgets, restores and restarts; then checks on the
+  stores and on the prompts a reply would be sent. No model is called and no
+  key is needed; the report counts the cases that hold per mechanism.
 
 --repeat runs every case that many times, each time in a fresh deployment, and
 the intervals count each case once, so repeats show noise without inflating
@@ -39,14 +43,16 @@ import shutil
 import sys
 import tempfile
 import time
+import types
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
 
 from . import langs
-from persona_agent import __version__, candidates, channels, paths, promotion
+from persona_agent import (__version__, access, candidates, channels, chatlangs,
+                           consolidate, paths, promotion)
 from persona_agent.access import ADMIN_MODE
 from persona_agent.agent import Agent
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, env_str
@@ -59,8 +65,10 @@ from persona_agent.textproc import salvage_json_object
 from persona_agent.transport import SendResult
 
 EVAL_DATA = paths.seed_file("evals")
-SUITES = ("speak", "persona", "learning")
+SUITES = ("speak", "persona", "learning", "memory")
 JUDGED_SUITES = ("persona", "learning")
+#: The suites that drive the real model; memory asks no model anything.
+MODEL_SUITES = ("speak", "persona", "learning")
 MODES = ("judge", "followup", "called", ADMIN_MODE, "proactive")
 CALLED_MODES = ("called", ADMIN_MODE)
 LABELS = ("speak", "silent")
@@ -194,7 +202,8 @@ def _check_learning(c: dict) -> None:
 
 
 _CHECKS = {"speak": _check_speak, "persona": _check_persona,
-           "learning": _check_learning}
+           "learning": _check_learning,
+           "memory": lambda c: _check_memory(c)}
 
 
 def load_cases(suite: str, lang: str) -> list[dict]:
@@ -219,7 +228,8 @@ def dataset_digest(suite: str, lang: str) -> str:
 
 
 _STRATA = {"speak": lambda c: (c["mode"], c["label"]),
-           "persona": lambda c: c["channel"], "learning": None}
+           "persona": lambda c: c["channel"], "learning": None,
+           "memory": lambda c: c["mechanism"]}
 
 
 def take(cases: list[dict], limit: int, key=None) -> list[dict]:
@@ -1027,6 +1037,643 @@ async def rejudge(report: dict, judge: Judge) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# The memory suite: no model call at all
+# ---------------------------------------------------------------------------
+#
+# A case is a list of steps on one deployment: lines said in rooms and private
+# chats at given times, consolidations whose model answers are scripted in the
+# case, chat commands, page actions, restarts; then checks on the prompts a
+# reply would be sent and on the stores. In a scripted answer "~words" names
+# the line (src), note (n, from) or event (e) holding those words, and "@Name"
+# a speaker (about), so a case reads without the call's labels.
+
+_DAY_S = 86400.0
+_WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+_AT = re.compile(r"^(?:-(?P<ago>\d+)(?P<unit>[mhd])|today|(?P<day>yesterday|lastweek)"
+                 r"(?: (?P<wd>" + "|".join(_WEEKDAYS) + r"))? (?P<hh>\d\d):(?P<mm>\d\d))$")
+_MEMORY_FAILS = {"timeout": asyncio.TimeoutError, "error": RuntimeError}
+_MEMORY_PROBE_CHECKS = (
+    "memory_has", "memory_lacks", "prompt_has", "prompt_lacks", "history_has",
+    "history_lacks", "gate_has", "gate_lacks", "about_has", "about_lacks",
+    "said_by_has", "line_has", "count", "within_budget", "stored_chars_min")
+_MEMORY_STATE_CHECKS = (
+    "facts_has", "facts_lacks", "fact", "facts_count", "events_has", "events_lacks",
+    "thread_has", "thread_lacks", "trash_has", "trash_lacks", "lines_lacks",
+    "calls_max", "calls_min", "facts_max", "events_max", "unchanged", "ids")
+#: Every step a case may take, with the keys it needs.
+MEMORY_STEPS = {
+    "legacy": ("memory",), "say": ("conv", "at", "lines"),
+    "filler": ("conv", "at", "count", "speakers", "texts"),
+    "dm": ("conv", "at", "lines"), "facts": ("conv", "rows"),
+    "events": ("conv", "rows"), "thread": ("conv", "text"),
+    "fold": ("conv", "answer"), "trigger": ("conv", "times"),
+    "busy_day": ("conv", "count", "speakers", "texts", "answer"),
+    "command": ("conv", "line", "reply"), "page_forget": ("conv", "kind", "match"),
+    "restore": ("conv", "match", "expect"), "restart": (), "snapshot": (),
+    "probe": ("conv", "line"), "expect": ("conv",),
+}
+MEMORY_MECHANISMS = (
+    "recall", "update", "merge", "attribution", "injection", "time", "rooms",
+    "private", "restart", "forget", "restore", "budget", "calls", "identity",
+    "migration")
+MEMORY_NOTE = (
+    "No model is asked anything: each consolidation answer is written in the "
+    "case, every other model call fails the case, and the checks read the "
+    "stores and the prompts a reply would be sent.")
+
+
+def _check_memory(c: dict) -> None:
+    _need(c, c.get("mechanism") in MEMORY_MECHANISMS,
+          f"mechanism must be one of {MEMORY_MECHANISMS}")
+    _need(c, isinstance(c.get("measures"), str) and bool(c["measures"].strip()),
+          "measures says what a person would notice")
+    _need(c, c.get("people") is None or isinstance(c["people"], dict),
+          "people maps a speaker to a user id")
+    _need(c, c.get("settings") is None or isinstance(c["settings"], dict),
+          "settings are AgentSettings fields")
+    steps = c.get("steps")
+    _need(c, isinstance(steps, list) and bool(steps), "steps are required")
+    for n, step in enumerate(steps):
+        kind = step.get("do") if isinstance(step, dict) else None
+        _need(c, kind in MEMORY_STEPS, f"step {n}: do must be one of {tuple(MEMORY_STEPS)}")
+        missing = [k for k in MEMORY_STEPS[kind] if k not in step]
+        _need(c, not missing, f"step {n} ({kind}) needs {missing}")
+        _need(c, kind != "legacy" or n == 0, "a legacy memory file comes first")
+        if "at" in step:
+            _need(c, bool(_AT.match(str(step["at"]))), f"step {n}: bad time {step['at']!r}")
+        if kind in ("say", "dm"):
+            _need(c, _is_lines(step["lines"]) and bool(step["lines"]),
+                  f"step {n}: lines are 'name: text'")
+        if kind in ("probe", "command"):
+            _need(c, _is_line(step["line"]), f"step {n}: line is 'name: text'")
+        if kind == "fold":
+            _need(c, isinstance(step["answer"], dict), f"step {n}: answer is an object")
+        unknown = set(step) - {"do", *MEMORY_STEPS[kind], "every", "reason", "fail",
+                               "expect_done", "expect_refused", "admin", "mode", "by",
+                               "answer", *_MEMORY_PROBE_CHECKS, *_MEMORY_STATE_CHECKS}
+        _need(c, not unknown, f"step {n}: unknown keys {sorted(unknown)}")
+    _need(c, any(s.get("do") in ("probe", "expect")
+                 or any(k in s for k in _MEMORY_STATE_CHECKS) for s in steps),
+          "a case checks something: a probe, an expect step or a state check")
+
+
+class MemoryCaseError(Exception):
+    """The case itself is wrong (a reference matching nothing); it fails."""
+
+
+def memory_agent(home: Path, *, lang: str, persona: str, name: str,
+                 settings: dict | None = None):
+    """An agent with consolidation on and its default budget, configured from
+    nothing but the case: the operator's .env does not move the numbers."""
+    base = agent_settings(home, lang=lang, persona=persona, persona_name=name, env={})
+    extra = dict(settings or {})
+    if "admin_ids" in extra:
+        extra["admin_ids"] = tuple(extra["admin_ids"])
+    agent = Agent(dataclasses.replace(
+        base, api_key="offline-memory-eval", memory_tidy_every=8,
+        memory_calls_per_day=40, chat_followup_window_s=0, **extra))
+
+    async def _no_search(messages, hint=""):
+        return ""
+    agent._decide_and_search = _no_search
+    return agent
+
+
+class _MemoryRun:
+    """One case's agent, clock, scripted consolidation answers and findings."""
+
+    def __init__(self, case: dict, home: Path, *, lang: str, persona: str, name: str):
+        self.case, self.home, self.lang = case, home, lang
+        self.persona, self.name = persona, name
+        self.people = {k: str(v) for k, v in (case.get("people") or {}).items()}
+        self.now = time.time()
+        self.agent = None
+        self.calls: list[dict] = []
+        self.other_calls = 0
+        self.answer: dict | None = None
+        self.snap = ""
+        self.failed: list[str] = []
+        self.errors: list[str] = []
+
+    # ---- setup ----------------------------------------------------------------
+
+    def uid(self, speaker: str) -> str:
+        return self.people.get(speaker) or f"telegram:{NAME_UID[speaker]}"
+
+    def build(self) -> None:
+        self.agent = memory_agent(self.home, lang=self.lang, persona=self.persona,
+                                  name=self.name, settings=self.case.get("settings"))
+        self.agent._call_llm = self._llm
+        self.tz = self.agent._prompt_tz()
+
+    def at(self, spec: str) -> float:
+        m = _AT.match(spec)
+        if m["ago"]:
+            return self.now - int(m["ago"]) * {"m": 60, "h": 3600, "d": _DAY_S}[m["unit"]]
+        here = datetime.fromtimestamp(self.now, self.tz)
+        midnight = here.replace(hour=0, minute=0, second=0, microsecond=0)
+        if not m["day"]:
+            # Earlier today, and never in the future.
+            return min(max(midnight.timestamp() + 60, self.now - 7200), self.now - 30)
+        day = midnight.date() - timedelta(days=1)
+        if m["day"] == "lastweek":
+            monday = midnight.date() - timedelta(days=midnight.weekday())
+            day = monday - timedelta(days=7) + timedelta(
+                days=_WEEKDAYS.index(m["wd"] or "wed"))
+        moment = datetime(day.year, day.month, day.day, int(m["hh"]), int(m["mm"]),
+                          tzinfo=self.tz)
+        return min(moment.timestamp(), self.now - 30)
+
+    # ---- the only model there is --------------------------------------------------
+
+    async def _llm(self, system, messages, model=None, **_kw):
+        content = str((messages or [{}])[0].get("content") or "")
+        if not content.startswith(consolidate._FOLD_PROMPT):
+            self.other_calls += 1
+            raise RuntimeError("the memory eval makes no call but consolidation")
+        payload = json.loads(content[len(consolidate._FOLD_PROMPT):]
+                             .strip("\x1e\x1f \n"))
+        self.calls.append(payload)
+        answer = self.answer
+        if answer is None:
+            raise RuntimeError("no consolidation answer is scripted here")
+        if "fail" in answer:
+            if answer["fail"] == "junk":
+                return "I would rather chat about the weather."
+            raise _MEMORY_FAILS[answer["fail"]]("scripted failure")
+        try:
+            return json.dumps(self._resolve(answer, payload), ensure_ascii=False)
+        except MemoryCaseError as e:
+            self.errors.append(str(e))
+            raise
+
+    def _resolve(self, answer: dict, payload: dict) -> dict:
+        def find(rows, key: str, ref, field: str = "text"):
+            if not (isinstance(ref, str) and ref.startswith("~")):
+                return ref
+            words = _fill(ref[1:], self.name).lower()
+            for row in rows:
+                if words in str(row.get(field, "")).lower():
+                    return row[key]
+            raise MemoryCaseError(f"scripted answer: nothing in the call holds {ref!r}")
+
+        lines = payload.get("lines") or []
+        notes = payload.get("notes") or []
+        events = (payload.get("episodes") or []) + (
+            (payload.get("fold_month") or {}).get("episodes") or [])
+
+        def speaker(ref):
+            if not (isinstance(ref, str) and ref.startswith("@")):
+                return ref
+            for s in payload.get("speakers") or []:
+                if s["name"] == ref[1:]:
+                    return s["s"]
+            raise MemoryCaseError(f"scripted answer: {ref[1:]!r} said nothing in the call")
+
+        def op(o: dict) -> dict:
+            o = dict(o)
+            for key in ("text",):
+                if isinstance(o.get(key), str):
+                    o[key] = _fill(o[key], self.name)
+            if isinstance(o.get("src"), list):
+                o["src"] = [find(lines, "l", r) for r in o["src"]]
+            if "n" in o:
+                o["n"] = find(notes, "n", o["n"])
+            if isinstance(o.get("from"), list):
+                o["from"] = [find(notes, "n", r) for r in o["from"]]
+            if "e" in o:
+                o["e"] = find(events, "e", o["e"])
+            if "about" in o:
+                o["about"] = speaker(o["about"])
+            return o
+
+        out = {"thread": _fill(answer["thread"], self.name)
+               if isinstance(answer.get("thread"), str) else answer.get("thread"),
+               "facts": [op(o) for o in answer.get("facts") or []],
+               "episodes": [op(o) for o in answer.get("episodes") or []]}
+        if answer.get("rollup") is not None:
+            out["rollup"] = answer["rollup"]
+        return out
+
+    # ---- steps --------------------------------------------------------------------
+
+    async def step(self, n: int, s: dict) -> None:
+        a = self.agent
+        kind = s["do"]
+        conv = s.get("conv", "")
+        if kind in ("say", "dm", "filler"):
+            start, every = self.at(s["at"]), float(s.get("every", 60))
+            if kind == "filler":
+                lines = [f"{s['speakers'][i % len(s['speakers'])]}: "
+                         f"{s['texts'][i % len(s['texts'])]}" for i in range(s["count"])]
+            else:
+                lines = s["lines"]
+            for i, line in enumerate(lines):
+                speaker, text = _split(line, self.name)
+                t = start + i * every
+                if kind == "dm":
+                    self._dm_turn(conv, speaker, text, t)
+                elif speaker == self.name:
+                    a._append_buffer(conv, self.name, text, "", at=t)
+                else:
+                    a._append_buffer(conv, speaker, text, self.uid(speaker), at=t)
+                    a.active_users[conv].append((self.uid(speaker), speaker))
+        elif kind == "facts":
+            for row in s["rows"]:
+                self._seed_fact(conv, row)
+            a._save_memories()
+        elif kind == "events":
+            for row in s["rows"]:
+                self._seed_events(conv, row)
+            a._save_episodes()
+        elif kind == "thread":
+            a.episode_store.set_thread(conv, _fill(s["text"], self.name),
+                                       self.now - _DAY_S, self.now - 3600)
+            a._save_episodes()
+        elif kind == "fold":
+            await self._fold(n, conv, s)
+        elif kind == "trigger":
+            self.answer = s.get("answer") or {"fail": s.get("fail", "error")}
+            for _ in range(int(s["times"])):
+                a._maybe_consolidate(conv, s.get("reason", "idle"))
+                await self._settle()
+        elif kind == "busy_day":
+            await self._busy_day(conv, s)
+        elif kind == "command":
+            speaker, text = _split(s["line"], self.name)
+            reply = a._handle_memory_command(conv, text, self.uid(speaker), speaker)
+            want = chatlangs.spec(self.lang).replies.get(s["reply"], ())
+            self._need(f"step {n}: the command answers {s['reply']}",
+                       reply in want, repr(reply))
+        elif kind == "page_forget":
+            item = self._find_item(conv, s["kind"], s["match"])
+            tid = a._forget_item(conv, s["kind"], item, by=s.get("by", "page")) \
+                if item is not None else ""
+            self._need(f"step {n}: the page forgets {s['match']!r}", bool(tid))
+        elif kind == "restore":
+            rows = [r for r in a._removed_items(conv)
+                    if s["match"].lower() in str(r.get("text", "")).lower()]
+            got = a._restore(rows[0]["tid"], s.get("by", "page")) if rows else "none"
+            self._need(f"step {n}: restoring {s['match']!r} answers {s['expect']}",
+                       got == s["expect"], got)
+        elif kind == "restart":
+            await a.aclose()
+            self.build()
+        elif kind == "snapshot":
+            self.snap = self._digest()
+        elif kind == "probe":
+            self._probe(n, s)
+        if kind == "expect" or (kind != "probe" and any(
+                k in s for k in _MEMORY_STATE_CHECKS)):
+            self._expect(n, s)
+
+    def _dm_turn(self, conv: str, speaker: str, text: str, t: float) -> None:
+        a = self.agent
+        uid = channels.dm_user(conv)
+        a._wake(conv)
+        role = "assistant" if speaker == self.name else "user"
+        turn = {"role": role, "content": text, "t": t, "seq": a._next_seq(conv)}
+        if role == "user":
+            turn["name"] = speaker
+        a.dm_history.setdefault(uid, []).append(turn)
+        a.last_dm_activity_at[uid] = t
+        a._recent_dirty.add(conv)
+
+    def _seed_fact(self, conv: str, row: dict) -> None:
+        names = row.get("people") or [row.get("about")]
+        for k in range(int(row.get("count", 1))):
+            for who in names:
+                t = self.now - float(row.get("age_days", 10)) * _DAY_S - k * 60
+                text = _fill(row["text"], self.name).format(name=who or "", n=k + 1)
+                item = {"text": text, "time": t, "born": t, "imp": int(row.get("imp", 3)),
+                        "uses": 0, "used": 0.0, "src": "reply", "tidied": True}
+                if row.get("auto", True):
+                    item["auto"] = True
+                if who:
+                    item.update(user_id=self.uid(who), user_name=who)
+                self.agent._append_memory(conv, item)
+
+    def _seed_events(self, conv: str, row: dict) -> None:
+        start = self.at(row["at"])
+        for k in range(int(row.get("count", 1))):
+            t0 = start + k * float(row.get("every", 3600))
+            names = list(row.get("with") or [])
+            self.agent.episode_store.add(conv, {
+                "t0": t0, "t1": t0 + 60 * float(row.get("minutes", 30)),
+                "who": [self.uid(x) for x in names], "names": names,
+                "text": _fill(row["text"], self.name).format(n=k + 1),
+                "imp": int(row.get("imp", 3))})
+
+    def _find_item(self, conv: str, kind: str, match: str) -> str | None:
+        a = self.agent
+        words = match.lower()
+        if kind == "note":
+            rows = a.memories.get(conv, [])
+        elif kind == "episode":
+            rows = a.episode_store.episodes(conv)
+        else:
+            return ""
+        return next((str(r.get("id")) for r in rows
+                     if words in str(r.get("text", "")).lower()), None)
+
+    async def _settle(self) -> None:
+        while self.agent._bg_tasks:
+            await asyncio.gather(*list(self.agent._bg_tasks), return_exceptions=True)
+
+    async def _fold(self, n: int, conv: str, s: dict) -> None:
+        a = self.agent
+        reason = s.get("reason") or a._fold_due(conv) or "idle"
+        inp = a._fold_input(conv, reason)
+        if inp is None:
+            self._need(f"step {n}: something waited to be consolidated", False)
+            return
+        self.answer = s["answer"]
+        result = await a._fold(conv, reason, inp)
+        if self.errors:
+            raise MemoryCaseError(self.errors[-1])
+        self._need(f"step {n}: the consolidation was applied", result is not None)
+        if result is None:
+            return
+        for op, count in (s.get("expect_done") or {}).items():
+            self._need(f"step {n}: {count} {op} applied", result.done[op] == count,
+                       f"done {dict(result.done)}, refused {dict(result.refused)}")
+        for why in s.get("expect_refused") or []:
+            self._need(f"step {n}: an operation refused for {why}",
+                       result.refused[why] > 0, dict(result.refused))
+
+    async def _busy_day(self, conv: str, s: dict) -> None:
+        """A long day in one room on a moving clock: intake asks for a
+        consolidation after every line, as turns.py does."""
+        a = self.agent
+        self.answer = s["answer"]
+        clock = [self.at("yesterday 08:00")]
+        step_s = min(34.0, (self.now - 60 - clock[0]) / max(1, s["count"]))
+        real = consolidate.time
+        consolidate.time = types.SimpleNamespace(time=lambda: clock[0],
+                                                 monotonic=time.monotonic)
+        try:
+            for i in range(int(s["count"])):
+                clock[0] += step_s
+                who = s["speakers"][i % len(s["speakers"])]
+                a._append_buffer(conv, who, s["texts"][i % len(s["texts"])].format(n=i + 1),
+                                 self.uid(who), at=clock[0])
+                a._maybe_consolidate(conv, "lines")
+                await self._settle()
+        finally:
+            consolidate.time = real
+
+    # ---- checks ---------------------------------------------------------------------
+
+    def _need(self, what: str, ok: bool, detail="") -> None:
+        if not ok:
+            detail = str(detail or "")
+            self.failed.append(what + (f" ({detail[:300]})" if detail else ""))
+
+    def _digest(self) -> str:
+        a = self.agent
+        store = a.episode_store
+        return json.dumps({
+            "facts": a.memories, "events": {c: store.episodes(c) for c in store.convs()},
+            "threads": {c: store.thread(c) for c in store.convs()},
+            "cursor": a.folded_upto}, sort_keys=True, ensure_ascii=False, default=str)
+
+    def _probe(self, n: int, s: dict) -> None:
+        a = self.agent
+        conv = s["conv"]
+        speaker, text = _split(s["line"], self.name)
+        uid = self.uid(speaker)
+        if channels.is_dm(conv):
+            self._dm_turn(conv, speaker, text, time.time())
+            admin = s.get("admin", access.is_admin(uid, a._admins()))
+            p = a._build_dm_prompt(list(a.dm_history[channels.dm_user(conv)]),
+                                   is_admin=admin, pkey=conv)
+            history = "\n".join(str(m.get("content", "")) for m in p.messages)
+            whole = "\n".join((p.system, p.turn_context, history))
+            gate = ""
+        else:
+            a._append_buffer(conv, speaker, text, uid)
+            a.active_users[conv].append((uid, speaker))
+            p = a._build_group_prompt(conv, s.get("mode", "called"), text)
+            history, gate = p.user, p.gate_system
+            whole = "\n".join((p.system, p.user))
+        memory = "\n".join(re.findall(
+            r"<earlier_in_chat>.*?</earlier_in_chat>|<memories>.*?</memories>",
+            p.system + "\n" + getattr(p, "turn_context", ""), flags=re.S))
+        self._check_probe(n, s, memory=memory, whole=whole, history=history, gate=gate)
+
+    def _check_probe(self, n, s, *, memory, whole, history, gate) -> None:
+        low = memory.lower()
+        # Not splitlines(): names are framed with \x1e and \x1f, which it splits on.
+        items = [ln for ln in memory.split("\n") if ln.startswith("- ")]
+        sections: dict[str, list[str]] = {}
+        head = ""
+        for ln in memory.split("\n"):
+            if ln.startswith("About "):
+                head = ln
+                sections[head] = []
+            elif ln.startswith("- ") and head:
+                sections[head].append(ln.lower())
+            elif not ln.strip() or ln.endswith(":"):
+                head = ""
+        where = f"step {n}"
+
+        def has(hay: str, frag: str) -> bool:
+            return _fill(frag, self.name).lower() in hay.lower()
+        for frag in s.get("memory_has", []):
+            self._need(f"{where}: the recalled memory holds {frag!r}", has(low, frag), memory)
+        for frag in s.get("memory_lacks", []):
+            self._need(f"{where}: the recalled memory lacks {frag!r}", not has(low, frag),
+                       memory)
+        for frag in s.get("prompt_has", []):
+            self._need(f"{where}: the prompt holds {frag!r}", has(whole, frag))
+        for frag in s.get("prompt_lacks", []):
+            self._need(f"{where}: the prompt lacks {frag!r}", not has(whole, frag))
+        for frag in s.get("history_has", []):
+            self._need(f"{where}: the lines read hold {frag!r}", has(history, frag))
+        for frag in s.get("history_lacks", []):
+            self._need(f"{where}: the lines read lack {frag!r}", not has(history, frag))
+        for frag in s.get("gate_has", []):
+            self._need(f"{where}: the speak-or-not prompt holds {frag!r}", has(gate, frag))
+        for frag in s.get("gate_lacks", []):
+            self._need(f"{where}: the speak-or-not prompt lacks {frag!r}",
+                       not has(gate, frag))
+        for who, frag in (s.get("about_has") or {}).items():
+            self._need(f"{where}: {frag!r} is listed about {who}", any(
+                who.lower() in h.lower() and any(has(x, frag) for x in rows)
+                for h, rows in sections.items()), memory)
+        for who, frag in (s.get("about_lacks") or {}).items():
+            self._need(f"{where}: {frag!r} is not listed about {who}", not any(
+                who.lower() in h.lower() and any(has(x, frag) for x in rows)
+                for h, rows in sections.items()), memory)
+        for frag in s.get("said_by_has", []):
+            self._need(f"{where}: {frag!r} is shown as reported speech", any(
+                has(x, frag) and "said by" in x for x in items), memory)
+        for frag, also in (s.get("line_has") or {}).items():
+            self._need(f"{where}: the line with {frag!r} also says {also!r}", any(
+                has(x, frag) and has(x, also) for x in items), memory)
+        for frag, count in (s.get("count") or {}).items():
+            got = sum(has(x, frag) for x in items)
+            self._need(f"{where}: {frag!r} recalled {count} time(s)", got == count, str(got))
+        if s.get("within_budget"):
+            charged = sum(len(ln) + 1 for ln in memory.split("\n")
+                          if ln.startswith(("- ", "About ")))
+            charged += sum(len(ln) for ln in re.findall(
+                r"<earlier_in_chat>\n[^\n]*\n(\"[^\n]*\")\n", memory))
+            budget = self.agent._memory_budget()
+            self._need(f"{where}: the recalled memory keeps within {budget} characters",
+                       charged <= budget, str(charged))
+        if s.get("stored_chars_min"):
+            a = self.agent
+            stored = sum(len(str(it.get("text", ""))) for it in a.memories.get(s["conv"], []))
+            stored += sum(len(str(e.get("text", "")))
+                          for e in a.episode_store.episodes(s["conv"]))
+            self._need(f"{where}: more is stored than fits ({s['stored_chars_min']}+)",
+                       stored >= s["stored_chars_min"], str(stored))
+
+    def _expect(self, n: int, s: dict) -> None:
+        a = self.agent
+        conv = s["conv"] if "conv" in s else ""
+        where = f"step {n}"
+        facts = [it for it in a.memories.get(conv, []) if isinstance(it, dict)]
+        events = a.episode_store.episodes(conv)
+        thread = str((a.episode_store.thread(conv) or {}).get("text", ""))
+
+        def texts(rows, frag):
+            words = _fill(frag, self.name).lower()
+            return [r for r in rows if words in str(r.get("text", "")).lower()]
+        for frag in s.get("facts_has", []):
+            self._need(f"{where}: a fact holds {frag!r}", bool(texts(facts, frag)),
+                       str([f["text"] for f in facts]))
+        for frag in s.get("facts_lacks", []):
+            self._need(f"{where}: no fact holds {frag!r}", not texts(facts, frag),
+                       str([f["text"] for f in facts]))
+        for frag, count in (s.get("facts_count") or {}).items():
+            got = len(texts(facts, frag))
+            self._need(f"{where}: {count} fact(s) hold {frag!r}", got == count, str(got))
+        for frag, want in (s.get("fact") or {}).items():
+            rows = texts(facts, frag)
+            self._need(f"{where}: a fact holds {frag!r}", bool(rows))
+            for row in rows[:1]:
+                if "about" in want:
+                    who = want["about"]
+                    ok = (not row.get("user_id")) if who is None else (
+                        str(row.get("user_id")) == self.uid(who))
+                    self._need(f"{where}: {frag!r} is about {who or 'the group'}", ok,
+                               str(row.get("user_id")))
+                if "said_by" in want:
+                    who = want["said_by"]
+                    ok = (not row.get("said_by")) if who is None else (
+                        str(row.get("said_by")) == self.uid(who))
+                    self._need(f"{where}: {frag!r} is said by {who or 'its subject'}", ok,
+                               str(row.get("said_by")))
+        for frag in s.get("events_has", []):
+            self._need(f"{where}: an event holds {frag!r}", bool(texts(events, frag)),
+                       str([e["text"] for e in events]))
+        for frag in s.get("events_lacks", []):
+            self._need(f"{where}: no event holds {frag!r}", not texts(events, frag))
+        for frag in s.get("thread_has", []):
+            self._need(f"{where}: the summary holds {frag!r}",
+                       _fill(frag, self.name).lower() in thread.lower(), thread)
+        for frag in s.get("thread_lacks", []):
+            self._need(f"{where}: the summary lacks {frag!r}",
+                       _fill(frag, self.name).lower() not in thread.lower(), thread)
+        trash = a.memory_trash.path
+        rows = [json.loads(x) for x in trash.read_text(encoding="utf-8").split("\n")
+                if x.strip()] if trash.exists() else []
+        removed = [r for r in rows if isinstance(r.get("item"), dict)]
+        for want in s.get("trash_has", []):
+            words = _fill(want["match"], self.name).lower()
+            self._need(f"{where}: {want['match']!r} was put aside as {want.get('why')}", any(
+                words in str(r["item"].get("text", "")).lower()
+                and want.get("why", r.get("why")) == r.get("why") for r in removed),
+                str([(r.get("why"), r["item"].get("text")) for r in removed]))
+        for frag in s.get("trash_lacks", []):
+            words = _fill(frag, self.name).lower()
+            self._need(f"{where}: nothing holding {frag!r} can be restored", not any(
+                words in str(r["item"].get("text", "")).lower() for r in removed))
+        for frag in s.get("lines_lacks", []):
+            a._maybe_flush_recent(force=True)
+            uid = channels.dm_user(conv)
+            rows = (list(a.buffers.get(conv) or []) + list(a._spill.get(conv) or [])
+                    + list(a.dm_history.get(uid) or []) + list(a._dm_spill.get(uid) or []))
+            snap = a._recent.snapshot(conv) or {}
+            for key in ("lines", "spill", "dm", "dm_spill"):
+                rows += list(snap.get(key) or [])
+            words = _fill(frag, self.name).lower()
+            self._need(f"{where}: no kept line holds {frag!r}", not any(
+                words in str(r.get("text") or r.get("content") or "").lower()
+                for r in rows))
+        if "calls_max" in s:
+            self._need(f"{where}: at most {s['calls_max']} consolidation call(s)",
+                       len(self.calls) <= s["calls_max"], str(len(self.calls)))
+        if "calls_min" in s:
+            self._need(f"{where}: at least {s['calls_min']} consolidation call(s)",
+                       len(self.calls) >= s["calls_min"], str(len(self.calls)))
+        if "facts_max" in s:
+            self._need(f"{where}: at most {s['facts_max']} facts kept",
+                       len(facts) <= s["facts_max"], str(len(facts)))
+        if "events_max" in s:
+            self._need(f"{where}: at most {s['events_max']} events kept",
+                       len(events) <= s["events_max"], str(len(events)))
+        if s.get("unchanged"):
+            self._need(f"{where}: nothing changed since the snapshot",
+                       bool(self.snap) and self._digest() == self.snap)
+        if s.get("ids"):
+            self._need(f"{where}: every fact has its own id", len(facts) == len(
+                {it.get("id") for it in facts if re.fullmatch(r"m[0-9a-f]{10}",
+                                                              str(it.get("id") or ""))}),
+                str([it.get("id") for it in facts]))
+
+
+async def memory_case(run_dir: Path, case: dict, *, lang: str, persona: str,
+                      name: str) -> dict:
+    """Run one memory case in its own deployment; returns its row."""
+    steps = list(case["steps"])
+    row = {"id": case["id"], "mechanism": case["mechanism"], "measures": case["measures"]}
+    with deployment_root(run_dir / "memory" / case["id"]) as home:
+        if steps and steps[0]["do"] == "legacy":
+            runtime = home / "runtime"
+            runtime.mkdir(parents=True, exist_ok=True)
+            (runtime / "memory.json").write_text(
+                json.dumps(steps.pop(0)["memory"], ensure_ascii=False), encoding="utf-8")
+        run = _MemoryRun(case, home, lang=lang, persona=persona, name=name)
+        try:
+            run.build()
+            for n, step in enumerate(steps):
+                await run.step(n, step)
+            if run.other_calls:
+                run.failed.append(f"{run.other_calls} call(s) other than consolidation")
+        except Exception as e:  # noqa: BLE001 - one case, recorded
+            row["error"] = f"{type(e).__name__}: {e}"
+        finally:
+            if run.agent is not None:
+                await run.agent.aclose()
+    row.update(held=not run.failed and "error" not in row, failed=run.failed,
+               calls=len(run.calls))
+    return row
+
+
+def memory_metrics(rows: list[dict]) -> dict:
+    by: dict = {}
+    for r in rows:
+        b = by.setdefault(r["mechanism"], {"cases": 0, "held": 0})
+        b["cases"] += 1
+        b["held"] += bool(r.get("held"))
+    held = sum(bool(r.get("held")) for r in rows)
+    return {"cases": len(rows), "held": held, "rate": _rate(held, len(rows)),
+            "errors": sum(1 for r in rows if r.get("error")),
+            "calls": sum(r.get("calls", 0) for r in rows),
+            "by_mechanism": {m: by[m] for m in MEMORY_MECHANISMS if m in by}}
+
+
+async def run_memory(run_dir: Path, cases: list[dict], *, lang: str,
+                     persona: str, name: str) -> dict:
+    rows = [await memory_case(run_dir, c, lang=lang, persona=persona, name=name)
+            for c in cases]
+    return {"note": MEMORY_NOTE, "cases": rows, "metrics": memory_metrics(rows)}
+
+
+# ---------------------------------------------------------------------------
 # Run, report, table
 # ---------------------------------------------------------------------------
 
@@ -1086,6 +1733,19 @@ def print_table(report: dict) -> None:
                       f"{_pct(p['after'])} after; scenarios up {p['scenarios_up']}, "
                       f"down {p['scenarios_down']}, same {p['scenarios_same']}")
         print(f"  {POLICY_NOTE}")
+    if "memory" in suites:
+        m = suites["memory"]["metrics"]
+        print("\nmemory: what a person would notice (no model call)")
+        print(f"  {'mechanism':<13}{'cases held':>12}")
+        for mech, b in m["by_mechanism"].items():
+            print(f"  {mech:<13}{b['held']:>6}/{b['cases']:<5}")
+        print(f"  {'overall':<13}{_frac(m['held'], m['cases']):>12}; consolidation "
+              f"calls {m['calls']}, errors {m['errors']}")
+        for row in suites["memory"]["cases"]:
+            if not row.get("held"):
+                why = row.get("error") or "; ".join(row.get("failed") or [])
+                print(f"  failed {row['id']} ({row['mechanism']}): {why}")
+        print(f"  {MEMORY_NOTE}")
 
 
 def _shown(path: Path) -> str:
@@ -1139,8 +1799,9 @@ async def run(args, env=None) -> dict:
     persona = prepare_persona(raw_persona, name)
 
     configured = AgentSettings.from_env(env=env, lang=lang)
-    if not configured.api_key:
-        raise EvalRefused("LLM_API_KEY is not set: every suite drives the real model")
+    if any(s in MODEL_SUITES for s in suites) and not configured.api_key:
+        raise EvalRefused("LLM_API_KEY is not set: the speak, persona and learning "
+                          "suites drive the real model")
     judge, same = None, False
     if any(s in JUDGED_SUITES for s in suites):
         judge, same = make_judge(
@@ -1198,6 +1859,12 @@ async def run(args, env=None) -> dict:
             report["suites"]["learning"] = await run_learning(
                 run_dir, judge, cases["learning"], lang=lang, persona=persona,
                 name=name, env=env, repeat=repeat)
+        if "memory" in suites:
+            # The cases address the shipped name; scripted answers need no tries.
+            mem_name = DEFAULT_NAMES.get(lang, "Nova")
+            report["suites"]["memory"] = await run_memory(
+                run_dir, cases["memory"], lang=lang, name=mem_name,
+                persona=prepare_persona(raw_persona, mem_name))
     finally:
         if args.keep:
             report["workdir"] = str(run_dir)

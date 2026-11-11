@@ -10,6 +10,9 @@ MAX_CONVERSATIONS = 256
 EXCERPT_CHARS = 60
 NAME_CHARS = 32
 _REASON_CHARS = 80
+# Outcomes of a call: each person who called gets their own row.
+_PER_PERSON = frozenset({"model failed", "blocked", "delivery failed",
+                         "answered together"})
 
 
 def _clip(text, limit: int) -> str:
@@ -43,9 +46,12 @@ class DecisionLog:
             last = rows[-1] if rows else None
             # A run of identical silences (every message below the trigger
             # count) is one line, or it would push out every real decision.
+            # A failure that silenced someone else is not the same line.
             if (last is not None and not spoke and not last["spoke"]
                     and last["mode"] == row["mode"]
-                    and last["reason"] == row["reason"]):
+                    and last["reason"] == row["reason"]
+                    and (row["reason"] not in _PER_PERSON
+                         or last["sender"] == row["sender"])):
                 row["count"] = last["count"] + 1
                 rows[-1] = row
             else:

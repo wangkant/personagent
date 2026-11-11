@@ -174,7 +174,11 @@ class Discord(Platform):
         name = plain_name((data.get("member") or {}).get("nick"), author.get("global_name"),
                           author.get("username"), uid)
         text = str(data.get("content") or "")
-        mentioned = any(str(m.get("id")) == self.bot_id for m in data.get("mentions") or [])
+        snapshots = data.get("message_snapshots") or []
+        forward = not text and not data.get("attachments") and bool(snapshots)
+        # A forwarded call was someone else's, long ago.
+        mentioned = not forward and any(str(m.get("id")) == self.bot_id
+                                        for m in data.get("mentions") or [])
         quoted = data.get("referenced_message") or {}
         quoted_author = quoted.get("author") or {}
         addressed = is_dm or mentioned or str(quoted_author.get("id")) == self.bot_id
@@ -190,15 +194,14 @@ class Discord(Platform):
         if mentioned:
             segments.append({"type": "mention", "user_id": self.bot_id, "name": ""})
         body = data
-        snapshots = data.get("message_snapshots") or []
-        if not text and not data.get("attachments") and snapshots:
+        if forward:
             # A forward carries no author; what it says is in the snapshot.
             body = (snapshots[0] or {}).get("message") or {}
             text = str(body.get("content") or "")
             segments.append({"type": "forward", "name": ""})
         names = {str(m.get("id")): plain_name((m.get("member") or {}).get("nick"), m.get("global_name"),
                                                m.get("username"))
-                 for m in data.get("mentions") or [] if isinstance(m, dict)}
+                 for m in body.get("mentions") or [] if isinstance(m, dict)}
         segments.extend(tagged_segments(text, names))
         for attachment in body.get("attachments") or []:
             segments.append(_attachment(attachment, voice=bool(int(body.get("flags") or 0) & VOICE_FLAG)))

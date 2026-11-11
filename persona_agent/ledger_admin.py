@@ -123,7 +123,8 @@ def _judged_on_now(index: promotion.EvidenceIndex, cand: dict, policy) -> bool:
     if not review:
         return False
     related = index.related(cand)
-    seen = sorted({str(e.get("event_id") or "") for e in index.linked(cand) + related} - {""})
+    seen = list(promotion.judged_ids(cand, index.linked(cand), related, now=time.time(),
+                                     policy=policy))
     group = promotion.conflict_group(cand, index.peers(cand), policy=policy,
                                      related_events=related)
     peers = sorted(str(c.get("candidate_id") or "") for c in group[1:])
@@ -153,10 +154,8 @@ def _standing(index: promotion.EvidenceIndex, cand: dict, decision, policy) -> l
         out = [_count(index, cand, decision, policy)]
     days = env_float("PROMOTE_OBSERVE_MAX_DAYS", 30.0, minimum=0.0)
     if judging and days > 0:
-        stamps = [promotion.epoch(e.get("ts"))
-                  for e in index.linked(cand) + index.related(cand)]
-        stamps.append(promotion.epoch(cand.get("created_at")))
-        newest = max(stamps)
+        newest = promotion.newest_reaction(cand, index.linked(cand), index.related(cand),
+                                           policy=policy)
         if newest:
             on = datetime.fromtimestamp(newest + days * 86400.0).strftime("%Y-%m-%d")
             out.append(f"If no new reaction arrives, it will be set aside on {on}.")
@@ -412,8 +411,9 @@ def cmd_transition(args, ledger, log, policy, paths, action: str) -> int:
 
 
 def cmd_restore(args, ledger, log, policy, paths) -> int:
-    """Bring back what the character or the time limit set aside, through the
-    ledger's own restore; a person's or a content rule's discard stays."""
+    """Bring back what the character or the time limit set aside, or what the
+    character or a rule took out of use, through the ledger's own restore; a
+    person's decision or a content rule's discard stays."""
     cid = _resolve_id(ledger, args.candidate_id)
     if cid is None:
         return 1

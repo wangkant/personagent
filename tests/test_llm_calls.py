@@ -1850,6 +1850,9 @@ async def test_each_answers_usage_is_counted_per_model_and_day(tmp: Path) -> Non
         await agent._call_llm("sys", [{"role": "user", "content": "hi"}], model=model,
                               max_tokens=50, enable_search=False)
     path = tmp / usage.USAGE_FILE
+    pending = agent.__dict__["_usage_book"]._pending
+    if pending is not None:
+        pending.result()    # written on a worker thread
     check("the first count is written beside the memory file at once",
           usage.load(path)[usage.day_of(time.time())]["primary"]["calls"] == 1)
     # The rest wait for the minute; the next write carries them.

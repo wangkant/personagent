@@ -37,6 +37,31 @@ REASON_EXPIRED = "Set aside by rule: no new reactions for {days} days."
 REASON_CONFIRMED = ("Kept by rule: the person it was taught for has confirmed it "
                     "since the objection.")
 
+# What no character adopts, whatever the model says: a link, a mass mention,
+# an advertisement or an instruction to the character itself.
+_TLDS = ("com|net|org|io|cn|me|ly|gg|co|cc|tv|xyz|top|app|dev|info|biz|site|online|"
+         "shop|store|vip|club|link|live|ru|tk|ml|ga|cf|uk|de|jp|kr|hk|tw|us")
+_UNADOPTABLE = re.compile("|".join((
+    r"https?://", r"\bwww\.", r"\bt\.me/", r"\bwa\.me/",
+    rf"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:{_TLDS})(?![A-Za-z0-9])",
+    r"@(?:everyone|here|all|channel)\b", r"@(?:全体成员|全体|所有人)", r"\[CQ:at,qq=all\]",
+    r"\b(?:ignore|disregard|forget|override)\b.{0,30}\b(?:instructions?|rules|prompts?|"
+    r"guidelines|persona)\b",
+    r"\bsystem prompt\b", r"\byou are now\b", r"\bdeveloper mode\b", r"\bjailbreak",
+    r"(?:忽略|无视|忘记|忘掉).{0,12}(?:指令|指示|设定|规则|提示词?|人设)",
+    r"系统提示", r"你现在是", r"从现在(?:开始|起)你",
+    r"\b(?:promo|discount|coupon|referral|invite) codes?\b", r"\buse (?:my )?code\b",
+    r"\baffiliate\b", r"\bsponsored\b", r"\bbuy now\b", r"\blimited[- ]time offer\b",
+    r"\b(?:recommend|promote|advertise|plug)\b.{0,40}\bto (?:everyone|everybody|all)\b",
+    r"优惠码|折扣码|邀请码|推广码|返利|代购|扫码|加(?:我)?(?:微信|vx|VX|qq|QQ|群)|"
+    r"(?:推荐|安利)给(?:所有人|大家|每个人)",
+)), re.IGNORECASE)
+
+
+def unadoptable(text: str) -> bool:
+    """Does `text` carry what no character adopts (see _UNADOPTABLE)."""
+    return bool(_UNADOPTABLE.search(str(text or "")))
+
 
 def put_in_use(ledger, cid: str, *, ts: str, actor: str, reason: str,
                policy=promotion.DEFAULT_POLICY, judge: str = "",
@@ -302,15 +327,19 @@ class Learning:
                 or (cand.get("type") == candidates.TYPE_PAIR
                     and str(cand.get("better") or "").strip() == reply))
 
-    def _dispute_promoted_for(self, reply: str, ts: str, event_id: str) -> int:
-        """A bystander disagreed with `reply`: link their event to every
-        promoted candidate teaching it, for the character to judge."""
+    def _dispute_promoted_for(self, reply: str, ts: str, event: dict) -> int:
+        """A bystander disagreed with `reply` in `event`: link it to every
+        promoted candidate teaching that reply where the event was given, for
+        the character to judge."""
         reply = (reply or "").strip()
         disputed = 0
         for cand in self.candidate_ledger.active():
-            if self._teaches(cand, reply) and self.candidate_ledger.link_evidence(
-                    cand["candidate_id"], [event_id], ts=ts,
-                    note="disputed by someone the reply was not for"):
+            if (self._teaches(cand, reply)
+                    and promotion.in_scope(event, cand, policy=self.promotion_policy,
+                                           compare_mode=False)
+                    and self.candidate_ledger.link_evidence(
+                        cand["candidate_id"], [event["event_id"]], ts=ts,
+                        note="disputed by someone the reply was not for")):
                 disputed += 1
                 logger.info("[Agent] candidate %s DISPUTED by a bystander, "
                             "left to the character: %r", cand["candidate_id"],
@@ -318,15 +347,20 @@ class Learning:
                 self._queue_dispute(cand["candidate_id"])
         return disputed
 
-    def _rollback_promoted_for(self, reply: str, ts: str, event_id: str = "",
+    def _rollback_promoted_for(self, reply: str, ts: str, event: dict | None = None,
                                reason: str = "") -> int:
         """A human disagreed with `reply`: roll back every promoted candidate
-        that teaches it, as an example or as a rewrite's improvement."""
+        that teaches it, as an example or as a rewrite's improvement, where
+        `event` was given (everywhere without one)."""
         ledger = self.candidate_ledger
         reply = (reply or "").strip()
+        event_id = str((event or {}).get("event_id") or "")
         rolled = 0
         for cand in ledger.active():
             if not self._teaches(cand, reply):
+                continue
+            if event and not promotion.in_scope(event, cand, policy=self.promotion_policy,
+                                                compare_mode=False):
                 continue
             if ledger.rollback(cand["candidate_id"], ts=ts, actor="auto",
                                reason=reason or "the person it was for disagreed",
@@ -523,14 +557,15 @@ class Learning:
                            type(e).__name__, e)
 
     def _retract_reply(self, reply: str, ts: str = "",
-                       event_id: str = "", reason: str = "") -> None:
+                       event: dict | None = None, reason: str = "") -> None:
         """A human disagreed with this reply: roll back its promoted
-        candidates, and delete it from examples_file, which has no ledger."""
+        candidates where `event` was given, and delete it from examples_file,
+        which has no ledger or scope."""
         reply = (reply or "").strip()
         if not reply:
             return
         ts = ts or datetime.now().isoformat(timespec="seconds")
-        self._rollback_promoted_for(reply, ts, event_id=event_id, reason=reason)
+        self._rollback_promoted_for(reply, ts, event=event, reason=reason)
         removed = promotion.retract_example(self.examples_file, reply)
         if removed:
             self._auto_examples_seen.discard(reply)
@@ -708,14 +743,12 @@ class Learning:
                         reaction_ev["recipient_id"] == reaction_ev["speaker_id"])
                     if recipient or is_admin:
                         self._retract_reply(
-                            str(entry.get("reply") or ""), ts=now,
-                            event_id=reaction_ev["event_id"],
+                            str(entry.get("reply") or ""), ts=now, event=reaction_ev,
                             reason=("the person it was for disagreed" if recipient
                                     else "the admin disagreed"))
                     else:
                         self._dispute_promoted_for(
-                            str(entry.get("reply") or ""), ts=now,
-                            event_id=reaction_ev["event_id"])
+                            str(entry.get("reply") or ""), ts=now, event=reaction_ev)
 
                 # Arm the retry; a rejection also asks what they meant.
                 if adj["reaction"] in ("rejection", "correction") and conv_id:
@@ -931,8 +964,8 @@ class Learning:
             admin_ids=self._admins())
         group = promotion.conflict_group(cand, peers, policy=self.promotion_policy,
                                          related_events=related)
-        seen = tuple(sorted({str(e.get("event_id") or "") for e in linked + related}
-                            - {""}))
+        seen = promotion.judged_ids(cand, linked, related, now=time.time(),
+                                    policy=self.promotion_policy)
         rivals = tuple(sorted(str(c.get("candidate_id") or "") for c in group[1:]))
         key = (cand.get("state"), seen, rivals,
                tuple(sorted((str(c.get("candidate_id")), str(c.get("state")))
@@ -955,12 +988,12 @@ class Learning:
         """The content rules the character already applies in code; a
         failure is a discard with no model asked."""
         text = self._taught_text(cand)
-        if text and TextProcessing._sanitize_reply(
-                text, self.agent_lang, self.reply_style) != text:
+        if text and (unadoptable(text) or TextProcessing._sanitize_reply(
+                text, self.agent_lang, self.reply_style) != text):
             return REASON_POLICY
         lesson = str((cand.get("payload") or {}).get("lesson") or "").strip()
-        if lesson and not self._validate_memory_candidate(
-                lesson, max_chars=reactions.LESSON_MAX_CHARS):
+        if lesson and (unadoptable(lesson) or not self._validate_memory_candidate(
+                lesson, max_chars=reactions.LESSON_MAX_CHARS)):
             return REASON_LESSON
         admins = self._admins()
         for ev in linked:
@@ -1168,14 +1201,25 @@ class Learning:
     def _dispute_basis(self, cid: str):
         """(cand, linked, dispute ids, seen) for an item in use, or None."""
         cand = self.candidate_ledger.get(cid)
-        if cand is None or cand.get("state") != candidates.STATE_PROMOTED:
+        if (cand is None or cand.get("state") != candidates.STATE_PROMOTED
+                or self._put_in_use_by_hand(cand)):
             return None
         linked = self.evidence_log.many(cand.get("evidence") or [])
-        disputed = promotion.disputes(cand, linked)
+        disputed = promotion.disputes(cand, linked, policy=self.promotion_policy)
         if not disputed:
             return None
         seen = tuple(sorted({str(e.get("event_id") or "") for e in linked} - {""}))
         return cand, linked, disputed, seen
+
+    @staticmethod
+    def _put_in_use_by_hand(cand: dict) -> bool:
+        """Was its latest step into use a person's: then only the person the
+        reply was for or the operator takes it out of use."""
+        for entry in reversed(cand.get("history") or []):
+            if entry.get("state") == candidates.STATE_PROMOTED:
+                return entry.get("actor") not in (candidates.ACTOR_AUTO,
+                                                  candidates.ACTOR_CHARACTER)
+        return False
 
     def _confirmed_since(self, cand: dict, linked, disputed) -> bool:
         """Was it taught by the person it was for, who confirmed it after the
@@ -1281,10 +1325,8 @@ class Learning:
         reason = REASON_EXPIRED.format(days=f"{days:g}")
         expired = 0
         for cand in ledger.pending():
-            stamps = [promotion.epoch(e.get("ts"))
-                      for e in index.linked(cand) + index.related(cand)]
-            stamps.append(promotion.epoch(cand.get("created_at")))
-            newest = max(stamps)
+            newest = promotion.newest_reaction(cand, index.linked(cand), index.related(cand),
+                                               policy=self.promotion_policy)
             if newest and now - newest > days * 86400.0 and ledger.reject(
                     cand["candidate_id"], ts=ts, actor=candidates.ACTOR_AUTO,
                     reason=reason, judge=candidates.JUDGE_EXPIRY):
