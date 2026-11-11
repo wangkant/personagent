@@ -389,7 +389,8 @@ class PendingReplies:
             # Quoting another member is about their message, address or not.
             if quote_by_bot is False:
                 return None
-        if at_bot and not quote_mid:
+        # An unresolved quote names no reply: the @ decides as it does alone.
+        if at_bot:
             # An @ is about the sender's own reply, else one meant for nobody.
             sender = str(sender_uid)
             for want in (sender, ""):
@@ -405,8 +406,8 @@ class PendingReplies:
                 seen.update(matched_by="at", matched_at=now, match_seq=self._seq)
                 self._save()
                 return seen
-        elif at_bot or (is_dm and str(sender_uid) == q[-1]["target_uid"]):
-            return self._take(conv_id, q, -1, "at" if at_bot else "dm", now)
+        elif is_dm and str(sender_uid) == q[-1]["target_uid"]:
+            return self._take(conv_id, q, -1, "dm", now)
         for i in range(len(q) - 1, -1, -1):
             e = q[i]
             if (e.get("elicited_uid") == str(sender_uid)

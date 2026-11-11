@@ -41,11 +41,16 @@ class MemoryFileDamaged(RuntimeError):
     def __init__(self, path: Path):
         path = Path(path)
         bak = path.with_name(path.name + BAK_SUFFIX)
-        message = f"{path.name} is damaged and was left untouched."
         if bak.is_file():
             day = datetime.fromtimestamp(bak.stat().st_mtime).strftime("%Y-%m-%d")
-            message += (f" A copy from {day} is at {bak}; move it in place of "
-                        f"{path.name} to start from it.")
+            message = (f"The memory file {path} is damaged and was left untouched. "
+                       f"A copy from {day} is at {bak}; move it in place of the damaged "
+                       "file to start from it, or move the damaged file aside to start "
+                       "with an empty memory.")
+        else:
+            message = (f"The memory file {path} is damaged and was left untouched, and "
+                       "no earlier copy of it exists. Move the damaged file aside, for "
+                       "example by renaming it, to start with an empty memory.")
         super().__init__(message)
         self.path = path
         self.backup = bak if bak.is_file() else None
@@ -157,6 +162,50 @@ def daily_backup(path: Path, state) -> bool:
     state.touch()
     state.save(force=True)
     return made
+
+
+def refresh_backup(path: Path) -> None:
+    """After a final forget: the daily copy becomes the file as it is now,
+    so it no longer holds what was forgotten."""
+    path = Path(path)
+    bak = path.with_name(path.name + BAK_SUFFIX)
+    if not bak.exists():
+        return
+    if path.is_file():
+        tmp = bak.with_name(bak.name + ".tmp")
+        shutil.copy2(path, tmp)
+        tmp.replace(bak)
+    else:
+        bak.unlink()
+
+
+def scrub_migration_copy(memory_path: Path, keep: Callable[[str, dict], bool]) -> int:
+    """After a final forget: drop from the pre-migration copy every note
+    `keep(conv, row)` refuses. How many went?"""
+    pre = Path(memory_path).with_name(Path(memory_path).name + PRE_V2_SUFFIX)
+    try:
+        data = json.loads(pre.read_bytes().decode("utf-8"))
+    except FileNotFoundError:
+        return 0
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        # Unreadable, so of no use to anyone: it must not keep what was forgotten.
+        pre.unlink()
+        return 1
+    if not isinstance(data, dict):
+        pre.unlink()
+        return 1
+    gone = 0
+    for conv in list(data):
+        rows = data[conv] if isinstance(data[conv], list) else []
+        kept = [r for r in rows if not readable_row(r) or keep(str(conv), r)]
+        gone += len(rows) - len(kept)
+        if kept:
+            data[conv] = kept
+        else:
+            del data[conv]
+    if gone:
+        save_json(pre, data)
+    return gone
 
 
 def drop_unreadable(memories: dict, trash) -> int:

@@ -35,6 +35,8 @@ Debajo, **Más funciones** activa la búsqueda web, la comprensión de imágenes
 
 Hay otras dos vistas que no requieren conectar ninguna plataforma. **Práctica** reproduce una demostración guionizada y ofrece un chat de grupo de práctica, donde puede ver por qué el personaje responde o guarda silencio. **Aplicación** comprueba todos los servicios de los que depende el personaje, muestra los registros y reúne las actualizaciones, las copias de seguridad y el icono de escritorio.
 
+**Actividad** muestra los chats en los que participa el personaje, lo que ha dicho recientemente, lo que recuerda y lo que ha aprendido. El personaje decide por sí mismo qué aprende y mantiene su memoria actualizada; nada de ello queda pendiente de usted. Aun así, puede deshacer cualquier cosa que haya aprendido, y olvidar o restaurar cualquier cosa que recuerde.
+
 ## Llevar el personaje a otras plataformas
 
 1. Seleccione **Conectar plataformas** y elija una plataforma. Una vez conectada, el personaje responde en los grupos y los chats privados de esa plataforma.

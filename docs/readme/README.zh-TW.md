@@ -38,6 +38,7 @@ personagent 是一個加入群組聊天的角色：可選用現成角色或自�
 <td valign="top">
 從糾正中學到的事（例如群組中如何稱呼健身房）會套用於該聊天此後的每一則回覆。<br>
 蓄意搗亂者或旁觀者都無法讓它學壞。<br>
+反應無法確定的變更由角色自行判斷並記錄理由，任何內容都無須他人核准。<br>
 每一項變更都有紀錄，且均可撤回。
 </td>
 </tr>
@@ -57,7 +58,7 @@ personagent 是一個加入群組聊天的角色：可選用現成角色或自�
 </tr>
 </table>
 
-每個聊天都有獨立的記憶，也可以要求角色忘記指定的內容：`小夏，記住 阿傑不吃辣`、`小夏 忘掉 不吃辣`（[記憶指令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#教導角色)）。
+每個聊天都有獨立的記憶：重新啟動後仍在的近期訊息、此前對話的摘要、附日期的事件，以及關於成員的事實，均由角色自行保持最新。也可以要求角色忘記指定的內容：`小夏，記住 阿傑不吃辣`、`小夏 忘掉 不吃辣`（[記憶指令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#教導角色)）。「動態」中會顯示角色記住的全部內容，其中任何一項都可以刪除或還原（[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#記憶)）。
 
 ## 從這裡開始
 

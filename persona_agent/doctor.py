@@ -114,7 +114,7 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     for r in results:
         mark = "  -  " if r["ok"] is None else ("  OK " if r["ok"] else " FAIL")
         tag = langs.term(" [critical]") if r["critical"] else ""
-        print(f"[{mark}] {_pad(langs.term(r['name']), 34)}{_pad(tag, 11)} {r['ms']:5.0f}ms  {langs.term(r['detail'])}")
+        print(f"[{mark}] {_pad(langs.term(r['name']), 34)}{_pad(tag, 11)} {r['ms']:5.0f}ms  {langs.term(r.get('advice') or r['detail'])}")
     mark, detail = direct_row(direct_platforms(home.find_home()))
     print(f"[{mark}] {_pad(langs.term('directly connected platforms'), 34)}{_pad('', 11)} {'':7}  {detail}")
     print("-" * 64)

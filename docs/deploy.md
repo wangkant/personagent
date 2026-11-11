@@ -84,20 +84,40 @@ while any remain, and `--json` lists them under `retired_settings`. `HOST`,
 install, loads nothing from the internet and never shows keys or tokens. It
 reads the JSON API of the agent service that the local page started. With
 `personagent run` alone, read the service's log and use `personagent learned`
-instead. `DASHBOARD_ENABLED=false` turns the API off. The view then says so,
-and `personagent doctor` prints `activity: off (...)`.
+and `personagent memory` instead. `DASHBOARD_ENABLED=false` turns the API
+off. The view then says so, and `personagent doctor` prints
+`activity: off (...)`.
 
 The API lives under `/api/dashboard/` on the agent service:
 
 - `GET conversations` and `GET conversation?id=<chat id>` read the chats the
-  service knows and one chat in detail.
-- `POST candidates/<id>/promote`, `replace`, `reject` and `rollback` change
-  what it has learned. Each change goes into the same ledger as
-  `personagent learned`, with the actor `dashboard`.
+  service knows and one chat in detail. Each chat in `conversations` carries
+  `learned`, `observing` (the number of items under observation) and
+  `latest` (when something last came into use). `conversation` returns
+  `learned` and `observing` lists. An item under observation carries
+  `standing` (its stage, what it still lacks, the character's reason and the
+  date it will be set aside); an item in use carries `by` (`reactions`,
+  `character` or `person`) and `why`. It also returns what the
+  chat remembers: `memories`, `core_note` and `core_at`, `thread`,
+  `episodes`, `removed` and `memory_status`.
+- `POST candidates/<id>/promote`, `replace`, `reject`, `rollback` and
+  `restore` are a person's optional actions on what it has learned. Each goes
+  into the same ledger as `personagent learned`, with the actor `dashboard`.
+  `restore` brings back what the character or the time limit set aside, and
+  what the character or a rule took out of use; what a person undid or set
+  aside, and what a content rule discarded, stays as it is. `promote` does
+  not bring back an item that was rolled back.
 - `POST memory/forget` with the body
-  `{"conv": "<chat id>", "note": "<note id>"}` deletes one memory note.
-  `conv` and the id are those of an entry of `memories` in
-  `GET conversation`. Without `note` it deletes the chat's core note.
+  `{"conv": "<chat id>", "kind": "note", "id": "<id>"}` forgets one item and
+  answers with the `tid` that `POST memory/restore` (`{"tid": "<tid>"}`)
+  takes to bring it back. `kind` is `note`, `episode`, `thread` or `core`.
+  The earlier body `{"conv": "<chat id>", "note": "<note id>"}` still works,
+  and without `note` it forgets the chat's core note.
+- `POST memory/forget_chat` with `{"conv": "<chat id>"}` forgets everything
+  that chat remembers. It cannot be undone.
+- `GET memory/list?conv=<chat id>` lists what each chat remembers and what
+  can still be restored; `personagent memory` reads it while the service
+  runs.
 
 Every call needs the header `X-Personagent-Dashboard-Token` with the token in
 `dashboard.token` in the runtime folder (`<home>/runtime/` unless
@@ -119,7 +139,12 @@ connectors and `/health/details` only.
 The service serves no page. `GET /` answers a short note that points to the
 local page and to `personagent learned`, which is also what an old `?token=`
 link opens now. The local page binds to 127.0.0.1 only. On a server with no
-local page, review and overrule learning with `personagent learned`.
+local page, `personagent learned` shows what the character learned, what it
+is observing and why, and lets you put an item in use, set it aside, undo
+it, or bring back what the character or the time limit set aside and what
+the character or a rule took out of use.
+`personagent memory` lists what it remembers and forgets or restores an
+item.
 
 ## What the host must provide
 
@@ -134,6 +159,10 @@ local page, review and overrule learning with `personagent learned`.
 `AGENT_RUNTIME_DIR` must resolve beneath the home, or startup fails. A
 relative `PERSONA_FILE` or `PERSONA_CARD_FILE` resolves under the home too,
 so a persona kept elsewhere needs an absolute path.
+
+A damaged `memory.json`, `core_memory.json` or `episodes.json` stops the
+start with exit code 2 and one sentence that names the file and its `.bak`
+copy to put in its place. The damaged file is left untouched.
 
 ## Connecting platforms
 
@@ -316,8 +345,11 @@ no setting to bring it back:
 
 - the OCR fallback for images that no vision model described;
 - quote lookup through NapCat. Quotes resolve from personagent's own index of
-  recent messages, and from the quoted text a connector sends with the quote;
-- collecting new stickers from images posted in groups.
+  recent messages, and from the quoted text a connector sends with the quote.
+
+New stickers are collected on every path, as on QQ: from pictures posted in
+groups that arrive inline or marked as stickers. A photo that a connector
+sends only as a link is not collected.
 
 ## More than one platform
 
@@ -409,23 +441,48 @@ add any proxy or tunnel, even on one host.
 ## Costs
 
 - **Probes spend credit.** `personagent doctor` and `/health/details` send one
-  tiny chat completion to each configured model endpoint (chat, DM, eval and
-  vision). They also send one embedding if `EMBEDDING_MODEL` is set, and one
+  tiny chat completion to each model where the agent sends work: group and
+  private replies, the web search decision, the reaction judge (while
+  `REACT_LEARN_ENABLED` is on), self-review (while `EVAL_ENABLED` is on) and
+  vision. They also send one embedding if `EMBEDDING_MODEL` is set, and one
   Tavily search if `TAVILY_API_KEY` is set. `/health` and the settings and
   ledger checks are free.
+- **Model use is counted.** Every model request is tallied per model and per
+  day from the usage the provider reports, with the cost where the provider
+  reports it. `personagent doctor` prints today and the last 7 days, and the
+  App view of the local page shows the same. The tally file is written in the
+  background, at most once a minute and once more at shutdown.
+- **Learning and memory.** The character's own learning decisions cost one
+  call each on `PROMOTE_JUDGE_MODEL`, at most `PROMOTE_JUDGE_BATCH` every
+  `PROMOTE_JUDGE_INTERVAL_S`. Memory consolidation costs one call per stretch
+  of a chat on `LLM_JUDGE_MODEL`, at most 16 per chat and
+  `MEMORY_CALLS_PER_DAY` (40) for all chats together each day.
+  `PROMOTE_JUDGE_ENABLED=false` and `MEMORY_CALLS_PER_DAY=0` turn them off.
 - **The scripts in `tools/`** differ. Some are free and some call a model.
   The table in [tools.md](tools.md) says which.
-- **`personagent eval`** calls the model for every case. The persona and
+- **`personagent eval`** calls the model for every case, except in the
+  `memory` suite, which runs offline with scripted answers. The persona and
   learning suites also need a second model as judge (`BENCH_JUDGE_MODEL`).
 - **Memory.** Past 256 namespaced (non-QQ) conversations, the least recently
-  active idle one loses its recent history and pending reactions. Long-term
-  memories, core notes and ledgers stay. A conversation in the middle of a
-  request is never evicted. Long-term memories are loaded from disk at
-  startup and are not bounded by this cap.
+  active idle one is dropped from memory and loses its pending reactions.
+  Its unconsolidated messages are consolidated first, and its recent
+  messages stay in `runtime/recent.json` for 72 hours unless
+  `MEMORY_KEEP_RECENT=false`. Facts, events, core notes and ledgers stay. A
+  conversation in the middle of a request is never evicted. Long-term
+  memories are loaded from disk at startup and are not bounded by this cap.
 - **Disk.** The evidence log and candidate ledger in `runtime/` are
   append-only and never truncated. `personagent doctor` flags either one past
-  50 MB (`LEDGER_EVIDENCE_WARN_BYTES`, `LEDGER_CANDIDATES_WARN_BYTES`). Back
-  up `runtime/`, because it holds everything the bot has learned.
+  50 MB (`LEDGER_EVIDENCE_WARN_BYTES`, `LEDGER_CANDIDATES_WARN_BYTES`). The
+  memory files stay small: `recent.json` keeps chats active in the last 72
+  hours, and `memory_trash.jsonl` keeps removed items for at most 30 days.
+  Before the first change of each day, `memory.json`, `core_memory.json` and
+  `episodes.json` are copied to a file of the same name ending in `.bak`,
+  and the first start of this version keeps the old memory file as
+  `memory.json.pre-v2`. After **Forget this chat** or a forget asked for in
+  chat, the `.bak` copies are written again from the current files and
+  `memory.json.pre-v2` loses what was forgotten, so no copy on disk keeps
+  it. Back up `runtime/`, because it holds
+  everything the bot has learned and remembers.
 
 ## When the bot goes quiet
 
@@ -464,7 +521,10 @@ and why it stayed quiet. On a server, read the service log, and use
    messages by default) and may still pass. From 02:00 to 07:00 in its time
    zone, it mostly stays out of chats it was not called into. The time zone
    is `PERSONA_TZ_OFFSET_HOURS`. Left blank, it is UTC+8 when `AGENT_LANG` is
-   `zh` or `zh-TW` and this machine's offset otherwise. Activity shows the reason for each
+   `zh` or `zh-TW` and this machine's offset otherwise. A group message that
+   arrives more than 10 minutes after it was sent, within two minutes of its
+   platform's first message since the start, is a backlog: it is kept as
+   context and not answered, and the service log says so. Activity shows the reason for each
    recent turn. To watch the same decision offline, run
    `personagent chat --trigger 4`.
 5. **personagent's allowlists.** `ACCESS_GROUPS` and `ACCESS_DM_USERS` apply
@@ -476,9 +536,14 @@ and why it stayed quiet. On a server, read the service log, and use
    (402 or an exhausted quota) logs one ERROR line naming the provider host
    and the setting to fix. Run `personagent doctor`. It sends a tiny request
    to each model endpoint and shows the status, which also catches a wrong
-   `LLM_BASE_URL` or `LLM_MODEL`. While the model is down, the persona sends a
-   short in-character excuse when it is called, at most once per conversation
-   every five minutes.
+   `LLM_BASE_URL` or `LLM_MODEL`. When the main model times out or the
+   connection drops and `LLM_FALLBACK_MODEL` names a different model, the
+   call moves to the fallback at once, so the turn is still answered within
+   its time budget. An error that a provider sends inside a normal response,
+   such as OpenRouter's upstream failures, is handled like the matching HTTP
+   error. While the model is down, the persona sends a short in-character
+   excuse when it is called, at most once per conversation every five
+   minutes; Activity shows the turn as "the model did not answer".
 7. **A misspelled setting.** The startup log and `personagent doctor` list every key that
    `.env.example` does not know, and any value that starts with `#`.
 8. **A BOM on `.env`.** The first setting's name carries the BOM and never

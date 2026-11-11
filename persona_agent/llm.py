@@ -296,13 +296,13 @@ class ModelCalls:
         wait = book.due(now)
         try:
             if not wait:
-                book.flush(now)
+                book.flush_soon(now)
             elif not self.__dict__.get("_usage_flush"):
                 def later() -> None:
                     self.__dict__["_usage_flush"] = None
                     try:
-                        book.flush(time.time())
-                    except OSError as e:
+                        book.flush_soon(time.time())
+                    except (OSError, RuntimeError) as e:
                         logger.debug("[Agent] model use tally not written: %s", e)
                 self.__dict__["_usage_flush"] = asyncio.get_running_loop().call_later(wait, later)
         except (OSError, RuntimeError) as e:

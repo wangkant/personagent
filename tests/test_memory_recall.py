@@ -178,6 +178,18 @@ def test_a_quiet_member_named_in_the_message_is_recalled(tmp: Path) -> None:
     check("another absent member still does not", "cello" not in block, block)
 
 
+def test_two_members_with_one_name_get_two_headers(tmp: Path) -> None:
+    a = make_agent(tmp)
+    speak(a, G, "telegram:7", "Sam")
+    speak(a, G, "telegram:66", "Sam")
+    a.memories[G] = [note("Sam keeps bees", uid="telegram:7", name="Sam"),
+                     note("Sam owns the bakery", uid="telegram:66", name="Sam")]
+    block = a._memories_for_prompt(G, "what does sam do")
+    heads = [ln for ln in block.split("\n") if ln.startswith("About ")]
+    check("one header each", len(heads) == 2, block)
+    check("the second says it is someone else", "different member" in heads[1], block)
+
+
 @pytest.mark.parametrize("lang,question", [("en", "what did we do last week?"),
                                            ("zh", "上周干嘛了")])
 def test_a_time_word_brings_that_weeks_event(tmp: Path, lang: str, question: str) -> None:

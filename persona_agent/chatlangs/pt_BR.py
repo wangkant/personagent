@@ -73,7 +73,7 @@ SPEC = Spec(
     # "label: {n}" throughout, so no count needs singular or plural.
     learned_text={
         "head": ("memórias: {memories}, respostas aprendidas: {examples}, "
-                 "correções: {fixes}, esperando outra pessoa confirmar: {voice}, "
+                 "correções: {fixes}, em observação até mais uma reação concordante: {voice}, "
                  "aguardando minha própria decisão: {admin}"),
         "score": ", última autoavaliação {score}/5",
         "pair": "antes: {was}, agora: {better}",

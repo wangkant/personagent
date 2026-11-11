@@ -121,14 +121,17 @@ def test_damaged_memory_stops_with_the_backup_named(tmp: Path) -> None:
     (tmp / "memory.json").write_text("{not json", encoding="utf-8")
     with pytest.raises(memstore.MemoryFileDamaged) as no_copy:
         isolated_agent(tmp)
-    check("without a copy it says only that", str(no_copy.value)
-          == "memory.json is damaged and was left untouched.", str(no_copy.value))
+    check("without a copy it names the file and how to start empty", str(no_copy.value)
+          == f"The memory file {tmp / 'memory.json'} is damaged and was left untouched, "
+          "and no earlier copy of it exists. Move the damaged file aside, for example by "
+          "renaming it, to start with an empty memory.", str(no_copy.value))
     (tmp / "memory.json.bak").write_text("{}", encoding="utf-8")
     with pytest.raises(memstore.MemoryFileDamaged) as named:
         isolated_agent(tmp)
     message = str(named.value)
     check("it names the daily copy and what to do", "memory.json.bak" in message
-          and "move it in place of memory.json" in message, message)
+          and "move it in place of the damaged file" in message
+          and "start with an empty memory" in message, message)
     check("the damaged file is untouched",
           (tmp / "memory.json").read_text(encoding="utf-8") == "{not json")
     (tmp / "memory.json").write_text("[1, 2]", encoding="utf-8")

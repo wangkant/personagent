@@ -384,7 +384,7 @@ def standing(cand: dict, index: promotion.EvidenceIndex, policy, judge: Judge,
         else:
             group = promotion.conflict_group(cand, index.peers(cand), policy=policy,
                                              related_events=related)
-            seen = sorted({str(e.get("event_id") or "") for e in linked + related} - {""})
+            seen = list(promotion.judged_ids(cand, linked, related, now=now, policy=policy))
             peers = sorted(str(c.get("candidate_id") or "") for c in group[1:])
             review = cand.get("review") or {}
             # The character looks again whenever the evidence or the rivals change.
@@ -412,9 +412,7 @@ def standing(cand: dict, index: promotion.EvidenceIndex, policy, judge: Judge,
             out["missing"] = promotion.GATE_SPEAKERS
     # As learning._expire_observing: the newest reaction, or the item itself.
     if judge.judging and judge.observe_days > 0:
-        stamps = [promotion.epoch(e.get("ts")) for e in linked + related]
-        stamps.append(promotion.epoch(cand.get("created_at")))
-        newest = max(stamps)
+        newest = promotion.newest_reaction(cand, linked, related, policy=policy)
         if newest:
             out["expires"] = newest + judge.observe_days * 86400.0
     return out

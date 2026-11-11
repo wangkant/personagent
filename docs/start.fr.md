@@ -35,6 +35,8 @@ En dessous, **Autres fonctions** active la recherche web, la compréhension des 
 
 Deux autres vues ne nécessitent aucune plateforme. **Entraînement** joue une démonstration scriptée et anime un groupe de discussion d'entraînement, dans lequel vous pouvez voir pourquoi le personnage répond ou reste silencieux. **Application** vérifie chaque service dont dépend le personnage, affiche les journaux et regroupe les mises à jour, les sauvegardes et l'icône du Bureau.
 
+**Activité** montre les discussions où se trouve le personnage, ce qu'il a dit récemment, ce dont il se souvient et ce qu'il a appris. Le personnage décide lui-même de ce qu'il apprend et tient sa mémoire à jour ; rien n'y attend votre intervention. Vous pouvez toujours annuler tout ce qu'il a appris, et oublier ou restaurer tout ce dont il se souvient.
+
 ## L'emmener sur d'autres plateformes
 
 1. Cliquez sur **Connecter des plateformes** et choisissez une plateforme. Une fois celle-ci connectée, votre personnage répond dans les groupes et les messages privés de cette plateforme.

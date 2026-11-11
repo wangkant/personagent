@@ -62,6 +62,7 @@ SPEC = Spec(
     self_id=r"(?<![가-힣])(?:저는|나는|제가|내가|전|난)(?![가-힣])",
     made_by=r"(?:이|가|에서)\s*(?:만든|개발한|훈련시킨|학습시킨)",
     name_end=r"\s*(?:입니다|이에요|예요|이야|야|이고|고|이라고|라고|이라는|라는)",
+    maker_first=True,
     leak_labels=r"입력|화자|발화자|의도|판단|결정|스타일|분석",
     assistant_tells=(r"죄송(?:합니다|하지만|해요|하게도)[^.\n]{0,30}"
                      r"(?:도와\s?(?:드릴|줄)|답변(?:해\s?드릴|드릴|할)|제공(?:해\s?드릴|할)|응답할|처리할)\s?수\s?없"
@@ -87,7 +88,7 @@ SPEC = Spec(
     # 의 and labels, so no particle has to agree with a name or a number.
     learned_text={
         "head": ("기억 {memories}개, 배운 답변 {examples}개, 고친 것 {fixes}개, "
-                 "두 번째 확인 대기 {voice}개, 스스로 판단 중 {admin}개"),
+                 "관찰 중(일치한 반응이 한 번 더 오면 적용) {voice}개, 스스로 판단 중 {admin}개"),
         "score": ", 최근 자체 평가 {score}/5",
         "pair": "원래: {was}, 고친 거: {better}",
         "someone_else": "다른 채팅방의 누군가",

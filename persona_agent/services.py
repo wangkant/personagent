@@ -541,6 +541,25 @@ class Services:
             self.close()
 
 
+def _memory_problem(home: Path) -> str:
+    """The sentence of a damaged memory file the agent would stop on, read with
+    the settings the agent starts with; '' when there is none."""
+    from dotenv import dotenv_values
+
+    from . import memory_admin
+    saved = dict(os.environ)
+    os.environ.update({k: v for k, v in dotenv_values(home / ".env").items() if v is not None})
+    os.environ["AGENT_HOME"] = str(home)
+    try:
+        error = memory_admin.memory_problem()
+    except (OSError, ValueError):
+        return ""  # a setting the agent's own start reports
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+    return memory_admin.damaged_sentence(error) if error else ""
+
+
 def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
     argparse.ArgumentParser(prog=prog, description=langs.term("Start personagent and its connected platforms together")).parse_args(argv)
     home = homes.find_home()
@@ -548,6 +567,10 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
         from .setup_wizard import command
         print(langs.term(f"Finish the setup first: {command('start', home)}"))
         return 2
+    damaged = _memory_problem(home)
+    if damaged:
+        print(damaged, file=sys.stderr)
+        return 1
     from . import updates
     from .setup_wizard import connect_astrbot
     updates.refresh_soon(home)
@@ -590,7 +613,7 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
     except KeyboardInterrupt:
         return 0
     except (OSError, ValueError, RuntimeError) as exc:
-        print(str(exc), file=sys.stderr)
+        print(langs.term(str(exc)), file=sys.stderr)
         return 1
     finally:
         services.close()

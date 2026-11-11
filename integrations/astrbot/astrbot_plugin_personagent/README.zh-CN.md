@@ -201,7 +201,7 @@ personagent 通过 `connector_id` 识别该 AstrBot，该 id 由插件生成一�
 
 请求体是规范 JSON：UTF-8、键排序、紧凑分隔符、非 ASCII 字符不转义。签名覆盖这些确切的字节，因此代理不能改写请求体。personagent 拒绝错误的签名、重复的 nonce，以及与其自身时钟相差超过五分钟的时间戳。请保持两边时钟同步。
 
-请求体还以 `sent_at` 携带适配器记录的消息时间。personagent 单独按 `CONNECTOR_MAX_EVENT_AGE_S`（默认 24 小时）检查该时间，因此用新签名重发的旧事件仍会被拒绝。适配器没有给出有效时间戳的消息，插件不转发，由 AstrBot 照常处理。
+请求体还以 `sent_at` 携带适配器记录的消息时间。personagent 单独按 `CONNECTOR_MAX_EVENT_AGE_S`（默认 24 小时）检查该时间，因此用新签名重发的旧事件仍会被拒绝。适配器没有给出有效时间戳的消息，插件不转发，由 AstrBot 照常处理。角色看到的每条消息都附有这一时间；群聊消息到达时若已超过 10 分钟（例如重启后 AstrBot 补发的积压消息），只作为上下文保留，不予回复。
 
 ## personagent 一侧的身份
 

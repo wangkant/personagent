@@ -1262,7 +1262,7 @@ def test_the_vision_probe_runs_the_health_check_on_the_values_given(monkeypatch)
     def check_vision():
         seen.append((os.environ.get("VISION_MODEL"), os.environ.get("VISION_BASE_URL"),
                      os.environ.get("VISION_API_KEY")))
-        return True, "ok"
+        return True, "vl -> 'Red.'"
     monkeypatch.setattr(health, "check_vision", check_vision)
     monkeypatch.setenv("VISION_MODEL", "before")
     monkeypatch.delenv("VISION_API_KEY", raising=False)
@@ -1275,3 +1275,146 @@ def test_the_vision_probe_runs_the_health_check_on_the_values_given(monkeypatch)
         raise OSError("HTTP Error 400: model does not support image input")
     monkeypatch.setattr(health, "check_vision", failing)
     check("a refusal is a no", welcome._vision_works("vl", "https://v.example/v1", "vk") is False)
+
+
+@pytest.mark.parametrize("answer, sees", [
+    ("Red", True), ("red.", True), ("The square is red.", True), ("红色", True), ("赤", True),
+    ("Rot", True), ("rouge", True), ("빨간색", True), ("красный", True),
+    ("fake-model", False), ("hello there", False), ("Blue", False), ("", False),
+    ("I cannot see images.", False)])
+def test_the_vision_probe_passes_only_an_answer_that_names_the_colour(monkeypatch, answer, sees):
+    """Any answer used to pass, so a gateway that drops the picture was saved as working."""
+    from persona_agent import health
+
+    monkeypatch.setattr(health, "check_vision", lambda: (True, f"redline-vl -> {answer!r}"))
+    check(repr(answer), welcome._vision_works("redline-vl", "https://v.example/v1", "vk") is sees)
+
+
+def _language_strings(code):
+    if code in ("en", "zh"):
+        return _page_strings(code)
+    return json.loads((welcome.ASSETS / "i18n" / f"{code}.json").read_text(encoding="utf-8"))["strings"]
+
+
+ADDED_SENTENCES = ("ariaNav", "ariaLanguage", "ariaSend", "ariaChats", "activityAdmin", "activityLearnedRetired",
+                   "activityForgetOldChatAsk", "characterLang", "characterLangNote")
+
+
+@pytest.mark.parametrize("code", ["en", "zh", *welcome.PAGE_LANGUAGES])
+def test_what_the_page_says_about_learned_items_and_its_person_is_in_every_language(code):
+    strings = _language_strings(code)
+    english = _page_strings("en")
+    for key in ADDED_SENTENCES:
+        assert strings.get(key, "").strip(), (code, key)
+    if code != "en":
+        # Each a translation, except words that are the same in that language.
+        same = {k for k in ("ariaNav", "ariaChats") if strings[k] == english[k]}
+        assert {k for k in ADDED_SENTENCES if strings[k] == english[k]} <= same, code
+    # One label per item: the panel reads the Activity view's, so its own copies are gone.
+    for key in ("learned_wording", "learned_repeat", "learned_said", "learned_instead", "learned_lesson"):
+        assert key not in strings, (code, key)
+    # Forgetting this page's chat says what becomes of what was learned there; another chat's keeps it.
+    assert strings["forgetChatAsk"] != _language_strings(code).get("activityForgetOldChatAsk")
+    assert len(strings["forgetChatAsk"]) > len(strings["activityForgetOldChatAsk"])
+    assert len(strings["activityForgetChatAsk"]) > len(strings["activityForgetOldChatAsk"])
+    # The judge's help says an unusable answer is asked for once more.
+    for key in ("tuning_h_promote_judge_enabled", "tuning_h_promote_judge_batch"):
+        assert strings[key] != english[key] or code == "en"
+    if code == "en":
+        assert "requested once more" in strings["tuning_h_promote_judge_enabled"]
+        assert "Set aside" in strings["learned_sum_idle"] and "Set aside" in strings["forgetChatAsk"]
+
+
+def test_portuguese_names_logs_in_portuguese():
+    strings = _language_strings("pt-BR")
+    found = [k for k, v in strings.items() if re.search(r"\b[Ll]ogs?\b(?! in)", v)]
+    assert found == []
+
+
+def test_every_accessible_name_follows_the_page_language():
+    html = (welcome.ASSETS / "index.html").read_text(encoding="utf-8")
+    labelled = re.findall(r"<[a-z]+\b[^>]*\baria-label=\"[^\"]*\"[^>]*>", html)
+    for tag in labelled:
+        # Only a product name stays as written.
+        if "Tavily" in tag:
+            continue
+        key = re.search(r'data-t-aria="(\w+)"', tag)
+        assert key and key.group(1) in _page_strings("en"), tag
+    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
+    assert 'node.setAttribute("aria-label", t(node.dataset.tAria))' in js
+
+
+def test_every_place_that_shows_a_learned_item_reads_it_again_after_a_change():
+    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
+    panel = (welcome.ASSETS / "panels" / "learned.js").read_text(encoding="utf-8")
+    decide = js.split("async function decide(item, verb) {")[1].split("\n}\n")[0]
+    assert "learnedChanged();" in decide
+    forget = js.split("async function forgetWholeChat() {")[1].split("\n}\n")[0]
+    assert "learnedChanged();" in forget and '"activityForgetOldChatAsk"' in forget
+    for button in ('$("forget-chat").addEventListener', '$("reset-chat").addEventListener'):
+        assert "learnedChanged();" in js.split(button)[1].split("\n});\n")[0], button
+    assert "PA.onLearned(load);" in panel and "PA.learnedChanged(load);" in panel
+    # The open tab is read again when pressed, not ignored.
+    assert "if (tab === name) return;" not in panel
+
+
+def test_the_setup_card_sends_the_characters_language_not_the_pages():
+    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
+    html = (welcome.ASSETS / "index.html").read_text(encoding="utf-8")
+    assert '<select id="character-lang">' in html and 'data-t="characterLangNote"' in html
+    submit = js.split('$("settings-form").addEventListener("submit"')[1].split("\n});\n")[0]
+    assert 'lang: $("character-lang").value || lang,' in submit
+    assert "\n      lang,\n" not in submit
+
+
+def test_the_page_chat_names_its_person_and_an_earlier_page_chat_says_its_learning_is_out_of_use(
+        client, workspace, monkeypatch):
+    current = workspace._page_key()
+    page = {"platform": "browser", "kind": "dm",
+            "observing": [], "past": [],
+            "learned": [{"id": "def456", "type": "preference_pair", "reply": "hello", "better": "hi",
+                         "created": 4.0, "actions": ["rollback"], "evidence": [{"speaker": "you"}],
+                         "standing": None, "by": {"by": "reactions", "why": ""}}],
+            "memories": [{"text": "likes tea", "about": "you", "said_by_name": "you", "conv": "x"},
+                         {"text": "Sam is tall", "about": "Sam", "said_by_name": "you"}],
+            "episodes": [{"id": "e1", "text": "went out", "t0": 1.0, "names": ["you", "Sam"]}],
+            "decisions": [{"ts": 2.0, "mode": "owner", "spoke": True, "reason": "addressed", "excerpt": "hi",
+                           "answered": "hello", "sender": "you", "count": 1},
+                          {"ts": 1.0, "mode": "owner", "spoke": True, "reason": "addressed", "excerpt": "hey",
+                           "answered": "hi there", "sender": "", "count": 1},
+                          {"ts": 0.5, "mode": "proactive", "spoke": True, "reason": "proactive", "excerpt": "Hi!",
+                           "answered": "", "sender": "", "count": 1}]}
+
+    def handler(request):
+        return httpx.Response(200, json={**page, "id": request.url.params["id"]})
+    _activity_service(workspace, monkeypatch, handler)
+    chat = client.get("/api/activity/chat", params={"id": current}, headers=HEADERS).json()
+    # Oldest first: a message the character started names no one; every quoted message is the person's.
+    assert [r.get("self", False) for r in chat["recent"]] == [False, True, True]
+    assert all(r["sender"] == "" for r in chat["recent"])
+    assert chat["learned"][0]["from"] == [] and chat["learned"][0]["self"] is True
+    assert chat["notes"][0]["about"] == chat["notes"][0]["saidBy"] == ""
+    assert chat["notes"][0]["aboutSelf"] and chat["notes"][0]["saidBySelf"]
+    assert chat["notes"][1]["about"] == "Sam" and "aboutSelf" not in chat["notes"][1]
+    assert chat["events"][0]["names"] == ["Sam"] and chat["events"][0]["self"] is True
+    assert "you" not in json.dumps(chat)
+    assert "retired" not in chat
+    earlier = client.get("/api/activity/chat", params={"id": "private:browser:0123456789abcdef01234567"},
+                         headers=HEADERS).json()
+    assert earlier["retired"] is True
+    # Another platform's names are shown as they are.
+    other = {**page, "platform": "telegram"}
+
+    def other_handler(request):
+        return httpx.Response(200, json={**other, "id": request.url.params["id"]})
+    _activity_service(workspace, monkeypatch, other_handler)
+    chat = client.get("/api/activity/chat", params={"id": "telegram:1"}, headers=HEADERS).json()
+    assert chat["recent"][-1]["sender"] == "you" and "self" not in chat["recent"][-1] and "retired" not in chat
+    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
+    assert "state?.adminName || t(\"activityAdmin\")" in js
+    assert "row.self ? pagePerson() : row.sender" in js
+
+
+def test_the_state_carries_the_admins_name(client, workspace):
+    sw.write_env(workspace.env, {"ADMIN_NAME": "Kai"})
+    assert client.get("/api/state", headers=HEADERS).json()["adminName"] == "Kai"

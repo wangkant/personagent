@@ -6,7 +6,7 @@ come from the chat lines it cites, never from a model."""
 from __future__ import annotations
 
 import time
-from datetime import datetime
+from datetime import datetime, tzinfo
 from pathlib import Path
 from typing import Optional
 
@@ -133,17 +133,18 @@ class EpisodeStore:
         return rows.pop(min(range(len(rows)), key=key))
 
     def oldest_month(self, conv: str, now: Optional[float] = None,
-                     min_age_days: float = 60, min_count: int = 3) -> list[dict]:
-        """The events of the oldest calendar month (local) that has at least
-        `min_count` events older than `min_age_days`; roll-ups are not rolled
-        up again. Empty when no month qualifies."""
+                     min_age_days: float = 60, min_count: int = 3,
+                     tz: Optional[tzinfo] = None) -> list[dict]:
+        """The events of the oldest calendar month (in `tz`, else local) that
+        has at least `min_count` events older than `min_age_days`; roll-ups
+        are not rolled up again. Empty when no month qualifies."""
         now = time.time() if now is None else now
         cutoff = now - min_age_days * 86400.0
         months: dict[tuple[int, int], list[dict]] = {}
         for row in self.episodes(conv):
             if row.get("rollup") or _num(row.get("t1")) >= cutoff:
                 continue
-            d = datetime.fromtimestamp(_num(row.get("t0")))
+            d = datetime.fromtimestamp(_num(row.get("t0")), tz)
             months.setdefault((d.year, d.month), []).append(row)
         for month in sorted(months):
             if len(months[month]) >= min_count:

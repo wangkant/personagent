@@ -87,7 +87,7 @@ SPEC = Spec(
     # "label: n" throughout, so no count has to agree with a noun.
     learned_text={
         "head": ("Erinnerungen: {memories}, gelernte Antworten: {examples}, "
-                 "Korrekturen: {fixes}, warten auf eine zweite Stimme: {voice}, "
+                 "Korrekturen: {fixes}, in Beobachtung bis zu einer weiteren übereinstimmenden Reaktion: {voice}, "
                  "von mir selbst zu entscheiden: {admin}"),
         "score": ", letzte Selbstbewertung {score}/5",
         "pair": "vorher: {was}, besser: {better}",

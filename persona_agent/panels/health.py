@@ -30,7 +30,8 @@ ERRORS: frozenset[str] = frozenset({"health_busy", "health_failed", "health_inva
 LOGS = ("agent", "astrbot", "direct", "install", "app", "practice", "update")
 SERVICES = ("agent", "astrbot", "direct")
 PROBES = {"Ledger sizes": "ledger", "DM chat": "dm", "Group replies": "chat",
-          "Web search decision": "searchdecide", "Reaction judge": "react", "Vision": "vision", "Eval": "eval", "Embeddings": "embeddings",
+          "Web search decision": "searchdecide", "Reaction judge": "react",
+          "Learning decisions": "decide", "Reviewing its own replies": "evolve", "Vision": "vision", "Eval": "eval", "Embeddings": "embeddings",
           "Web search (Tavily)": "search", "OneBot bridge": "onebot"}
 # Probes retry and run concurrently; their worst case is about 90 s.
 CHECK_TIMEOUT = 150

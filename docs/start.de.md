@@ -35,6 +35,8 @@ Darunter schaltet **Weitere Funktionen** die Websuche, die Bilderkennung und eig
 
 Zwei weitere Ansichten kommen ohne verbundene Plattform aus. **Übung** spielt eine vorgefertigte Demo ab und stellt einen Übungsgruppenchat bereit, in dem Sie nachvollziehen können, warum die Figur antwortet oder schweigt. **App** prüft alle Dienste, auf die die Figur angewiesen ist, zeigt die Protokolle an und bündelt Updates, Sicherungen und das Desktopsymbol.
 
+**Aktivität** zeigt die Chats, in denen die Figur aktiv ist, was sie zuletzt gesagt hat, was sie sich merkt und was sie gelernt hat. Die Figur entscheidet selbst, was sie lernt, und hält ihr Gedächtnis selbst aktuell; nichts davon wartet auf Sie. Sie können dennoch alles rückgängig machen, was sie gelernt hat, und alles vergessen lassen oder wiederherstellen, was sie sich merkt.
+
 ## Auf andere Plattformen bringen
 
 1. Klicken Sie auf **Plattformen verbinden** und wählen Sie eine Plattform. Sobald sie verbunden ist, antwortet Ihre Figur in den Gruppenchats und Direktnachrichten dieser Plattform.

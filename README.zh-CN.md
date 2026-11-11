@@ -36,6 +36,7 @@ personagent 是一个用于群聊的角色：可选用现成角色或自行编�
 <td valign="top">
 纠正所教的内容（例如群里对健身房的称呼）会应用于该聊天此后的每一条回复。<br>
 恶意干扰者和旁观者都无法教坏角色。<br>
+反应无法确定的改动由角色自行判断并记录理由，任何内容都无需他人批准。<br>
 每一处改动均有记录，且均可撤回。
 </td>
 </tr>
@@ -55,7 +56,7 @@ personagent 是一个用于群聊的角色：可选用现成角色或自行编�
 </tr>
 </table>
 
-每个聊天都有独立的记忆，也可以让角色忘记指定内容：`小夏，记住 阿杰不吃辣`、`小夏 忘掉 不吃辣`（[记忆命令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#教导角色)）。
+每个聊天都有独立的记忆：重新启动后仍在的近期消息、此前对话的摘要、带日期的事件，以及关于成员的事实，均由角色自行保持更新。也可以让角色忘记指定内容：`小夏，记住 阿杰不吃辣`、`小夏 忘掉 不吃辣`（[记忆命令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#教导角色)）。「动态」中会显示角色记住的全部内容，其中任何一项都可以删除或恢复（[记忆](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#记忆)）。
 
 ## 快速开始
 

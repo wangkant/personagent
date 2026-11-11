@@ -106,6 +106,25 @@ def test_the_terminal_speaks_the_install_language(home, monkeypatch, capsys) -> 
     check("zh: the refusal", "没有与该编号对应的项。" in capsys.readouterr().out)
 
 
+def test_refusals_say_where_to_look(home, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(memory_admin, "_memory_command", lambda sub="": f"personagent memory {sub}".strip())
+    check("an unknown id", run("forget", "zzz") == 1)
+    out = capsys.readouterr().out
+    check("the refusal and the listing to run",
+          "No item has that id.\nRun `personagent memory` to see the ids." in out, out)
+    check("an unknown removed id", run("restore", "xyz") == 1)
+    check("points at what was removed", "Run `personagent memory removed` to see the ids."
+          in capsys.readouterr().out)
+    check("an unknown chat", run("list", "--chat", "telegram:nope") == 0)
+    out = capsys.readouterr().out
+    check("not read as an empty memory",
+          "No chat with the key telegram:nope holds anything remembered. Run `personagent "
+          "memory` to see the chats and their keys." in out and "Nothing is remembered." not in out, out)
+    monkeypatch.setenv("AGENT_LANG", "zh")
+    run("list", "--chat", "telegram:nope")
+    check("zh", "键为 telegram:nope 的聊天中没有任何记忆。" in capsys.readouterr().out)
+
+
 def test_a_damaged_memory_file_is_one_sentence_naming_the_copy(home, capsys) -> None:
     memory = home / "runtime" / "memory.json"
     (home / "runtime" / "memory.json.bak").write_text("{}", encoding="utf-8")
@@ -113,7 +132,8 @@ def test_a_damaged_memory_file_is_one_sentence_naming_the_copy(home, capsys) -> 
     check("exit 1, no traceback", run() == 1)
     err = capsys.readouterr().err
     check("the file, the copy and what to do",
-          err.startswith("memory.json is damaged and was left untouched. A copy from ")
+          err.startswith(f"The memory file {memory} is damaged and was left untouched. "
+                         "A copy from ")
           and str(home / "runtime" / "memory.json.bak") in err and "Traceback" not in err, err)
     check("the damaged file is left as it was", memory.read_text(encoding="utf-8") == '{"broken')
 
@@ -121,8 +141,17 @@ def test_a_damaged_memory_file_is_one_sentence_naming_the_copy(home, capsys) -> 
 def test_the_damaged_sentence_is_translated(home, monkeypatch) -> None:
     monkeypatch.setenv("AGENT_LANG", "de")
     error = memstore.MemoryFileDamaged(home / "runtime" / "episodes.json")
+    path = home / "runtime" / "episodes.json"
     check("without a copy", memory_admin.damaged_sentence(error)
-          == "episodes.json ist beschädigt und wurde nicht verändert.")
+          == f"Die Gedächtnisdatei {path} ist beschädigt und wurde nicht verändert; eine "
+          "frühere Kopie davon gibt es nicht. Verschieben Sie die beschädigte Datei, zum "
+          "Beispiel durch Umbenennen, um mit einem leeren Gedächtnis zu starten.")
+    trial = home / "runtime" / "trial"
+    sentence = memory_admin.damaged_sentence(
+        memstore.MemoryFileDamaged(trial / "memory.json"), trial=trial)
+    check("the trial's own file is named as the trial's",
+          sentence.startswith(f"Die Gedächtnisdatei {trial / 'memory.json'} des Probechats")
+          and f"Löschen Sie den Ordner {trial}," in sentence, sentence)
 
 
 @pytest.fixture

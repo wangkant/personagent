@@ -7,7 +7,9 @@ lifecycle event, not a field:
         |                     |
         |                     +--supersede--> superseded  (replacement promoted)
         +--reject---------> rejected --restore--> promoted  (a person, only
-                                                  after the character's discard)
+                                                  after the character's discard;
+                                                  rolled_back too, after the
+                                                  character's or a rule's)
 
 A ``review`` row records that the character looked and keeps observing; it
 changes no state.
@@ -226,14 +228,18 @@ def _review_entry(row: dict) -> dict:
 
 
 def restorable(cand: dict | None) -> bool:
-    """Was this candidate set aside by the character or by the time limit,
-    so a person may bring it back; a person's discard stays final."""
-    if not cand or cand.get("state") != STATE_REJECTED:
+    """Was this candidate set aside by the character or by the time limit, or
+    taken out of use by the character or a rule, so a person may bring it
+    back; a person's own decision stays final."""
+    state = (cand or {}).get("state")
+    if state not in (STATE_REJECTED, STATE_ROLLED_BACK):
         return False
     history = cand.get("history") or []
-    if not history or history[-1].get("state") != STATE_REJECTED:
+    if not history or history[-1].get("state") != state:
         return False
     last = history[-1]
+    if state == STATE_ROLLED_BACK:
+        return last.get("actor") in (ACTOR_CHARACTER, ACTOR_AUTO)
     return (last.get("actor") in RESTORABLE_ACTORS
             or (last.get("actor") == ACTOR_AUTO
                 and last.get("judge") in RESTORABLE_JUDGES))
@@ -467,8 +473,8 @@ class CandidateLedger:
 
     def restore(self, cid: str, *, ts: str, actor: str,
                 reason: str = "") -> bool:
-        """A person puts back in use what the character or the time limit set
-        aside. Not a wider
+        """A person puts back in use what the character, a rule or the time
+        limit set aside or withdrew (`restorable`). Not a wider
         transition table: a person's discard stays final, and no automatic
         actor may restore anything."""
         if actor in (ACTOR_AUTO, ACTOR_CHARACTER) or not str(actor or "").strip():

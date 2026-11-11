@@ -212,7 +212,7 @@
 "set aside after a long time without a new reaction": "因長時間未收到新的反應，已依時限擱置",
 "observing": "觀察中",
 "stopped using {n} learned {rows} about that reply": "已停用 {n} 項與該回覆相關的學習結果",
-"waiting for your reaction to its retry": "正在等待你對重試回覆作出反應",
+"under observation: it takes effect when one more agreeing reaction arrives, and your next reaction to its retry is weighed as that reaction": "進入觀察：再獲得一次一致的反應即生效，你對重試回覆的下一次反應將作為該反應予以判定",
 "nothing to learn": "無可學習的內容",
 "{strong} of {need} strong reactions so far": "明確證據目前為 {strong}/{need} 則",
 "{events} of {need} agreeing reactions so far": "一致的反應目前為 {events}/{need} 則",
@@ -434,5 +434,6 @@
 "{who} liked {said}": "{who}認可了{said}",
 "{who} moved on from {said}": "{who}未回應{said}",
 "{who} accepted the second try {said}": "{who}接受了第二次回覆{said}",
-"{who} moved on from the second try {said}": "{who}未對第二次回覆{said}表態"
+"{who} moved on from the second try {said}": "{who}未對第二次回覆{said}表態",
+"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "「{choice}」不是可選項目。請輸入 0 至 {n} 之間的數字。"
 }

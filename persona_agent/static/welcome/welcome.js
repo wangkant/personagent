@@ -1,7 +1,12 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 // What the panels registered: see PA at the end of this file.
-const panelHooks = { show: {}, state: [], language: [] };
+const panelHooks = { show: {}, state: [], language: [], learned: [] };
+// After anything changed what was learned or where it applies: every place that shows it reads it again.
+function learnedChanged(from) {
+  for (const reread of panelHooks.learned) if (reread !== from) reread();
+  if (from) activityLoop();
+}
 const translations = {
   zh: {
     chat: "开始聊天",
@@ -88,7 +93,16 @@ const translations = {
     activityFoldUsed: "记忆整理：今日已使用 {used} 次调用，上限为 {cap} 次。",
     activityFoldPaused: "记忆整理因出错已暂停，下次尝试时间为 {time}。",
     activityForgetChat: "清除此聊天的记忆",
-    activityForgetChatAsk: "角色将清除在此聊天中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容。其他聊天中记住的内容将予以保留。此操作无法撤销。",
+    activityForgetChatAsk: "角色将清除在此聊天中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容。其他聊天中记住的内容将予以保留。在此聊天中学到的内容也将保留并继续使用。此操作无法撤销。",
+    activityForgetOldChatAsk: "角色将清除在此聊天中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容。其他聊天中记住的内容将予以保留。此操作无法撤销。",
+    ariaNav: "导航",
+    ariaLanguage: "页面语言",
+    ariaSend: "发送",
+    ariaChats: "聊天列表",
+    activityAdmin: "管理员",
+    activityLearnedRetired: "本页面的这次对话已由新的对话取代。角色在此学到或正在观察的内容已不再使用，列在「角色学到的内容」的「已搁置」中。",
+    characterLang: "角色使用的语言",
+    characterLangNote: "角色以此语言交流和学习。页面顶部选择的语言只改变本页面的显示。",
     activityChatForgotten: "已清除此聊天的记忆。",
     justNow: "刚刚",
     minutesAgo: "{n} 分钟前",
@@ -130,7 +144,7 @@ const translations = {
     hide: "隐藏",
     keyNote: "密钥保存在本机；聊天内容会发送至你选择的模型服务。",
     advanced: "高级设置",
-    characterOptions: "更改角色名称或性格",
+    characterOptions: "更改角色名称、性格或语言",
     name: "角色名称",
     character: "性格",
     customKept: "现有人设将保留；仅在选择新的性格时才会被替换。",
@@ -188,7 +202,7 @@ const translations = {
     chatHint: "本机对话，你在此处的身份是管理员。",
     newChat: "新对话",
     forgetChat: "清除本次对话的记忆",
-    forgetChatAsk: "角色将清除在本次对话中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容，随后开始新的对话。其他聊天中记住的内容将予以保留。此操作无法撤销。",
+    forgetChatAsk: "角色将清除在本次对话中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容，随后开始新的对话。角色在本次对话中学到的内容此后不再使用，仍列在「角色学到的内容」的「已搁置」中。其他聊天中记住的内容将予以保留。此操作无法撤销。",
     forget_needs_activity: "清除记忆需要先开启动态数据，可在「角色与设置」的高级设置中开启。",
     forgetChatDone: "已清除本次对话的记忆，并已开始新的对话。",
     forgetChatNone: "本次对话中没有记下任何内容，已开始新的对话。",
@@ -437,7 +451,16 @@ const translations = {
     activityFoldUsed: "Memory consolidation: {used} of {cap} calls used today.",
     activityFoldPaused: "Memory consolidation is paused after errors; the next attempt is at {time}.",
     activityForgetChat: "Forget this chat",
-    activityForgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. What it remembers from other chats is kept. This cannot be undone.",
+    activityForgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. What it remembers from other chats is kept. What it learned in this chat is kept and stays in use. This cannot be undone.",
+    activityForgetOldChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. What it remembers from other chats is kept. This cannot be undone.",
+    ariaNav: "Navigation",
+    ariaLanguage: "Page language",
+    ariaSend: "Send",
+    ariaChats: "Chats",
+    activityAdmin: "Admin",
+    activityLearnedRetired: "This chat on this page has been replaced by a new chat. What the character learned or was observing here is no longer used; it is listed under Set aside in What the character has learned.",
+    characterLang: "Language the character speaks",
+    characterLangNote: "The character talks and learns in this language. The language chosen at the top of the page changes only how this page reads.",
     activityChatForgotten: "The character has forgotten this chat.",
     justNow: "just now",
     minutesAgo: "{n} min ago",
@@ -482,7 +505,7 @@ const translations = {
     keyNote:
       "Your key stays on this computer. Chats go to the model service you choose.",
     advanced: "Advanced settings",
-    characterOptions: "Choose a name or personality",
+    characterOptions: "Choose a name, personality or language",
     name: "Character name",
     character: "Personality",
     customKept:
@@ -544,7 +567,7 @@ const translations = {
     chatHint: "A chat on this computer. Here you are the admin.",
     newChat: "New chat",
     forgetChat: "Forget this chat",
-    forgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. A new chat then starts. What it remembers from other chats is kept. This cannot be undone.",
+    forgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. A new chat then starts. What the character learned in this chat is no longer used from then on; it remains listed under Set aside in What the character has learned. What it remembers from other chats is kept. This cannot be undone.",
     forget_needs_activity: "Forgetting a chat needs activity data, which is switched off. Turn it on in the advanced settings under Character & settings.",
     forgetChatDone: "The character has forgotten this chat, and a new chat has started.",
     forgetChatNone: "The character had noted nothing in this chat. A new chat has started.",
@@ -725,8 +748,8 @@ const translations = {
 };
 // The page's languages and their BCP 47 tags. English and Chinese live above;
 // the others are translations in /assets/i18n/<code>.json, loaded when chosen,
-// and a string one lacks shows in English. Saving the settings makes the page's
-// language AGENT_LANG.
+// and a string one lacks shows in English. The character's own language
+// (AGENT_LANG) is chosen on the setup card, not here.
 const LANGS = {
   en: "en",
   zh: "zh-CN",
@@ -862,6 +885,8 @@ function renderText() {
   $("language").value = lang;
   for (const node of document.querySelectorAll("[data-t]"))
     label(node, t(node.dataset.t));
+  for (const node of document.querySelectorAll("[data-t-aria]"))
+    node.setAttribute("aria-label", t(node.dataset.tAria));
   $("message").placeholder = t("message");
   for (const image of document.querySelectorAll("#messages .picture img")) image.alt = pictureAlt();
 }
@@ -986,6 +1011,12 @@ function populate() {
   $("api-key").placeholder = state.configured ? t("keySaved") : "sk-…";
   providerChanged(false);
   updateNames();
+  // The character's language is a setting; the page's own language is the reader's.
+  const speaks = $("character-lang");
+  if (!speaks.options.length)
+    speaks.append(...[...$("language").options].map((o) => new Option(o.textContent, o.value)));
+  speaks.value = (state.configured && state.lang) || lang;
+  if (!speaks.value) speaks.value = lang;
 }
 function freeNoteChanged() {
   $("free-note").hidden = $("model").value.trim() !== "openrouter/free";
@@ -1730,12 +1761,15 @@ function cameInText(info) {
     return t("activityByCharacter", { reason: info.why || "" });
   return t(info.by === "reactions" ? "activityByReactions" : "activityByPerson");
 }
+// The person at this page, as its own chat names them: the admin's name, or the word for an admin.
+function pagePerson() {
+  return state?.adminName || t("activityAdmin");
+}
 function change(item, observed) {
   const card = el("div", `change${observed ? " observed" : ""}`);
   const top = el("div", "change-top");
-  const who = item.from.length
-    ? t("activityFrom", { who: item.from.join(t("listSep")) })
-    : "";
+  const from = item.self ? [pagePerson()] : item.from;
+  const who = from.length ? t("activityFrom", { who: from.join(t("listSep")) }) : "";
   top.append(
     el(
       "span",
@@ -1778,7 +1812,8 @@ function recentLine(row) {
   const item = el("li", row.spoke ? "spoke" : "passed");
   const said = (text) => {
     const line = el("p", "message");
-    if (row.sender) line.append(el("strong", "", `${row.sender} `));
+    const sender = row.self ? pagePerson() : row.sender;
+    if (sender) line.append(el("strong", "", `${sender} `));
     line.append(text);
     return line;
   };
@@ -1817,6 +1852,8 @@ function renderChat() {
   const parts = [head];
   if (activityError)
     parts.push(el("p", "activity-note error-note", t(activityError)));
+  if (chat.retired && (chat.learned.length || chat.observing.length))
+    parts.push(el("p", "activity-note", t("activityLearnedRetired")));
   if (chat.learned.length) {
     const part = section("activityLearned", chat.learned.length);
     for (const item of chat.learned) part.append(change(item, false));
@@ -1895,6 +1932,7 @@ async function decide(item, verb) {
     });
     if (seq === activitySeq) activityChat = chat;
     toast(t("activityUndone"));
+    learnedChanged();
   } catch (error) {
     toast(t(error.message));
   } finally {
@@ -2022,8 +2060,10 @@ function memorySection(chat) {
       memoryItem(
         note.text,
         [
-          note.about && t("activityAbout", { who: note.about }),
-          note.saidBy && t("activitySaidBy", { name: note.saidBy }),
+          (note.aboutSelf || note.about) &&
+            t("activityAbout", { who: note.aboutSelf ? pagePerson() : note.about }),
+          (note.saidBySelf || note.saidBy) &&
+            t("activitySaidBy", { name: note.saidBySelf ? pagePerson() : note.saidBy }),
           note.by && note.by !== "auto" && t("activityFrom", { who: note.by }),
           note.conv !== chat.id && t("activityRoomNote"),
           note.born && t("activityFirstNoted", { date: activityDate(note.born) }),
@@ -2039,7 +2079,7 @@ function memorySection(chat) {
     events.map((event) =>
       memoryItem(
         event.text,
-        [eventWhen(event), event.names.join(t("listSep"))],
+        [eventWhen(event), [...(event.self ? [pagePerson()] : []), ...event.names].join(t("listSep"))],
         forgetButton(`forget:episode:${event.id}`, () =>
           forget("episode", chat.id, event.id),
         ),
@@ -2110,12 +2150,18 @@ function restore(tid) {
 async function forgetWholeChat() {
   if (activityBusy) return;
   const chat = activitySelected;
-  if (!(await ask(t("activityForgetChatAsk"), t("activityForgetChat")))) return;
+  // This page's own chat starts anew, as its own Forget does, and asks the same question.
+  // An earlier page chat's learned items are already out of use; another chat's stay in use.
+  const retired = activityChat?.id === chat && Boolean(activityChat.retired);
+  const page = chat.startsWith("private:browser:") && !retired;
+  const question = page ? "forgetChatAsk" : retired ? "activityForgetOldChatAsk" : "activityForgetChatAsk";
+  if (!(await ask(t(question), t("activityForgetChat")))) return;
   await memoryCall("activity/forget_chat", { chat }, () => {
-    toast(t("activityChatForgotten"));
-    // This page's own chat starts anew, as its own Forget does.
-    if (chat.startsWith("private:browser:"))
+    toast(t(page ? "forgetChatDone" : "activityChatForgotten"));
+    if (page) {
       api("chat/history").then(showHistory, () => {});
+      learnedChanged();
+    }
   });
 }
 // As many messages as the server keeps; the history tells the page its number.
@@ -2329,6 +2375,8 @@ $("language").addEventListener("change", async () => {
   }
   if (!state.name && $("character-name").value === oldDefault)
     $("character-name").value = defaultName();
+  // Before the first setup the reader's language is the natural first choice.
+  if (!state.configured) $("character-lang").value = lang;
   renderLanguage();
   showView(view);
 });
@@ -2486,7 +2534,7 @@ $("settings-form").addEventListener("submit", async (event) => {
       model: $("model").value,
       name: $("character-name").value,
       character: $("character").value,
-      lang,
+      lang: $("character-lang").value || lang,
     });
     // A chosen personality rewrote persona.txt: drop the box's old text.
     if ($("character").value !== "custom") {
@@ -2568,6 +2616,7 @@ $("forget-chat").addEventListener("click", async () => {
     const done = await api("chat/forget", {});
     showHistory(await api("chat/history"));
     toast(done.forgotten ? t("forgetChatDone") : t("forgetChatNone"));
+    learnedChanged();
   } catch (error) {
     toast(t(error.message));
   } finally {
@@ -2579,6 +2628,7 @@ $("reset-chat").addEventListener("click", async () => {
   try {
     await api("chat/reset", {});
     showHistory(await api("chat/history"));
+    learnedChanged();
   } catch (error) {
     toast(t(error.message));
   }
@@ -2713,6 +2763,14 @@ window.PA = {
   // fn(state) each time the page's state is read again.
   onState(fn) {
     panelHooks.state.push(fn);
+  },
+  // fn() after something elsewhere on the page changed what was learned or where it applies.
+  onLearned(fn) {
+    panelHooks.learned.push(fn);
+  },
+  // A panel changed what was learned: the other places that show it read it again.
+  learnedChanged(fn) {
+    learnedChanged(fn);
   },
   // fn() after the page changes language.
   onLanguage(fn) {

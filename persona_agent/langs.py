@@ -164,18 +164,24 @@ def terminal_lang() -> str:
     return _terminal_lang[key]
 
 
-def term(text: str) -> str:
-    """One terminal sentence in the language of this install, slots kept."""
+def term(text: str, *, keep: tuple = ()) -> str:
+    """One terminal sentence in the language of this install, slots kept. A
+    slot holding a sentence is translated too; one holding a value in `keep`
+    (a name, a quotation) stays as given, even if it reads like a word here."""
     lang = terminal_lang()
     if lang == "en":
         return text
     sentences, shapes = _terminal_catalog(lang)
     if text in sentences:
         return sentences[text]
+    kept = {str(value) for value in keep}
+
+    def fill(value: str) -> str:
+        return value if value in kept else term(value)
     for pattern, there in shapes:
         match = pattern.fullmatch(text)
         if match:
-            return re.sub(r"\{(\d)\}", lambda slot: term(match[f"s{slot[1]}"]), there)
+            return re.sub(r"\{(\d)\}", lambda slot: fill(match[f"s{slot[1]}"]), there)
     if "\n" in text:
         return "\n".join(term(line) for line in text.split("\n"))
     return text

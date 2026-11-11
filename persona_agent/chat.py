@@ -133,7 +133,8 @@ _TEXT = {
         "same_chat": ", same chat",
         "held": "not in use yet: {why}",
         "rolled_back": "stopped using {n} learned {rows} about that reply",
-        "armed": "waiting for your reaction to its retry",
+        "armed": ("under observation: it takes effect when one more agreeing reaction "
+                  "arrives, and your next reaction to its retry is weighed as that reaction"),
         "nothing": "nothing to learn",
         "why_off": "automatic learning is switched off, so nothing new is put in use",
         "why_deciding": "the character is deciding it itself",
@@ -238,7 +239,7 @@ _TEXT = {
         "same_chat": "，来自同一聊天",
         "held": "尚未生效：{why}",
         "rolled_back": "已停用 {n} 条与该回复相关的学习结果",
-        "armed": "正在等待你对重试回复作出反应",
+        "armed": "进入观察：再获得一次一致的反应即生效，你对重试回复的下一次反应将作为该反应予以判定",
         "nothing": "无可学习的内容",
         "why_off": "自动学习已关闭，不会启用任何新内容",
         "why_deciding": "角色正在自行判断此项",
@@ -988,18 +989,24 @@ def trace(lang: str, r: Reaction, doctor: str | None = None) -> str:
     return t["learning"].format(text=verdicts + t["then"] + outcome)
 
 
+def _marks(lang: str) -> tuple[str, str, str]:
+    """A label's colon and a remark's brackets as the language writes them."""
+    return ("：", "（", "）") if lang in ("zh", "zh-TW", "ja") else (": ", " (", ")")
+
+
 def candidate_line(lang: str, agent: Agent, cand: dict) -> str:
     t = text_for(lang)
+    colon, opened, closed = _marks(lang)
     kind = t["kind_pair" if cand.get("type") == candidates.TYPE_PAIR else "kind_example"]
     what = f'"{clip(cand.get("reply"))}"'
     if cand.get("better"):
         what += f' -> "{clip(cand.get("better"))}"'
     state = cand.get("state", "")
-    line = f"{kind} {cand['candidate_id'][:8]} {what}: {state_label(lang, state)}"
+    line = f"{kind} {cand['candidate_id'][:8]} {what}{colon}{state_label(lang, state)}"
     if state == candidates.STATE_PROPOSED:
-        line += f" ({held_reason(lang, checklist(agent, cand))})"
+        line += f"{opened}{held_reason(lang, checklist(agent, cand))}{closed}"
     elif decided_reason(lang, cand):
-        line += f" ({decided_reason(lang, cand)})"
+        line += f"{opened}{decided_reason(lang, cand)}{closed}"
     return line
 
 
@@ -1038,7 +1045,7 @@ def why_lines(lang: str, trial: Trial, name: str) -> list[str]:
         return lines
     lines.append(t["why_ledger"])
     for e in events:
-        lines.append(f"    {e.get('speaker_name') or '?'}: {judged(lang, e)}")
+        lines.append(f"    {e.get('speaker_name') or '?'}{_marks(lang)[0]}{judged(lang, e)}")
     for cand in cands:
         lines.append("    " + candidate_line(lang, trial.agent, cand))
     return lines
@@ -1079,8 +1086,8 @@ def build_agent(lang: str, trigger: int) -> tuple[Agent, Path]:
             agent = Agent(settings)
         except MemoryFileDamaged as error:
             from persona_agent import memory_admin
-            # One sentence naming the file and its copy, as the other commands give.
-            print(memory_admin.damaged_sentence(error), file=sys.stderr)
+            # The damaged file is the trial's own copy, never the live memory.
+            print(memory_admin.damaged_sentence(error, trial=state), file=sys.stderr)
             raise SystemExit(1) from None
     finally:
         if saved is None:

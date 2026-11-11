@@ -35,6 +35,8 @@ Abaixo dela, **Mais recursos** ativa a pesquisa na web, a compreensão de imagen
 
 Outras duas visões não exigem nenhuma plataforma. **Prática** reproduz uma demonstração roteirizada e oferece um grupo de prática, no qual é possível ver por que o personagem responde ou permanece em silêncio. **Aplicativo** verifica cada serviço de que o personagem depende, exibe os logs e reúne as atualizações, os backups e o ícone da área de trabalho.
 
+**Atividade** mostra as conversas em que o personagem está, o que ele disse recentemente, o que ele lembra e o que aprendeu. O personagem decide por conta própria o que aprende e mantém a memória atualizada; nada ali espera por você. Ainda assim, você pode desfazer qualquer coisa que ele aprendeu e esquecer ou restaurar qualquer coisa que ele lembra.
+
 ## Conecte outras plataformas
 
 1. Clique em **Conectar plataformas** e escolha uma plataforma. Após a conexão, o personagem responde nos grupos e nas conversas privadas dessa plataforma.

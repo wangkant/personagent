@@ -78,9 +78,9 @@ Cada solicitação traz uma mensagem e devolve as respostas a ela.
 }
 ```
 
-Os campos obrigatórios são `platform`, `conversation_type` (`group` ou `dm`), `sender_id`, `message_id` e `sent_at`, mais `conversation_id` para grupos. `sent_at` é quando a plataforma carimbou a mensagem, em segundos unix. Envie os ids brutos da plataforma. O agente acrescenta o prefixo.
+Os campos obrigatórios são `platform`, `conversation_type` (`group` ou `dm`), `sender_id`, `message_id` e `sent_at`, mais `conversation_id` para grupos. `sent_at` é quando a plataforma carimbou a mensagem, em segundos unix. O personagem vê cada mensagem com esse horário. Uma mensagem de grupo que tem mais de 10 minutos quando chega, nos dois minutos seguintes à primeira mensagem da plataforma desde que o agente foi iniciado, é um acúmulo entregue depois de um reinício: é mantida como contexto e não é respondida. Passados esses dois minutos, um `sent_at` antigo deixa de reter uma mensagem, de modo que um conector cujo relógio está atrasado continua recebendo respostas. Envie os ids brutos da plataforma. O agente acrescenta o prefixo.
 
-O conector define `addressed`. É verdadeiro quando a mensagem menciona o bot, responde a uma das mensagens do bot ou é dirigida ao bot pelas regras da própria plataforma. O agente também percebe sozinho o próprio nome no texto. Ele lê uma citação da própria mensagem, ou uma @ ao bot, como uma reação com a qual pode aprender, então defina `addressed` nas respostas ao bot. Uma citação da mensagem de outro membro nunca é uma reação ao bot.
+O conector define `addressed`. É verdadeiro quando a mensagem menciona o bot, responde a uma das mensagens do bot ou é dirigida ao bot pelas regras da própria plataforma. O agente também percebe sozinho o próprio nome no texto. Ele lê uma citação da própria mensagem, ou uma @ ao bot, como uma reação com a qual pode aprender, então defina `addressed` nas respostas ao bot. Uma citação da mensagem de outro membro nunca é uma reação ao bot. Uma menção ao bot dentro de uma mensagem encaminhada não se dirige ao bot, então não defina `addressed` para ela.
 
 Um evento cujo `sender_id` é igual ao `bot_id` é a própria mensagem do bot devolvida como eco. O agente a descarta sem ler e responde `{"handled": false, "owned": true, "replies": []}`, de modo que a lógica de bot do próprio conector também permaneça em silêncio. Ignore esses eventos no conector.
 
@@ -89,12 +89,14 @@ Os segmentos vêm em ordem:
 | Tipo | Campos | Observações |
 |---|---|---|
 | `text` | `text` | |
-| `mention` | `user_id`, `name` | Uma menção a alguém. Menciona o bot quando `user_id` é igual a `bot_id`. |
-| `image` | `url` ou `b64`, `sticker` (booleano) | `sticker` marca uma figurinha enviada como imagem. |
+| `mention` | `user_id`, `name` | Uma menção a alguém. Menciona o bot quando `user_id` é igual a `bot_id`. O personagem lê `name` no lugar do id, então envie-o. `name` chega ao modelo marcado como um nome que o remetente não escreveu, então nunca chama o personagem nem dá um comando. Uma menção ao bot depois de um segmento `forward` não é uma chamada. |
+| `image` | `url` ou `b64`, `sticker` (booleano) | `sticker` marca uma figurinha enviada como imagem. Uma imagem de grupo enviada como `b64`, ou marcada com `sticker`, pode ser coletada para a biblioteca de figurinhas; uma foto enviada apenas como `url` não é coletada. |
 | `emoji` | `name`, `id` | Uma figurinha da plataforma ou emoji personalizado que o agente não consegue ver. `name` é como uma pessoa o chamaria. |
+| `media` | `kind`, `name`, `transcript`, `emoji` | Algo que o agente não consegue ver. `kind` é `voice`, `video`, `file`, `photo` (uma imagem que não pôde ser obtida) ou `sticker`. Acrescente `name` a um arquivo, `transcript` a uma mensagem de voz que a plataforma transcreveu e `emoji` a uma figurinha. |
+| `forward` | `name` | Os segmentos depois dele foram encaminhados de `name`, não escritos pelo remetente. `name` pode estar vazio. O texto deles é lido como palavras da pessoa cuja mensagem foi encaminhada: não chama ninguém pelo nome nem executa nenhum comando de memória. Coloque o comentário do próprio remetente antes do segmento `forward` ou envie-o como uma mensagem separada. |
 | `reply` | `message_id`, `text`, `sender_id`, `sender_name` | A mensagem que esta cita. Envie `text` sempre que a plataforma fornecer. |
 
-Descreva qualquer outra coisa em palavras, como um segmento `text` do tipo `(sent a voice message)` ou `(sent a file: deck.pdf)`. O agente descarta tipos de segmento desconhecidos.
+Envie mídias como um segmento `media`, nunca em palavras como `(sent a voice message)`: o personagem as leria como se tivessem sido digitadas pelo remetente. O agente descarta tipos de segmento desconhecidos.
 
 Estes campos opcionais ativam mais do agente:
 
@@ -115,7 +117,7 @@ A resposta é assim:
 ]}
 ```
 
-- `replies`: envie em ordem, cada uma como uma mensagem separada. Quando `mention_user_id` está presente, é o id com prefixo a mencionar. Exiba a menção da forma usada pela plataforma.
+- `replies`: envie em ordem, cada uma como uma mensagem separada. Quando `mention_user_id` está presente, é o id com prefixo a mencionar. Exiba a menção da forma usada pela plataforma. Um item com `"reason": "excuse"` é a mensagem curta que o personagem envia em uma conversa privada quando o modelo falhou, não uma resposta. Envie-o como os demais ou trate-o como um erro.
 - `owned`: o agente assumiu esta conversa. Quando é verdadeiro, impeça qualquer outra lógica de bot de responder, mesmo que `replies` esteja vazio, porque a persona optou por permanecer em silêncio. Quando é falso, a mensagem é sua. Ou a conversa não está nas listas de permissão do agente, ou o agente não consegue responder de forma alguma (sem `LLM_API_KEY`, ou `AGENT_ENABLED=false`). No segundo caso, o log do agente traz uma linha ERROR com a causa.
 - A solicitação dura até o turno terminar, que é um debounce curto mais o tempo do modelo. As chamadas ao modelo de um turno dividem um único orçamento de 1,5 × `LLM_TIMEOUT_S`, novas tentativas incluídas, tanto em um grupo quanto em uma conversa privada, e uma mensagem que chega enquanto um turno anterior da sua conversa ainda está pensando aguarda esse turno terminar antes de começar o seu. Reserve pelo menos 3 × `LLM_TIMEOUT_S` segundos (360 com o padrão).
 - Um comando de memória (como "remember ...") que chega enquanto um turno da sua conversa ainda está pensando é respondido depois desse turno. Um conector que declarou `outbox` recebe `{"handled": false, "owned": true, "replies": []}` na hora e o resultado depois, como uma entrega `follow_up`. Sem `outbox`, o resultado vem na resposta a uma solicitação: a dele mesmo ou a de outra solicitação em espera da mesma conversa, então uma resposta pode trazer `replies` que mencionam outra pessoa que não o remetente do evento.

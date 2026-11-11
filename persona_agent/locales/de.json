@@ -210,7 +210,7 @@
 "set aside after a long time without a new reaction": "nach langer Zeit ohne neue Reaktion zurückgestellt",
 "observing": "in Beobachtung",
 "stopped using {n} learned {rows} about that reply": "nutzt {n} gelernte {rows} zu dieser Antwort nicht mehr",
-"waiting for your reaction to its retry": "wartet auf Ihre Reaktion auf den zweiten Versuch",
+"under observation: it takes effect when one more agreeing reaction arrives, and your next reaction to its retry is weighed as that reaction": "unter Beobachtung: Es wird wirksam, sobald eine weitere übereinstimmende Reaktion eintrifft, und Ihre nächste Reaktion auf den zweiten Versuch wird als diese Reaktion gewertet",
 "nothing to learn": "nichts zu lernen",
 "{strong} of {need} strong reactions so far": "starke Reaktionen bisher: {strong} von {need}",
 "{events} of {need} agreeing reactions so far": "übereinstimmende Reaktionen bisher: {events} von {need}",
@@ -434,5 +434,6 @@
 "{who} liked {said}": "{who} hat {said} positiv aufgenommen",
 "{who} moved on from {said}": "{who} hat auf {said} nicht reagiert",
 "{who} accepted the second try {said}": "{who} hat den zweiten Versuch {said} akzeptiert",
-"{who} moved on from the second try {said}": "{who} hat auf den zweiten Versuch {said} nicht reagiert"
+"{who} moved on from the second try {said}": "{who} hat auf den zweiten Versuch {said} nicht reagiert",
+"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "„{choice}“ ist keine der verfügbaren Optionen. Geben Sie eine Zahl von 0 bis {n} ein."
 }

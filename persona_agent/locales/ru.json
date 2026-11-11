@@ -284,7 +284,7 @@
 "set aside after a long time without a new reaction": "отложено: долгое время не было новых реакций",
 "observing": "под наблюдением",
 "stopped using {n} learned {rows} about that reply": "больше не использует выученное об этом ответе, строк: {n}",
-"waiting for your reaction to its retry": "ожидается ваша реакция на вторую попытку",
+"under observation: it takes effect when one more agreeing reaction arrives, and your next reaction to its retry is weighed as that reaction": "под наблюдением: вступит в силу, когда поступит ещё одна согласная реакция, и ваша следующая реакция на вторую попытку будет оценена как эта реакция",
 "nothing to learn": "учиться нечему",
 "{strong} of {need} strong reactions so far": "сильных реакций пока: {strong} из {need}",
 "{events} of {need} agreeing reactions so far": "согласных реакций пока: {events} из {need}",
@@ -429,5 +429,6 @@
 "{who} moved on from {said}": "{who} переходит к другой теме после ответа {said}",
 "{who} accepted the second try {said}": "{who} принимает вторую попытку {said}",
 "{who} moved on from the second try {said}": "{who} переходит к другой теме после второй попытки {said}",
-"fixes": "исправления"
+"fixes": "исправления",
+"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "«{choice}» не является одним из вариантов. Введите число от 0 до {n}."
 }

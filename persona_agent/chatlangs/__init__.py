@@ -107,6 +107,9 @@ class Spec:
     #: What must follow "I am <name>" for it to be a claim, where word order
     #: lets the name be an object ("私はChatGPTを使う"): a copula, a comma.
     name_end: str = ""
+    #: The maker comes before `made_by` and the copula ends the clause
+    #: ("OpenAIが開発したAIです"), so a made-by claim needs that copula.
+    maker_first: bool = False
     #: Protocol labels a model leaks as "Label: ...", one alternation.
     leak_labels: str = ""
     #: An assistant's refusal or "hope this helps", never a person's chat.

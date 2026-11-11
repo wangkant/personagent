@@ -16,8 +16,10 @@ from typing import Optional
 from . import channels
 from . import memstate
 from . import memstore
+from . import people
 from . import ranking
 from . import timewords
+from .memory import _SENTENCE_END
 from .textproc import _clean_prompt_source, _fence_user_data, _focus_tokens, strip_json_fences
 
 logger = logging.getLogger("agent")
@@ -116,17 +118,23 @@ def _imp(value, default: Optional[int] = memstore.IMP_DEFAULT) -> Optional[int]:
         and 1 <= value <= 5 else default
 
 
+def _share(text: str, sources: str) -> float:
+    """The part of `text`'s focus tokens that occur in `sources`."""
+    tokens = _focus_tokens(text, "zh")
+    if not tokens:
+        return 0.0
+    hay = str(sources or "").lower()
+    return sum(1 for tok in tokens if tok in hay) / len(tokens)
+
+
 def grounded(text: str, sources: str, need: float) -> bool:
     """Is `text` made of the sources' words: at least `need` of its focus
     tokens occur in them (all of them for a text of fewer than two)."""
     tokens = _focus_tokens(text, "zh")
     if not tokens:
         return False
-    hay = str(sources or "").lower()
-    found = sum(1 for tok in tokens if tok in hay)
-    if len(tokens) < 2:
-        return found == len(tokens)
-    return found / len(tokens) >= need
+    share = _share(text, sources)
+    return share == 1.0 if len(tokens) < 2 else share >= need
 
 
 def _spoken(lines) -> str:
@@ -151,6 +159,8 @@ class FoldInput:
     thread: Optional[dict] = None
     max_seq: int = 0
     payload: dict = field(default_factory=dict)
+    # The chat's forget count when read: a forget meanwhile voids the answer.
+    gen: int = 0
 
 
 @dataclass
@@ -264,7 +274,8 @@ class Consolidation:
         def when(t: float, fmt: str) -> str:
             return datetime.fromtimestamp(t, tz).strftime(fmt) if t else ""
 
-        inp = FoldInput(conv=conv, reason=reason, dm=dm, reader=reader)
+        inp = FoldInput(conv=conv, reason=reason, dm=dm, reader=reader,
+                        gen=self._memory_gen(conv))
         speaker_of: dict[str, str] = {}
         lines_out = []
         for i, row in enumerate(rows, 1):
@@ -317,7 +328,7 @@ class Consolidation:
         month: list = []
         max_events = int(getattr(self.settings, "memory_episodes_max", 120) or 120)
         if len(store.episodes(conv)) >= max_events:
-            month = store.oldest_month(conv, now)
+            month = store.oldest_month(conv, now, tz=tz)
         events_out, month_out = [], []
         for ep in recent + [e for e in month if not any(e is r for r in recent)]:
             label = f"E{len(inp.events) + 1}"
@@ -420,12 +431,60 @@ class Consolidation:
                                max(0, int((next_at - time.time()) // 60)))
                 return None
             async with self.locks[conv]:
-                result = self._apply_fold(conv, inp, plan)
-            budget.succeeded(conv)
+                if self._memory_gen(conv) != inp.gen:
+                    # It read what a forget has removed since: nothing of it is kept.
+                    logger.info("[Agent] memory fold of %s dropped: the chat forgot "
+                                "something meanwhile", conv)
+                    result = FoldResult()
+                    result.refused["forgotten"] += 1
+                    return result
+                undo = self._fold_snapshot(conv)
+                try:
+                    result = self._apply_fold(conv, inp, plan)
+                except Exception as e:
+                    undo()
+                    budget.failed(conv, time.time(), e)
+                    self._save_memory_state(force=False)
+                    logger.warning("[Agent] memory fold not applied (conv=%s): %s",
+                                   conv, type(e).__name__)
+                    return None
+            if result.refused["shape"]:
+                # A malformed answer backs off like a failed call.
+                budget.failed(conv, time.time(), "shape")
+            else:
+                budget.succeeded(conv)
             self._save_memory_state(force=False)
             return result
         finally:
             self._folding.discard(conv)
+
+    def _fold_snapshot(self, conv: str):
+        """A function that puts the chat's notes, events and summary back as
+        they are now, keeping each row the same object."""
+        items = self.memories.get(conv)
+        notes = None if items is None else [(it, dict(it)) for it in items]
+        entry = self.episode_store.data.get(conv)
+        events = None if entry is None else (
+            dict(entry), [(ep, dict(ep)) for ep in entry.get("episodes", [])])
+
+        def undo() -> None:
+            if notes is None:
+                self.memories.pop(conv, None)
+            else:
+                for it, was in notes:
+                    it.clear()
+                    it.update(was)
+                self.memories[conv] = [it for it, _was in notes]
+            data = self.episode_store.data
+            if events is None:
+                data.pop(conv, None)
+                return
+            was_entry, rows = events
+            for ep, was in rows:
+                ep.clear()
+                ep.update(was)
+            data[conv] = dict(was_entry, episodes=[ep for ep, _was in rows])
+        return undo
 
     @staticmethod
     def _usable_plan(plan) -> bool:
@@ -448,7 +507,7 @@ class Consolidation:
         caps: Counter = Counter()
         for op in plan.get("facts") or []:
             kind = op.get("op") if isinstance(op, dict) else None
-            if kind not in OP_CAPS:
+            if not isinstance(kind, str) or kind not in OP_CAPS:
                 res.refused["shape"] += 1
                 continue
             caps[kind] += 1
@@ -461,7 +520,7 @@ class Consolidation:
         events = 0
         for op in plan.get("episodes") or []:
             kind = op.get("op") if isinstance(op, dict) else None
-            if kind not in ("add", "extend"):
+            if not isinstance(kind, str) or kind not in ("add", "extend"):
                 res.refused["shape"] += 1
                 continue
             events += 1
@@ -530,22 +589,86 @@ class Consolidation:
         before = max((line["t1"] or line["t"] for line in rows), default=0.0)
         return self.memory_state.tombstoned(conv, memstore.token_hashes(text), before)
 
-    def _may_change(self, it: dict, cited: list) -> bool:
-        """A note's subject (or the admin) may change it; a saved note also
-        its saver; a group note any person's line, a saved one its saver's."""
-        humans = {line["uid"] for line in cited if not line["bot"] and line["uid"]}
-        if not humans:
-            return False
-        admins = set(self._admins())
+    def _named(self, inp: FoldInput, text: str) -> set[str]:
+        """The chunk's speakers `text` names."""
+        return people.names_in(text, [{"user_id": uid, "user_name": name}
+                                      for uid, name in inp.speakers.values()])
+
+    def _lines_by(self, lines: list, uids) -> list:
+        """The human lines these people spoke; the operator's accounts are one."""
+        ids: set[str] = set()
+        for uid in uids:
+            ids |= self._same_person(str(uid or ""))
+        return [line for line in lines if not line["bot"] and line["uid"] in ids]
+
+    def _owners(self, it: dict, end: bool = False) -> Optional[set]:
+        """Whose lines may change a note: its subject's (its speaker's when it
+        is reported speech, whose subject may only end it), its saver's and
+        the admin's; None for an unsaved group note, anybody's."""
         subject = str(it.get("user_id") or "")
-        allowed = set(admins)
-        if subject:
-            allowed |= self._same_person(subject)
+        said = str(it.get("said_by") or "")
+        ids = set(self._admins())
         if not it.get("auto") and it.get("saved_by"):
-            allowed.add(str(it["saved_by"]))
-        if not subject and not self._note_fixed(it, time.time()):
-            return True
-        return bool(humans & allowed)
+            ids |= self._same_person(str(it["saved_by"]))
+        if said:
+            ids |= self._same_person(said)
+            if end and subject:
+                ids |= self._same_person(subject)
+        elif subject:
+            ids |= self._same_person(subject)
+        elif not self._note_fixed(it, time.time()):
+            return None
+        return ids
+
+    def _owner_lines(self, it: dict, cited: list, end: bool = False) -> list:
+        humans = [line for line in cited if not line["bot"]]
+        owners = self._owners(it, end)
+        return humans if owners is None else [
+            line for line in humans if line["uid"] in owners]
+
+    def _claimer(self, text: str, humans: list) -> list:
+        """The lines of the one speaker whose own words carry `text` best."""
+        by_uid: dict[str, list] = {}
+        for line in humans:
+            if line["uid"]:
+                by_uid.setdefault(line["uid"], []).append(line)
+        best, share = [], 0.0
+        for lines in by_uid.values():
+            spoken = _spoken(lines)
+            if grounded(text, spoken, GROUND_FACT) and _share(text, spoken) > share:
+                best, share = lines, _share(text, spoken)
+        return best
+
+    def _fold_owner(self, inp: FoldInput, about, text: str, humans: list) -> tuple[dict, str]:
+        """Whose a new fact is. A person's own only when their own lines carry
+        it; a group fact naming people only when theirs do; anything else is
+        the word of the speaker whose lines carry it, which stays in the room."""
+        if inp.dm:
+            mine = self._lines_by(humans, {inp.reader})
+            if not mine:
+                return {}, "subject"
+            if not grounded(text, _spoken(mine), GROUND_FACT):
+                return {}, "grounding"
+            return {"user_id": inp.reader, "user_name": mine[0]["name"] or inp.reader}, ""
+        named = self._named(inp, text)
+        speaker = inp.speakers.get(about) if isinstance(about, str) else None
+        if about == "group" or (speaker and not speaker[0]):
+            if not named:
+                return {}, ""
+            if all(self._lines_by(humans, {u}) for u in named) and grounded(
+                    text, _spoken(self._lines_by(humans, named)), GROUND_FACT):
+                return {}, ""
+        elif speaker:
+            uid, name = speaker
+            mine = self._lines_by(humans, {uid})
+            self_named = named & self._same_person(uid)
+            if mine and grounded(text, _spoken(mine), GROUND_FACT) and (
+                    self_named or not named):
+                return {"user_id": uid, "user_name": name}, ""
+        lines = self._claimer(text, humans)
+        if not lines:
+            return {}, "subject"
+        return {"said_by": lines[0]["uid"], "said_by_name": lines[0]["name"]}, ""
 
     # Facts.
 
@@ -566,10 +689,16 @@ class Consolidation:
             return "negation"
         if self._tombstoned(conv, text, cited):
             return "tombstone"
+        row, why = self._fold_owner(inp, op.get("about"), text, humans)
+        if why:
+            return why
         imp = _imp(op.get("imp"))
         items = self.memories.setdefault(conv, [])
         same = next((it for it in items if it.get("text") == text), None)
         if same is not None:
+            if (str(same.get("user_id") or ""), str(same.get("said_by") or "")) != (
+                    row.get("user_id", ""), row.get("said_by", "")):
+                return "owner"
             same["time"] = now
             same["imp"] = max(_imp(same.get("imp")), imp)
             self._fold_changed.add("note")
@@ -578,23 +707,6 @@ class Consolidation:
         if imp == 1:
             res.done["unimportant"] += 1
             return ""
-        about = op.get("about")
-        row: dict = {}
-        if inp.dm:
-            mine = [line for line in humans if line["uid"] == inp.reader]
-            if not mine:
-                return "subject"
-            row.update(user_id=inp.reader, user_name=mine[0]["name"] or inp.reader)
-        elif about == "group":
-            pass
-        elif isinstance(about, str) and about in inp.speakers and any(
-                line["speaker"] == about for line in humans):
-            uid, name = inp.speakers[about]
-            if uid:
-                row.update(user_id=uid, user_name=name)
-        else:
-            # Someone's word about another person: reported speech.
-            row.update(said_by=humans[0]["uid"], said_by_name=humans[0]["name"])
         last = max(line["t1"] or line["t"] or now for line in cited)
         row.update(text=text, time=last, born=last, auto=True, src="fold",
                    imp=imp, uses=0, used=0.0, tidied=True,
@@ -624,14 +736,30 @@ class Consolidation:
         cited = self._cited(inp, op)
         if not cited:
             return "src"
-        if not self._may_change(it, cited):
+        own = self._owner_lines(it, cited)
+        if not own:
             return "owner"
         text = self._fold_text(op.get("text"), 200)
         if not text:
             return "text"
         said = " ".join(line["text"] for line in cited)
-        if not grounded(text, _spoken(cited) + " " + it["text"], GROUND_FACT):
+        # Only the lines of those who may change it carry the new words.
+        if not grounded(text, _spoken(own) + " " + it["text"], GROUND_FACT):
             return "grounding"
+        fresh = _focus_tokens(text, "zh") - _focus_tokens(it["text"], "zh")
+        if fresh:
+            hay = _spoken(own).lower()
+            found = sum(1 for tok in fresh if tok in hay) / len(fresh)
+            if found < (1.0 if len(fresh) < 2 else GROUND_FACT):
+                return "grounding"
+        if not it.get("said_by"):
+            # Like an added fact: a new name needs that person's own line,
+            # unless the note stays about its subject.
+            named = self._named(inp, text) - self._named(inp, it["text"])
+            subject = self._same_person(str(it.get("user_id") or ""))
+            if named and not (subject and self._named(inp, text) & subject) and any(
+                    not self._lines_by(own, {u}) for u in named):
+                return "subject"
         if timewords.has_negation(text) != timewords.has_negation(said):
             return "negation"
         if self._tombstoned(conv, text, cited):
@@ -655,8 +783,13 @@ class Consolidation:
             return why
         cited = self._cited(inp, op)
         if cited:
-            if not self._may_change(it, cited):
+            own = self._owner_lines(it, cited, end=True)
+            if not own:
                 return "owner"
+            # Their own words must touch the note, not only someone else's.
+            if not _focus_tokens(" ".join(line["text"] for line in own), "zh") \
+                    & _focus_tokens(it["text"], "zh"):
+                return "grounding"
         elif op.get("why", "over") != "over" or not it.get("auto") \
                 or self._note_fixed(it, now) \
                 or now - float(it.get("born") or it.get("time") or now) < OVER_MIN_AGE_S:
@@ -679,9 +812,10 @@ class Consolidation:
                 return why
             notes.append(it)
         subjects = {str(it.get("user_id") or "") for it in notes}
+        speakers = {str(it.get("said_by") or "") for it in notes}
         autos = {bool(it.get("auto")) for it in notes}
         savers = {str(it.get("saved_by") or "") for it in notes}
-        if len(subjects) != 1 or len(autos) != 1 or (
+        if len(subjects) != 1 or len(speakers) != 1 or len(autos) != 1 or (
                 autos == {False} and len(savers) != 1):
             return "merge"
         if any(it.get("auto") and self._note_fixed(it, now) for it in notes):
@@ -716,6 +850,8 @@ class Consolidation:
         imp = _imp(op.get("imp"), None)
         if imp is None:
             return "shape"
+        if self._note_fixed(it, now):
+            return "fixed"
         it["imp"] = imp
         self._fold_changed.add("note")
         res.done["rate"] += 1
@@ -730,7 +866,8 @@ class Consolidation:
             day = date.fromisoformat(raw.strip()[:10])
         except ValueError:
             return ""
-        today = date.today()
+        # The chat's own day, as the lines' times are shown to the model.
+        today = datetime.now(self._prompt_tz() if hasattr(self, "_prompt_tz") else None).date()
         return day.isoformat() if today - timedelta(days=1) <= day <= today + timedelta(days=366) else ""
 
     def _fold_event_add(self, conv, inp, op, now, res) -> str:
@@ -801,6 +938,15 @@ class Consolidation:
         text = self._fold_text(raw, 400, markers=True)
         if not text:
             return "text"
+        # A forgotten thing stays out of the summary as out of the facts.
+        rows = list(inp.lines.values())
+        parts = [p.strip() for p in _SENTENCE_END.split(text) if p.strip()]
+        kept = [p for p in parts if not self._tombstoned(conv, p, rows)]
+        if not kept:
+            return "tombstone"
+        if len(kept) != len(parts):
+            res.refused["tombstone"] += 1
+            text = " ".join(kept)
         source = _spoken(inp.lines.values())
         if not grounded(text, source + " " + ((inp.thread or {}).get("text") or ""),
                         GROUND_FACT):
@@ -833,6 +979,9 @@ class Consolidation:
         if not grounded(text, " ".join(then for _ep, then in month), GROUND_EVENT):
             return "grounding"
         rows = [ep for ep, _then in month]
+        if self.memory_state.tombstoned(conv, memstore.token_hashes(text),
+                                        max(_ep_end(ep) for ep in rows)):
+            return "tombstone"
         new = {"text": text, "t0": min(_ep_start(ep) for ep in rows),
                "t1": max(_ep_end(ep) for ep in rows),
                "imp": max(_imp(ep.get("imp")) for ep in rows),

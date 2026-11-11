@@ -37,10 +37,23 @@ def _is_loopback(url: str) -> bool:
         return False
 
 
+class Unreachable(OSError):
+    """No answer at all from `url`: refused, unknown host, or no answer in time."""
+
+    def __init__(self, url: str, cause: BaseException):
+        super().__init__(f"{type(cause).__name__}: {cause}")
+        self.url, self.cause = url, cause
+
+
 def _open(req, timeout):
-    if _is_loopback(req.full_url):
-        return _direct().open(req, timeout=timeout)
-    return urllib.request.urlopen(req, timeout=timeout)
+    try:
+        if _is_loopback(req.full_url):
+            return _direct().open(req, timeout=timeout)
+        return urllib.request.urlopen(req, timeout=timeout)
+    except urllib.error.HTTPError:
+        raise
+    except OSError as e:
+        raise Unreachable(req.full_url, e) from e
 
 
 def _post_json(url, payload, headers, timeout=30):
@@ -168,6 +181,126 @@ def check_reaction_judge():
     return _say_ok(os.getenv("REACT_MODEL", "").strip() or _judge_model())
 
 
+def _react_model() -> str:
+    return os.getenv("REACT_MODEL", "").strip() or _judge_model()
+
+
+def _promote_judge_model() -> str:
+    """PROMOTE_JUDGE_MODEL as settings.py resolves it (blank = the reaction judge)."""
+    return os.getenv("PROMOTE_JUDGE_MODEL", "").strip() or _react_model()
+
+
+class Same(str):
+    """A model an earlier row already asks; `row` names that row."""
+
+    def __new__(cls, model: str, row: str):
+        value = super().__new__(cls, model)
+        value.row = row
+        return value
+
+
+def _probed() -> dict:
+    """Each model a plain question already reaches, and the first row asking it."""
+    from .config_env import env_bool
+
+    rows = (("DM chat", os.getenv("LLM_DM_MODEL", "") or _main_model(), True),
+            ("Group replies", _main_model(), True),
+            ("Reaction judge", _react_model(), env_bool("REACT_LEARN_ENABLED", True)),
+            ("Learning decisions", _promote_judge_model(), _deciding()))
+    out: dict = {}
+    for name, model, on in rows:
+        if on and model:
+            out.setdefault(model, name)
+    return out
+
+
+def _deciding() -> bool:
+    from .config_env import env_bool
+    return env_bool("PROMOTE_JUDGE_ENABLED", True) and env_bool("PROMOTE_AUTO_ENABLED", True)
+
+
+def check_learning_decisions():
+    """PROMOTE_JUDGE_MODEL, with which the character decides what it adopts,
+    discards or keeps observing; not asked again when an earlier row asks it."""
+    if not _deciding():
+        return None, "turned off"
+    model = _promote_judge_model()
+    first = _probed().get(model)
+    if first and first != "Learning decisions":
+        return None, Same(model, first)
+    return _say_ok(model)
+
+
+def check_evolve():
+    """EVOLVE_MODEL (blank = the eval model), only while that loop is on."""
+    from .config_env import env_bool
+
+    if not env_bool("EVOLVE_AUTO_ENABLED", False):
+        return None, "turned off"
+    model = (os.getenv("EVOLVE_MODEL", "").strip() or os.getenv("EVAL_MODEL", "").strip()
+             or os.getenv("LLM_FALLBACK_MODEL", "").strip() or _main_model())
+    first = _probed().get(model)
+    if first:
+        return None, Same(model, first)
+    return _say_ok(model)
+
+
+def _setting_for(url: str) -> str:
+    """The .env setting whose address `url` is on, or ''."""
+    from .config_env import env_str
+
+    named = (("LLM_FALLBACK_BASE_URL", env_str("LLM_FALLBACK_BASE_URL", strip=True)),
+             ("EMBEDDING_BASE_URL", env_str("EMBEDDING_BASE_URL", strip=True)),
+             ("VISION_BASE_URL", env_str("VISION_BASE_URL", strip=True)),
+             ("QQ_ONEBOT_URL", env_str("QQ_ONEBOT_URL", strip=True)),
+             ("LLM_BASE_URL", os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL) or ""))
+    for name, base in named:
+        base = base.rstrip("/")
+        if base and url.startswith(base):
+            return name
+    return ""
+
+
+def _timed_out(error: BaseException) -> bool:
+    cause = getattr(error, "cause", error)
+    reason = getattr(cause, "reason", cause)
+    return isinstance(cause, TimeoutError) or isinstance(reason, TimeoutError)
+
+
+def failure_sentence(error: BaseException) -> str:
+    """What a failed probe means and what to check, in one sentence for
+    langs.term; '' when the raw detail says more."""
+    if isinstance(error, urllib.error.HTTPError):
+        host = urlsplit(error.url or "").netloc or "the service"
+        if error.code in (401, 403):
+            return (f"{host} refused the key (HTTP {error.code}). "
+                    "Check the key for this service in .env.")
+        if error.code == 404:
+            return (f"{host} answered HTTP 404. "
+                    "Check the address and the model name in .env.")
+        if error.code == 429:
+            return (f"{host} is limiting requests (HTTP 429). "
+                    "Check the account's quota, or try again later.")
+        return (f"{host} answered with an error (HTTP {error.code}). "
+                "Try again later, and check the service if it persists.")
+    if isinstance(error, Unreachable):
+        host = urlsplit(error.url).netloc or error.url
+        if _timed_out(error):
+            return (f"{host} did not answer in time. Check that the service is running "
+                    "and that the network or proxy lets the connection through.")
+        setting = _setting_for(error.url)
+        if setting:
+            return (f"Could not connect to {host}. Check {setting} in .env, that the "
+                    "service is running, and that the network or proxy lets the "
+                    "connection through.")
+        return (f"Could not connect to {host}. Check that the network or proxy lets "
+                "the connection through.")
+    if isinstance(error, TimeoutError):
+        return ("The service did not answer in time. Check that it is running and that "
+                "the network or proxy lets the connection through.")
+    return ""
+
+
 def check_vision():
     """Vision endpoint: any OpenAI-compatible vision model, via VISION_*."""
     key, base = vision_endpoint_from_env()
@@ -274,13 +407,12 @@ def check_ledger_sizes():
     from .settings import content_lang
 
     lang = content_lang(os.getenv("AGENT_LANG", ""))
-    watched = (
-        ("evidence", "evidence", EvidenceLog),
-        ("candidate_ledger", "candidate_ledger", CandidateLedger),
-    )
+    watched = (("evidence", EvidenceLog), ("candidate_ledger", CandidateLedger))
     parts, healthy = [], True
-    for label, stem, cls in watched:
+    for stem, cls in watched:
         path = resolve_runtime_lang_file(stem, "jsonl", lang)
+        # The file's own name: one language's word for one and not the other read oddly.
+        label = path.name
         if not path.exists():
             parts.append(f"{label} absent")
             continue
@@ -305,7 +437,9 @@ CHECKS = [
     ("Group replies",           check_group_replies,      True),
     ("Web search decision",     check_search_decision,    False),
     ("Reaction judge",          check_reaction_judge,     False),
-    ("Vision",                  check_vision,             False),
+    ("Learning decisions",      check_learning_decisions, False),
+    ("Reviewing its own replies", check_evolve,           False),
+    ("Vision",                 check_vision,             False),
     ("Eval",                    check_eval,               False),
     ("Embeddings",              check_embeddings,         False),
     ("Web search (Tavily)",     check_tavily,             False),
@@ -328,15 +462,29 @@ def run_checks() -> list:
             # server only adds the missed-mention sweep and a fallback.
             critical = False
         t0 = time.time()
+        advice = ""
         try:
             ok, detail = fn()
         except Exception as e:
             ok, detail = False, f"{type(e).__name__}: {str(e)[:90]}"
-        return {"name": name, "ok": ok, "critical": critical,
-                "detail": detail, "ms": round((time.time() - t0) * 1000)}
+            advice = failure_sentence(e)
+        row = {"name": name, "ok": ok, "critical": critical,
+               "detail": detail, "ms": round((time.time() - t0) * 1000)}
+        if advice:
+            row["advice"] = advice
+        return row
 
     with ThreadPoolExecutor(max_workers=len(CHECKS)) as ex:
-        return list(ex.map(_one, CHECKS))
+        results = list(ex.map(_one, CHECKS))
+    by_name = {r["name"]: r for r in results}
+    for r in results:
+        if isinstance(r["detail"], Same):
+            first = by_name.get(r["detail"].row) or {}
+            # Answered as that row was: it is the same model on the same address.
+            r["ok"] = first.get("ok")
+            r["detail"] = (f"{str(r['detail'])}: the same model as the row "
+                           f"{r['detail'].row}, so it is not asked again")
+    return results
 
 
 def all_critical_ok(results) -> bool:

@@ -221,12 +221,13 @@ def test_mentions_of_other_people_reach_the_model_by_name(agent):
     mention = next(s for s in event["segments"] if s["type"] == "mention" and s["user_id"] == "81234")
     assert mention["name"] == "Sammy", event["segments"]
     text = perceived(agent, "discord", {**event, "conversation_id": "300"}, bot_id="900")
-    assert "@Sammy what do you think of #channel and @role" in text, text
+    # Fenced: the mentioned person chose the name, not the sender.
+    assert "\x02@Sammy\x03 what do you think of #channel and @role" in text, text
     assert "<@" not in text and "81234" not in text, text
 
     stoat_event = st(content="ask <@01SAM> about it")
     assert {"type": "mention", "user_id": "01SAM", "name": "Sam"} in stoat_event["segments"]
-    assert "ask @Sam about it" in perceived(agent, "stoat", stoat_event, bot_id="01BOT")
+    assert "ask \x02@Sam\x03 about it" in perceived(agent, "stoat", stoat_event, bot_id="01BOT")
 
 
 def test_a_named_mention_renders_by_name_and_counts_the_person_present(agent):
@@ -234,7 +235,7 @@ def test_a_named_mention_renders_by_name_and_counts_the_person_present(agent):
              "sender_name": "Alex", "message_id": "m1",
              "segments": [{"type": "mention", "user_id": "55", "name": "Sam"},
                           {"type": "text", "text": "you there?"}]}
-    assert perceived(agent, "telegram", event) == "@Sam you there?"
+    assert perceived(agent, "telegram", event) == "\x02@Sam\x03 you there?"
     assert ("telegram:55", "Sam") in agent.active_users["telegram:g1"]
     nameless = dict(event, segments=[{"type": "mention", "user_id": "56"}])
     assert perceived(agent, "telegram", nameless) == "@telegram:56"

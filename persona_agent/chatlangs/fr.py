@@ -84,7 +84,7 @@ SPEC = Spec(
                      "réseau bizarre là, laisse-moi une minute"),
     learned_text={
         "head": ("souvenirs : {memories}, réponses apprises : {examples}, "
-                 "corrections : {fixes}, en attente d'un deuxième avis : {voice}, "
+                 "corrections : {fixes}, en observation jusqu'à une autre réaction concordante : {voice}, "
                  "soumis à ma propre décision : {admin}"),
         "score": ", dernière auto-éval : {score}/5",
         "pair": "avant : {was}, maintenant : {better}",

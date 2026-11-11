@@ -157,11 +157,20 @@ def _chat(conv: str) -> dict:
             "tail": tail if len(tail) <= 8 else "…" + tail[-6:]}
 
 
+def _tab(cand: dict, live: dict) -> str:
+    """Where the panel lists an item: an item the character would not use in
+    its own language is never counted or listed as in use or observed."""
+    name = TAB_OF.get(str(cand.get("state") or ""), "")
+    if name in ("in_use", "observing") and live["pool"] == live["lang"] and _gap(cand, live):
+        return "set_aside"
+    return name
+
+
 def _row(cand: dict, live: dict) -> dict:
     history = cand.get("history") or []
     payload = cand.get("payload") or {}
     state = str(cand.get("state") or "")
-    return {"id": cand.get("candidate_id", ""), "tab": TAB_OF.get(state, ""),
+    return {"id": cand.get("candidate_id", ""), "tab": _tab(cand, live),
             "state": state, "gap": _gap(cand, live),
             # Who put it where it is; an observed item has no decider yet.
             "by": "" if state == candidates.STATE_PROPOSED or not history
@@ -189,20 +198,22 @@ def overview(workspace, lang: str = "", tab: str = "", limit: int = 30) -> dict:
     limit = max(1, min(int(limit or 30), MAX_LIMIT))
     rows = pool.ledger.all()
     totals = {name: 0 for name in TABS}
-    # Per tab, the items the character would not use now (another scope).
-    idle = {name: 0 for name in TABS}
+    # Items listed under Set aside only because the character would not use them now.
+    idle = 0
     chats = set()
+    placed = []
     for cand in rows:
-        name = TAB_OF.get(cand.get("state"))
+        name = _tab(cand, pool.live)
         if not name:
             continue
+        placed.append((name, cand))
         totals[name] += 1
-        if _gap(cand, pool.live):
-            idle[name] += 1
+        if name != TAB_OF.get(cand.get("state")):
+            idle += 1
         elif name == "in_use":
             chats.add(str((cand.get("scope") or {}).get("conv_id") or ""))
     # Newest change first, so what was just decided is on top.
-    shown = sorted((c for c in rows if c.get("state") in TABS[tab]), key=_order, reverse=True)
+    shown = sorted((c for name, c in placed if name == tab), key=_order, reverse=True)
     current = _current(pool.env)
     langs = []
     for code in sorted(set(_pools(pool.runtime)) | {current, pool.lang}):
@@ -270,7 +281,9 @@ def _step(entry: dict) -> dict:
 def _event(ev: dict, cand: dict, pool: _Pool) -> dict:
     adj = ev.get("adjudication") or {}
     kind = str(ev.get("kind") or "")
-    return {"who": dashboard._clip(ev.get("speaker_name") or "", 64),
+    # The page's own chat sends under a placeholder; the page names its person.
+    page = kind == evidence.KIND_REACTION and ev.get("platform") == access.PAGE_PLATFORM
+    return {"who": "" if page else dashboard._clip(ev.get("speaker_name") or "", 64), "self": page,
             "what": str(ev.get("reaction_type") or "") if kind == evidence.KIND_REACTION else kind,
             "said": dashboard._clip(ev.get("reaction_text"), 500),
             "better": dashboard._clip(adj.get("better"), 300),

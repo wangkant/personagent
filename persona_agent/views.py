@@ -161,7 +161,8 @@ class DataViews:
         else:
             head = (f"{memories} memor{'y' if memories == 1 else 'ies'}, "
                     f"{n_ex} repl{'y' if n_ex == 1 else 'ies'} and {n_pr} fix{'' if n_pr == 1 else 'es'} learned, "
-                    f"{voice} awaiting a second voice, {admin} under my own review")
+                    f"{voice} under observation until another agreeing reaction arrives, "
+                    f"{admin} under my own review")
         if scores:
             score = f"{sum(scores) / len(scores):.1f}"
             head += (text["score"].format(score=score) if text

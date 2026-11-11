@@ -346,7 +346,10 @@ The body also carries the adapter's own time for the message as `sent_at`.
 The agent checks it separately against `CONNECTOR_MAX_EVENT_AGE_S` (default
 24 hours), so an old event re-sent with a fresh signature is still rejected.
 The plugin does not forward a message whose adapter gives no valid
-timestamp, and AstrBot handles that message as usual.
+timestamp, and AstrBot handles that message as usual. The character sees
+each message with this time, and a group message that is more than 10
+minutes old when it arrives, such as a backlog AstrBot delivers after a
+restart, is kept as context and not answered.
 
 ## Identities on the agent side
 

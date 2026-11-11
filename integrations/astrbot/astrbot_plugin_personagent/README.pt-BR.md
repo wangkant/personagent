@@ -201,7 +201,7 @@ Quando `connector_token` está definido, toda solicitação leva quatro cabeçal
 
 O corpo é JSON canônico: UTF-8, chaves ordenadas, separadores compactos e caracteres não ASCII sem escape. A assinatura cobre esses bytes exatos, então um proxy não pode reescrever o corpo. O agente rejeita uma assinatura incorreta, um nonce reutilizado ou um carimbo de data/hora a mais de cinco minutos do próprio relógio. Mantenha os dois relógios sincronizados.
 
-O corpo também leva a hora da mensagem segundo o adaptador como `sent_at`. O agente a verifica separadamente com `CONNECTOR_MAX_EVENT_AGE_S` (24 horas por padrão), então um evento antigo reenviado com assinatura nova ainda é rejeitado. O plugin não encaminha uma mensagem cujo adaptador não dá um carimbo válido, e o AstrBot a trata como de costume.
+O corpo também leva a hora da mensagem segundo o adaptador como `sent_at`. O agente a verifica separadamente com `CONNECTOR_MAX_EVENT_AGE_S` (24 horas por padrão), então um evento antigo reenviado com assinatura nova ainda é rejeitado. O plugin não encaminha uma mensagem cujo adaptador não dá um carimbo válido, e o AstrBot a trata como de costume. O personagem vê cada mensagem com esse horário, e uma mensagem de grupo que tem mais de 10 minutos quando chega, como um acúmulo que o AstrBot entrega depois de um reinício, é mantida como contexto e não é respondida.
 
 ## Identidades no lado do agente
 

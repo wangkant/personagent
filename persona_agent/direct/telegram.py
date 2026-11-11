@@ -113,13 +113,14 @@ class Telegram(Platform):
         addressed = is_dm
         segments: list[dict] = []
         handle = "@" + self.username.lower() if self.username else ""
-        for entity in entities:
+        origin = message.get("forward_origin")
+        # A forwarded call was someone else's, long ago.
+        for entity in [] if isinstance(origin, dict) else entities:
             piece = _entity_text(text, entity)
             if entity.get("type") == "mention" and handle and piece.lower() == handle:
                 addressed = True
             if entity.get("type") == "text_mention" and str((entity.get("user") or {}).get("id")) == self.bot_id:
                 addressed = True
-        origin = message.get("forward_origin")
         if isinstance(origin, dict):
             segments.append({"type": "forward", "name": _origin_name(origin)})
         if text:

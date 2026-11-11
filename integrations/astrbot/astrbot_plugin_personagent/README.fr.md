@@ -201,7 +201,7 @@ Quand `connector_token` est défini, chaque requête porte quatre en-têtes :
 
 Le corps est du JSON canonique : UTF-8, clés triées, séparateurs compacts et caractères non ASCII non échappés. La signature couvre ces octets exacts, donc un proxy ne doit pas réécrire le corps. L'agent rejette une mauvaise signature, un nonce réutilisé ou un horodatage à plus de cinq minutes de sa propre horloge. Gardez les deux horloges synchronisées.
 
-Le corps porte aussi l'heure du message selon l'adaptateur sous `sent_at`. L'agent la vérifie séparément avec `CONNECTOR_MAX_EVENT_AGE_S` (24 heures par défaut), donc un ancien événement renvoyé avec une nouvelle signature reste rejeté. Le plugin ne transmet pas un message dont l'adaptateur ne donne pas d'horodatage valide, et AstrBot le traite comme d'habitude.
+Le corps porte aussi l'heure du message selon l'adaptateur sous `sent_at`. L'agent la vérifie séparément avec `CONNECTOR_MAX_EVENT_AGE_S` (24 heures par défaut), donc un ancien événement renvoyé avec une nouvelle signature reste rejeté. Le plugin ne transmet pas un message dont l'adaptateur ne donne pas d'horodatage valide, et AstrBot le traite comme d'habitude. Le personnage voit chaque message avec cette heure, et un message de groupe qui date de plus de 10 minutes à son arrivée, comme un arriéré qu'AstrBot remet après un redémarrage, est conservé comme contexte et ne reçoit pas de réponse.
 
 ## Identités côté agent
 

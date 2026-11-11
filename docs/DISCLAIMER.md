@@ -85,9 +85,13 @@ them commercially, and share changes under the same licence. See
 ## What your model provider sees
 
 Each reply sends the model provider a prompt made of the persona, recent
-messages from the chat (names included), the notes the bot has kept about the
-chat, and what it retrieved from what it has learned. If you set a vision
-model, images go to it. Other services you turn on see parts of this too. They
+messages from the chat (names and times included), the summary of earlier
+conversation, the facts and events the bot remembers about the chat, and
+what it retrieved from what it has learned. Memory consolidation sends one
+chat's recent messages and notes to the judge model, and the bot's own
+learning decisions send a reply, the reactions to it and the proposed
+wordings to the model that makes them. If you set a vision model, images go
+to it. Other services you turn on see parts of this too. They
 include the fallback, judge, self-evaluation and embedding endpoints you
 configure, and web search, which sends a short query to Tavily if you set a
 key and to DuckDuckGo otherwise. The update check sends pypi.org only
@@ -104,19 +108,24 @@ agree to any provider's terms, so tell them where their messages go.
 
 Everything it keeps is under its home folder. Settings and API keys are in
 `.env`. Bot credentials and the AstrBot it runs for you are in `platforms/`.
-`runtime/` holds the chat notes, the reactions it judged (quoted verbatim),
-the ledger of what it learned, and the learned examples. If you set
+`runtime/` holds the recent messages of each chat for 72 hours, the facts,
+events and summaries it remembers, what it removed from memory for up to 30
+days, the reactions it judged (quoted verbatim), the ledger of what it
+learned, the learned examples and a count of its model use. If you set
 `SERVER_LOG_FILE`, the logs can hold conversation details too. Keep the folder
 private. Never publish it or attach it to an issue, and back it up if you care
 about what it has learned. Laws on storing and processing other people's
 messages differ between countries, and following yours is your
 responsibility.
 
-It can learn something wrong. A change needs two agreeing reactions from the
-same chat, at least one of them from the person the reply was for. Every
-change is recorded in an append-only ledger, which you can review and undo
-with `personagent learned` or in the local page's Activity view. Check it
-from time to time.
+It can learn something wrong. Reactions change it only with two agreeing
+reactions from the same chat, at least one of them from the person the reply
+was for. Where reactions cannot settle a change, the bot decides itself with
+a model call, and a model can misjudge. Nobody is asked to confirm these
+changes. Every change is recorded in an append-only ledger with who decided
+it and why, and you can undo it with `personagent learned` or in the local
+page's Activity view. Check it from time to time. What it remembers can be
+read and forgotten there too, or with `personagent memory`.
 
 ## No warranty
 

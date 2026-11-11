@@ -3,8 +3,12 @@ kept in a small file beside the memory file that the page and `doctor` read."""
 from __future__ import annotations
 
 import json
+import logging
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
+
+logger = logging.getLogger("agent")
 
 USAGE_FILE = "model_usage.json"
 # Today and the six days before it, plus one so a week never loses its first day.
@@ -53,6 +57,8 @@ class UsageBook:
         self.days = load(self.path)
         self.written_at: float | None = None
         self.dirty = False
+        self._pool: ThreadPoolExecutor | None = None
+        self._pending: Future | None = None
 
     def add(self, model: str, usage, now: float) -> None:
         usage = usage if isinstance(usage, dict) else {}
@@ -74,17 +80,44 @@ class UsageBook:
             return 0.0
         return max(0.0, self.written_at + WRITE_EVERY_S - now)
 
-    def flush(self, now: float) -> None:
+    def _take(self, now: float) -> str | None:
+        """The file's text as of now, marking it written; None when unchanged."""
         if not self.dirty:
-            return
-        from .storage import atomic_write_text
-
+            return None
         keep = sorted(self.days)[-KEEP_DAYS:]
         self.days = {day: self.days[day] for day in keep}
-        # Rebuildable tallies: no disk wait on the event loop.
-        atomic_write_text(self.path, json.dumps({"days": self.days}, ensure_ascii=False),
-                          fsync=False)
         self.written_at, self.dirty = now, False
+        return json.dumps({"days": self.days}, ensure_ascii=False)
+
+    def _write(self, text: str) -> None:
+        from . import storage
+
+        # Rebuildable tallies: no fsync.
+        storage.atomic_write_text(self.path, text, fsync=False)
+
+    def _write_quietly(self, text: str) -> None:
+        try:
+            self._write(text)
+        except OSError as e:
+            logger.debug("[Agent] model use tally not written: %s", e)
+
+    def flush_soon(self, now: float) -> None:
+        """Write on a worker thread, in order, so the event loop never waits on the disk."""
+        text = self._take(now)
+        if text is None:
+            return
+        if self._pool is None:
+            self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="usage-tally")
+        self._pending = self._pool.submit(self._write_quietly, text)
+
+    def flush(self, now: float) -> None:
+        """Write now, after any write in flight, so the newest tally lands last."""
+        text = self._take(now)
+        pending, self._pending = self._pending, None
+        if pending is not None:
+            pending.result()
+        if text is not None:
+            self._write(text)
 
 
 def _total(rows) -> dict:

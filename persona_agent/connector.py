@@ -235,6 +235,7 @@ def synthesize_onebot_payload(
 
     message: list[dict] = []
     has_self_mention = False
+    forwarded = False
     for seg in event.get("segments") or []:
         if not isinstance(seg, dict):
             continue
@@ -243,7 +244,8 @@ def synthesize_onebot_payload(
             message.append({"type": "text", "data": {"text": str(seg.get("text", ""))}})
         elif t == "mention":
             target = str(seg.get("user_id", ""))
-            if bot_id and target == bot_id:
+            # Inside a forward it was someone else calling, long ago.
+            if bot_id and target == bot_id and not forwarded:
                 message.append({"type": "at", "data": {"qq": self_mention_id}})
                 has_self_mention = True
             else:
@@ -276,6 +278,7 @@ def synthesize_onebot_payload(
             if part:
                 message.append(part)
         elif t == "forward":
+            forwarded = True
             message.append({"type": "forwarded_from",
                             "data": {"name": _seg_str(seg, "name", 64)}})
         elif t == "reply":

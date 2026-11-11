@@ -429,6 +429,8 @@ _TEXT: dict[str, tuple[str, str]] = {
                      "通过 AstrBot 接入的其他平台（Slack、KOOK、飞书等）"),
     "menu_back": ("Back", "返回"),
     "menu_platform_choose": ("Choose 0–{n}", "请选择 0–{n}"),
+    "menu_platform_bad": ('"{choice}" is not one of the options. Enter a number from 0 to {n}.',
+                          "「{choice}」不是可选项。请输入 0 至 {n} 之间的数字。"),
     # why a platform refused; `<code>_<platform>` is one platform's own wording
     "refused_platform_rejected": ("{name} refused the connection. Check the values and the platform's own "
                                   "settings, then try again.",
@@ -2611,6 +2613,7 @@ def choose_platform() -> list[str]:
             return ["connect", DIRECT_WORDS.get(kinds[int(choice) - 1], kinds[int(choice) - 1])]
         if choice == str(len(kinds) + 1):
             return ["connect", "astrbot"]
+        _say(t("menu_platform_bad", choice=choice, n=len(kinds) + 1))
 
 
 def start_main(argv: list[str] | None = None, prog: str = "personagent start") -> int:

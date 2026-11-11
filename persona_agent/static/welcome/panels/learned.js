@@ -7,7 +7,7 @@ PA.strings({
       "Everything the character has learned in every chat: what it uses, what it is still observing and what was set aside. The character decides these items by itself; you may also step in here if you wish, even while the character is not running.",
     learned_sum: "Learned items in use: {inUse}. Chats they were learned in: {chats}. Items still under observation: {observing}.",
     learned_sum_none: "The character has not learned anything yet. Items appear here when someone corrects or approves one of its replies.",
-    learned_sum_idle: "{n} item(s) belong to an earlier character or an earlier chat on this page and are not used.",
+    learned_sum_idle: "Items not used because they belong to an earlier character or an earlier chat on this page: {n}. They are listed under Set aside.",
     learned_sum_other: "These items were learned while the character spoke {lang}. They are used only when it speaks {lang} again.",
     learned_not_running: "The character is not running. Every item can still be read here, and the optional actions remain available.",
     learned_lang_label: "Language learned in",
@@ -21,18 +21,12 @@ PA.strings({
     learned_tab_set_aside: "Set aside",
     learned_hint_in_use: "These items shape the character's replies.",
     learned_hint_observing: "The character decides these items by itself as reactions arrive. Nothing here requires your action.",
-    learned_hint_set_aside:
-      "These items are not used. Each one states who set it aside and why. An item that the character or the time limit set aside can be brought back.",
+    learned_hint_set_aside: "These items are not used. Each one states why: who set it aside, or the earlier character or chat it belongs to. An item that the character or the time limit set aside can be brought back.",
     learned_empty_in_use: "No items are in use.",
     learned_empty_observing: "No items are under observation.",
     learned_empty_set_aside: "No items have been set aside.",
     learned_loading: "Loading…",
     learned_more: "Show more",
-    learned_wording: "Better wording",
-    learned_repeat: "Reply worth repeating",
-    learned_said: "Original",
-    learned_instead: "Revised",
-    learned_lesson: "Going forward",
     learned_here: "This page",
     learned_group: "group",
     learned_dm: "direct message",
@@ -137,7 +131,7 @@ PA.strings({
       "角色在所有聊天中学到的内容：正在使用的、仍在观察的以及已搁置的。这些内容由角色自行决定；如有需要，你也可以在此介入，角色未运行时同样可以。",
     learned_sum: "使用中的内容：{inUse} 条，来自 {chats} 个聊天；仍在观察的内容：{observing} 条。",
     learned_sum_none: "角色尚未学到任何内容。当有人纠正或认可它的回复时，相关内容会显示在这里。",
-    learned_sum_idle: "此外，有 {n} 条内容属于之前的角色或本页面之前的对话，目前不会使用。",
+    learned_sum_idle: "此外，有 {n} 条内容属于之前的角色或本页面之前的对话，目前不会使用，已列在「已搁置」中。",
     learned_sum_other: "以下内容是角色以{lang}交流时学到的，仅在它再次以{lang}交流时使用。",
     learned_not_running: "角色未运行。你仍可在此查看全部内容，也可以使用各项可选操作。",
     learned_lang_label: "学习时使用的语言",
@@ -150,17 +144,12 @@ PA.strings({
     learned_tab_set_aside: "已搁置",
     learned_hint_in_use: "这些内容目前会影响角色的回复。",
     learned_hint_observing: "角色会随着新的反应自行决定这些内容，此处无需你进行任何操作。",
-    learned_hint_set_aside: "这些内容不会使用，每条都注明了由谁搁置及其原因。由角色或时限搁置的内容可以恢复使用。",
+    learned_hint_set_aside: "这些内容不会使用，每条都注明了原因：由谁搁置，或属于之前的哪个角色或对话。由角色或时限搁置的内容可以恢复使用。",
     learned_empty_in_use: "没有使用中的内容。",
     learned_empty_observing: "没有正在观察的内容。",
     learned_empty_set_aside: "没有已搁置的内容。",
     learned_loading: "正在加载…",
     learned_more: "显示更多",
-    learned_wording: "改进说法",
-    learned_repeat: "值得沿用的回复",
-    learned_said: "原回复",
-    learned_instead: "改为",
-    learned_lesson: "今后做法",
     learned_here: "本页面",
     learned_group: "群聊",
     learned_dm: "私聊",
@@ -462,6 +451,7 @@ PA.strings({
       detail = value;
       limit = PAGE;
       PA.toast(PA.t(done, { lang: langName(item.lang) }));
+      PA.learnedChanged(load);
     } catch (failed) {
       detailError = failed.message;
     } finally {
@@ -477,11 +467,12 @@ PA.strings({
     return row;
   }
 
+  // The Activity view's labels, so one item reads the same in both places.
   function words(item) {
     const body = make("div", "change-body");
     if (item.kind === "wording") {
-      body.append(line("learned_said", item.said, "was"), line("learned_instead", item.better, "now"));
-      if (item.lesson) body.append(line("learned_lesson", item.lesson, "lesson"));
+      body.append(line("activitySaid", item.said, "was"), line("activityBetter", item.better, "now"));
+      if (item.lesson) body.append(line("activityLesson", item.lesson, "lesson"));
     } else body.append(make("p", "change-reply", item.said));
     return body;
   }
@@ -531,7 +522,7 @@ PA.strings({
   function decidedText(item) {
     const info = item.decided;
     if (!info || !info.by) return "";
-    if (item.tab === "in_use") return PA.cameIn(info);
+    if (item.state === "promoted") return PA.cameIn(info);
     if (info.by === "character") return PA.t("learned_out_character", { reason: info.why });
     if (info.by === "time") return PA.t("learned_out_time", { days: info.days });
     if (info.by === "rule")
@@ -565,7 +556,11 @@ PA.strings({
     for (const ev of item.events) {
       const li = make("li");
       const self = ev.what === "self_eval" || ev.what === "self_review";
-      const who = self ? PA.t("learned_itself") : ev.who || PA.t("learned_someone");
+      const who = self
+        ? PA.t("learned_itself")
+        : ev.self
+          ? (PA.state && PA.state.adminName) || PA.t("activityAdmin")
+          : ev.who || PA.t("learned_someone");
       const head = make("div", "learned-event-head");
       head.append(make("strong", "", who));
       const what = KNOWN_WHAT.includes(ev.what) ? PA.t(`learned_what_${ev.what}`) : "";
@@ -602,17 +597,20 @@ PA.strings({
     box.id = "learned-detail";
     const steps = item.history.filter((step) => step.state !== "review");
     const last = steps[steps.length - 1];
+    // Read from the ledger state: an item out of scope is listed under Set aside.
+    const observed = item.state === "proposed";
+    const promoted = item.state === "promoted";
     // An item the character would not use is never described as in use.
-    if (item.tab !== "observing" && !(item.gap && item.tab === "in_use"))
+    if (!observed && !(item.gap && promoted))
       box.append(
-        make("p", "learned-status", PA.t(`learned_now_${item.tab === "in_use" ? "in_use" : item.state}`, {
+        make("p", "learned-status", PA.t(`learned_now_${promoted ? "in_use" : item.state}`, {
           when: date(last ? last.when : item.when),
         })),
       );
-    const decided = item.tab === "observing" ? "" : decidedText(item);
+    const decided = observed ? "" : decidedText(item);
     if (decided) box.append(make("p", "learned-status learned-by", decided));
     // Observed items explain the scope under where they stand instead.
-    if (item.gap && item.tab !== "observing") box.append(make("p", "learned-status learned-out", scopeText(item)));
+    if (item.gap && !observed) box.append(make("p", "learned-status learned-out", scopeText(item)));
     if (item.replacedBy) box.append(make("p", "learned-small", PA.t("learned_replaced_by", { text: item.replacedBy })));
     if (item.standing) box.append(standing(item));
     if (item.context.length) {
@@ -646,7 +644,7 @@ PA.strings({
     head.dataset.id = item.id;
     head.setAttribute("aria-expanded", String(item.id === openId));
     const top = make("span", "learned-row-top");
-    const kind = make("span", "change-kind", PA.t(item.kind === "wording" ? "learned_wording" : "learned_repeat"));
+    const kind = make("span", "change-kind", PA.t(item.kind === "wording" ? "activityWording" : "activityRepeat"));
     if (item.gap) kind.append(make("span", "learned-gap", PA.t(`learned_gap_${item.gap}`)));
     top.append(kind, make("small", "", meta(item)));
     head.append(top, make("span", "learned-row-text", item.kind === "wording" ? item.better : item.said));
@@ -667,17 +665,18 @@ PA.strings({
     return li;
   }
 
-  function summary(totals, idle) {
+  // The same counts as the tabs: an item out of scope is counted under Set aside only.
+  function summary(totals) {
     if (data.lang !== data.current) return PA.t("learned_sum_other", { lang: langName(data.lang) });
     const all = Object.values(totals).reduce((a, b) => a + b, 0);
     if (!all) return PA.t("learned_sum_none");
     const text = PA.t("learned_sum", {
-      inUse: String(totals.in_use - idle.in_use),
+      inUse: String(totals.in_use),
       chats: String(data.chats),
-      observing: String(totals.observing - idle.observing),
+      observing: String(totals.observing),
     });
-    const unused = Object.values(idle).reduce((a, b) => a + b, 0);
-    return unused ? `${text}${zh() ? "" : " "}${PA.t("learned_sum_idle", { n: String(unused) })}` : text;
+    const idle = Number(data.idle) || 0;
+    return idle ? `${text}${zh() ? "" : " "}${PA.t("learned_sum_idle", { n: String(idle) })}` : text;
   }
 
   function draw() {
@@ -691,9 +690,8 @@ PA.strings({
       return;
     }
     const totals = data.totals;
-    const idle = data.idle || {};
     const all = Object.values(totals).reduce((a, b) => a + b, 0);
-    sum.textContent = summary(totals, idle);
+    sum.textContent = summary(totals);
     running.hidden = data.running;
     running.textContent = PA.t("learned_not_running");
     const others = data.langs.filter((pool) => pool.code !== data.lang && pool.count);
@@ -726,7 +724,8 @@ PA.strings({
         button.append(make("span", "", PA.t(`learned_tab_${name}`)));
         button.append(make("span", "count", String(totals[name])));
         button.addEventListener("click", () => {
-          if (tab === name) return;
+          // The open tab reads the list again rather than doing nothing.
+          if (tab === name) return load();
           tab = name;
           limit = PAGE;
           error = "";
@@ -768,6 +767,7 @@ PA.strings({
     load();
   });
   PA.onShow("activity", load);
+  PA.onLearned(load);
   PA.onLanguage(render);
   render();
 })();

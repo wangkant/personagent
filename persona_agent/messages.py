@@ -54,6 +54,7 @@ class MessageParsing:
         link_slots: list[tuple[int, int]] = []
         # Mentions, so following text gets a space connectors may omit.
         at_slots: set[int] = set()
+        forwarded = False
         for seg in payload.get("message", []):
             if not isinstance(seg, dict):
                 continue
@@ -62,7 +63,8 @@ class MessageParsing:
             if t == "text":
                 # The sender's own words may not manufacture either frame.
                 txt = _clean_prompt_source(d.get("text", ""))
-                parts.append(txt)
+                # A forward's words are someone else's: they call no one.
+                parts.append(_fence(txt) if forwarded and txt.strip() else txt)
                 # The cap counts across the whole message.
                 urls = self._extract_urls(txt)[
                     :self.MAX_URLS_PER_MESSAGE - len(msg_urls)]
@@ -80,8 +82,9 @@ class MessageParsing:
                 if name and qq and group_id:
                     # Present, so an [AT:id] reply to them still resolves.
                     self.active_users[group_id].append((qq, name))
-                # A name that names the character would read as a call to it.
-                parts.append(f"@{name}" if name and not (
+                # Fenced: the mentioned person chose it. One that names the
+                # character would read as a call to it.
+                parts.append(_fence(f"@{name}") if name and not (
                     self.persona_name and mentions_name(
                         name, self.persona_name, getattr(self, "persona_aliases", ()))) else f"@{qq}")
             elif t == "image":
@@ -137,6 +140,7 @@ class MessageParsing:
                 name = " ".join(_clean_prompt_source(d.get("name")).split())[:128]
                 parts.append(_fence(f"[file: {name}]") if name else "[file]")
             elif t == "forwarded_from":
+                forwarded = True
                 name = " ".join(_clean_prompt_source(d.get("name")).split())[:64]
                 parts.append(_fence(f"[forwarded from {name}]") if name else "[forwarded]")
             elif t == "forward":

@@ -150,6 +150,16 @@ def scope_compatible(a: dict, b: dict, *,
     return not compare_mode or _label_compatible(a.get("mode", ""), b.get("mode", ""))
 
 
+def in_scope(event: dict, cand: dict, *, policy: Policy = DEFAULT_POLICY,
+             compare_mode: bool = True) -> bool:
+    """Was `event` given where `cand` applies: the scope rule every link
+    between evidence and a candidate uses. An item in use applies in every
+    kind of turn of its chat, so objections to one pass compare_mode=False."""
+    return scope_compatible(candidates.scope_from_event(event), cand.get("scope") or {},
+                            require_same_conversation=policy.require_same_conversation,
+                            compare_mode=compare_mode)
+
+
 def supports_candidate(event: dict, cand: dict, *,
                        policy: Policy = DEFAULT_POLICY) -> bool:
     """Does `event` argue for *this* candidate: same reply, compatible scope,
@@ -161,8 +171,7 @@ def supports_candidate(event: dict, cand: dict, *,
         return False
     if str(event.get("reply") or "").strip() != str(cand.get("reply") or "").strip():
         return False
-    if not scope_compatible(candidates.scope_from_event(event), cand.get("scope") or {},
-                            require_same_conversation=policy.require_same_conversation):
+    if not in_scope(event, cand, policy=policy):
         return False
     if ctype == candidates.TYPE_PAIR and not _vouches_for(event, cand):
         answers = str((cand.get("payload") or {}).get("answers") or "")
@@ -339,7 +348,6 @@ def counter_evidence(cand: dict, events, *, now: float = 0.0,
     ctype = str(cand.get("type") or "")
     reply = str(cand.get("reply") or "")
     better = str(cand.get("better") or "").strip()
-    scope = cand.get("scope") or {}
     max_age = policy.max_evidence_age_days * 86400.0
     out = []
     for ev in events or ():
@@ -356,13 +364,43 @@ def counter_evidence(cand: dict, events, *, now: float = 0.0,
         if (about_reply and now and max_age > 0
                 and now - epoch(ev.get("ts")) > max_age):
             continue
-        if not scope_compatible(candidates.scope_from_event(ev), scope,
-                                require_same_conversation=policy.require_same_conversation):
+        if not in_scope(ev, cand, policy=policy):
             continue
         if (evidence.opposes(ev, ctype) if about_reply
                 else evidence.opposes_rewrite(ev)):
             out.append(ev.get("event_id", ""))
     return [eid for eid in out if eid]
+
+
+def judged_evidence(cand: dict, linked, related, *, now: float = 0.0,
+                    policy: Policy = DEFAULT_POLICY) -> list[dict]:
+    """What a judgement of `cand` is built on: its accepted support and the
+    accepted evidence against it, in scope; nothing else may reopen it."""
+    against = set(counter_evidence(cand, related, now=now, policy=policy))
+    out, ids = [], set()
+    for ev in [e for e in linked or () if supports_candidate(e, cand, policy=policy)] + [
+            e for e in related or () if e.get("event_id") in against]:
+        eid = str(ev.get("event_id") or "")
+        if eid and eid not in ids:
+            ids.add(eid)
+            out.append(ev)
+    return out
+
+
+def judged_ids(cand: dict, linked, related, *, now: float = 0.0,
+               policy: Policy = DEFAULT_POLICY) -> tuple[str, ...]:
+    return tuple(sorted(str(e.get("event_id")) for e in judged_evidence(
+        cand, linked, related, now=now, policy=policy)))
+
+
+def newest_reaction(cand: dict, linked, related, *,
+                    policy: Policy = DEFAULT_POLICY) -> float:
+    """The newest judged event, at any age, or the item itself: what the time
+    limit counts from."""
+    stamps = [epoch(e.get("ts")) for e in judged_evidence(
+        cand, linked, related, policy=policy)]
+    stamps.append(epoch(cand.get("created_at")))
+    return max(stamps)
 
 
 def decide(cand: dict, *, linked_events, related_events=(), peers=(),
@@ -529,9 +567,10 @@ def conflict_group(cand: dict, peers, *, policy: Policy = DEFAULT_POLICY,
     return [cand] + [by_id[cid] for cid in rivals if cid in by_id]
 
 
-def disputes(cand: dict, linked_events) -> list[str]:
-    """Accepted objections, linked to a candidate in use, to the text it
-    teaches: a bystander's dispute for the character to judge."""
+def disputes(cand: dict, linked_events, *,
+             policy: Policy = DEFAULT_POLICY) -> list[str]:
+    """Accepted objections, linked to a candidate in use and given where it
+    applies, to the text it teaches: a bystander's dispute for the character."""
     taught = str((cand.get("better") if cand.get("type") == candidates.TYPE_PAIR
                   else cand.get("reply")) or "").strip()
     if not taught:
@@ -539,7 +578,8 @@ def disputes(cand: dict, linked_events) -> list[str]:
     return [str(ev.get("event_id") or "") for ev in linked_events or ()
             if ev.get("event_id")
             and str(ev.get("reply") or "").strip() == taught
-            and evidence.opposes_rewrite(ev)]
+            and evidence.opposes_rewrite(ev)
+            and in_scope(ev, cand, policy=policy, compare_mode=False)]
 
 
 def retract_example(path: Path, reply: str) -> int:
