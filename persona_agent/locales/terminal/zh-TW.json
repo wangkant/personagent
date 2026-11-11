@@ -374,5 +374,13 @@
 "The service is running, but its activity data is turned off (DASHBOARD_ENABLED=false), so its memory cannot be reached from here. Turn activity data on, or stop the service first.": "服務正在執行，但其動態資料已關閉（DASHBOARD_ENABLED=false），因此無法從此處存取其記憶。請開啟動態資料，或先停止服務。",
 "The running service did not answer. Try again in a moment.": "正在執行的服務沒有回應，請稍後再試。",
 "{0} is damaged and was left untouched.": "{0} 已損壞，未做任何變更。",
-"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "{0} 已損壞，未做任何變更。{1} 的副本位於 {2}；將其移到 {3} 的位置即可從該副本啟動。"
+"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "{0} 已損壞，未做任何變更。{1} 的副本位於 {2}；將其移到 {3} 的位置即可從該副本啟動。",
+"Group replies": "群組回覆",
+"Web search decision": "網路搜尋判斷",
+"Reaction judge": "反應判斷",
+"turned off": "已關閉",
+"{0} did not call the search tool, so web search will not run": "{0} 未呼叫搜尋工具，網路搜尋將不會執行",
+"model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "模型用量——今日：請求 {0}，Token {1}，費用 {2}；近 7 日：請求 {3}，Token {4}，費用 {5}",
+"not reported": "未提供",
+"model use: nothing recorded yet": "模型用量：尚無記錄"
 }

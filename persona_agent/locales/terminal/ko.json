@@ -374,5 +374,13 @@
 "The service is running, but its activity data is turned off (DASHBOARD_ENABLED=false), so its memory cannot be reached from here. Turn activity data on, or stop the service first.": "서비스가 실행 중이지만 활동 데이터가 꺼져 있어(DASHBOARD_ENABLED=false) 여기에서 기억에 접근할 수 없습니다. 활동 데이터를 켜거나 먼저 서비스를 중지하십시오.",
 "The running service did not answer. Try again in a moment.": "실행 중인 서비스가 응답하지 않았습니다. 잠시 후 다시 시도하십시오.",
 "{0} is damaged and was left untouched.": "다음 파일이 손상되어 변경하지 않고 그대로 두었습니다: {0}",
-"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "다음 파일이 손상되어 변경하지 않고 그대로 두었습니다: {0}. {1} 시점의 사본이 다음 위치에 있습니다: {2}. 이 사본을 {3} 자리로 옮기면 사본에서 시작합니다."
+"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "다음 파일이 손상되어 변경하지 않고 그대로 두었습니다: {0}. {1} 시점의 사본이 다음 위치에 있습니다: {2}. 이 사본을 {3} 자리로 옮기면 사본에서 시작합니다.",
+"Group replies": "그룹 채팅 답장",
+"Web search decision": "웹 검색 여부 판단",
+"Reaction judge": "반응 판단",
+"turned off": "꺼짐",
+"{0} did not call the search tool, so web search will not run": "{0}: 검색 도구를 호출하지 않았으므로 웹 검색이 실행되지 않습니다",
+"model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "모델 사용량 — 오늘: 요청 {0}, 토큰 {1}, 비용 {2}; 최근 7일: 요청 {3}, 토큰 {4}, 비용 {5}",
+"not reported": "제공되지 않음",
+"model use: nothing recorded yet": "모델 사용량: 아직 기록이 없습니다"
 }

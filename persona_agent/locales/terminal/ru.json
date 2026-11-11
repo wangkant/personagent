@@ -374,5 +374,13 @@
 "The service is running, but its activity data is turned off (DASHBOARD_ENABLED=false), so its memory cannot be reached from here. Turn activity data on, or stop the service first.": "Служба работает, но её данные активности отключены (DASHBOARD_ENABLED=false), поэтому получить доступ к её памяти отсюда нельзя. Включите данные активности или сначала остановите службу.",
 "The running service did not answer. Try again in a moment.": "Работающая служба не ответила. Повторите попытку чуть позже.",
 "{0} is damaged and was left untouched.": "Файл {0} повреждён и оставлен без изменений.",
-"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "Файл {0} повреждён и оставлен без изменений. Копия от {1} находится в {2}; поместите её на место файла {3}, чтобы начать с неё."
+"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "Файл {0} повреждён и оставлен без изменений. Копия от {1} находится в {2}; поместите её на место файла {3}, чтобы начать с неё.",
+"Group replies": "Ответы в групповых чатах",
+"Web search decision": "Решение о веб-поиске",
+"Reaction judge": "Оценка реакций",
+"turned off": "отключено",
+"{0} did not call the search tool, so web search will not run": "{0}: инструмент поиска не вызван, поэтому веб-поиск выполняться не будет",
+"model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "использование модели — сегодня: запросы {0}, токены {1}, стоимость {2}; за 7 дней: запросы {3}, токены {4}, стоимость {5}",
+"not reported": "не сообщается",
+"model use: nothing recorded yet": "использование модели: записей пока нет"
 }

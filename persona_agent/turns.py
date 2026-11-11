@@ -19,6 +19,8 @@ from . import decision_log
 from .connector import (ConnectorSink, current_sink,
                       event_connector, event_prefiltered,
                       synthesize_onebot_payload)
+from .messages import message_time
+from .prompt import BUFFERED_LINE_CHARS
 from .textproc import (
     TextProcessing,
     _clean_prompt_source,
@@ -37,6 +39,10 @@ _EXCUSE_COOLDOWN_S = 300.0
 # A bare call ("@Bot", "Bot?") waits this long for the message that follows it.
 BARE_CALL_DEBOUNCE_S = 5.0
 
+# A connector message older than this (a backlog handed over after a restart)
+# joins the window but opens no turn: it is not answered as if just said.
+STALE_MESSAGE_S = 600.0
+
 # A turn's whole model time, in LLM_TIMEOUT_S: one full-length call and half
 # of another, however many calls, retries and models it goes through.
 _TURN_BUDGET_CALLS = 1.5
@@ -47,6 +53,12 @@ _MAX_HELD = 256
 # Held memory commands that keep their handler, where an answer can only
 # travel in a response; a later one's answer rides in the last keeper's.
 _MAX_COMMAND_WAITERS = 2
+
+# Callers since the last turn that one reply answers together.
+_MAX_CALLERS = 4
+
+# How long a turn waits for a picture still being read in its line.
+_UNREAD_WAIT_S = 20.0
 
 
 class _Held:
@@ -295,6 +307,21 @@ class Turns:
         # Cancelled only at shutdown, so what it displaced needs no other turn.
         return await item.waiter, item.carried
 
+    async def _read_in_line(self, group_id: str, gate: _TurnGate, item: _Held,
+                            absorb: Callable[[], tuple],
+                            say: Optional[Callable]) -> tuple[Optional[tuple], list]:
+        """`_group_intake` for a message that took its place in line before
+        it was read (`_enter_line`)."""
+        try:
+            async with self.locks[group_id]:
+                self._ready(group_id, gate, item, absorb,
+                            message=say is None, say=say)
+        except BaseException:
+            if item.absorb is None:
+                self._leave_line(group_id, gate, item)
+            raise
+        return await item.waiter, item.carried
+
     async def _say_memory_answer(self, group_id: str, answer: str,
                                  at_uid: str, *, background: bool = False) -> bool:
         """Send a memory command's answer to a group and put it on record.
@@ -331,6 +358,9 @@ class Turns:
             return {"handled": False, "owned": True, "replies": []}
         payload = synthesize_onebot_payload(
             event, self._self_mention_id(), self.connector_qq_platforms)
+        # When it was said, in OneBot's field, for the window and for a backlog.
+        if message_time({"time": event.get("sent_at")}) is not None:
+            payload["time"] = message_time({"time": event.get("sent_at")})
         if payload.get("message_type") == "private":
             route_key = channels.dm_routing_key(payload.get("user_id", ""))
         else:
@@ -562,66 +592,78 @@ class Turns:
             isinstance(seg, dict) and seg.get("type") == "image"
             for seg in payload.get("message", [])
         )
-        if has_image:
-            self._vision_in_flight[group_id] += 1
+        # A picture takes its place in line before it is read, as in a DM, so
+        # a slow caption keeps arrival order and joins the turn after it.
+        place = self._enter_line(group_id) if has_image else None
         try:
             text = await self._extract_text(payload)
-        finally:
-            if has_image:
-                self._vision_in_flight[group_id] = max(0, self._vision_in_flight[group_id] - 1)
-        if not text:
-            return False
-        # ctrl_text drops link enrichment, so a fetched page cannot call the bot
-        # or run memory commands; text keeps it, marked, for the prompt.
-        ctrl_text = _strip_web_desc(text)
+            if not text:
+                if place:
+                    self._leave_line(group_id, *place)
+                return False
+            # ctrl_text drops link enrichment, so a fetched page cannot call the
+            # bot or run memory commands; text keeps it, marked, for the prompt.
+            ctrl_text = _strip_web_desc(text)
 
-        sender = payload.get("sender") or {}  # may be present but null
-        # Cleaned here: the name reaches prompts that bypass `_fmt_line`.
-        nickname = (_clean_prompt_source(
-            sender.get("card") or sender.get("nickname")) or "?")[:8]
+            sender = payload.get("sender") or {}  # may be present but null
+            # Cleaned here: the name reaches prompts that bypass `_fmt_line`.
+            nickname = (_clean_prompt_source(
+                sender.get("card") or sender.get("nickname")) or "?")[:8]
 
-        is_at = self._is_at_me(payload)
-        is_called = self._names_me(ctrl_text)
-        # Quoting its message is how people answer it on QQ.
-        addressed = is_at or is_called or self._quotes_me(payload)
-        is_noise = len(text.strip()) < 4 and not addressed
+            is_at = self._is_at_me(payload)
+            is_called = self._names_me(ctrl_text)
+            # Quoting its message is how people answer it on QQ.
+            addressed = is_at or is_called or self._quotes_me(payload)
+            is_noise = len(text.strip()) < 4 and not addressed
 
-        is_admin_msg = access.is_admin(user_id, self._admins())
-        is_command = addressed and self._is_memory_command(ctrl_text)
+            is_admin_msg = access.is_admin(user_id, self._admins())
+            is_command = addressed and self._is_memory_command(ctrl_text)
 
-        # A directed reaction to a recent reply is adjudicated off the hot path.
-        # A memory command is not one and must not consume the pending reply.
-        if self.react_learn_enabled and not is_command:
-            _quote_mid, _quote_by_bot = "", None
-            for _seg in payload.get("message", []) or []:
-                if isinstance(_seg, dict) and _seg.get("type") == "reply":
-                    _qdata = _seg.get("data") or {}
-                    _qid = _qdata.get("id")
-                    if _qid is not None:
-                        _quote_mid = str(_qid)
-                    if _qdata.get("quote_self"):
-                        _quote_by_bot = True
-                    elif _qdata.get("quote_name") not in (None, "", self.persona_name):
-                        _quote_by_bot = False
-                    break
-            _r_entry = self.pending_reactions.match(
-                group_id, sender_uid=user_id, quote_mid=_quote_mid,
-                at_bot=addressed, now=time.time(), quote_by_bot=_quote_by_bot)
-            if _r_entry:
-                self._spawn(self._process_reaction(
-                    _r_entry, text, nickname, user_id, is_admin_msg,
-                    conv_id=group_id, is_dm=False))
+            # A directed reaction to a recent reply is adjudicated off the hot
+            # path. A memory command is not one and must not consume the
+            # pending reply.
+            if self.react_learn_enabled and not is_command:
+                _quote_mid, _quote_by_bot = "", None
+                for _seg in payload.get("message", []) or []:
+                    if isinstance(_seg, dict) and _seg.get("type") == "reply":
+                        _qdata = _seg.get("data") or {}
+                        _qid = _qdata.get("id")
+                        if _qid is not None:
+                            _quote_mid = str(_qid)
+                        if _qdata.get("quote_self"):
+                            _quote_by_bot = True
+                        elif _qdata.get("quote_name") not in (None, "", self.persona_name):
+                            _quote_by_bot = False
+                        break
+                _r_entry = self.pending_reactions.match(
+                    group_id, sender_uid=user_id, quote_mid=_quote_mid,
+                    at_bot=addressed, now=time.time(), quote_by_bot=_quote_by_bot)
+                if _r_entry:
+                    self._spawn(self._process_reaction(
+                        _r_entry, text, nickname, user_id, is_admin_msg,
+                        conv_id=group_id, is_dm=False))
+        except BaseException:
+            # An unread place left in line would hold the group forever.
+            if place and place[1].absorb is None:
+                self._leave_line(group_id, *place)
+            raise
 
         def absorb() -> tuple[int, Optional[str]]:
             """Phase 1: buffer the message, run a memory command, stamp the
             seq. Returns (seq, the command's answer)."""
-            # The cut must not leave an enrichment span open.
-            self._append_buffer(group_id, nickname,
-                                _truncate_framed(text, 200), user_id)
+            # The cut must not leave an enrichment span open, and is marked.
+            line = _truncate_framed(text, BUFFERED_LINE_CHARS)
+            if len(text) > BUFFERED_LINE_CHARS:
+                line += "…"
+            self._append_buffer(group_id, nickname, line, user_id, at=sent_at)
             if mid is not None:
                 self._index_msg(mid, f"{nickname}: {text[:200]}")
             self.last_activity_at[group_id] = time.time()
             self.active_users[group_id].append((user_id, nickname))
+            self._maybe_consolidate(group_id, "lines")
+            if stale and not is_command:
+                # Context only: it neither counts toward a turn nor calls one.
+                return 0, None
             if not is_noise:
                 self.counters[group_id] += 1
 
@@ -632,22 +674,37 @@ class Turns:
                     group_id, ctrl_text, user_id, nickname)
                 if answer is not None:
                     return 0, answer
+                now = time.time()
+                earlier = self._sticky_call.get(group_id)
+                # Everyone who called since the last turn, which answers them all.
+                callers = list(earlier.get("callers", ())) if (
+                    earlier and now - earlier["ts"] < self.message_debounce_sec + 5.0
+                ) else []
                 self._sticky_call[group_id] = {
                     "user_id": user_id,
                     "nickname": nickname,
-                    "ts": time.time(),
+                    "ts": now,
+                    "callers": (callers + [(nickname, user_id, ctrl_text[:200])]
+                                )[-_MAX_CALLERS:],
                 }
             self._msg_seq[group_id] += 1
             return self._msg_seq[group_id], None
 
         caller = user_id  # a sticky call rebinds user_id further down
+        sent_at = message_time(payload)
+        stale = (via_connector and sent_at is not None
+                 and time.time() - sent_at > STALE_MESSAGE_S)
 
         async def say(outcome: tuple, *, background: bool = False) -> bool:
             return await self._say_memory_answer(
                 group_id, outcome[1], caller, background=background)
 
-        absorbed, carried = await self._group_intake(
-            group_id, absorb, say if is_command else None)
+        if place is None:
+            absorbed, carried = await self._group_intake(
+                group_id, absorb, say if is_command else None)
+        else:
+            absorbed, carried = await self._read_in_line(
+                group_id, *place, absorb, say if is_command else None)
         if absorbed is None:
             # A message overtaken behind a turn, which the debounce would
             # drop, or a command that is answered once the turn is over.
@@ -667,6 +724,11 @@ class Turns:
             # Later commands whose answers had no way out but this response.
             await self._say_carried(group_id, carried)
             return handled
+        if stale:
+            logger.info("[Agent] a message from %d min ago was kept as context, "
+                        "not answered (group=%s)",
+                        int((time.time() - sent_at) // 60), group_id)
+            return False
 
         # Debounce outside the lock so a burst batches into one turn.
         bare_after_strip = (
@@ -680,18 +742,24 @@ class Turns:
             except asyncio.CancelledError:
                 return False
 
-        vision_waited = 0.0
-        while self._vision_in_flight.get(group_id, 0) > 0 and vision_waited < 4.0:
-            await asyncio.sleep(0.3)
-            vision_waited += 0.3
-        if vision_waited > 0:
-            logger.debug("[Agent] waited %.1fs for vision in group=%s", vision_waited, group_id)
-
         # A turn begun meanwhile without a newer message (a proactive one) is
-        # waited out: two turns of one group never run side by side.
+        # waited out: two turns of one group never run side by side. So, for a
+        # while, is a picture still being read in the line, which joins this
+        # burst once read.
+        unread_waited = 0.0
         while (self._msg_seq.get(group_id, 0) == my_seq
                and (running := self._pending_outbound.get(group_id)) is not None):
-            await running.wait()
+            if running.busy:
+                await running.wait()
+            elif (unread_waited < _UNREAD_WAIT_S
+                  and any(held.absorb is None for held in running.held)):
+                await asyncio.sleep(0.3)
+                unread_waited += 0.3
+            else:
+                break
+        if unread_waited:
+            logger.debug("[Agent] waited %.1fs for a picture in group=%s",
+                         unread_waited, group_id)
 
         # Phase 2: only the latest message of the burst reaches the model.
         async with self.locks[group_id]:
@@ -734,6 +802,14 @@ class Turns:
 
             self.counters[group_id] = 0
             self._sticky_call.pop(group_id, None)
+            # Several people called within one debounce: one reply for all,
+            # each one's latest words, the @ to the latest caller.
+            by_uid: dict = {}
+            if sticky is not None and mode in ("called", access.ADMIN_MODE):
+                for entry in sticky.get("callers", ()):
+                    by_uid.pop(entry[1], None)
+                    by_uid[entry[1]] = entry
+            together = list(by_uid.values()) if len(by_uid) > 1 else []
 
             skip = pacing_skip(mode, first_appearance=never_replied,
                                sleep_hour=TextProcessing._is_sleep_hour())
@@ -773,6 +849,10 @@ class Turns:
                     final, intent, mem = retried, retry_intent, retry_mem or mem
             return final, intent, mem
 
+        # Read by the prompt (`_build_group_prompt`); `_think` keeps its shape.
+        turn_callers = self.__dict__.setdefault("_turn_callers", {})
+        if together:
+            turn_callers[group_id] = together
         # Outside the group lock: no handler queues on it for the length of a
         # model call or of a send, each holding a webhook admission slot.
         try:
@@ -853,16 +933,22 @@ class Turns:
                     self._commit_core_memory(group_id, final.core_note)
                     if auto_mem:
                         self._save_auto_memory(group_id, auto_mem)
+                    self._mark_used(group_id, committed)
             if not send_result.success:
                 logger.warning(
                     "[Agent] reply PARTIALLY delivered (mode=%s, group=%s): "
                     "committed %d of %d chars",
                     mode, group_id, len(committed), len(reply))
         finally:
+            turn_callers.pop(group_id, None)
             self._end_turn(group_id, gate)
         logger.info("[Agent] reply (mode=%s, group=%s): %s", mode, group_id, reply[:60])
         decision_log.record(group_id, mode, True, why, committed,
                             answered=ctrl_text, sender=sender_name)
+        for caller_nick, caller_uid, said in together:
+            if caller_uid != user_id:
+                decision_log.record(group_id, mode, False, "answered together",
+                                    said, sender=caller_nick)
 
         # Reactions are judged against what was actually delivered.
         if self.react_learn_enabled and committed:

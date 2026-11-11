@@ -28,6 +28,13 @@ from test_turns import (NOTED, SEEDS, Storm, _dm, _dm_event, _settle,
 PKEY = "private:42"
 
 
+def _said(turns) -> list:
+    """Turns as role and content; their times and numbers are checked in
+    tests/test_memory_recent.py."""
+    return [{k: v for k, v in dict(m).items() if k in ("role", "content")}
+            for m in turns or []]
+
+
 def _collect_dms(agent: Agent) -> list:
     sent: list = []
 
@@ -46,7 +53,7 @@ def _hang_the_first_call(agent: Agent):
 
     async def chat(history, is_admin=False, pkey="", proactive=False,
                    proactive_cue=""):
-        seen.append(([dict(m) for m in history], proactive, proactive_cue))
+        seen.append((_said(history), proactive, proactive_cue))
         mine = len(seen)
         if mine == 1:
             started.set()
@@ -103,7 +110,7 @@ async def test_dms_during_a_model_call_leave_and_are_answered_in_one_turn(
     check("it is the newest request's own", handled[0] is True
           and handled[-1] is True, repr(handled))
     check("the first reply sits right after what it saw, the rest after it",
-          agent.dm_history["42"] == [
+          _said(agent.dm_history["42"]) == [
               _user("question one"), _bot("answer 1"), _user(*words),
               _bot("answer 2")], repr(agent.dm_history["42"]))
     check("both replies went out, once each",
@@ -202,7 +209,7 @@ async def test_a_dm_turn_over_its_budget_ends_with_the_failure_line_once(
     answers = True
     check("which the next message gets",
           await asyncio.wait_for(agent.handle_onebot(_dm("ok?", "b3")), 5) is True
-          and agent.dm_history["42"] == [
+          and _said(agent.dm_history["42"]) == [
               _user("you there?", "hello??", "ok?"), _bot("there you are")],
           repr(agent.dm_history.get("42")))
     check("nothing stays held", PKEY not in agent._pending_outbound)
@@ -292,7 +299,7 @@ async def test_a_held_dm_command_runs_after_the_turn_without_its_handler(
           sent[0] == ("42", "answer 1") and len(sent) == 71
           and all(text in NOTED for _, text in sent[1:]), repr(sent[:3]))
     check("a command is no model call and no history",
-          len(seen) == 1 and agent.dm_history["42"] == [
+          len(seen) == 1 and _said(agent.dm_history["42"]) == [
               _user("question one"), _bot("answer 1")],
           repr(agent.dm_history["42"]))
 
@@ -382,7 +389,7 @@ async def test_a_proactive_dm_turn_has_the_budget_and_holds_no_lock(
           and sent[0] == ("42", "answer 1"), repr(sent))
     await asyncio.gather(*later)
     check("on record before the words it did not see, which get one turn",
-          agent.dm_history["42"] == [
+          _said(agent.dm_history["42"]) == [
               _bot("answer 1"), _user("a", "b", "c"), _bot("answer 2")],
           repr(agent.dm_history["42"]))
     check("nothing stays held", PKEY not in agent._pending_outbound)
@@ -400,7 +407,7 @@ def test_a_burst_of_short_dms_is_answered_once(tmp: Path) -> None:
 
         async def chat(history, is_admin=False, pkey="", proactive=False,
                        proactive_cue=""):
-            seen.append([dict(m) for m in history])
+            seen.append(_said(history))
             return "sure, 7 works", ""
 
         agent._chat_dm = chat
@@ -520,7 +527,7 @@ async def test_what_was_said_during_an_outage_waits_whole(tmp: Path) -> None:
 
     async def chat(history, is_admin=False, pkey="", proactive=False,
                    proactive_cue=""):
-        seen.append([dict(m) for m in history])
+        seen.append(_said(history))
         return "sorry, I'm back", ""
 
     agent._chat_dm = chat
@@ -566,6 +573,35 @@ async def test_a_dm_lesson_names_the_person(tmp: Path) -> None:
           and "user:" not in judged[0], repr(judged[:1])[:600])
     check("the evidence names them",
           [e.get("speaker_name") for e in events] == ["Kay"], repr(events))
+
+
+# ---- the trim and consolidation ----------------------------------------------
+
+async def test_the_trim_hands_its_unconsolidated_turns_to_the_spill(tmp: Path) -> None:
+    agent = make_agent(tmp)
+    _collect_dms(agent)
+
+    async def chat(history, is_admin=False, pkey="", proactive=False,
+                   proactive_cue=""):
+        return "noted", ""
+
+    agent._chat_dm = chat
+    agent._wake(PKEY)
+    agent.dm_history["42"] = [
+        {"role": "user" if i % 2 else "assistant", "content": f"turn {i}",
+         "t": 1e9 + i, "seq": i} for i in range(1, 60)]
+    agent.window_seq[PKEY] = 59
+    agent.folded_upto[PKEY] = 10
+    await agent._handle_dm("42", _dm("one more", "m1"), is_admin=False)
+    kept = agent.dm_history["42"]
+    check("the trim is unchanged: past 60 turns, 40 are kept", len(kept) == 40
+          and kept[-1]["content"] == "noted", repr(len(kept)))
+    check("exactly the dropped turns not yet consolidated wait in the spill",
+          [t["seq"] for t in agent._dm_spill["42"]] == list(range(11, 22)),
+          repr([t["seq"] for t in agent._dm_spill.get("42", [])]))
+    await agent._handle_dm("42", _dm("and another", "m2"), is_admin=False)
+    check("no trim, nothing more spilled", len(agent.dm_history["42"]) == 42
+          and len(agent._dm_spill["42"]) == 11)
 
 
 # ---- a storm of DMs ----------------------------------------------------------

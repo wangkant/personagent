@@ -16,11 +16,11 @@ from .prompts import (
     HONEST_DISCLOSURE,
     INTENT_RULES,
     REASONING_PROTOCOL,
-    STYLE_GUIDE,
     TOOL_GUIDE,
     dm_intent_rules,
     dm_output_protocol,
     dm_style_guide,
+    style_guide,
 )
 from .storage import file_stamp
 from .textproc import (
@@ -30,6 +30,7 @@ from .textproc import (
     _UNTRUSTED_INPUT_RULES,
     _clean_prompt_source,
     _fence_user_data,
+    _truncate_framed,
 )
 
 logger = logging.getLogger("agent")
@@ -41,6 +42,19 @@ _PLATFORM_NAME_RE = re.compile(r"[a-z0-9_-]{1,32}")
 _GAP_MARK_S = 1800.0
 #: A first shown line older than this gets its time.
 _EARLIEST_MARK_S = 3600.0
+
+_CANT_SEE_NOTE = (
+    "⚠️ This turn's trigger is something you **can't see** (image / voice / "
+    "video / file / forwarded chat, or a quoted message that couldn't be fetched) "
+    "— there's no text to go on. **Don't guess the content, don't pretend you saw it**: "
+)
+
+#: A chat line is buffered cut to this; a longer call is shown whole once.
+BUFFERED_LINE_CHARS = 200
+_FULL_MESSAGE_CHARS = 1000
+
+# The owner_profile.json counts the sticker guide does arithmetic on.
+_OWNER_PROFILE_COUNTS = ("total_msgs", "msgs_with_image", "sticker_only_msgs")
 
 
 def _stamp(value) -> float:
@@ -120,10 +134,8 @@ class PromptBuilder:
         if history and TextProcessing._is_blind_content(
                 history[-1].get("text", "")):
             blind_note = (
-                "\n⚠️ This turn's trigger is something you **can't see** (image / voice / "
-                "video / file / forwarded chat, or a quoted message that couldn't be fetched) "
-                "— there's no text to go on. **Don't guess the content, don't pretend you saw it**: "
-                "either ask naturally ('what's that?' / 'what'd you send?') or PASS. **Never fabricate** details.\n"
+                f"\n{_CANT_SEE_NOTE}either ask naturally ('what's that?' / "
+                "'what'd you send?') or PASS. **Never fabricate** details.\n"
             )
 
         if caller_override:
@@ -146,11 +158,11 @@ class PromptBuilder:
 
         focus_block = ""
         focus_items: list[str] = []
-        # Images, stickers and cards are the turn's primary signal. No class
-        # may run over a span delimiter, or an item could close a span.
+        # Described images, stickers and cards are the turn's primary signal;
+        # a bare [image] has nothing to engage with (the blind note says so).
+        # No class may run over a span delimiter, or an item could close a span.
         focus_pat = re.compile(
             r"\[image:[^\]\x02\x03]+\]|\[sticker:[^\]\x02\x03]+\]"
-            r"|\[image\]|\[sticker\]"
             r"|\[bilibili-video\][^\n\[\x02\x03]+"
             r"|\[share\|[^\]\x02\x03]+\][^\n\[\x02\x03]*"
         )
@@ -192,12 +204,29 @@ class PromptBuilder:
         # Lets judge / proactive open at a specific member.
         active_text = self._active_users_for_prompt(group_id)
 
+        # The buffer keeps a cut line; a long message aimed at it is read whole.
+        full_text = ""
+        if (mode in ("called", ADMIN_MODE, "followup")
+                and len(latest_text) > BUFFERED_LINE_CHARS
+                and all(m.get("text") != latest_text for m in history[-5:])):
+            full_text = ("Their full message:\n"
+                         f"{_fence_user_data(_truncate_framed(latest_text, _FULL_MESSAGE_CHARS))}\n")
+        callers_line = ""
+        callers = getattr(self, "_turn_callers", {}).get(group_id)
+        if callers and mode in ("called", ADMIN_MODE):
+            listed = "; ".join(f"{nick} (id={uid}): {' '.join(said.split())}"
+                               for nick, uid, said in callers)
+            callers_line = (f"Several people called you: {_fence_user_data(listed)}. "
+                            "Answer them in one reply.\n")
+
         if mode == "called":
             user_prompt = (
                 f"{time_line}"
                 f"{focus_block}"
                 f"Recent group chat{speaker_hint}, and they called you out / @ed you:\n"
                 f"---\n{history_text}\n---\n"
+                f"{full_text}"
+                f"{callers_line}"
                 f"You were called out, so reply unless it was a purely incidental mention with no actual content directed at you.\n"
                 f"Address {_fence_user_data(latest_nick) if latest_nick else 'the person who called you'} directly, sound like a real person."
             )
@@ -206,14 +235,16 @@ class PromptBuilder:
             admin_ref = self.admin_name or "the owner"
             admin_from = f"{admin_ref}, the owner" if self.admin_name else admin_ref
             admin_is = f"{admin_ref} is" if self.admin_name else "This is"
+            # Owner mode is chosen only when the owner addressed the character.
             user_prompt = (
                 f"{time_line}"
                 f"{focus_block}"
-                f"Recent group chat (latest line is from {admin_from}):\n"
+                f"Recent group chat (latest line is from {admin_from}), and they called you out / @ed you:\n"
                 f"---\n{history_text}\n---\n"
+                f"{full_text}"
+                f"{callers_line}"
+                f"You were called out, so reply unless it was a purely incidental mention with no actual content directed at you.\n"
                 f"{admin_is} the owner — **lean towards replying**: casual chat / questions / venting / sharing — engage with all of them.\n"
-                f"If owner is in a 1-on-1 thread with someone else about work/tech that doesn't involve you → PASS.\n"
-                f"Apply the protocol's PASS signals as usual (even from owner, closing signals / fragment noise still PASS).\n"
             )
         elif mode == "followup":
             user_prompt = (
@@ -221,6 +252,7 @@ class PromptBuilder:
                 f"{focus_block}"
                 f"Recent group chat{speaker_hint}. You just spoke, and now there's a new message:\n"
                 f"---\n{history_text}\n---\n"
+                f"{full_text}"
                 f"Judge this new line: asking you / continuing what you said / expanding the topic → reply. Otherwise apply the protocol's PASS signals.\n"
                 f"If you do reply, address {_fence_user_data(latest_nick) if latest_nick else 'the speaker'} alone — don't braid in others.\n"
                 f"**Prefer PASS over forcing a reply** — being clingy is worse than being quiet.\n"
@@ -286,7 +318,7 @@ class PromptBuilder:
         # Static prefix first, for the provider's prefix cache.
         static_block = (
             f"<persona>\n{self.persona}\n</persona>\n\n"
-            f"{STYLE_GUIDE}\n\n"
+            f"{style_guide(self.reply_style)}\n\n"
             f"{INTENT_RULES}\n\n"
             f"{TOOL_GUIDE}\n\n"
             f"{_UNTRUSTED_INPUT_RULES}\n\n"
@@ -402,13 +434,14 @@ class PromptBuilder:
         # ADMIN_NAME may be empty, and this reaches every prompt.
         admin_ref = self.admin_name or "the owner"
         profile_file = self.owner_profile_file
-        if not profile_file.exists():
+        profile = (self._read_owner_profile(profile_file)
+                   if profile_file.exists() else None)
+        if profile is None:
             return (
                 "**Frequency reference**: haven't analyzed " + admin_ref +
                 "'s chat style yet — default to **moderate frequency**: roughly "
                 "1 sticker every 3-5 text messages, not strict.\n\n"
             )
-        profile = self._read_owner_profile(profile_file)
         total = profile.get("total_msgs", 0)
         with_sticker = profile.get("msgs_with_image", 0)
         sticker_only = profile.get("sticker_only_msgs", 0)
@@ -424,12 +457,24 @@ class PromptBuilder:
             f"\n"
         )
 
-    def _read_owner_profile(self, path):
-        """`path` parsed once per change, not on every prompt. A file that
-        does not parse is not cached, so it raises on every build."""
+    def _read_owner_profile(self, path) -> Optional[dict]:
+        """`path` parsed once per change, not on every prompt; None, with one
+        warning per file version, when it is not a profile."""
         stamp = (path, file_stamp(path))
         if stamp != self._owner_profile_stamp:
-            self._owner_profile = json.loads(path.read_text(encoding="utf-8"))
+            try:
+                profile = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(profile, dict) or not all(
+                        isinstance(profile.get(k, 0), (int, float))
+                        and not isinstance(profile.get(k, 0), bool)
+                        for k in _OWNER_PROFILE_COUNTS):
+                    raise ValueError("not an object of counts")
+            except (OSError, ValueError) as e:
+                # One bad file must not silence the character.
+                logger.warning("[Agent] owner_profile %s is unusable (%s); "
+                               "using the default sticker rate", path, e)
+                profile = None
+            self._owner_profile = profile
             self._owner_profile_stamp = stamp
         return self._owner_profile
 
@@ -528,7 +573,7 @@ class PromptBuilder:
             f"<persona>\n{self.persona}\n"
             f"{persona_extra}"
             f"</persona>\n\n"
-            f"{dm_style_guide(self.persona_style)}\n\n"
+            f"{dm_style_guide(self.persona_style, self.reply_style)}\n\n"
             f"{dm_intent_rules(self.persona_style)}\n\n"
             f"{DM_TOOL_GUIDE}\n\n"
             f"{_UNTRUSTED_INPUT_RULES}\n\n"
@@ -566,11 +611,16 @@ class PromptBuilder:
                 f"{self._lessons_for_prompt(channels.learning_key(pkey))}"
                 f"{memory_block}"
             )
+        blind_note = ""
+        if not proactive and TextProcessing._is_blind_content(last_user):
+            blind_note = (f"{_CANT_SEE_NOTE}ask naturally ('what's that?' / "
+                          "'what'd you send?'). **Never fabricate** details.\n\n")
         turn_context = (
             f"{_TURN_CONTEXT_OPEN}"
             f"{proactive_note}"
             f"{self._examples_for_prompt(focus_text=last_user, conv_id=channels.learning_key(pkey))}"
             f"{memory_blocks}\n\n"
+            f"{blind_note}"
             f"{'' if proactive else _dm_gap_note(history)}"
             f"[Current local time] {TextProcessing._current_time_str()}\n\n"
             "Follow the JSON output protocol."

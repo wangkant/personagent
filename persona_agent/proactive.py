@@ -5,6 +5,8 @@ import asyncio
 import logging
 import random
 import time
+from datetime import date
+from typing import Optional
 
 from . import access
 from . import channels
@@ -131,6 +133,7 @@ class Proactive:
         self._commit_core_memory(gid, final.core_note)
         if mem:
             self._save_auto_memory(gid, mem)
+        self._mark_used(gid, reply)
         decision_log.record(gid, "proactive", True, "proactive", reply)
         # A quote or an @ in answer to it is a reaction like any other.
         if self.react_learn_enabled:
@@ -152,6 +155,10 @@ class Proactive:
         targets = {uid for uid in allowed | admins if channels.is_native(uid)}
         targets.update(uid for uid in list(self.last_dm_activity_at)
                        if not channels.is_native(uid))
+        # A plan they told of, due in the last few days, is worth asking after.
+        due = {uid: ep for uid, ep in self._due_followups().items()
+               if not channels.is_native(uid) or uid in allowed | admins}
+        targets.update(due)
         # Sorted before the shuffle: a set's order differs from run to run,
         # and a seeded test must be able to replay the pick.
         targets = sorted(uid for uid in targets if self._proactive_platform_ok(uid))
@@ -167,7 +174,8 @@ class Proactive:
                 continue
             last_act = self.last_dm_activity_at.get(uid, 0.0)
             # Don't cold-DM someone who never messaged the bot.
-            if not last_act or now - last_act < self.proactive_dm_min_silence_s:
+            if (not last_act and uid not in due) or (
+                    last_act and now - last_act < self.proactive_dm_min_silence_s):
                 continue
             # The learning key, which eviction also pops.
             key = channels.dm_learning_key(uid)
@@ -186,20 +194,44 @@ class Proactive:
             gate = self._begin_turn(pkey)
             try:
                 if await self._proactive_dm_turn(
-                        uid, pkey, access.is_admin(uid, admins), now):
+                        uid, pkey, access.is_admin(uid, admins), now,
+                        followup=due.get(uid)):
                     return True
             finally:
                 self._end_turn(pkey, gate)
         return False
 
+    def _due_followups(self) -> dict:
+        """{reader: event} for private chats with a plan due 0 to 3 days ago
+        that no opener has asked after yet."""
+        today = date.today()
+        out: dict = {}
+        store = self.episode_store
+        for conv in store.convs():
+            uid = channels.dm_user(conv)
+            if not uid:
+                continue
+            for ep in store.episodes(conv):
+                try:
+                    day = date.fromisoformat(str(ep.get("due") or ""))
+                except ValueError:
+                    continue
+                if not ep.get("followed") and 0 <= (today - day).days <= 3:
+                    out[uid] = ep
+        return out
+
     async def _proactive_dm_turn(self, uid: str, pkey: str, is_admin: bool,
-                                 now: float) -> bool:
-        """Ask the model for an opener and send it. True if they read any
-        of it."""
+                                 now: float, followup: Optional[dict] = None) -> bool:
+        """Ask the model for an opener and send it; `followup` is a due plan
+        of theirs to ask after. True if they read any of it."""
+        self._wake(pkey)
         history = list(self.dm_history.get(uid, []))[-10:]
+        cue = ({"proactive_cue": f"They had planned this for {followup['due']}: "
+                                 f"{followup.get('text', '')}"}
+               if followup else {})
         try:
             reply, mem = await self._within_turn_budget(self._chat_dm(
-                history, is_admin=is_admin, proactive=True, pkey=pkey))
+                history, is_admin=is_admin, proactive=True, pkey=pkey, **cue))
         except Exception as e:
             logger.warning("[Agent] proactive DM failed (%s): %s", uid, e)
             decision_log.record(pkey, "proactive", False, "model failed")
@@ -222,20 +254,28 @@ class Proactive:
                            uid, result.partial)
             # They read the delivered part; keep it on record.
             if result.partial and result.delivered:
-                self.dm_history.setdefault(uid, []).append(
-                    {"role": "assistant", "content": result.delivered})
+                self._commit_dm_history(uid, pkey, [
+                    *self.dm_history.get(uid, []),
+                    {"role": "assistant", "content": result.delivered,
+                     "t": time.time(), "seq": self._next_seq(pkey)}])
                 self._openers()[channels.dm_learning_key(uid)] = now
                 decision_log.record(pkey, "proactive", True, "proactive",
                                     result.delivered)
             else:
                 decision_log.record(pkey, "proactive", False, "delivery failed")
             return result.partial
-        self.dm_history.setdefault(uid, []).append(
-            {"role": "assistant", "content": reply})
+        self._commit_dm_history(uid, pkey, [
+            *self.dm_history.get(uid, []),
+            {"role": "assistant", "content": reply,
+             "t": time.time(), "seq": self._next_seq(pkey)}])
         self._openers()[channels.dm_learning_key(uid)] = now
         decision_log.record(pkey, "proactive", True, "proactive", reply)
         self._commit_core_memory(pkey, final.core_note)
         if mem:
             self._save_auto_memory(pkey, mem)
+        self._mark_used(pkey, reply)
+        if followup is not None:
+            followup["followed"] = True
+            self._save_episodes()
         logger.info("[Agent] proactive DM (%s): %r", uid, reply[:60])
         return True

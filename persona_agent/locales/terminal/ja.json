@@ -374,5 +374,13 @@
 "The service is running, but its activity data is turned off (DASHBOARD_ENABLED=false), so its memory cannot be reached from here. Turn activity data on, or stop the service first.": "サービスは実行中ですが、アクティビティのデータが無効になっている（DASHBOARD_ENABLED=false）ため、ここから記憶にアクセスできません。アクティビティのデータを有効にするか、先にサービスを停止してください。",
 "The running service did not answer. Try again in a moment.": "実行中のサービスから応答がありませんでした。しばらくしてから再度お試しください。",
 "{0} is damaged and was left untouched.": "{0} は破損しているため、変更せずにそのまま残しました。",
-"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "{0} は破損しているため、変更せずにそのまま残しました。{1} 時点のコピーが {2} にあります。{3} と置き換えると、そのコピーから開始できます。"
+"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "{0} は破損しているため、変更せずにそのまま残しました。{1} 時点のコピーが {2} にあります。{3} と置き換えると、そのコピーから開始できます。",
+"Group replies": "グループチャットへの返信",
+"Web search decision": "ウェブ検索の判断",
+"Reaction judge": "反応の判定",
+"turned off": "オフ",
+"{0} did not call the search tool, so web search will not run": "{0} は検索ツールを呼び出さなかったため、ウェブ検索は実行されません",
+"model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "モデルの使用量 — 本日：リクエスト {0}、トークン {1}、費用 {2}／過去 7 日間：リクエスト {3}、トークン {4}、費用 {5}",
+"not reported": "報告なし",
+"model use: nothing recorded yet": "モデルの使用量：まだ記録がありません"
 }

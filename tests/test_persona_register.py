@@ -332,3 +332,34 @@ def test_both_guides_let_the_chat_choose_the_reply_language() -> None:
         check("...after the register, which stays first",
               guide.index(COMPANY_HEADER) < guide.index("[LANGUAGE]") < guide.index("[FORMAT"),
               repr(style))
+
+
+def test_a_cards_emoji_opt_in_and_length_reach_the_prompt(tmp: Path) -> None:
+    """The tuning panel edits `reply_style`; the prompt said emoji were banned
+    whatever the card said. The default card must give today's exact text, or
+    the provider's prompt cache starts over."""
+    import dataclasses
+
+    agent = make_agent(tmp)
+    default_group = agent._build_group_prompt("g1", "called", "hi").system
+    default_dm = agent._build_dm_prompt([{"role": "user", "content": "hi"}]).system
+    check("the default card keeps the group guide byte for byte",
+          STYLE_GUIDE in default_group)
+    check("...and the 1:1 guide", dm_style_guide(agent.persona_style) in default_dm)
+
+    agent.reply_style = dataclasses.replace(agent.reply_style, allow_emoji=True)
+    group = agent._build_group_prompt("g1", "called", "hi").system
+    dm = agent._build_dm_prompt([{"role": "user", "content": "hi"}]).system
+    for who, text in (("group", group), ("1:1", dm)):
+        banned = next(line for line in text.splitlines() if line.startswith("- Banned:"))
+        check(f"{who}: emoji are no longer banned", "emoji," not in banned, banned)
+        check(f"{who}: ...but used only as the character does",
+              "emoji only as this character uses them" in text, banned)
+        check(f"{who}: no length line at the default length",
+              "Stay under" not in text)
+
+    agent.reply_style = dataclasses.replace(agent.reply_style, max_chars=120)
+    group = agent._build_group_prompt("g1", "called", "hi").system
+    dm = agent._build_dm_prompt([{"role": "user", "content": "hi"}]).system
+    check("a shorter limit is stated in both guides",
+          "Stay under 120 characters" in group and "Stay under 120 characters" in dm)

@@ -85,6 +85,7 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
             "services": results,
             "direct_platforms": direct_platforms(home.find_home()),
             "update": update_notice(),
+            "model_use": model_use(),
         }, ensure_ascii=False, indent=2))
         return 0 if ok else 1
     print("=" * 64)
@@ -116,6 +117,8 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
         print(f"[{mark}] {_pad(langs.term(r['name']), 34)}{_pad(tag, 11)} {r['ms']:5.0f}ms  {langs.term(r['detail'])}")
     mark, detail = direct_row(direct_platforms(home.find_home()))
     print(f"[{mark}] {_pad(langs.term('directly connected platforms'), 34)}{_pad('', 11)} {'':7}  {detail}")
+    print("-" * 64)
+    print("  " + langs.term(model_use_line(model_use())))
     print("=" * 64)
     services_ok = all_critical_ok(results)
     if not services_ok:
@@ -132,6 +135,29 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     if notice:
         print(langs.term(notice))
     return 0 if services_ok and not retired else 1
+
+
+def model_use() -> dict:
+    """What the character's model calls used today and in the last 7 days."""
+    import os
+
+    from persona_agent import paths, usage
+
+    memory = Path(os.getenv("MEMORY_FILE") or "memory.json")
+    memory = memory if memory.is_absolute() else paths.runtime_dir() / memory
+    return usage.read_summary(memory.with_name(usage.USAGE_FILE))
+
+
+def model_use_line(found: dict) -> str:
+    def cost(total: dict) -> str:
+        return "not reported" if total["cost"] is None else f"${total['cost']:.4f}"
+
+    today, week = found["today"], found["week"]
+    if not week["calls"]:
+        return "model use: nothing recorded yet"
+    return (f"model use — today: requests {today['calls']}, tokens {today['tokens']}, "
+            f"cost {cost(today)}; last 7 days: requests {week['calls']}, "
+            f"tokens {week['tokens']}, cost {cost(week)}")
 
 
 def update_notice() -> dict | None:

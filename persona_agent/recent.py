@@ -23,6 +23,9 @@ UNANSWERED_MAX = 3
 CAPS = {"lines": LINES_MAX, "spill": SPILL_MAX, "dm": DM_MAX,
         "dm_spill": DM_SPILL_MAX, "unanswered": UNANSWERED_MAX}
 
+#: Times kept per chat beside its lines (see clean_entry).
+MARKS = ("reply", "opener", "proactive")
+
 
 def _num(value, kind=float):
     try:
@@ -37,6 +40,11 @@ def clean_entry(entry: dict) -> tuple[dict, int]:
     out: dict = {"seq": _num(entry.get("seq"), int),
                  "folded_upto": _num(entry.get("folded_upto"), int),
                  "last_at": _num(entry.get("last_at"))}
+    marks = entry.get("marks")
+    # When it last spoke, opened, or tried to open there: a restart must not
+    # make it speak first again where it was just ignored.
+    out["marks"] = {k: _num(v) for k, v in marks.items()
+                    if k in MARKS and _num(v) > 0} if isinstance(marks, dict) else {}
     lost = 0
     for key, cap in CAPS.items():
         rows = entry.get(key)

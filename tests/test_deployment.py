@@ -116,7 +116,7 @@ class DeploymentTests(unittest.TestCase):
                 return {'choices': [{'message': {'content': 'ok'}}]}
 
             env = {'LLM_API_KEY': 'k', 'LLM_BASE_URL': base, 'LLM_MODEL': model,
-                   'LLM_FALLBACK_MODEL': '', 'EVAL_MODEL': model,
+                   'LLM_FALLBACK_MODEL': '', 'EVAL_MODEL': model, 'EVAL_ENABLED': 'true',
                    'VISION_MODEL': model, 'VISION_API_KEY': 'vision-key',
                    'VISION_BASE_URL': base}
             with patch.dict(os.environ, env), \

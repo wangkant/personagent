@@ -856,6 +856,155 @@ async def test_a_followup_pass_closes_the_window_only_for_that_sender(
           and _last_reason() == "below the trigger count", repr(calls))
 
 
+# ---- what one turn is given ---------------------------------------------------
+
+def _prompting_think(agent: Agent):
+    """`_think` that builds the real group prompt and records it with the
+    buffer it saw; answers "sure"."""
+    seen: list = []
+
+    async def think(group_id, mode, text="", caller_override=None, retry_note=""):
+        prompt = agent._build_group_prompt(group_id, mode, text,
+                                           caller_override=caller_override)
+        seen.append({"mode": mode, "user": prompt.user, "lines": _lines(agent, group_id)})
+        return "sure", "chat", ""
+
+    agent._think = think
+    return seen
+
+
+async def test_a_long_call_reaches_the_model_whole(tmp: Path) -> None:
+    agent = make_agent(tmp)
+    _collect_sends(agent)
+    seen = _prompting_think(agent)
+    question = "Luna, " + " ".join(f"part{i} of a long question" for i in range(30))
+    check("the question is long", len(question) > 600, repr(len(question)))
+    await agent.handle_onebot(_group(question, "lq1", at_bot=True))
+    check("one turn", len(seen) == 1, repr(seen))
+    check("the model is given the whole question", question in seen[0]["user"]
+          and "Their full message:" in seen[0]["user"], seen[0]["user"][-400:])
+    buffered = seen[0]["lines"][-1][1]
+    check("the buffered line says it was cut", buffered.endswith("…")
+          and len(buffered) == 201, repr(buffered))
+
+    short = make_agent(tmp / "short")
+    _collect_sends(short)
+    seen = _prompting_think(short)
+    await short.handle_onebot(_group("Luna, a short one", "lq2", at_bot=True))
+    check("a short call is not repeated", "Their full message:" not in seen[0]["user"]
+          and not seen[0]["lines"][-1][1].endswith("…"), seen[0]["user"])
+
+
+def test_two_people_calling_within_one_debounce_are_answered_together(
+        tmp: Path) -> None:
+    async def main():
+        decision_log.LOG.clear()
+        agent = make_agent(tmp, message_debounce_sec=2.0)
+        ats: list = []
+
+        async def send(group_id, text, at_user_id=""):
+            ats.append(at_user_id)
+            return SendResult(success=True)
+
+        agent._send_group = send
+        seen = _prompting_think(agent)
+        first = asyncio.create_task(agent.handle_onebot(
+            _group("is the shop open on sunday", "s1", at_bot=True, user="8", name="Bo")))
+        await asyncio.sleep(0.5)
+        second = asyncio.create_task(agent.handle_onebot(
+            _group("and what time does it close", "s2", at_bot=True, user="9", name="Cy")))
+        await asyncio.gather(first, second)
+        return agent, seen, ats
+
+    agent, seen, ats = on_a_virtual_clock(main())
+    check("one model call for both", len(seen) == 1, repr(seen))
+    user = seen[0]["user"]
+    # Not splitlines(): it also splits at the frame characters.
+    called = next((line for line in user.split("\n")
+                   if line.startswith("Several people called you")), "")
+    check("the prompt names both callers", "Bo" in called and "Cy" in called
+          and "one reply" in called, user[-600:])
+    check("the @ goes to the latest caller", ats == ["9"], repr(ats))
+    rows = decision_log.LOG.recent(GROUP)
+    together = [r for r in rows if r["reason"] == "answered together"]
+    check("Activity says Bo was answered together with Cy",
+          len(together) == 1 and together[0]["sender"] == "Bo"
+          and together[0]["spoke"] is False, repr(rows))
+    check("nothing is left for the next turn", not agent.__dict__.get(
+        "_turn_callers") and GROUP not in agent._sticky_call, repr(agent._sticky_call))
+
+    one = make_agent(tmp / "one", message_debounce_sec=2.0)
+
+    async def same_person():
+        _collect_sends(one)
+        seen = _prompting_think(one)
+        a = asyncio.create_task(one.handle_onebot(
+            _group("is the shop open", "t1", at_bot=True, user="8", name="Bo")))
+        await asyncio.sleep(0.5)
+        b = asyncio.create_task(one.handle_onebot(
+            _group("on sunday I mean", "t2", at_bot=True, user="8", name="Bo")))
+        await asyncio.gather(a, b)
+        return seen
+
+    seen = on_a_virtual_clock(same_person())
+    check("one person calling twice is not 'several people'",
+          len(seen) == 1 and "Several people" not in seen[0]["user"], repr(seen))
+
+
+def test_a_picture_read_slowly_is_answered_with_the_text_after_it(tmp: Path) -> None:
+    def picture(mid: str) -> dict:
+        return {"post_type": "message", "message_type": "group", "group_id": GROUP,
+                "user_id": "7", "message_id": mid, "sender": {"nickname": "Ann"},
+                "message": [{"type": "image", "data": {"file": "dog.jpg"}}],
+                "raw_message": "[CQ:image,file=dog.jpg]"}
+
+    async def main():
+        agent = make_agent(tmp)
+        _collect_sends(agent)
+        seen = _prompting_think(agent)
+        read = agent._extract_text
+
+        async def slow_caption(payload):
+            if any(seg.get("type") == "image" for seg in payload["message"]):
+                await asyncio.sleep(6.0)
+                return "[image: a dog asleep on a sofa]"
+            return await read(payload)
+
+        agent._extract_text = slow_caption
+        pic = asyncio.create_task(agent.handle_onebot(picture("p1")))
+        await asyncio.sleep(0.2)
+        text = asyncio.create_task(agent.handle_onebot(
+            _group("what do you think of my dog", "p2", at_bot=True)))
+        results = await asyncio.gather(pic, text)
+        return agent, seen, results
+
+    agent, seen, results = on_a_virtual_clock(main())
+    check("exactly one turn", len(seen) == 1, repr(seen))
+    said = " ".join(text for _name, text in seen[0]["lines"]) if seen else ""
+    check("it saw the caption before the text",
+          0 <= said.find("[image: a dog asleep on a sofa]")
+          < said.find("@Luna what do you think of my dog"), repr(seen))
+    check("the text's handler took the turn", results == [False, True], repr(results))
+    check("nothing stays held", GROUP not in agent._pending_outbound)
+
+    async def unreadable():
+        agent = make_agent(tmp / "empty")
+        _collect_sends(agent)
+        seen = _prompting_think(agent)
+
+        async def nothing(payload):
+            await asyncio.sleep(1.0)
+            return ""
+
+        agent._extract_text = nothing
+        await agent.handle_onebot(picture("e1"))
+        return agent, seen
+
+    agent, seen = on_a_virtual_clock(unreadable())
+    check("a picture that reads as nothing leaves its place in line",
+          not seen and GROUP not in agent._pending_outbound, repr(agent._pending_outbound))
+
+
 # ---- a storm: seeded interleavings of everything at once ----------------------
 
 class _VirtualClockLoop(asyncio.SelectorEventLoop):
@@ -912,11 +1061,11 @@ def _tokens(texts) -> list:
 
 SEEDS = (3, 7, 11, 19, 23, 42, 77, 101, 256, 1009, 4242, 90210)
 
-#: How often each kind of arrival comes: chatter, a call and a memory command
-#: in a group; a message, a command and a connector's cue in a DM; a tick of
-#: the proactive loop for groups and for DMs.
-MIXED = {"g_chat": 30, "g_call": 14, "g_cmd": 8, "d_chat": 26, "d_cmd": 8,
-         "d_cue": 3, "p_group": 4, "p_dm": 4}
+#: How often each kind of arrival comes: chatter, a call, a memory command and
+#: a picture in a group; a message, a command and a connector's cue in a DM; a
+#: tick of the proactive loop for groups and for DMs.
+MIXED = {"g_chat": 30, "g_call": 14, "g_cmd": 8, "g_pic": 6, "d_chat": 26,
+         "d_cmd": 8, "d_cue": 3, "p_group": 4, "p_dm": 4}
 
 
 class Storm:
@@ -987,6 +1136,12 @@ class Storm:
                 wait = self.rng.choice((0, 0, 0, 0.3, 4.0))
                 if wait:
                     await asyncio.sleep(wait)
+            pictures = [seg["data"]["file"] for seg in payload.get("message", [])
+                        if seg.get("type") == "image"]
+            if pictures:
+                # A caption, quick or slower than the turn's wait for it.
+                await asyncio.sleep(self.rng.choice((0, 0.3, 4.0, 6.0, 25.0)))
+                return f"[image: {pictures[0].split('.')[0]} photo]"
             return await read(payload)
 
         async def process_reaction(entry, text, name, uid, is_admin,
@@ -1039,6 +1194,15 @@ class Storm:
             return agent._maybe_proactive_dms()
         if kind == "d_cue":
             return agent.handle_event(_dm_event(f"nudge c{i}", i, proactive=True))
+        if kind == "g_pic":
+            # Pictures arrive over NapCat; their captions take a while.
+            conv = self.rng.choice([c for via, c in self.GROUPS if via == "onebot"])
+            self.arrived[conv].append(f"w{i}")
+            return agent.handle_onebot({
+                "post_type": "message", "message_type": "group", "group_id": conv,
+                "user_id": "101", "message_id": f"g{i}", "sender": {"nickname": "U101"},
+                "message": [{"type": "image", "data": {"file": f"w{i}.jpg"}}],
+                "raw_message": "[CQ:image]"})
         if kind.startswith("g_"):
             via, conv = self.rng.choice(self.GROUPS)
             user = self.rng.choice(("101", "102", "42"))
@@ -1166,7 +1330,9 @@ class Storm:
         return (
             [(conv, [m["text"] for m in agent.buffers[conv]])
              for _via, conv in self.GROUPS],
-            [(uid, agent.dm_history.get(uid, [])) for _via, uid in self.DMS],
+            # Not the stored times, which are wall-clock.
+            [(uid, [(m.get("role"), m.get("content"))
+                    for m in agent.dm_history.get(uid, [])]) for _via, uid in self.DMS],
             [(c["conv"], c["fate"]) for c in self.calls], self.sends,
             [repr(r) for r in self.results])
 

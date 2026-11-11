@@ -374,5 +374,13 @@
 "The service is running, but its activity data is turned off (DASHBOARD_ENABLED=false), so its memory cannot be reached from here. Turn activity data on, or stop the service first.": "Le service est en cours d'exécution, mais ses données d'activité sont désactivées (DASHBOARD_ENABLED=false) ; sa mémoire n'est donc pas accessible d'ici. Activez les données d'activité ou arrêtez d'abord le service.",
 "The running service did not answer. Try again in a moment.": "Le service en cours d'exécution n'a pas répondu. Réessayez dans un instant.",
 "{0} is damaged and was left untouched.": "{0} est endommagé et n'a pas été modifié.",
-"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "{0} est endommagé et n'a pas été modifié. Une copie du {1} se trouve dans {2} ; placez-la à la place de {3} pour repartir de cette copie."
+"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "{0} est endommagé et n'a pas été modifié. Une copie du {1} se trouve dans {2} ; placez-la à la place de {3} pour repartir de cette copie.",
+"Group replies": "Réponses de groupe",
+"Web search decision": "Décision de recherche web",
+"Reaction judge": "Évaluation des réactions",
+"turned off": "désactivé",
+"{0} did not call the search tool, so web search will not run": "{0} n'a pas appelé l'outil de recherche : la recherche web ne sera pas effectuée",
+"model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "utilisation du modèle — aujourd'hui : requêtes {0}, jetons {1}, coût {2} ; 7 derniers jours : requêtes {3}, jetons {4}, coût {5}",
+"not reported": "non communiqué",
+"model use: nothing recorded yet": "utilisation du modèle : aucun enregistrement pour l'instant"
 }

@@ -121,11 +121,14 @@ class Transport:
 
     def _evict_conversation(self, key: str) -> None:
         """Drop a conversation's in-memory state and pending reactions; its
-        long-term memories stay."""
+        long-term memories stay, and its recent lines wait on disk."""
         self._connector_conv_lru.pop(key, None)
+        self._recent_stash(key)
+        for d in (self.window_seq, self.folded_upto, self._spill):
+            d.pop(key, None)
         for d in (self.locks, self.send_locks, self.buffers, self.counters,
                   self.last_reply_at, self.active_users, self._msg_seq,
-                  self._vision_in_flight, self._sticky_call,
+                  self._turn_callers, self._sticky_call,
                   self.last_activity_at, self.last_proactive_at,
                   self._send_window, self._sent_mids):
             d.pop(key, None)
@@ -144,6 +147,7 @@ class Transport:
         if channels.is_dm(key):
             uid = key.split(":", 1)[1]
             self.dm_history.pop(uid, None)
+            self._dm_spill.pop(uid, None)
             self._dm_unanswered.pop(uid, None)
             self.last_dm_activity_at.pop(uid, None)
             self.last_proactive_at.pop(reaction_key, None)
@@ -152,6 +156,14 @@ class Transport:
         self.pending_reactions.drop_conversation(reaction_key)
         logger.info("[Agent] connector conversation evicted (over the %d cap): %s",
                     _MAX_CONNECTOR_CONVS, key)
+
+    def _recent_stash(self, key: str) -> None:
+        """Before an eviction: consolidate what is due from the state still
+        held, and write the chat to recent.json, so it comes back with it."""
+        if key not in self.window_seq:
+            return
+        self._maybe_consolidate(key, "evict")
+        self._maybe_flush_recent(only=key)
 
     @staticmethod
     def _typing_delay(chunk: str) -> float:

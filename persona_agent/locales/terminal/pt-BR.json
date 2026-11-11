@@ -374,5 +374,13 @@
 "The service is running, but its activity data is turned off (DASHBOARD_ENABLED=false), so its memory cannot be reached from here. Turn activity data on, or stop the service first.": "O serviço está em execução, mas os dados de atividade estão desativados (DASHBOARD_ENABLED=false), por isso a memória dele não pode ser acessada daqui. Ative os dados de atividade ou pare o serviço primeiro.",
 "The running service did not answer. Try again in a moment.": "O serviço em execução não respondeu. Tente novamente em instantes.",
 "{0} is damaged and was left untouched.": "{0} está danificado e não foi alterado.",
-"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "{0} está danificado e não foi alterado. Uma cópia de {1} está em {2}; coloque-a no lugar de {3} para iniciar a partir dela."
+"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "{0} está danificado e não foi alterado. Uma cópia de {1} está em {2}; coloque-a no lugar de {3} para iniciar a partir dela.",
+"Group replies": "Respostas em grupos",
+"Web search decision": "Decisão de pesquisa na web",
+"Reaction judge": "Avaliação de reações",
+"turned off": "desativado",
+"{0} did not call the search tool, so web search will not run": "{0} não chamou a ferramenta de pesquisa, portanto a pesquisa na web não será executada",
+"model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "uso do modelo — hoje: solicitações {0}, tokens {1}, custo {2}; últimos 7 dias: solicitações {3}, tokens {4}, custo {5}",
+"not reported": "não informado",
+"model use: nothing recorded yet": "uso do modelo: ainda não há registros"
 }

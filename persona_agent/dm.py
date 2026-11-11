@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -11,6 +12,7 @@ from .access import ADMIN_MODE, PAGE_PLATFORM
 from . import channels
 from . import decision_log
 from .connector import current_sink
+from .messages import message_time
 # An emoji-only draft the sanitizer eats would come back identical from an
 # unchanged prompt, so the one retry carries a note.
 from .decision import EMPTY_DRAFT_RETRY_NOTE as _EMPTY_DRAFT_RETRY_NOTE
@@ -65,6 +67,33 @@ def _trimmed_history(history: list[dict]) -> list[dict]:
     return history[-_DM_HISTORY_KEEP:] if len(history) > _DM_HISTORY_MAX else history
 
 
+def _page_turns(path, conversation: str) -> list[dict]:
+    """The page's own saved copy of its chat (browser-chat.json) as turns,
+    for a page chat that has no recent window yet; [] if it is another chat."""
+    try:
+        saved = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(saved, dict) or str(saved.get("conversation") or "") != conversation:
+        return []
+    turns: list[dict] = []
+    for message in saved.get("messages") or []:
+        if not isinstance(message, dict):
+            continue
+        role, text = message.get("role"), message.get("text")
+        if role not in ("user", "assistant") or not isinstance(text, str) or not text.strip():
+            continue
+        # One turn per side in a row, as the history keeps them.
+        if turns and turns[-1]["role"] == role:
+            turns[-1]["content"] += "\n" + text
+        else:
+            turns.append({"role": role, "content": text})
+    # The words still waiting for this answer are the turn being answered.
+    while turns and turns[-1]["role"] == "user":
+        turns.pop()
+    return turns[-_DM_HISTORY_KEEP:]
+
+
 class DirectMessages:
     async def _handle_dm(self, user_id: str, payload: dict,
                               is_admin: bool = True,
@@ -110,11 +139,18 @@ class DirectMessages:
         debounce = (0.0 if channels.platform_of(pkey) == PAGE_PLATFORM
                     else self.message_debounce_sec)
 
+        sent_at = message_time(payload)
+
         def take_in() -> int:
             """The reader's words wait for their next turn. Run in line, so a
             reaction is matched against the replies committed before it.
             Returns the message's number in this conversation."""
             self.last_dm_activity_at[user_id] = time.time()
+            self._wake(pkey)
+            # The turn is dated by the newest message it answers.
+            self.__dict__.setdefault("_dm_heard_at", {})[user_id] = min(
+                sent_at or time.time(), time.time())
+            self._recent_dirty.add(pkey)
             if self.react_learn_enabled:
                 entry = self.pending_reactions.match(
                     channels.dm_learning_key(user_id),
@@ -197,6 +233,40 @@ class DirectMessages:
                 if self._dm_send_tasks.get(pkey) is asyncio.current_task():
                     self._dm_send_tasks.pop(pkey, None)
 
+    def _commit_dm_history(self, user_id: str, pkey: str, history: list[dict]) -> None:
+        """Keep `history` as the reader's turns, trimmed; the unconsolidated
+        turns the trim drops wait in the DM spill for consolidation."""
+        before = self.dm_history.get(user_id, [])
+        kept = _trimmed_history(history)
+        held = {id(turn) for turn in kept}
+        folded = self.folded_upto.get(pkey, 0)
+        dropped = {id(turn): turn for turn in [*before, *history]
+                   if id(turn) not in held and int(turn.get("seq") or 0) > folded}
+        if dropped:
+            self._spill_rows(pkey, sorted(dropped.values(),
+                                          key=lambda turn: int(turn.get("seq") or 0)),
+                             dm_reader=user_id)
+        self.dm_history[user_id] = kept
+        vars(self).get("_dm_heard_at", {}).pop(user_id, None)
+        self._recent_dirty.add(pkey)
+        self._maybe_flush_recent()
+
+    def _rehydrate_page(self, user_id: str, pkey: str) -> None:
+        """A page chat with no turns held reads the page's saved copy once."""
+        if user_id in self.dm_history or channels.platform_of(pkey) != PAGE_PLATFORM:
+            return
+        done = self.__dict__.setdefault("_page_rehydrated", set())
+        if pkey in done:
+            return
+        done.add(pkey)
+        turns = _page_turns(self.memory_file.parent / "desktop" / "browser-chat.json",
+                            user_id.split(":", 1)[-1])
+        for turn in turns:
+            turn["t"], turn["seq"] = 0.0, self._next_seq(pkey)
+        if turns:
+            self.dm_history[user_id] = turns
+            self._recent_dirty.add(pkey)
+
     async def _say_dm_memory_answer(self, user_id: str, answer: str, *,
                                     background: bool = False) -> bool:
         """Send a memory command's answer to a DM. `background`: no request
@@ -238,6 +308,8 @@ class DirectMessages:
                     # Shared with the agent's own proactive loop.
                     self.last_proactive_at[
                         channels.dm_learning_key(user_id)] = time.time()
+                self._wake(pkey)
+                self._rehydrate_page(user_id, pkey)
                 history = list(self.dm_history.get(user_id, []))
                 # A proactive turn leaves the history ending on the bot,
                 # which is what lets _build_dm_prompt add its internal cue.
@@ -245,8 +317,11 @@ class DirectMessages:
                     # Everything let in since the last committed reply is one
                     # user turn, so two user turns never sit in a row.
                     said = list(self._dm_unanswered.get(user_id) or [text])
+                    heard = vars(self).get("_dm_heard_at", {}).get(user_id)
                     history.append({"role": "user",
-                                    "content": "\n".join(said)})
+                                    "content": "\n".join(said),
+                                    "name": nickname, "t": heard or time.time(),
+                                    "seq": self._next_seq(pkey)})
                 history = _trimmed_history(history)
 
             cue = ({"proactive": True, "proactive_cue": text}
@@ -303,8 +378,9 @@ class DirectMessages:
                 if send_result.partial and send_result.delivered:
                     async with self.locks[pkey]:
                         history.append({"role": "assistant",
-                                        "content": send_result.delivered})
-                        self.dm_history[user_id] = _trimmed_history(history)
+                                        "content": send_result.delivered,
+                                        "t": time.time(), "seq": self._next_seq(pkey)})
+                        self._commit_dm_history(user_id, pkey, history)
                         if not proactive:
                             self._dm_unanswered.pop(user_id, None)
                         committed = True
@@ -314,14 +390,17 @@ class DirectMessages:
                 return send_result.partial
 
             async with self.locks[pkey]:
-                history.append({"role": "assistant", "content": reply})
-                self.dm_history[user_id] = _trimmed_history(history)
+                history.append({"role": "assistant", "content": reply,
+                                "t": time.time(), "seq": self._next_seq(pkey)})
+                self._commit_dm_history(user_id, pkey, history)
                 if not proactive:
                     self._dm_unanswered.pop(user_id, None)
                 committed = True
                 self._commit_core_memory(pkey, pending_core)
                 if auto_mem:
                     self._save_auto_memory(pkey, auto_mem)
+                self._mark_used(pkey, reply)
+                self._maybe_consolidate(pkey, "trim")
                 # A proactive reply answers no message of the reader's. On
                 # record before the line moves: the next message may react.
                 if self.react_learn_enabled and not proactive:
@@ -338,6 +417,7 @@ class DirectMessages:
             # No await: this also runs when the turn is cancelled.
             if said and not committed:
                 self._dm_unanswered[user_id] = _kept_unanswered(said)
+                self._recent_dirty.add(pkey)
 
     async def _chat_dm(self, history: list[dict], is_admin: bool = True, proactive: bool = False, pkey: str = "", proactive_cue: str = "") -> tuple[str, str]:
         """One DM model turn (LLM_DM_MODEL): `is_admin` picks the close or

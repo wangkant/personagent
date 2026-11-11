@@ -102,6 +102,12 @@ const translations = {
     r_followup: "延续自己上一条发言",
     r_trigger: "累计消息数已达到条件，考虑主动发言",
     r_first: "首次出现在此聊天中",
+    r_failed: "模型未作出回应",
+    r_blocked: "回复未通过安全检查，已被拦下",
+    r_undelivered: "回复未能送达",
+    r_proactive: "曾考虑主动发起话题，判断后决定不发言",
+    r_together: "已与其他消息在同一条回复中一并作答",
+    r_other: "其他原因",
     m_called: "被点名",
     m_owner: "管理员",
     m_judge: "自行判断后发言",
@@ -335,10 +341,12 @@ const translations = {
     permission_required: "角色需要获得在此平台回复的权限。",
     forbidden: "页面授权已失效，请重新打开启动窗口中的本地链接。",
     generic: "操作未能完成，请重试。",
+    vision_unsupported: "此模型无法读取图片。请选择支持视觉的模型，或关闭图片识别。",
     stopped: "聊天平台已暂停。",
     retryChat: "重新发送",
     chatPicture: "{name} 发送的图片",
     chatPictureGone: "该图片已不存在。",
+    chatViaCoding: "经由编程助手",
     closing: "正在关闭…",
   },
   en: {
@@ -443,6 +451,12 @@ const translations = {
     r_followup: "following up on its own reply",
     r_trigger: "enough messages to consider joining in",
     r_first: "first time in this chat",
+    r_failed: "the model did not answer",
+    r_blocked: "the reply was held back by a safety check",
+    r_undelivered: "the reply could not be delivered",
+    r_proactive: "considered starting a conversation and decided against it",
+    r_together: "answered in the same reply as another message",
+    r_other: "for another reason",
     m_called: "called",
     m_owner: "admin",
     m_judge: "joined in on its own",
@@ -700,10 +714,12 @@ const translations = {
     forbidden:
       "The authorization for this page has expired. Reopen the local link shown in the launch window.",
     generic: "The operation did not complete. Try again.",
+    vision_unsupported: "This model cannot read images. Choose a vision model or turn image reading off.",
     stopped: "Chat platform paused.",
     retryChat: "Send again",
     chatPicture: "Picture sent by {name}",
     chatPictureGone: "This picture is no longer available.",
+    chatViaCoding: "via a coding assistant",
     closing: "Closing…",
   },
 };
@@ -1514,6 +1530,11 @@ const REASONS = {
   "followup window": "r_followup",
   "trigger count": "r_trigger",
   "first appearance": "r_first",
+  "model failed": "r_failed",
+  blocked: "r_blocked",
+  "delivery failed": "r_undelivered",
+  proactive: "r_proactive",
+  "answered together": "r_together",
 };
 // Platforms a chat can come from that Connect apps does not list.
 const CHAT_PLATFORMS = { qq: "QQ", matrix: "Matrix", satori: "Satori" };
@@ -1556,13 +1577,14 @@ function chatBadge(chat) {
 }
 function reasonText(row) {
   const key = REASONS[row.reason];
-  return key ? t(key) : row.reason;
+  // A reason this page does not know yet is still said in the page's words.
+  return key ? t(key) : t("r_other");
 }
 function modeText(row) {
   if (!row.mode) return "";
   const key =
     row.mode === "judge" && !row.spoke ? "m_judge_quiet" : `m_${row.mode}`;
-  return translations[lang]?.[key] || translations.en[key] || row.mode;
+  return translations[lang]?.[key] || translations.en[key] || "";
 }
 // The dot means only "learned something new since you last looked": nothing
 // here waits for the reader, so items under observation never light it.
@@ -1765,9 +1787,12 @@ function recentLine(row) {
     if (row.answered) item.append(said(row.answered));
     item.append(el("p", "reply", row.text));
   }
+  // A message answered in another's reply was not passed over.
   const why = row.spoke
     ? [modeText(row)]
-    : [t("activityQuiet"), reasonText(row)];
+    : row.reason === "answered together"
+      ? [reasonText(row)]
+      : [t("activityQuiet"), reasonText(row)];
   if (row.count > 1) why.push(t("activityCount", { n: String(row.count) }));
   why.push(ago(row.when));
   item.append(el("small", "why", why.filter(Boolean).join(" · ")));
@@ -2163,6 +2188,12 @@ function showMessage(item, arrived = false) {
   if (item.picture !== undefined) {
     if (item.picture) showPicture(node, item.picture);
     else pictureGone(node);
+  }
+  if (item.via === "coding") {
+    const via = el("small", "bubble-via", t("chatViaCoding"));
+    via.dataset.t = "chatViaCoding";
+    Object.assign(via.style, { display: "block", marginTop: "2px", fontSize: "11.5px", opacity: "0.7" });
+    node.append(via);
   }
   if (arrived) node.classList.add("arrived");
   chatSeen = Math.max(chatSeen, item.seq || 0);

@@ -251,7 +251,7 @@ def test_a_skipped_critical_probe_is_not_a_pass() -> None:
     check("health: an unconfigured LLM does not report healthy",
           health.all_critical_ok([
               r("DM chat", None),
-              r("Primary chat (/v1 tools)", None),
+              r("Group replies", None),
               r("OneBot bridge", True),
               r("Vision", None, critical=False)]) is False)
 
@@ -765,7 +765,9 @@ def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> N
                         ("LLM_FALLBACK_MODEL", "cheap"), ("EVAL_MODEL", "cheap")):
         monkeypatch.setenv(name, value)
 
-    health.check_primary_chat_tools()
+    monkeypatch.setenv("EVAL_ENABLED", "true")
+    monkeypatch.delenv("LLM_JUDGE_MODEL", raising=False)
+    health.check_search_decision()
     health.check_eval()
     primary = ("https://primary.example/v1/chat/completions", "Bearer sk-primary", "cheap")
     check("health: unset, the fallback is probed on the primary's endpoint",
@@ -774,7 +776,7 @@ def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> N
     monkeypatch.setenv("LLM_FALLBACK_BASE_URL", "https://fallback.example/v1")
     monkeypatch.setenv("LLM_FALLBACK_API_KEY", "sk-fallback")
     posted.clear()
-    health.check_primary_chat_tools()
+    health.check_search_decision()
     health.check_eval()
     fallback = ("https://fallback.example/v1/chat/completions", "Bearer sk-fallback",
                 "cheap")
@@ -794,6 +796,96 @@ def test_the_health_probes_follow_the_fallback_to_its_endpoint(monkeypatch) -> N
     check("health: any other private model is probed on the primary's endpoint",
           posted == [("https://primary.example/v1/chat/completions",
                       "Bearer sk-primary", "dm-model")], repr(posted))
+
+
+def _model_env(monkeypatch, **env) -> None:
+    for name in ("LLM_FALLBACK_BASE_URL", "LLM_FALLBACK_API_KEY", "LLM_DM_MODEL",
+                 "LLM_JUDGE_MODEL", "LLM_FALLBACK_MODEL", "REACT_MODEL", "EVAL_MODEL",
+                 "EVAL_ENABLED", "REACT_LEARN_ENABLED", "VISION_API_KEY", "VISION_BASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in {"LLM_API_KEY": "sk-primary", "LLM_MODEL": "main",
+                        "LLM_BASE_URL": "https://primary.example", **env}.items():
+        monkeypatch.setenv(name, value)
+
+
+def test_each_model_row_probes_the_model_the_agent_sends_that_work_to(monkeypatch) -> None:
+    """The tools row used to probe the fallback for "Primary chat" and passed
+    when no tool call came back; the reaction judge had no row at all."""
+    from persona_agent import health
+
+    sent: list = []
+
+    def fake_post(url, payload, headers, timeout=30):
+        sent.append(payload)
+        message = {"content": "ok"}
+        if payload.get("tools") and payload["model"] != "no-tools":
+            message["tool_calls"] = [{"function": {"name": "web_search", "arguments": "{}"}}]
+        return {"choices": [{"message": message}]}
+
+    monkeypatch.setattr(health, "_post_json", fake_post)
+    _model_env(monkeypatch, LLM_FALLBACK_MODEL="cheap", LLM_JUDGE_MODEL="judge",
+               REACT_MODEL="react", EVAL_ENABLED="true")
+    names = {name: fn for name, fn, _critical in health.CHECKS}
+    critical = {name: c for name, _fn, c in health.CHECKS}
+    check("health: the rows are named for the work", {
+        "Group replies", "Web search decision", "Reaction judge"} <= set(names), repr(names))
+    check("health: only group replies are critical of the three",
+          critical["Group replies"] and not critical["Web search decision"]
+          and not critical["Reaction judge"])
+    probed = {}
+    for name in ("Group replies", "Web search decision", "Reaction judge", "Eval"):
+        sent.clear()
+        ok, detail = names[name]()
+        probed[name] = (ok, [p["model"] for p in sent])
+    check("health: each name is probed where the agent sends it", probed == {
+        "Group replies": (True, ["main"]), "Web search decision": (True, ["judge"]),
+        "Reaction judge": (True, ["react"]), "Eval": (True, ["cheap"])}, repr(probed))
+    sent.clear()
+    names["Web search decision"]()
+    check("health: the search probe forces the search tool",
+          sent[0]["tool_choice"] == {"type": "function", "function": {"name": "web_search"}},
+          repr(sent[0].get("tool_choice")))
+    sent.clear()
+    names["Reaction judge"]()
+    check("health: the reaction probe is a few tokens", sent[0]["max_tokens"] == 16)
+
+    monkeypatch.setenv("LLM_JUDGE_MODEL", "no-tools")
+    ok, detail = health.check_search_decision()
+    check("health: an answer without a tool call is a failed search row",
+          ok is False and "no-tools" in detail, detail)
+
+    monkeypatch.delenv("REACT_MODEL")
+    monkeypatch.setenv("LLM_JUDGE_MODEL", "judge")
+    sent.clear()
+    health.check_reaction_judge()
+    check("health: a blank REACT_MODEL is the judge model", [p["model"] for p in sent] == ["judge"])
+    monkeypatch.setenv("REACT_LEARN_ENABLED", "false")
+    sent.clear()
+    check("health: learning from reactions off probes nothing",
+          health.check_reaction_judge()[0] is None and not sent)
+    monkeypatch.setenv("EVAL_ENABLED", "false")
+    check("health: self-review off probes nothing", health.check_eval()[0] is None and not sent)
+
+
+def test_a_misnamed_reaction_model_turns_its_row_red(monkeypatch) -> None:
+    import urllib.error
+
+    from persona_agent import health
+
+    def fake_post(url, payload, headers, timeout=30):
+        if payload["model"] == "typo":
+            raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    monkeypatch.setattr(health, "_post_json", fake_post)
+    _model_env(monkeypatch, REACT_MODEL="typo")
+    monkeypatch.setattr(health, "CHECKS", [
+        (n, fn, c) for n, fn, c in health.CHECKS if n in ("Reaction judge", "Group replies")])
+    rows = {r["name"]: r for r in health.run_checks()}
+    check("health: the reaction row is red and names the 404",
+          rows["Reaction judge"]["ok"] is False and "404" in rows["Reaction judge"]["detail"],
+          repr(rows["Reaction judge"]))
+    check("health: a broken reaction judge alone is not critical", health.all_critical_ok(rows.values()))
 
 
 def test_the_dm_chat_probe_uses_the_agents_default_model(monkeypatch) -> None:

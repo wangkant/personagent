@@ -32,6 +32,7 @@ from persona_agent.agent import Agent
 from persona_agent.config_env import env_bool, env_int, env_str
 from persona_agent.connector import CONVERSATION_TYPES, EVENT_KIND
 from persona_agent.health import run_checks, all_critical_ok
+from persona_agent.memstore import MemoryFileDamaged
 from persona_agent.outbox import parse_pull
 from persona_agent.paths import ROOT, runtime_dir
 from persona_agent.settings import AgentSettings
@@ -616,6 +617,12 @@ async def lifespan(app: FastAPI):
             agent = Agent(AgentSettings.from_env())
             # The ledger is authoritative: repair stale views before serving.
             agent._rebuild_promoted_views(strict=True)
+        except MemoryFileDamaged as error:
+            runtime_lock.release()
+            runtime_lock = None
+            # One sentence naming the daily copy, not a traceback.
+            logger.error("%s", langs.term(str(error)))
+            raise SystemExit(1) from None
         except BaseException:
             runtime_lock.release()
             runtime_lock = None
@@ -626,6 +633,7 @@ async def lifespan(app: FastAPI):
         _spawn(agent.loop_proactive())  # self-guards on PROACTIVE_ENABLED
         _spawn(agent.loop_evolve())     # self-guards on EVOLVE_AUTO_ENABLED
         _spawn(agent.loop_adoption())   # self-guards on PROMOTE_JUDGE_ENABLED
+        _spawn(agent.loop_memory())     # folds self-guard on MEMORY_CALLS_PER_DAY
         _spawn(agent.stickers.bootstrap_tag_all())
 
         async def _recheck_then_purge():
@@ -1055,7 +1063,26 @@ def startup_problem(host: str, port: int) -> str | None:
         except LockUnavailable:
             return _ALREADY_RUNNING.format(home=ROOT)
         lock.release()
+        damaged = _memory_problem()
+        if damaged:
+            return damaged
     return _bind_problem(host, port)
+
+
+def _memory_problem() -> str | None:
+    """The sentence of a damaged memory file (memory.json, core_memory.json,
+    episodes.json), which stops the start, or None. Reads only."""
+    from persona_agent import episodes, memstore
+    from persona_agent.paths import resolve_runtime_state_file
+
+    memory_file = resolve_runtime_state_file(AgentSettings.from_env().memory_file)
+    try:
+        memstore.load_memory_file(memory_file)
+        memstore.load_core_file(resolve_runtime_state_file("core_memory.json"))
+        episodes.EpisodeStore(memory_file.with_name("episodes.json")).load()
+    except MemoryFileDamaged as error:
+        return str(error)
+    return None
 
 
 def main(host: str | None = None, port: int | None = None) -> None:

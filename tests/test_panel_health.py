@@ -28,7 +28,7 @@ DOCTOR = {
         {"name": "Ledger sizes", "ok": True, "critical": False, "detail": "evidence absent", "ms": 3},
         {"name": "DM chat", "ok": False, "critical": True,
          "detail": f"HTTPError: HTTP Error 401: Unauthorized (key {KEY})", "ms": 120},
-        {"name": "Primary chat (/v1 tools)", "ok": True, "critical": True, "detail": "ok", "ms": 300},
+        {"name": "Group replies", "ok": True, "critical": True, "detail": "ok", "ms": 300},
         {"name": "Vision", "ok": None, "critical": False, "detail": "not configured", "ms": 0},
         {"name": "Web search (Tavily)", "ok": False, "critical": False,
          "detail": "URLError: <urlopen error timed out>", "ms": 30000},
@@ -339,6 +339,19 @@ def _table(lang: str) -> dict[str, str]:
     source = (ASSETS / "health.js").read_text(encoding="utf-8")
     block = re.search(rf"\n  {lang}: {{\n(.*?)\n  }},", source, re.S).group(1)
     return dict(re.findall(r'^    (\w+): "(.*)",$', block, re.M))
+
+
+def test_every_probe_row_has_its_name_in_every_page_language():
+    """A row the page has no name for shows the service's English name."""
+    ids = set(health.PROBES.values())
+    assert {"chat", "searchdecide", "react"} <= ids
+    for lang in ("en", "zh"):
+        missing = {i for i in ids if f"health_probe_{i}" not in _table(lang)}
+        assert not missing, (lang, missing)
+    for path in sorted((ASSETS.parent / "i18n").glob("*.json")):
+        strings = json.loads(path.read_text(encoding="utf-8"))["strings"]
+        missing = {i for i in ids if not strings.get(f"health_probe_{i}", "").strip()}
+        assert not missing, (path.name, missing)
 
 
 def test_the_wording_is_formal_and_uses_the_pages_names():

@@ -533,6 +533,13 @@ def test_plugin_reply_id_strip() -> None:
 # Integration: real Agent + handle_event round-trip
 # ---------------------------------------------------------------------------
 
+def _said(turns) -> list:
+    """Turns as role and content; their times and numbers are checked in
+    tests/test_memory_recent.py."""
+    return [{k: v for k, v in dict(m).items() if k in ("role", "content")}
+            for m in turns or []]
+
+
 def make_agent(tmp: Path, persona: str = "test persona") -> Agent:
     """`persona` is a parameter so a test can hand the ctor a document with a
     `[style]` declaration and check what the real parse does with it."""
@@ -1177,7 +1184,7 @@ async def test_a_proactive_turn_keeps_its_cue_transient(tmp: Path) -> None:
 
     async def fake_chat_dm(history, is_admin=False, pkey="",
                                 proactive=False, proactive_cue=""):
-        seen.append(([dict(m) for m in history], proactive, proactive_cue))
+        seen.append((_said(history), proactive, proactive_cue))
         return "hey, been a while", ""
 
     async def fake_send(user_id, message):
@@ -1974,6 +1981,32 @@ async def test_connector_conv_eviction(tmp: Path) -> None:
     check("conv-evict: QQ group state untouched", "123456" in agent.buffers)
 
 
+async def test_an_evicted_conversation_is_written_to_disk_first(tmp: Path) -> None:
+    """Eviction frees memory, not the conversation: its recent lines and the
+    reader's turns reach recent.json before they are dropped."""
+    from persona_agent.transport import _MAX_CONNECTOR_CONVS
+    agent = make_agent(tmp)
+    agent._append_buffer("tg:0", "x", "the room's last words", "9")
+    agent._wake("private:tg:7")
+    agent.dm_history["tg:7"] = [{"role": "user", "content": "hello", "t": 1.0e9 + 9e8,
+                                 "seq": agent._next_seq("private:tg:7")}]
+    agent._recent_dirty.add("private:tg:7")
+    agent._recent_flushed_at = time.monotonic()  # the throttle would hold it back
+    agent._touch_connector_conv("tg:0")
+    agent._touch_connector_conv("private:tg:7")
+    for i in range(1, _MAX_CONNECTOR_CONVS + 1):
+        agent._touch_connector_conv(f"tg:{i}")
+    check("conv-evict-disk: both evicted",
+          "tg:0" not in agent.buffers and "tg:7" not in agent.dm_history)
+    saved = json.loads((tmp / "recent.json").read_text(encoding="utf-8"))["convs"]
+    check("conv-evict-disk: the room's lines were written",
+          [ln["text"] for ln in saved["tg:0"]["lines"]] == ["the room's last words"],
+          repr(saved.get("tg:0")))
+    check("conv-evict-disk: the reader's turns were written",
+          [t["content"] for t in saved["private:tg:7"]["dm"]] == ["hello"],
+          repr(saved.get("private:tg:7")))
+
+
 async def test_connector_inflight_is_pinned(tmp: Path) -> None:
     from persona_agent.transport import _MAX_CONNECTOR_CONVS
 
@@ -2228,7 +2261,7 @@ async def test_dm_send_commit_serialized(tmp: Path) -> None:
     release_send.set()
     await task
     check("private ordering: commit completed under ordered path",
-          agent.dm_history["42"][-1]
+          _said(agent.dm_history["42"])[-1]
           == {"role": "assistant", "content": "first reply"},
           repr(agent.dm_history["42"]))
 
@@ -3235,7 +3268,7 @@ async def test_a_failed_dm_turn_keeps_the_readers_words(tmp: Path) -> None:
 
     async def flaky_chat(history, is_admin=False, pkey="", proactive=False,
                          proactive_cue=""):
-        seen.append([dict(m) for m in history])
+        seen.append(_said(history))
         if len(seen) == 1:
             raise RuntimeError("provider blip")
         return "you said your cat is called Momo", ""
@@ -3263,7 +3296,7 @@ async def test_a_failed_dm_turn_keeps_the_readers_words(tmp: Path) -> None:
           repr(last))
     check("next turn: no two user turns in a row", _alternates(seen[1]),
           repr(seen[1]))
-    stored = agent.dm_history["42"]
+    stored = _said(agent.dm_history["42"])
     check("next turn: the merged turn and the reply are committed",
           stored[-2:] == [
               {"role": "user",
@@ -3308,7 +3341,7 @@ async def test_a_half_delivered_dm_commits_what_the_reader_saw(
         "42", _dm_payload("tell me three things", "dm-half-1"), is_admin=False)
     check("partial DM: the return value is unchanged", handled is True,
           repr(handled))
-    stored = agent.dm_history.get("42") or []
+    stored = _said(agent.dm_history.get("42"))
     check("partial DM: the reader's turn and the delivered prefix are kept",
           stored[-2:] == [
               {"role": "user", "content": "tell me three things"},
@@ -3333,7 +3366,7 @@ async def test_a_passed_dm_message_reaches_the_next_prompt(tmp: Path) -> None:
 
     async def chat(history, is_admin=False, pkey="", proactive=False,
                    proactive_cue=""):
-        seen.append([dict(m) for m in history])
+        seen.append(_said(history))
         return replies.pop(0), ""
 
     async def ok_send(user_id, text):

@@ -374,5 +374,13 @@
 "The service is running, but its activity data is turned off (DASHBOARD_ENABLED=false), so its memory cannot be reached from here. Turn activity data on, or stop the service first.": "Der Dienst läuft, aber seine Aktivitätsdaten sind ausgeschaltet (DASHBOARD_ENABLED=false), daher ist sein Gedächtnis von hier aus nicht erreichbar. Schalten Sie die Aktivitätsdaten ein oder beenden Sie zuerst den Dienst.",
 "The running service did not answer. Try again in a moment.": "Der laufende Dienst hat nicht geantwortet. Versuchen Sie es in Kürze erneut.",
 "{0} is damaged and was left untouched.": "{0} ist beschädigt und wurde nicht verändert.",
-"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "{0} ist beschädigt und wurde nicht verändert. Eine Kopie vom {1} liegt unter {2}; verschieben Sie sie an die Stelle von {3}, um damit zu starten."
+"{0} is damaged and was left untouched. A copy from {1} is at {2}; move it in place of {3} to start from it.": "{0} ist beschädigt und wurde nicht verändert. Eine Kopie vom {1} liegt unter {2}; verschieben Sie sie an die Stelle von {3}, um damit zu starten.",
+"Group replies": "Antworten im Gruppenchat",
+"Web search decision": "Entscheidung über die Websuche",
+"Reaction judge": "Bewertung von Reaktionen",
+"turned off": "ausgeschaltet",
+"{0} did not call the search tool, so web search will not run": "{0} hat das Suchwerkzeug nicht aufgerufen, daher wird die Websuche nicht ausgeführt",
+"model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "Modellnutzung — heute: Anfragen {0}, Tokens {1}, Kosten {2}; letzte 7 Tage: Anfragen {3}, Tokens {4}, Kosten {5}",
+"not reported": "nicht gemeldet",
+"model use: nothing recorded yet": "Modellnutzung: noch nichts erfasst"
 }

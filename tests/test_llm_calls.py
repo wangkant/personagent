@@ -1570,7 +1570,7 @@ async def test_the_short_calls_turn_thinking_off_the_way_a_reply_does(
             ("LLM_API_KEY", "k"), ("LLM_BASE_URL", "https://api.deepseek.com"),
             ("LLM_MODEL", "chat-model"), ("LLM_FALLBACK_MODEL", ""),
             ("EVAL_MODEL", "chat-model"), ("VISION_MODEL", "vision-model"),
-            ("VISION_API_KEY", "vision-key"),
+            ("VISION_API_KEY", "vision-key"), ("EVAL_ENABLED", "true"),
             ("VISION_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")):
         monkeypatch.setenv(name, value)
     health.check_eval()
@@ -1729,3 +1729,180 @@ async def test_the_gate_keeps_its_temperature_on_a_k2_model(tmp: Path) -> None:
           [(p.get("reasoning"), "thinking" in p, p["temperature"])
            for p in http.payloads] == [({"enabled": False}, False, 0)] * 2,
           repr(http.payloads)[:400])
+
+
+class _ByModel:
+    """Fake `agent._http`: each model answers with its own scripted callable,
+    which returns a JSON body or raises."""
+
+    def __init__(self, **answers) -> None:
+        self.answers, self.models = answers, []
+
+    def __call__(self, **kw):
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        self.models.append(json["model"])
+        body = self.answers[json["model"]](json)
+        return httpx.Response(200, request=httpx.Request("POST", url), json=body)
+
+
+def _ok(text: str, **usage):
+    return lambda payload: {"choices": [{"message": {"content": text}, "finish_reason": "stop"}],
+                            **({"usage": usage} if usage else {})}
+
+
+async def test_an_error_inside_a_200_goes_to_the_fallback(tmp: Path, caplog) -> None:
+    """OpenRouter reports an upstream outage as a 200 whose body is an error:
+    read as a blank answer, the turn went silent and the backup was never asked."""
+    import logging
+
+    agent = _two_model_agent(tmp)
+    http = _ByModel(primary=lambda p: {"error": {"code": 502, "message": "upstream is down"}},
+                    fallback=_ok("from the backup"))
+    agent._http = http
+    with caplog.at_level(logging.INFO, logger="agent"):
+        out = await agent._call_llm("sys", [{"role": "user", "content": "hi"}],
+                                    model="primary", max_tokens=50, enable_search=False)
+    lines = [r.getMessage() for r in caplog.records]
+    check("an error body is answered by the fallback",
+          out == "from the backup" and http.models == ["primary", "fallback"],
+          repr((out, http.models)))
+    check("the log names the provider's message", _has(lines, "upstream is down"), repr(lines))
+
+    billing = _two_model_agent(tmp / "b")
+    billing.base_url = "https://openrouter.ai/api/v1"
+    http = _ByModel(primary=lambda p: {"error": {"code": 402, "message": "Insufficient credits"}},
+                    fallback=_ok("never"))
+    billing._http = http
+    caplog.clear()
+    with caplog.at_level(logging.ERROR, logger="agent"):
+        try:
+            await billing._call_llm("sys", [{"role": "user", "content": "hi"}],
+                                    model="primary", max_tokens=50, enable_search=False)
+        except Exception:
+            pass
+    lines = [r.getMessage() for r in caplog.records]
+    check("a 402 inside a 200 is the account: no failover, one billing line",
+          http.models == ["primary"] and _has(lines, "balance or quota"),
+          repr((http.models, lines)))
+
+
+async def test_a_content_filter_finish_is_named(tmp: Path, caplog) -> None:
+    agent = isolated_agent(tmp)
+    out, _sent, lines = await _ask(agent, caplog, _answer("", "content_filter", tokens=5))
+    check("a filtered answer stays blank", out == "", repr(out))
+    check("the log names the content filter", _has(lines, "content filter"), repr(lines))
+
+
+async def test_a_hanging_main_model_hands_the_turn_to_the_backup(tmp: Path) -> None:
+    """A timeout used to be retried with backoff on the same model, and the
+    turn budget ran out before the backup was reached."""
+    agent = _two_model_agent(tmp)
+    agent.api_max_retries = 2
+    agent.llm_timeout_s = 0.4
+
+    def hang(payload):
+        raise httpx.ReadTimeout("read timed out")
+
+    http = _ByModel(primary=hang, fallback=_ok("from the backup"))
+    agent._http = http
+    started = time.monotonic()
+    out = await agent._within_turn_budget(agent._call_llm(
+        "sys", [{"role": "user", "content": "hi"}], model="primary", max_tokens=50,
+        enable_search=False))
+    check("the backup answers within the turn",
+          out == "from the backup" and http.models == ["primary", "fallback"],
+          repr((out, http.models)))
+    check("no backoff on the hanging model", time.monotonic() - started < 0.5)
+
+    solo = isolated_agent(tmp / "solo")
+    solo.model = solo.llm_fallback_model = "primary"
+    solo.api_max_retries = 1
+    http = _ByModel(primary=hang)
+    solo._http = http
+    try:
+        await solo._call_llm("sys", [{"role": "user", "content": "hi"}], model="primary",
+                             max_tokens=50, enable_search=False)
+    except httpx.TimeoutException:
+        pass
+    check("without a backup a timeout keeps today's retry",
+          http.models == ["primary", "primary"], repr(http.models))
+
+
+async def test_each_answers_usage_is_counted_per_model_and_day(tmp: Path) -> None:
+    """Nothing showed what the character spends; the account is the user's."""
+    from persona_agent import usage
+
+    agent = _two_model_agent(tmp)
+    http = _ByModel(
+        primary=_ok("a", prompt_tokens=100, completion_tokens=20,
+                    prompt_tokens_details={"cached_tokens": 60}, cost=0.002),
+        fallback=_ok("b"))
+    agent._http = http
+    for model in ("primary", "primary", "fallback"):
+        await agent._call_llm("sys", [{"role": "user", "content": "hi"}], model=model,
+                              max_tokens=50, enable_search=False)
+    path = tmp / usage.USAGE_FILE
+    check("the first count is written beside the memory file at once",
+          usage.load(path)[usage.day_of(time.time())]["primary"]["calls"] == 1)
+    # The rest wait for the minute; the next write carries them.
+    agent.__dict__["_usage_book"].flush(time.time())
+    today = usage.load(path)[usage.day_of(time.time())]
+    check("two answers with usage are summed for their model", today["primary"] == {
+        "calls": 2, "prompt_tokens": 200, "completion_tokens": 40, "cached_tokens": 120,
+        "cost": 0.004, "costed": 2}, repr(today["primary"]))
+    check("an answer without usage is a call with no tokens", today["fallback"] == {
+        "calls": 1, "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0},
+        repr(today["fallback"]))
+    shown = usage.read_summary(path)
+    check("the summary adds today's models up",
+          shown["today"]["calls"] == 3 and shown["today"]["tokens"] == 240
+          and abs(shown["today"]["cost"] - 0.004) < 1e-9 and shown["week"]["calls"] == 3,
+          repr(shown))
+
+
+def test_the_tally_is_written_at_most_once_a_minute(tmp: Path) -> None:
+    from persona_agent import usage
+
+    book = usage.UsageBook(tmp / usage.USAGE_FILE)
+    book.add("m", {"prompt_tokens": 5}, 1000.0)
+    check("the first count may be written at once", book.due(1000.0) == 0)
+    book.flush(1000.0)
+    book.add("m", {"prompt_tokens": 5}, 1010.0)
+    check("a later one waits for the rest of the minute", book.due(1010.0) == 50.0)
+    book.flush(1060.0)
+    again = usage.UsageBook(tmp / usage.USAGE_FILE)
+    check("a restart goes on from the file",
+          again.days[usage.day_of(1000.0)]["m"]["calls"] == 2, repr(again.days))
+    (tmp / "broken.json").write_text("{not json", encoding="utf-8")
+    check("a damaged file reads as empty", usage.load(tmp / "broken.json") == {})
+    old = usage.UsageBook(tmp / "old.json")
+    for back in range(12):
+        old.add("m", {}, 1_000_000.0 + 86400 * back)
+    old.flush(2_000_000.0)
+    check("only the last eight days are kept", len(usage.load(tmp / "old.json")) == 8)
+
+
+def test_the_busy_warning_names_no_switch_without_a_backup(caplog) -> None:
+    import logging
+    from collections import deque
+
+    with tempfile.TemporaryDirectory() as d:
+        a = isolated_agent(Path(d))
+        a.model = a.llm_fallback_model = "solo"
+        a.llm_rate_window_s, a.llm_rate_threshold, a.llm_fallback_duration_s = 60, 5, 300
+        a.model_calls = deque([time.time()] * 6)
+        with caplog.at_level(logging.WARNING, logger="agent"):
+            picked = [a._pick_group_model("followup") for _ in range(3)]
+        lines = [r.getMessage() for r in caplog.records]
+        check("the same model is used", picked == ["solo"] * 3, repr(picked))
+        check("one warning that names no switch and says what to set",
+              len(lines) == 1 and "fall back to" not in lines[0]
+              and "LLM_FALLBACK_MODEL" in lines[0], repr(lines))

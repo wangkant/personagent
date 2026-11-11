@@ -15,18 +15,21 @@ from typing import Optional
 
 
 from . import candidates as candidate_ledger_mod
+from . import channels
 from . import embeddings as embeddings_mod
 from . import evidence as evidence_mod
 from . import langs
 from . import lineage as lineage_mod
 from . import outbox as outbox_mod
 from . import reactions
+from . import recent as recent_mod
 from .paths import (
     ROOT,
     resolve_runtime_lang_file,
     resolve_runtime_state_file,
     resolve_seed_lang_file,
 )
+from .consolidate import Consolidation
 from .decision import ReplyDecision
 from .dm import DirectMessages
 from .ingestion import ContentIngestion
@@ -96,8 +99,31 @@ def _load_persona(lang: str = "en") -> str:
     return DEFAULT_PERSONA
 
 
+class _RecentBuffers(dict):
+    """The rooms' windows: a room's deque is built on first use, from the
+    lines kept on disk when there are any."""
+
+    def __init__(self, maxlen: int, saved):
+        super().__init__()
+        self.maxlen = maxlen
+        self._saved = saved
+
+    def __missing__(self, key):
+        buf = deque(self._saved(key) or (), maxlen=self.maxlen)
+        self[key] = buf
+        return buf
+
+    def get(self, key, default=None):
+        if key in self:
+            return dict.__getitem__(self, key)
+        return self[key] if self._saved(key) else default
+
+
+_RECENT_FLUSH_S = 60.0
+
+
 class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
-            Retrieval, ModelCalls, WebSearch, Proactive, Memory,
+            Retrieval, ModelCalls, WebSearch, Proactive, Consolidation, Memory,
             DataViews, ContentIngestion, Transport, Learning):
     def __init__(self, settings: Optional[AgentSettings] = None, **overrides):
         """Wire one agent from one settings record: ``Agent(settings)``, or
@@ -272,9 +298,20 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self._excuse_inflight: set[str] = set()
 
         # Bound once, so every conversation keeps the same depth.
-        chat_context_messages = self.chat_context_messages
-        self.buffers: dict[str, deque] = defaultdict(
-            lambda: deque(maxlen=chat_context_messages))
+        # The recent lines of every chat on disk (recent.py), so a restart
+        # keeps the conversation; lines and turns carry `t` and `seq`.
+        self._recent = recent_mod.RecentStore(self.memory_file.with_name("recent.json"))
+        self._recent_dirty: set[str] = set()
+        self._recent_flushed_at: Optional[float] = None
+        self.window_seq: dict[str, int] = {}
+        # Every line or turn numbered up to this is consolidated (consolidate.py).
+        self.folded_upto: dict[str, int] = {}
+        # Unconsolidated lines that left a room's window, and a reader's turns
+        # the DM trim dropped.
+        self._spill: dict[str, list] = {}
+        self._dm_spill: dict[str, list] = {}
+        self.buffers: dict[str, deque] = _RecentBuffers(
+            self.chat_context_messages, self._saved_lines)
         self.counters: dict[str, int] = defaultdict(int)
         self.last_reply_at: dict[str, float] = defaultdict(float)
         self.locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -315,7 +352,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self._sent_mids: dict[str, list[str]] = {}
 
         self._msg_seq: dict[str, int] = defaultdict(int)
-        self._vision_in_flight: dict[str, int] = defaultdict(int)
+        # Callers answered together in the turn now running, per conversation.
+        self._turn_callers: dict = {}
         self._sticky_call: dict[str, dict] = {}
 
         # De-dups the webhook against the catch-up sweep; persisted so a restart
@@ -336,6 +374,145 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self.connector_handles = outbox_mod.HandleStore(
             resolve_runtime_state_file("connector_handles.json"))
         self.outbox = outbox_mod.Outbox(self.connector_handles)
+        self._restore_recent()
+
+    # ---- the recent window on disk ----------------------------------------
+
+    def _saved_lines(self, conv: str) -> list:
+        """A room's lines kept on disk, for its window's first use."""
+        if channels.is_dm(conv):
+            return []
+        return list((self._recent.snapshot(conv) or {}).get("lines") or [])
+
+    def _restore_recent(self) -> None:
+        """Load recent.json (or, with MEMORY_KEEP_RECENT off, delete it). A
+        room's lines wait for its first use; the rest is filled now."""
+        store = self._recent
+        if not getattr(self.settings, "memory_keep_recent", True):
+            store.delete()
+            return
+        store.load()
+        store.trim()
+        for conv, entry in store.convs.items():
+            self._load_recent_entry(conv, entry)
+        if store.convs:
+            logger.info("[Agent] recent messages restored for %d chat(s)",
+                        len(store.convs))
+
+    def _load_recent_entry(self, conv: str, entry: dict) -> None:
+        """A chat's saved entry into the running state; what is held wins."""
+        self.window_seq[conv] = max(int(entry.get("seq") or 0),
+                                    self.window_seq.get(conv, 0))
+        self.folded_upto[conv] = max(int(entry.get("folded_upto") or 0),
+                                     self.folded_upto.get(conv, 0))
+        uid = channels.dm_user(conv)
+        marks = entry.get("marks") or {}
+        key = channels.dm_learning_key(uid) if uid else conv
+        if marks.get("reply") and not self.last_reply_at.get(conv):
+            self.last_reply_at[conv] = marks["reply"]
+        if marks.get("opener"):
+            self._opener_sent_at.setdefault(key, marks["opener"])
+        if marks.get("proactive") and not self.last_proactive_at.get(key):
+            self.last_proactive_at[key] = marks["proactive"]
+        if uid:
+            if entry.get("dm"):
+                self.dm_history.setdefault(uid, list(entry["dm"]))
+            if entry.get("dm_spill"):
+                self._dm_spill.setdefault(uid, list(entry["dm_spill"]))
+            if entry.get("unanswered"):
+                self._dm_unanswered.setdefault(uid, list(entry["unanswered"]))
+            if not self.last_dm_activity_at.get(uid):
+                self.last_dm_activity_at[uid] = entry.get("last_at") or 0.0
+        else:
+            if entry.get("spill"):
+                self._spill.setdefault(conv, list(entry["spill"]))
+            if not self.last_activity_at.get(conv):
+                self.last_activity_at[conv] = entry.get("last_at") or 0.0
+
+    def _wake(self, conv: str) -> None:
+        """A chat in use: what an eviction let go of comes back from disk."""
+        if conv in self.window_seq:
+            return
+        snap = self._recent.snapshot(conv)
+        if snap:
+            self._load_recent_entry(conv, snap)
+        self.window_seq.setdefault(conv, 0)
+
+    def _recent_entry(self, conv: str) -> Optional[dict]:
+        """A chat's entry for recent.json from what is held now; None when
+        nothing of it is left."""
+        snap = self._recent.snapshot(conv) or {}
+        if conv not in self.window_seq:
+            # Not held (evicted, or never woken): the copy on disk stands.
+            return dict(snap) if snap else None
+        uid = channels.dm_user(conv)
+        folded = int(self.folded_upto.get(conv, snap.get("folded_upto", 0)) or 0)
+        key = channels.dm_learning_key(uid) if uid else conv
+        marks = dict(snap.get("marks") or {})
+        for name, value in (("reply", self.last_reply_at.get(conv)),
+                            ("opener", self._opener_sent_at.get(key)),
+                            ("proactive", self.last_proactive_at.get(key))):
+            if value:
+                marks[name] = value
+        if uid:
+            turns = (self.dm_history[uid] if uid in self.dm_history
+                     else snap.get("dm") or [])
+            entry = {"lines": [], "spill": [], "dm": list(turns),
+                     "dm_spill": list(self._dm_spill.get(uid) or []),
+                     "unanswered": list(self._dm_unanswered.get(uid) or [])[
+                         -recent_mod.UNANSWERED_MAX:]}
+            activity, rows = self.last_dm_activity_at.get(uid, 0.0), entry["dm"]
+        else:
+            buf = dict.get(self.buffers, conv)
+            if buf is None:
+                lines, older = list(snap.get("lines") or []), []
+            else:
+                held = list(buf)
+                lines = held[-recent_mod.LINES_MAX:]
+                older = [r for r in held[:-recent_mod.LINES_MAX]
+                         if int(r.get("seq") or 0) > folded]
+            entry = {"lines": lines, "spill": list(self._spill.get(conv) or []) + older,
+                     "dm": [], "dm_spill": [], "unanswered": []}
+            activity, rows = self.last_activity_at.get(conv, 0.0), lines
+        if not any(entry[k] for k in recent_mod.CAPS):
+            return None
+        newest = max((float(r.get("t1") or r.get("t") or 0.0) for r in rows), default=0.0)
+        entry.update(seq=int(self.window_seq.get(conv, snap.get("seq", 0)) or 0),
+                     folded_upto=folded, marks=marks,
+                     last_at=max(float(activity or 0.0), newest,
+                                 float(snap.get("last_at") or 0.0)))
+        return entry
+
+    def _maybe_flush_recent(self, force: bool = False, only: str = "") -> None:
+        """Write the changed chats to recent.json: at most once a minute, or
+        now with `force` (shutdown) or `only` (a chat about to be evicted)."""
+        dirty = self._recent_dirty
+        if not getattr(self.settings, "memory_keep_recent", True):
+            dirty.clear()
+            return
+        mono = time.monotonic()
+        if not (force or only) and (not dirty or (
+                self._recent_flushed_at is not None
+                and mono - self._recent_flushed_at < _RECENT_FLUSH_S)):
+            return
+        store = self._recent
+        convs = [only] if only else list(dirty)
+        for conv in convs:
+            entry = self._recent_entry(conv)
+            if entry is None:
+                store.drop(conv)
+            else:
+                store.put(conv, entry)
+            dirty.discard(conv)
+        trimmed = store.trim()
+        if not convs and not trimmed:
+            return
+        try:
+            store.write()
+        except OSError as e:
+            logger.warning("[Agent] recent messages save failed: %s", e)
+        if not only:
+            self._recent_flushed_at = mono
 
     def _load_seen_msg_ids(self) -> None:
         """Refill the de-dup ring from disk."""
@@ -349,8 +526,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         """Open memory, reactions, stickers, the retrieval pools and the ledger
         views; after _apply_settings, since all of it hangs off the settings."""
         self.memories: dict[str, list[dict]] = self._load_memories()
-        # Conversations with a tidy pass under way (memory.py).
-        self._tidying: set[str] = set()
+        # Conversations with a consolidation under way (consolidate.py).
+        self._folding: set[str] = set()
         # One short note per conversation, always in the prompt.
         self.core_memory_file = resolve_runtime_state_file("core_memory.json")
         self.core_memory: dict[str, str] = self._load_core_memory()
@@ -553,6 +730,13 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self.pending_reactions.flush()
         self.connector_handles.flush(force=True)
         self.stickers._save(force=True)
+        self._maybe_flush_recent(force=True)
+        self._flush_memory_counters(force=True)
+        if self.memory_state._dirty:
+            self._save_memory_state(force=True)
+        book = self.__dict__.get("_usage_book")
+        if book is not None:
+            book.flush(time.time())
 
     async def aclose(self) -> None:
         """Stop owned work, close transports, then persist final state."""

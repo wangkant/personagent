@@ -36,6 +36,8 @@ from persona_agent.connector import ConnectorSink, current_sink
 from persona_agent.decision import (GATED_MODES, choose_group_mode, is_pass_sentinel,
                                     pacing_skip)
 from persona_agent.llm import _status_of
+from persona_agent.memstore import MemoryFileDamaged
+from persona_agent.prompt import BUFFERED_LINE_CHARS
 from persona_agent.settings import AgentSettings
 from persona_agent.textproc import (
     TextProcessing,
@@ -648,7 +650,9 @@ class Trial:
                 turn.reaction = await self._react(entry, text, nickname, uid,
                                                   is_admin, conv)
 
-        agent._append_buffer(conv, nickname, _truncate_framed(text, 200), uid)
+        line = _truncate_framed(text, BUFFERED_LINE_CHARS)
+        # As a live group buffers it: a cut line says that it was cut.
+        agent._append_buffer(conv, nickname, line + ("…" if len(text) > BUFFERED_LINE_CHARS else ""), uid)
         agent.last_activity_at[conv] = time.time()
         agent.active_users[conv].append((uid, nickname))
         turn.short = not (len(text.strip()) >= 4 or addressed)
@@ -737,6 +741,7 @@ class Trial:
         agent._commit_core_memory(conv, pending_core)
         if auto_mem:
             agent._save_auto_memory(conv, auto_mem)
+        agent._mark_used(conv, sent)
         self.last_mid = f"{conv}-{next(self._mids)}"
         if agent.react_learn_enabled:
             agent.pending_reactions.record(
@@ -1070,7 +1075,13 @@ def build_agent(lang: str, trigger: int) -> tuple[Agent, Path]:
             proactive_enabled=False, evolve_auto_enabled=False,
             memory_tidy_every=0,
         )
-        agent = Agent(settings)
+        try:
+            agent = Agent(settings)
+        except MemoryFileDamaged as error:
+            from persona_agent import memory_admin
+            # One sentence naming the file and its copy, as the other commands give.
+            print(memory_admin.damaged_sentence(error), file=sys.stderr)
+            raise SystemExit(1) from None
     finally:
         if saved is None:
             os.environ.pop("AGENT_RUNTIME_DIR", None)

@@ -29,8 +29,8 @@ ERRORS: frozenset[str] = frozenset({"health_busy", "health_failed", "health_inva
 # The logs under <home>/runtime/desktop the page may read; never a client path.
 LOGS = ("agent", "astrbot", "direct", "install", "app", "practice", "update")
 SERVICES = ("agent", "astrbot", "direct")
-PROBES = {"Ledger sizes": "ledger", "DM chat": "dm", "Primary chat (/v1 tools)": "chat",
-          "Vision": "vision", "Eval": "eval", "Embeddings": "embeddings",
+PROBES = {"Ledger sizes": "ledger", "DM chat": "dm", "Group replies": "chat",
+          "Web search decision": "searchdecide", "Reaction judge": "react", "Vision": "vision", "Eval": "eval", "Embeddings": "embeddings",
           "Web search (Tavily)": "search", "OneBot bridge": "onebot"}
 # Probes retry and run concurrently; their worst case is about 90 s.
 CHECK_TIMEOUT = 150

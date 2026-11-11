@@ -1150,6 +1150,71 @@ def test_the_observed_items_in_activity_have_no_buttons_and_light_no_dot():
     assert 'id="activity-dot" class="dot"' in html
 
 
+def _recorded_reasons() -> set[str]:
+    """Every reason the code can hand decision_log, read from the source."""
+    import ast
+
+    found: set[str] = set()
+
+    def words(node) -> set[str]:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return {node.value}
+        if isinstance(node, ast.IfExp):
+            return words(node.body) | words(node.orelse)
+        return set()
+
+    for path in Path(welcome.__file__).parent.glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call):
+                func = node.func
+                if (getattr(func, "attr", "") == "record" and len(node.args) >= 4
+                        and getattr(getattr(func, "value", None), "id", "") == "decision_log"):
+                    found |= words(node.args[3])
+                elif getattr(func, "id", "") == "silent" and node.args:
+                    found |= words(node.args[0])
+            # `mode, why = "", "below the trigger count"` and `return "judge", "trigger count"`.
+            elif (isinstance(node, (ast.Assign, ast.Return)) and isinstance(node.value, ast.Tuple)
+                  and len(node.value.elts) == 2 and path.name in ("decision.py", "turns.py")):
+                found |= words(node.value.elts[1])
+            elif (path.name == "decision.py" and isinstance(node, ast.Assign)
+                  and isinstance(node.targets[0], ast.Name) and node.targets[0].id.isupper()):
+                found |= words(node.value)
+    # A reason is a few lower-case words; prompt notes among the constants are not.
+    return {text for text in found if re.fullmatch(r"[a-z]+(?: [a-z]+)*", text)}
+
+
+def _reason_map() -> dict[str, str]:
+    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
+    block = re.search(r"const REASONS = \{(.*?)\};", js, re.S).group(1)
+    return dict(re.findall(r'^\s+"?([\w ]+?)"?: "(r_\w+)",', block, re.M))
+
+
+def test_every_reason_the_service_records_reads_as_a_sentence_in_every_language():
+    recorded = _recorded_reasons()
+    assert {"model failed", "blocked", "delivery failed", "proactive", "passed",
+            "below the trigger count", "sleep window", "sticky call"} <= recorded, recorded
+    mapped = _reason_map()
+    assert recorded <= set(mapped), sorted(recorded - set(mapped))
+    assert "answered together" in mapped
+    keys = set(mapped.values()) | {"r_other", "chatViaCoding", "vision_unsupported"}
+    for code in ("en", "zh"):
+        assert not keys - set(_page_strings(code)), (code, keys - set(_page_strings(code)))
+    for code in welcome.PAGE_LANGUAGES:
+        strings = json.loads((welcome.ASSETS / "i18n" / f"{code}.json").read_text(encoding="utf-8"))["strings"]
+        missing = {k for k in keys if not strings.get(k, "").strip()}
+        assert not missing, (code, missing)
+
+
+def test_an_unknown_reason_is_never_shown_raw_and_a_coding_entry_is_labelled():
+    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
+    reason = re.search(r"\nfunction reasonText\(row\) \{\n(.*?)\n\}\n", js, re.S).group(1)
+    assert "row.reason;" not in reason and 't("r_other")' in reason
+    mode = re.search(r"\nfunction modeText\(row\) \{\n(.*?)\n\}\n", js, re.S).group(1)
+    assert "|| row.mode" not in mode
+    shown = re.search(r"\nfunction showMessage\(item, arrived = false\) \{\n(.*?)\n\}\n", js, re.S).group(1)
+    assert 'item.via === "coding"' in shown and 't("chatViaCoding")' in shown
+
+
 def test_page_language_files_are_served_and_nothing_else(client):
     for code in welcome.PAGE_LANGUAGES:
         response = client.get(f"/assets/i18n/{code}.json")

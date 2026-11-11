@@ -688,6 +688,13 @@ class Learning:
                 if reaction_is_new and pair is not None and _fresh_pair(pair):
                     outcomes.append("pair:" + self._propose_candidate(
                         reaction_ev, candidates.TYPE_PAIR, pair, now))
+                elif reaction_is_new and pair is None and adj.get("lesson") and conv_id:
+                    # No better line to carry it: the lesson is kept as a fact
+                    # of the chat, or it would end with the retry window.
+                    mem_conv = (channels.dm_routing_key(str(reactor_uid))
+                                if is_dm else conv_id)
+                    if self._save_lesson_fact(mem_conv, adj["lesson"]):
+                        outcomes.append("fact")
                 ex = reactions.to_example(entry, adj, now)
                 if reaction_is_new and ex is not None:
                     # Weak evidence: waits for a strong event or a human.

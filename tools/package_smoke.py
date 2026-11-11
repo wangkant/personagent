@@ -24,7 +24,7 @@ from pathlib import Path
 
 REPLY = "hey there"
 # Names of the two model probes in persona_agent.health.CHECKS.
-CHAT_PROBES = ("DM chat", "Primary chat (/v1 tools)")
+CHAT_PROBES = ("DM chat", "Group replies")
 STEPS = ("version", "init", "chat", "run", "doctor")
 # Settings a developer's shell may carry that would override the test home's .env.
 _SCRUBBED_PREFIXES = ("LLM_", "AGENT_", "PERSONA_", "CONNECTOR_", "SERVER_", "QQ_",

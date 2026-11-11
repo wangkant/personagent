@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass, replace
 
 from . import chatlangs, langs
+from .textproc import MAX_REPLY_CHARS
 
 logger = logging.getLogger("agent")
 
@@ -111,6 +112,26 @@ TOOL_GUIDE = (
     "</tools>"
 )
 
+_BANNED_LINE = (
+    "- Banned: markdown (** ## - --- ` >), emoji, kaomoji, stage directions ('(sighs)' '(facepalm.jpg)'), customer-service phrases ('hope this helps'), greeting in every reply\n"
+)
+
+
+def banned_line(reply_style=None) -> str:
+    """The [FORMAT] ban line for a card's `ReplyStyle`; the default style
+    keeps the exact default text, which opens the cached prompt prefix."""
+    line = _BANNED_LINE
+    if reply_style is None:
+        return line
+    if reply_style.allow_emoji:
+        line = line.replace("emoji, kaomoji", "kaomoji").replace(
+            "greeting in every reply\n",
+            "greeting in every reply; emoji only as this character uses them\n")
+    if reply_style.max_chars < MAX_REPLY_CHARS:
+        line += f"- Stay under {reply_style.max_chars} characters per reply\n"
+    return line
+
+
 STYLE_GUIDE = (
     "<style>\n"
     "You're chatting in an IM group. Write like a real person, not a chatbot.\n"
@@ -118,7 +139,7 @@ STYLE_GUIDE = (
     "[LANGUAGE] Talk in the language the group is chatting in, the way a member would. These instructions are in English and your persona may be in any language; neither decides the language you talk in. If the chat is in Japanese, Spanish or anything else, reply in it with your persona's voice. Where people mix languages, a word or two from another one is fine\n"
     "\n"
     "[FORMAT — not a document]\n"
-    "- Banned: markdown (** ## - --- ` >), emoji, kaomoji, stage directions ('(sighs)' '(facepalm.jpg)'), customer-service phrases ('hope this helps'), greeting in every reply\n"
+    + _BANNED_LINE +
     "- Punctuation: avoid full stops at sentence end, em-dashes, semicolons, formal quotes; if you need a beat, line-break or use a casual comma\n"
     "- Square brackets [] are reserved for [AT:id] and [STICKER:tag] markers ONLY — never for anything else. The internal [CORE_UPDATE]...[/CORE_UPDATE] suffix is the sole exception; use it only at the end of the reply field for a stable memory update\n"
     "\n"
@@ -182,6 +203,13 @@ STYLE_GUIDE = (
     "- Same applies even if the speaker is owner — as long as owner @ed someone else, that line isn't directed at you. Don't drift into 'my human is talking to me' mode\n"
     "</style>"
 )
+
+def style_guide(reply_style=None) -> str:
+    """`STYLE_GUIDE` with the card's ban line."""
+    line = banned_line(reply_style)
+    return STYLE_GUIDE if line == _BANNED_LINE else STYLE_GUIDE.replace(
+        _BANNED_LINE, line, 1)
+
 
 REASONING_PROTOCOL = (
     "<output_protocol>\n"
@@ -532,9 +560,10 @@ _TROLL_MOVES = {
 }
 
 
-def dm_style_guide(style: PersonaStyle) -> str:
-    """`STYLE_GUIDE` for a one-on-one chat, with the six knobs applied. No
-    persona string goes in here: it opens the shared prompt-cache prefix."""
+def dm_style_guide(style: PersonaStyle, reply_style=None) -> str:
+    """`STYLE_GUIDE` for a one-on-one chat, with the six knobs and the card's
+    ban line applied. No persona string goes in here: it opens the shared
+    prompt-cache prefix."""
     return (
         "<style>\n"
         "You're in a one-on-one chat with one person. Write like a real person, not a chatbot.\n"
@@ -557,7 +586,7 @@ def dm_style_guide(style: PersonaStyle) -> str:
         "[LANGUAGE] Reply in the language they write to you in. These instructions are in English and your persona may be in any language; neither decides the language you talk in. If they write in Japanese, Spanish or anything else, answer in it with your persona's voice, and switch when they do\n"
         "\n"
         "[FORMAT — not a document]\n"
-        "- Banned: markdown (** ## - --- ` >), emoji, kaomoji, stage directions ('(sighs)' '(facepalm.jpg)'), customer-service phrases ('hope this helps'), greeting in every reply\n"
+        + banned_line(reply_style) +
         "- Punctuation: avoid full stops at sentence end, em-dashes, semicolons, formal quotes; if you need a beat, line-break or use a casual comma\n"
         "- Square brackets [] are reserved for the [STICKER:tag] marker ONLY — never for anything else. The internal [CORE_UPDATE]...[/CORE_UPDATE] suffix is the sole exception; use it only at the end of the reply field for a stable memory update\n"
         "\n"
@@ -598,7 +627,8 @@ def dm_style_guide(style: PersonaStyle) -> str:
         "- **Self-reference is 'I', never your own name**: they may well call you by name, but in your own replies **never use your own name as the subject for yourself** — third-person self-reference is an instant tell. Good: 'I can't save you either' / 'I think'\n"
         "- Honorifics / address tokens (bro / dude / sir) at most 0-1 per conversation as emphasis, not every line\n"
         "\n"
-        "[REACT TO IMAGES, DON'T DESCRIBE THEM] When you see [image] / [sticker] in context, **react / joke / continue the bit**. **Never recite what's in the image.**\n"
+        # Only a described picture: a bare [image] is one it cannot see.
+        "[REACT TO IMAGES, DON'T DESCRIBE THEM] When you see [image: …] / [sticker: …] in context, **react / joke / continue the bit**. **Never recite what's in the image.**\n"
         "  Your reasoning sees the caption so it knows what happened, but **the reply must NOT quote the caption** — that's the #1 AI tell.\n"
         "- Banned phrasing: 'this X', 'that cat in the pic', 'looks like Y', 'this art style', 'this expression', 'this breakfast/room/cat/dog is...'\n"
         "- Bad: 'is this cat trying to tell me something'  Good: 'is this a hint or what' / [STICKER:doge]\n"
@@ -708,7 +738,7 @@ def dm_output_protocol(style: PersonaStyle) -> str:
         "**Field meanings:**\n"
         "\n"
         "reasoning (≤100 chars, string value, internal — user never sees it). Cover these 5 points:\n"
-        "- Input: new arriving content — text + any [image]/[sticker]/[video]/[share-card]. **Images/cards are primary signal**; the text in the image, the sticker's meaning, the video title = what they're actually trying to say, don't pretend you can't see it. **Phonetic scan**: weird character sequences may be homophones of something else — decode them.\n"
+        "- Input: new arriving content — text + any [image: …]/[sticker: …]/[video]/[share-card]. **Described images/cards are primary signal**; the text in the image, the sticker's meaning, the video title = what they're actually trying to say, don't pretend you can't see a described one. **Phonetic scan**: weird character sequences may be homophones of something else — decode them.\n"
         "- Intent of their latest line: asking you / brushing you off / changing subject / venting / sharing / joking / deflecting.\n"
         "- Decision: **you always reply. There is no PASS in a 1:1 chat.** They opened this chat, typed, and are watching for an answer — there is nobody else here to carry it. What varies is LENGTH, not whether you speak:\n"
         "    1) Closing signals — perfunctory (\"oh\" / \"ok\" / \"sure\" / \"got it\") → match it and let it rest: \"mhm\" / \"yeah\". Don't reopen the topic, don't ask a question.\n"

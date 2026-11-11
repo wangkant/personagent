@@ -4,7 +4,10 @@ from __future__ import annotations
 import itertools
 import logging
 import re
+import time
+from typing import Optional
 
+from . import recent as recent_mod
 from .addressing import mentions_name
 from .connector import (CONNECTOR_BOT_ID, current_sink)
 from .textproc import (
@@ -17,6 +20,21 @@ logger = logging.getLogger("agent")
 
 #: How much of a quoted message the model reads.
 QUOTE_CHARS = 200
+
+
+def message_time(payload: dict) -> Optional[float]:
+    """When the platform says a message was sent (unix seconds), or None."""
+    raw = payload.get("time") if isinstance(payload, dict) else None
+    if isinstance(raw, bool):
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    # Milliseconds, as some platforms send them.
+    if value > 1e11:
+        value /= 1000.0
+    return value if 1e9 < value < 1e11 else None
 
 
 class MessageParsing:
@@ -213,15 +231,56 @@ class MessageParsing:
         self._index_msg(key, rendered)
         return rendered
 
-    def _append_buffer(self, group_id: str, name: str, text: str, user_id: str = "") -> None:
+    def _next_seq(self, conv: str) -> int:
+        """The next line number of a chat; it outlives a restart (recent.json)."""
+        seqs = self.__dict__.setdefault("window_seq", {})
+        seqs[conv] = int(seqs.get(conv) or 0) + 1
+        return seqs[conv]
+
+    def _append_buffer(self, group_id: str, name: str, text: str, user_id: str = "",
+                       at: Optional[float] = None) -> None:
+        """One line of a room: `at` is when it was said (the platform's time),
+        else now. A line pushed out unconsolidated waits in the spill."""
+        wake = getattr(self, "_wake", None)
+        if wake is not None:
+            wake(group_id)
         buf = self.buffers[group_id]
-        # Merge on name and user_id: nicknames collide.
+        now = time.time()
+        at = now if at is None else min(float(at), now)
+        folded = getattr(self, "folded_upto", {}).get(group_id, 0)
+        # Merge on name and user_id: nicknames collide. A consolidated line
+        # takes no more words, or they would never be read.
         if (buf and buf[-1].get("name") == name
                 and buf[-1].get("user_id", "") == user_id
-                and len(buf[-1].get("text", "")) < 300):
+                and len(buf[-1].get("text", "")) < 300
+                and int(buf[-1].get("seq") or 0) > folded):
             buf[-1]["text"] = buf[-1]["text"] + " " + text
+            buf[-1]["t1"] = at
         else:
-            buf.append({"name": name, "text": text, "user_id": user_id})
+            if buf.maxlen is not None and len(buf) >= buf.maxlen:
+                oldest = buf[0]
+                if int(oldest.get("seq") or 0) > folded:
+                    self._spill_rows(group_id, [oldest])
+            buf.append({"name": name, "text": text, "user_id": user_id,
+                        "t": at, "seq": self._next_seq(group_id)})
+        dirty = getattr(self, "_recent_dirty", None)
+        if isinstance(dirty, set):
+            dirty.add(group_id)
+            self._maybe_flush_recent()
+
+    def _spill_rows(self, conv: str, rows: list, *, dm_reader: str = "") -> None:
+        """Keep unconsolidated lines that left the window, oldest dropped
+        (and counted) past the cap."""
+        name, key, cap = (("_dm_spill", dm_reader, recent_mod.DM_SPILL_MAX) if dm_reader
+                          else ("_spill", conv, recent_mod.SPILL_MAX))
+        spill = self.__dict__.setdefault(name, {}).setdefault(key, [])
+        spill.extend(rows)
+        if len(spill) > cap:
+            lost = len(spill) - cap
+            del spill[:lost]
+            state = getattr(self, "memory_state", None)
+            if state is not None:
+                state.add_lost(conv, lost)
 
     def _self_mention_id(self) -> str:
         """The id an @ of the bot carries: QQ_BOT_ID, else CONNECTOR_BOT_ID
