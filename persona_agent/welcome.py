@@ -90,6 +90,10 @@ MAX_PICTURE = 8 * 1024 * 1024
 OUTBOX_IDLE_S = 3.0
 
 
+# The name the page's chat sends; the page shows the admin's name or its own word instead.
+PAGE_SENDER = "you"
+
+
 def _connector_type():
     return direct_base.sdk().Connector
 
@@ -104,7 +108,7 @@ async def send_chat_items(url: str, token: str, conversation: str, text: str, *,
         response = await connector.send_event({
             "kind": "event", "platform": "browser", "conversation_type": "dm",
             "conversation_id": conversation, "sender_id": conversation,
-            "sender_name": "you", "message_id": secrets.token_hex(12),
+            "sender_name": PAGE_SENDER, "message_id": secrets.token_hex(12),
             "sent_at": int(time.time()),
             "text": text, "segments": [{"type": "text", "text": text}], "prefiltered": True,
             **fields,
@@ -222,6 +226,8 @@ class Workspace:
                     "model": values.get("LLM_MODEL", ""), "baseUrl": values.get("LLM_BASE_URL", ""),
                     "keyHint": sw.mask_secret(values["LLM_API_KEY"]) if values.get("LLM_API_KEY") else "",
                     "name": values.get("PERSONA_NAME", ""), "lang": langs.normalize(values.get("AGENT_LANG")),
+                    # What the page calls the person at it, where a name is set.
+                    "adminName": values.get("ADMIN_NAME", "").strip()[:64],
                     # An earlier release's template is on no menu: it maps to the plain one.
                     "character": sw.default_character(origin) if origin else ("custom" if card.is_file() else "warm-listener"),
                     "avatar": avatar,
@@ -906,7 +912,11 @@ class Workspace:
         raw = await self._activity_call("GET", "/api/dashboard/conversation", params={"id": chat})
         if raw is None or raw.get("off"):
             raise ValueError("activity_unavailable")
-        return _activity_chat(raw)
+        shown = _activity_chat(raw)
+        # An earlier page chat: what was learned there is no longer used.
+        if shown["platform"] == access.PAGE_PLATFORM and chat != self._page_key():
+            shown["retired"] = True
+        return shown
 
     async def activity_decide(self, payload: dict) -> dict:
         cid, action = str(payload.get("id") or ""), str(payload.get("action") or "")
@@ -976,13 +986,26 @@ def _activity_chat(raw: dict) -> dict:
     observes and where each item stands, what it learned and how, what it
     remembers and what it recently did. Evidence and history stay with the
     learned panel and `personagent learned`."""
+    # In this page's own chat every message is the page's person's, sent under a placeholder name.
+    page = raw.get("platform") == access.PAGE_PLATFORM
+
+    def mine(name) -> bool:
+        return page and name == PAGE_SENDER
+
+    def own(name) -> str:
+        return "" if mine(name) else name
+
+    def flag(key: str, on: bool) -> dict:
+        return {key: True} if on else {}
+
     def item(cand: dict) -> dict:
         speakers = [e.get("speaker") for e in cand.get("evidence") or [] if e.get("speaker")]
-        out = {"id": cand.get("id", ""),
+        out = {"id": cand.get("id", ""), **flag("self", page and bool(speakers)),
                "kind": "wording" if cand.get("type") == candidates.TYPE_PAIR else "repeat",
                "said": cand.get("reply", ""), "better": cand.get("better", ""),
                "lesson": cand.get("lesson", ""),
-               "when": cand.get("created", 0), "from": list(dict.fromkeys(speakers))[:3],
+               "when": cand.get("created", 0),
+               "from": [] if page else list(dict.fromkeys(speakers))[:3],
                "actions": [a for a in cand.get("actions") or [] if a in ACTIVITY_ACTIONS]}
         where = cand.get("standing")
         if isinstance(where, dict):
@@ -996,10 +1019,12 @@ def _activity_chat(raw: dict) -> dict:
     return {"id": raw.get("id", ""), "platform": raw.get("platform", ""), "kind": raw.get("kind", ""),
             "observing": [item(c) for c in raw.get("observing") or []],
             "learned": [item(c) for c in raw.get("learned") or []],
-            "notes": [{"text": m.get("text", ""), "by": m.get("by", ""), "about": m.get("about", ""),
+            "notes": [{"text": m.get("text", ""), "by": m.get("by", ""), "about": own(m.get("about", "")),
                        "when": m.get("time", 0), "id": m.get("id", ""), "conv": m.get("conv", ""),
                        "born": m.get("born", 0), "used": m.get("used", 0),
-                       "saidBy": m.get("said_by_name", "")}
+                       "saidBy": own(m.get("said_by_name", "")),
+                       **flag("aboutSelf", mine(m.get("about"))),
+                       **flag("saidBySelf", mine(m.get("said_by_name")))}
                       for m in raw.get("memories") or []],
             "core": raw.get("core_note", ""),
             "coreAt": raw.get("core_at") or 0,
@@ -1007,7 +1032,8 @@ def _activity_chat(raw: dict) -> dict:
                        "from": thread.get("from_t", 0), "to": thread.get("to_t", 0)}
             if isinstance(thread, dict) else None,
             "events": [{"id": e.get("id", ""), "text": e.get("text", ""), "from": e.get("t0", 0),
-                        "to": e.get("t1", 0), "names": list(e.get("names") or [])}
+                        "to": e.get("t1", 0), "names": [n for n in e.get("names") or [] if own(n)],
+                        **flag("self", any(mine(n) for n in e.get("names") or []))}
                        for e in raw.get("episodes") or []],
             "removed": [{"tid": r.get("tid", ""), "kind": r.get("kind", ""), "why": r.get("why", ""),
                          "by": r.get("by", ""), "at": r.get("at", 0), "text": r.get("text", ""),
@@ -1019,7 +1045,11 @@ def _activity_chat(raw: dict) -> dict:
             if isinstance(status, dict) else None,
             "recent": [{"when": d.get("ts", 0), "spoke": bool(d.get("spoke")), "mode": d.get("mode", ""),
                         "reason": d.get("reason", ""), "text": d.get("excerpt", ""),
-                        "answered": d.get("answered", ""), "sender": d.get("sender", ""),
+                        "answered": d.get("answered", ""),
+                        "sender": "" if page else d.get("sender", ""),
+                        # Whatever message a row quotes here was written by the page's person.
+                        **flag("self", page and bool(d.get("sender") or d.get("answered")
+                                                     or not d.get("spoke"))),
                         "count": int(d.get("count") or 1)}
                        for d in (raw.get("decisions") or [])[:ACTIVITY_RECENT]][::-1]}
 
@@ -1051,16 +1081,26 @@ def _vision_works(model: str, base: str, key: str) -> bool:
         before = {name: os.environ.get(name) for name in _VISION_VARS}
         os.environ.update(VISION_MODEL=model, VISION_BASE_URL=base, VISION_API_KEY=key)
         try:
-            ok, _ = health.check_vision()
+            ok, said = health.check_vision()
         except Exception:
-            ok = False
+            ok, said = False, ""
         finally:
             for name, value in before.items():
                 if value is None:
                     os.environ.pop(name, None)
                 else:
                     os.environ[name] = value
-    return ok is True
+    # The probe shows a red square: only an answer naming its colour proves the model saw it.
+    return ok is True and _names_red(str(said).rsplit("->", 1)[-1])
+
+
+# "Red" as a vision model may answer the probe's "What color?" in the languages it speaks.
+_RED = re.compile(r"\bred\b|\brot\b|rouge|roj[oa]|rosso|vermelh|красн|红|紅|赤|빨|적색|scarlet|crimson",
+                  re.IGNORECASE)
+
+
+def _names_red(answer: str) -> bool:
+    return bool(_RED.search(answer))
 
 
 def _endpoint(value) -> str:

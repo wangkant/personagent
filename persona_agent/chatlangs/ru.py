@@ -74,7 +74,7 @@ SPEC = Spec(
     # "label: n", so no word agrees with a count.
     learned_text={
         "head": ("заметок: {memories}, выученных ответов: {examples}, "
-                 "исправлений: {fixes}, ждут второго голоса: {voice}, "
+                 "исправлений: {fixes}, под наблюдением до ещё одной согласной реакции: {voice}, "
                  "на моём собственном рассмотрении: {admin}"),
         "score": ", последняя самооценка {score}/5",
         "pair": "было: {was}, стало: {better}",

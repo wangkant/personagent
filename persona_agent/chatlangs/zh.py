@@ -48,7 +48,7 @@ SPEC = Spec(
                      "卡住了，等会儿再聊"),
     learned_text={
         "head": ("记忆 {memories} 条，学到 {examples} 条回复和 {fixes} 组纠正，"
-                 "{voice} 条等第二个人佐证，{admin} 条由我自行判断"),
+                 "{voice} 条仍在观察（再获得一次一致的反应即生效），{admin} 条由我自行判断"),
         "score": "，最近自评 {score}/5",
         "pair": "原来：{was}，改成：{better}",
         "someone_else": "另一个聊天里有人",

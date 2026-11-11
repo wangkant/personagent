@@ -159,7 +159,7 @@ def test_a_damaged_memory_file_stops_the_start_in_one_sentence(
     monkeypatch.setenv("MEMORY_FILE", str(path))
     problem = server._memory_problem()
     check("one sentence naming the file and its copy",
-          problem is not None and problem.startswith("memory.json is damaged")
+          problem is not None and problem.startswith(f"The memory file {path} is damaged")
           and "memory.json.bak" in problem and "\n" not in problem, repr(problem))
     check("the file is left as it was", path.read_text(encoding="utf-8") == "{broken")
     path.write_text("{}", encoding="utf-8")

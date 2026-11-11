@@ -89,7 +89,7 @@ SPEC = Spec(
                      "電波悪いから少し待って"),
     learned_text={
         "head": ("記憶 {memories} 件、覚えた返事 {examples} 件、直し {fixes} 組、"
-                 "二人目の確認待ち {voice} 件、自分で判断中 {admin} 件"),
+                 "観察中（一致した反応があと一件で有効） {voice} 件、自分で判断中 {admin} 件"),
         "score": "、最近の自己評価 {score}/5",
         "pair": "前：{was}、直し：{better}",
         "someone_else": "別のチャットの誰か",

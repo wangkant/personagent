@@ -127,7 +127,8 @@ async def test_a_reply_to_the_bot_is_judged_and_its_retry_linked(tmp: Path) -> N
             ("rejection", evidence.NEGATIVE_ONLY)]
         assert chat.trace("en", r) == (
             "[learning] judged: rejection, accepted (negative only) - "
-            "waiting for your reaction to its retry")
+            "under observation: it takes effect when one more agreeing reaction arrives, "
+            "and your next reaction to its retry is weighed as that reaction")
         assert turn.retry_of == advice
         turn = await say(trial, model, ALEX, "haha yeah, thanks Nova",
                          verdict=THANKS, reply="anytime")
@@ -262,7 +263,7 @@ async def test_zh_trial_speaks_chinese(tmp: Path) -> None:
                          verdict=demo._verdict("rejection", True, "只是吐槽",
                                                better="啊又挂了？"))
         assert chat.trace("zh", turn.reaction) == (
-            "[学习] 判定：否定，采信（仅否定），正在等待你对重试回复作出反应")
+            "[学习] 判定：否定，采信（仅否定），进入观察：再获得一次一致的反应即生效，你对重试回复的下一次反应将作为该反应予以判定")
 
 
 def _feed(monkeypatch, lines):

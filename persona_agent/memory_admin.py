@@ -67,6 +67,16 @@ def _restore_command(tid: str) -> str:
     return command(f"memory restore {tid}")
 
 
+def _memory_command(sub: str = "") -> str:
+    from .setup_wizard import command
+    return command(f"memory {sub}".strip())
+
+
+def _no_such_id(removed: bool = False) -> None:
+    _say("No item has that id.")
+    _say(f"Run `{_memory_command('removed' if removed else '')}` to see the ids.")
+
+
 # ------------------------------------------------------------ the stores ----
 
 def _files_class():
@@ -218,7 +228,8 @@ def _about(fact: dict) -> str:
     about = fact.get("about") or ""
     said = fact.get("said_by_name") or ""
     if said:
-        return f"{about} ({langs.term(f'said by {said}')})" if about else langs.term(f"said by {said}")
+        named = langs.term(f"said by {said}", keep=(said,))
+        return f"{about} ({named})" if about else named
     return about
 
 
@@ -254,12 +265,16 @@ def cmd_list(args, backend) -> int:
         print(json.dumps(listing["chats"], ensure_ascii=False, indent=2))
         return 0
     if not listing["chats"]:
+        if args.chat:
+            _say(f"No chat with the key {args.chat} holds anything remembered. "
+                 f"Run `{_memory_command()}` to see the chats and their keys.")
+            return 0
         _say("Nothing is remembered.")
         return 0
     for i, chat in enumerate(listing["chats"]):
         if i:
             print()
-        _say(f"Chat: {chat['conv']}")
+        print(langs.term(f"Chat: {chat['conv']}", keep=(chat["conv"],)))
         _table(_memory_rows(chat), ["Id", "Kind", "About", "First noted", "Last used", "Text"])
     return 0
 
@@ -270,7 +285,8 @@ def cmd_removed(args, backend) -> int:
         print(json.dumps(removed, ensure_ascii=False, indent=2))
         return 0
     if not removed:
-        _say("Nothing removed can be brought back.")
+        _say(f"Nothing removed in the chat {args.chat} can be brought back." if args.chat
+             else "Nothing removed can be brought back.")
         return 0
     by_chat: dict[str, list[dict]] = {}
     for row in removed:
@@ -278,7 +294,7 @@ def cmd_removed(args, backend) -> int:
     for i, (conv, rows) in enumerate(by_chat.items()):
         if i:
             print()
-        _say(f"Chat: {conv}")
+        print(langs.term(f"Chat: {conv}", keep=(conv,)))
         _table([[r["tid"], langs.term(KINDS.get(r["kind"], r["kind"])), _reason(r),
                  _minute(r.get("at")), _minute(r.get("until")), _short(r.get("text"))]
                 for r in rows],
@@ -311,7 +327,7 @@ def cmd_forget(args, backend) -> int:
     items = _items(backend.listing(args.chat)) if wanted else []
     found = _pick([item[2] for item in items], wanted) if wanted else []
     if not found:
-        _say("No item has that id.")
+        _no_such_id()
         return 1
     if len(found) > 1:
         _say("Several chats have an always-present note; name one with --chat."
@@ -321,7 +337,7 @@ def cmd_forget(args, backend) -> int:
     conv, kind, item = items[found[0]]
     tid = backend.forget(conv, kind, "" if kind == "core" else item)
     if not tid:
-        _say("No item has that id.")
+        _no_such_id()
         return 1
     _say("Forgotten.")
     if tid != "-":
@@ -341,7 +357,7 @@ def cmd_restore(args, backend) -> int:
     elif len(wanted) == 11 and wanted.startswith("r"):
         tid = wanted  # a whole id no longer listed: the store says why
     else:
-        _say("No item has that id.")
+        _no_such_id(removed=True)
         return 1
     result = backend.restore(tid)
     if result == "ok":
@@ -354,9 +370,31 @@ def cmd_restore(args, backend) -> int:
 
 # ---------------------------------------------------------------- running ----
 
-def damaged_sentence(error) -> str:
-    """memstore.MemoryFileDamaged as one translated sentence."""
+def damaged_sentence(error, trial: Path | None = None) -> str:
+    """memstore.MemoryFileDamaged as one translated sentence; `trial` is the
+    practice chat's folder when the damaged file is its own copy."""
+    if trial is not None:
+        return langs.term(
+            f"The practice chat's memory file {error.path} is damaged; the memory the "
+            f"character uses in its chats is not affected. Delete the folder {trial} "
+            "to start the practice chat with an empty memory.")
     return langs.term(str(error))
+
+
+def memory_problem():
+    """The MemoryFileDamaged a start would stop on, or None. Reads only."""
+    from . import episodes, memstore
+    from .paths import resolve_runtime_state_file
+    from .settings import AgentSettings
+
+    memory_file = resolve_runtime_state_file(AgentSettings.from_env().memory_file)
+    try:
+        memstore.load_memory_file(memory_file)
+        memstore.load_core_file(resolve_runtime_state_file("core_memory.json"))
+        episodes.EpisodeStore(memory_file.with_name("episodes.json")).load()
+    except memstore.MemoryFileDamaged as error:
+        return error
+    return None
 
 
 def _parser(prog: str | None) -> argparse.ArgumentParser:

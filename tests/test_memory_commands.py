@@ -409,7 +409,7 @@ async def test_learned_summary_command(tmp: Path) -> None:
           "was: as an AI I cannot, better: nah, no idea" in out and len(out.splitlines()) <= 3, out)
     check("learned: promoted example shown", "lol same" in out, out)
     check("learned: other room's material excluded", "OTHER ROOM" not in out, out)
-    check("learned: pending count present", "0 awaiting a second voice" in out, out)
+    check("learned: pending count present", "0 under observation until another agreeing reaction arrives" in out, out)
     check("learned: survives the default character policy verbatim",
           TextProcessing._sanitize_reply(out, agent.agent_lang, agent.reply_style) == out, out)
     check("learned: not matched by an ordinary sentence",

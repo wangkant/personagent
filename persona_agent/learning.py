@@ -63,6 +63,18 @@ def unadoptable(text: str) -> bool:
     return bool(_UNADOPTABLE.search(str(text or "")))
 
 
+def content_refusal(cand: dict) -> str:
+    """The ledger reason when a candidate's line or lesson carries what no
+    character adopts, else ''."""
+    taught = (cand.get("better") if cand.get("type") == candidates.TYPE_PAIR
+              else cand.get("reply"))
+    if unadoptable(taught):
+        return REASON_POLICY
+    if unadoptable((cand.get("payload") or {}).get("lesson")):
+        return REASON_LESSON
+    return ""
+
+
 def put_in_use(ledger, cid: str, *, ts: str, actor: str, reason: str,
                policy=promotion.DEFAULT_POLICY, judge: str = "",
                model: str = "") -> bool:
@@ -164,6 +176,8 @@ class Learning:
                                         note="late corroboration"):
                 continue
             decision = self._decide_promotion(cid, events=events, peers=peers)
+            if decision.promote and self._refused_by_rule(cid, ts):
+                continue
             if decision.promote and ledger.promote(
                     cid, ts=ts, actor="auto", reason=decision.reason,
                     evidence=[event["event_id"]]):
@@ -239,6 +253,8 @@ class Learning:
         ledger.link_evidence(cid, support, ts=ts, note="corroboration scan")
         decision = self._decide_promotion(cid, events=events)
         label = "proposed" if created else "held"
+        if decision.promote and self._refused_by_rule(cid, ts):
+            return "blocked"
         if decision.promote:
             if ledger.promote(cid, ts=ts, actor="auto",
                               reason=decision.reason,
@@ -259,6 +275,18 @@ class Learning:
         logger.info("[Agent] candidate %s %s (%s): %s",
                     cid, label, ctype, decision.reason)
         return label
+
+    def _refused_by_rule(self, cid: str, ts: str) -> bool:
+        """Set aside by rule what agreeing reactions would put in use while
+        it carries what no character adopts."""
+        cand = self.candidate_ledger.get(cid) or {}
+        refusal = content_refusal(cand)
+        if not refusal:
+            return False
+        self.candidate_ledger.reject(cid, ts=ts, actor=candidates.ACTOR_AUTO,
+                                     reason=refusal, judge=RULES_VERSION)
+        logger.info("[Agent] candidate %s REJECTED by rule: %s", cid, refusal)
+        return True
 
     def _retire_answered_drafts(self, cid: str, ts: str) -> None:
         """Reject the proposed rewrites `cid` answered (the complaint's own
@@ -728,7 +756,11 @@ class Learning:
                     # of the chat, or it would end with the retry window.
                     mem_conv = (channels.dm_routing_key(str(reactor_uid))
                                 if is_dm else conv_id)
-                    if self._save_lesson_fact(mem_conv, adj["lesson"]):
+                    if unadoptable(adj["lesson"]):
+                        outcomes.append("fact:refused")
+                        logger.info("[Agent] lesson not kept as a fact: %s",
+                                    REASON_LESSON)
+                    elif self._save_lesson_fact(mem_conv, adj["lesson"]):
                         outcomes.append("fact")
                 ex = reactions.to_example(entry, adj, now)
                 if reaction_is_new and ex is not None:

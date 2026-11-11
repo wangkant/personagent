@@ -396,11 +396,11 @@ async def test_the_learned_summary_shows_the_chain(tmp: Path) -> None:
 
     for lang, ask, want in (
             ("en", "Nova what have you learned?",
-             ("0 awaiting a second voice, 0 under my own review",
+             ("0 under observation until another agreeing reaction arrives, 0 under my own review",
               "why: alex said it missed, alex accepted the retry, "
               "passed with 2 events, 1 strong")),
             ("zh", "Nova 你学到了什么",
-             ("0 条等第二个人佐证，0 条由我自行判断",
+             ("0 条仍在观察（再获得一次一致的反应即生效），0 条由我自行判断",
               "原因：alex 说没答对，alex 接受了重答，2 条证据其中 1 条强，通过"))):
         a = make_agent(tmp / lang, lang=lang)
         await complain(a, REJECTION, name="alex")
@@ -748,7 +748,7 @@ async def test_the_summary_counts_what_a_person_can_act_on(tmp: Path, monkeypatc
     monkeypatch.setattr(promotion, "decide", spy)
     out = a._handle_memory_command(CONV, "Nova what have you learned?") or ""
     check("p: liked replies and another character's proposals are not counted",
-          "0 awaiting a second voice, 0 under my own review" in out, out)
+          "0 under observation until another agreeing reaction arrives, 0 under my own review" in out, out)
     # The retry alex thanked is a liked reply a person approved: the character
     # may decide it, so it alone is looked at.
     liked = [c["candidate_id"] for c in a.candidate_ledger.pending()

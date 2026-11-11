@@ -42,7 +42,7 @@ COMMANDS = {
     "memory": ("persona_agent.memory_admin", "main",
                "look at what it remembers, forget an item or bring one back"),
     "eval": ("persona_agent.evals", "main",
-             "measure speaking, persona and learning on labelled cases"),
+             "measure speaking, persona, learning and memory on labelled cases"),
 }
 
 

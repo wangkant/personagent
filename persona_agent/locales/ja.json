@@ -286,7 +286,7 @@
 "set aside after a long time without a new reaction": "長期間新しい反応がなかったため、見送りました",
 "observing": "観察中",
 "stopped using {n} learned {rows} about that reply": "その返信について学んだ {n} 件の使用をやめました",
-"waiting for your reaction to its retry": "再挑戦への反応を待っています",
+"under observation: it takes effect when one more agreeing reaction arrives, and your next reaction to its retry is weighed as that reaction": "観察中です。一致した反応がもう一件届くと有効になり、再挑戦への次の反応がその反応として判定されます",
 "nothing to learn": "学ぶことはありません",
 "{strong} of {need} strong reactions so far": "強い反応はここまで {strong}/{need} 件",
 "{events} of {need} agreeing reactions so far": "一致した反応はここまで {events}/{need} 件",
@@ -434,5 +434,6 @@
 "{who} liked {said}": "{who}が{said}を評価",
 "{who} moved on from {said}": "{who}は{said}に反応せず",
 "{who} accepted the second try {said}": "{who}が 2 回目の返信{said}を承認",
-"{who} moved on from the second try {said}": "{who}は 2 回目の返信{said}に反応せず"
+"{who} moved on from the second try {said}": "{who}は 2 回目の返信{said}に反応せず",
+"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "「{choice}」は選択肢にありません。0 から {n} までの数字を入力してください。"
 }

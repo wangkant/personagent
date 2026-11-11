@@ -84,6 +84,7 @@ def _resolve_id(ledger: candidates.CandidateLedger, wanted: str) -> str | None:
         return hits[0]
     if not hits:
         _say(f"No candidate matches {wanted!r}.")
+        _say(f"Run `{_command('list --state=')}` to see every candidate and its id.")
     else:
         _say(f"{wanted!r} matches more than one candidate: {', '.join(h[:12] for h in hits[:6])}")
     return None
@@ -97,6 +98,29 @@ def _decide(ledger, log, cand, policy) -> promotion.Decision:
         related_events=promotion.related_events(cand, log.all()),
         peers=ledger.all(), now=time.time(), policy=policy,
         admin_ids=access.identity_from_env().admins)
+
+
+#: How a reaction was tied to the reply, each a whole phrase so that every
+#: language can give it the form its sentence needs.
+MATCHED = {"quote": "matched by a quotation of the reply",
+           "at": "matched by a mention of the character",
+           "dm": "matched as the next message in a private chat",
+           "elicited": "matched as the answer to the character's question",
+           "self": "the character's own review of its reply"}
+
+
+#: What a person reads for each state; `--state` still takes the names.
+STATES = {candidates.STATE_PROPOSED: "observing", candidates.STATE_PROMOTED: "in use",
+          candidates.STATE_REJECTED: "set aside", candidates.STATE_ROLLED_BACK: "taken out of use",
+          candidates.STATE_SUPERSEDED: "replaced by another"}
+
+
+def _state(name) -> str:
+    return langs.term(STATES.get(str(name or ""), str(name or "?")))
+
+
+def _moved(cid: str, before, after) -> str:
+    return f"{cid}: {_state(before)} -> {_state(after)}"
 
 
 def _short(text, width: int = 60) -> str:
@@ -229,16 +253,17 @@ def cmd_list(args, ledger, log, policy) -> int:
     if not rows:
         _say(f"No candidates are in the state {args.state}." if args.state else "There are no candidates.")
         return 0
-    print(f"{_pad(langs.term('id'), 14)}{_pad(langs.term('type'), 18)}{_pad(langs.term('state'), 12)}"
+    states = [_state(c.get("state")) for c in rows]
+    wide = max(langs.width(s) for s in [langs.term("state"), *states]) + 1
+    print(f"{_pad(langs.term('id'), 14)}{_pad(langs.term('type'), 18)}{_pad(langs.term('state'), wide)}"
           f"{_pad(langs.term('ev'), 4)}{langs.term('reply -> better')}")
     index = promotion.EvidenceIndex(log.all(), ledger.all())
-    for cand in rows:
+    for cand, state in zip(rows, states):
         line = _short(cand.get("reply"), 40)
         if cand.get("better"):
             line += "  ->  " + _short(cand.get("better"), 40)
-        print(f"{cand['candidate_id'][:12]:14} {str(cand.get('type') or '?'):17} "
-              f"{str(cand.get('state') or '?'):11} "
-              f"{len(cand.get('evidence') or []):<3} {line}")
+        print(f"{_pad(cand['candidate_id'][:12], 14)}{_pad(str(cand.get('type') or '?'), 18)}"
+              f"{_pad(state, wide)}{_pad(str(len(cand.get('evidence') or [])), 4)}{line}")
         if cand.get("state") == candidates.STATE_PROPOSED:
             notes = _standing(index, cand, _decide(ledger, log, cand, policy), policy)
         else:
@@ -280,7 +305,7 @@ def cmd_show(args, ledger, log, policy) -> int:
     cand = ledger.get(cid)
     _field("candidate", cid)
     _field("type", cand.get("type"))
-    _field("state", cand.get("state"))
+    _field("state", _state(cand.get("state")))
     _field("created", cand.get("created_at"))
     _field("adjudicated by", cand.get("adjudication_version") or "?")
     scope = cand.get("scope") or {}
@@ -311,14 +336,18 @@ def cmd_show(args, ledger, log, policy) -> int:
               f"{ev.get('reaction_type') or '-'}  {ev.get('strength')}  {counts}")
         who = ev.get("speaker_name") or ev.get("speaker_id") or "-"
         recipient = ev.get("recipient_id") or "-"
-        direction = ev.get("direction")
-        print("    " + langs.term(f"From {who} (recipient {recipient}, matched by {direction})" if direction
-                                  else f"From {who} (recipient {recipient}, undirected)"))
+        direction = str(ev.get("direction") or "")
+        how = MATCHED.get(direction, "matching method: {direction}" if direction else "undirected")
+        print("    " + langs.term(f"From {who} (recipient {recipient}, "
+                                  + how.format(direction=direction) + ")",
+                                  keep=(who, recipient, direction)))
         if ev.get("reaction_text"):
-            print("    " + langs.term(f"Said: {_short(ev.get('reaction_text'), 100)}"))
+            said = _short(ev.get("reaction_text"), 100)
+            print("    " + langs.term(f"Said: {said}", keep=(said,)))
         reason = (ev.get("adjudication") or {}).get("reason")
         if reason:
-            print("    " + langs.term(f"Verdict: {_short(reason, 100)}"))
+            verdict = _short(reason, 100)
+            print("    " + langs.term(f"Verdict: {verdict}", keep=(verdict,)))
         if ev.get("parent_event_id"):
             print("    " + langs.term(f"Follows: {ev['parent_event_id'][:12]}"))
 
@@ -394,18 +423,21 @@ def cmd_transition(args, ledger, log, policy, paths, action: str) -> int:
         print(f"  {_command(f'supersede {rival[:12]} {cid[:12]}')}")
         return 1
     if not fn(cid, ts=now, actor=args.actor, reason=reason):
-        _say({"promote": f"Refused: a candidate in the state {before} cannot be promoted.",
-              "reject": f"Refused: a candidate in the state {before} cannot be rejected.",
-              "rollback": f"Refused: a candidate in the state {before} cannot be rolled back."}[action])
+        state = STATES.get(str(before or ""), str(before or "?"))
+        _say({"promote": f"Refused: this candidate cannot be put in use. Its state: {state}.",
+              "reject": f"Refused: this candidate cannot be set aside. Its state: {state}.",
+              "rollback": f"Refused: this candidate cannot be taken out of use. Its state: {state}."
+              }[action])
         return 1
-    print(f"{cid}: {before} -> {ledger.get(cid).get('state')}")
+    print(_moved(cid, before, ledger.get(cid).get("state")))
     if action == "promote":
         # Drafts of the complaint this pair answers have nothing left for them.
         for other in promotion.answered_drafts(ledger.get(cid), ledger.all(),
                                                policy=policy):
             if ledger.reject(other, ts=now, actor=args.actor,
                              reason=f"answered by {cid}"):
-                print(f"{other}: proposed -> rejected " + langs.term(f"(answered by {cid[:12]})"))
+                print(_moved(other, candidates.STATE_PROPOSED, candidates.STATE_REJECTED)
+                      + " " + langs.term(f"(answered by {cid[:12]})"))
     _rebuild(paths, ledger)
     return 0
 
@@ -423,7 +455,8 @@ def cmd_restore(args, ledger, log, policy, paths) -> int:
         last = (cand.get("history") or [{}])[-1]
         actor = str(last.get("actor") or "")
         if before != candidates.STATE_REJECTED:
-            _say(f"Refused: a candidate in the state {before} cannot be brought back.")
+            _say("Refused: this candidate cannot be brought back. Its state: "
+                 f"{STATES.get(str(before or ''), str(before or '?'))}.")
         elif actor in (candidates.ACTOR_AUTO, candidates.ACTOR_CHARACTER, ""):
             _say(f"Refused: {cid[:12]} was set aside by rule, so it cannot be brought back.")
         else:
@@ -440,12 +473,14 @@ def cmd_restore(args, ledger, log, policy, paths) -> int:
     now = datetime.now().isoformat(timespec="seconds")
     if not ledger.restore(cid, ts=now, actor=args.actor,
                           reason=args.reason or "restore by operator"):
-        _say(f"Refused: a candidate in the state {before} cannot be brought back.")
+        _say("Refused: this candidate cannot be brought back. Its state: "
+             f"{STATES.get(str(before or ''), str(before or '?'))}.")
         return 1
-    print(f"{cid}: {before} -> {ledger.get(cid).get('state')}")
+    print(_moved(cid, before, ledger.get(cid).get("state")))
     for other in promotion.answered_drafts(ledger.get(cid), ledger.all(), policy=policy):
         if ledger.reject(other, ts=now, actor=args.actor, reason=f"answered by {cid}"):
-            print(f"{other}: proposed -> rejected " + langs.term(f"(answered by {cid[:12]})"))
+            print(_moved(other, candidates.STATE_PROPOSED, candidates.STATE_REJECTED)
+                  + " " + langs.term(f"(answered by {cid[:12]})"))
     _rebuild(paths, ledger)
     return 0
 

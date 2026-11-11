@@ -41,11 +41,16 @@ class MemoryFileDamaged(RuntimeError):
     def __init__(self, path: Path):
         path = Path(path)
         bak = path.with_name(path.name + BAK_SUFFIX)
-        message = f"{path.name} is damaged and was left untouched."
         if bak.is_file():
             day = datetime.fromtimestamp(bak.stat().st_mtime).strftime("%Y-%m-%d")
-            message += (f" A copy from {day} is at {bak}; move it in place of "
-                        f"{path.name} to start from it.")
+            message = (f"The memory file {path} is damaged and was left untouched. "
+                       f"A copy from {day} is at {bak}; move it in place of the damaged "
+                       "file to start from it, or move the damaged file aside to start "
+                       "with an empty memory.")
+        else:
+            message = (f"The memory file {path} is damaged and was left untouched, and "
+                       "no earlier copy of it exists. Move the damaged file aside, for "
+                       "example by renaming it, to start with an empty memory.")
         super().__init__(message)
         self.path = path
         self.backup = bak if bak.is_file() else None

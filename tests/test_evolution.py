@@ -374,13 +374,13 @@ async def test_a_self_review_no_person_can_settle_awaits_no_second_voice(
     a._call_llm = _Scripted({})
     await a._evolve_tick()
     summary = a._learned_summary("g1", "en")
-    check("its own rewrite alone is not counted as awaiting a second voice",
-          "0 awaiting a second voice, 0 under my own review" in summary, summary)
+    check("its own rewrite alone is not counted as under observation",
+          "0 under observation until another agreeing reaction arrives, 0 under my own review" in summary, summary)
     b, _model, _cid = await _diagnosed_then_complained(tmp / "b", "42")
     b.promote_judge_enabled = True
     summary = b._learned_summary("g1", "en")
     check("with its recipient's complaint it is under my own review",
-          "0 awaiting a second voice, 1 under my own review" in summary, summary)
+          "0 under observation until another agreeing reaction arrives, 1 under my own review" in summary, summary)
 
 
 async def test_a_self_review_a_bystander_rejected_is_not_judged(tmp: Path) -> None:

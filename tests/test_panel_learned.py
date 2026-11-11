@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 from fastapi.testclient import TestClient
 import pytest
@@ -309,7 +310,7 @@ def _env_add(workspace, text):
 
 def test_everything_in_scope_by_default(client, ids):
     value = client.get("/api/learned", headers=HEADERS).json()
-    assert value["idle"] == dict.fromkeys(learned.TABS, 0)
+    assert value["idle"] == 0
     assert all(row["gap"] == "" for row in value["items"])
 
 
@@ -317,8 +318,12 @@ def test_everything_in_scope_by_default(client, ids):
 def test_an_earlier_character_is_not_shown_as_in_use(client, workspace, ids, extra):
     _env_add(workspace, extra)
     value = client.get("/api/learned", headers=HEADERS).json()
-    assert value["idle"]["in_use"] == 2 and value["idle"]["observing"] == 2 and value["chats"] == 0
-    assert {row["gap"] for row in value["items"]} == {"persona"}
+    # Counted and listed in one place: under Set aside, never as in use or observed.
+    assert value["totals"] == {"in_use": 0, "observing": 0, "set_aside": 6}
+    assert value["idle"] == 4 and value["chats"] == 0 and value["items"] == []
+    aside = client.get("/api/learned?tab=set_aside", headers=HEADERS).json()["items"]
+    assert len(aside) == 6 and {row["gap"] for row in aside} == {"persona"}
+    assert {row["state"] for row in aside if row["tab"] == "set_aside"} >= {"promoted", "proposed"}
     item = client.get(f"/api/learned/item?id={ids['waiting']}", headers=HEADERS).json()
     assert item["gap"] == "persona" and item["actions"] == ["set_aside"]
     # Putting it into use would change nothing the character says, so it is refused, not faked.
@@ -333,7 +338,7 @@ def test_an_earlier_character_is_not_shown_as_in_use(client, workspace, ids, ext
 def test_a_lineage_from_another_document_is_another_character(client, workspace, ids):
     (workspace.home / "runtime" / "persona_lineage.json").write_text(
         json.dumps({"lineages": {"": ["0123456789ab"]}}), encoding="utf-8")
-    rows = client.get("/api/learned", headers=HEADERS).json()["items"]
+    rows = client.get("/api/learned?tab=set_aside", headers=HEADERS).json()["items"]
     assert {row["gap"] for row in rows} == {"persona"}
 
 
@@ -384,6 +389,30 @@ def test_an_earlier_page_chat_is_not_in_use(client, workspace):
     (workspace.home / "runtime" / "page.owner").write_text("newconv5678", encoding="utf-8")
     item = client.get(f"/api/learned/item?id={cid}", headers=HEADERS).json()
     assert item["gap"] == "chat" and item["actions"] == ["set_aside"]
+    # The summary's counts and the tabs' agree: nothing out of use is counted as observed.
+    value = client.get("/api/learned?tab=set_aside", headers=HEADERS).json()
+    assert value["totals"] == {"in_use": 0, "observing": 0, "set_aside": 1} and value["idle"] == 1
+    assert [row["id"] for row in value["items"]] == [cid] and item["tab"] == "set_aside"
+    # The page's own chat is named by the page, never by the placeholder it sends.
+    assert all(ev["who"] == "" and ev["self"] for ev in item["events"])
+
+
+def test_a_reset_page_chat_item_in_use_is_counted_under_set_aside(client, workspace):
+    cid = _page_item(workspace, "dm:browser:oldconv1234", "browser:oldconv1234")
+    _ledger(workspace).promote(cid, ts="2026-11-07T10:00:00", actor="auto", reason="2 compatible events, 1 strong")
+    (workspace.home / "runtime" / "page.owner").write_text("oldconv1234", encoding="utf-8")
+    before = client.get("/api/learned", headers=HEADERS).json()
+    assert before["totals"]["in_use"] == 1 and before["idle"] == 0 and before["chats"] == 1
+    owner = workspace.home / "runtime" / "page.owner"
+    owner.write_text("newconv5678", encoding="utf-8")
+    # The owner is cached by modification time, which a fast rewrite may not move.
+    stamp = owner.stat().st_mtime + 5
+    os.utime(owner, (stamp, stamp))
+    after = client.get("/api/learned", headers=HEADERS).json()
+    assert after["totals"] == {"in_use": 0, "observing": 0, "set_aside": 1}
+    assert after["idle"] == 1 and after["chats"] == 0 and after["items"] == []
+    item = client.get(f"/api/learned/item?id={cid}", headers=HEADERS).json()
+    assert item["tab"] == "set_aside" and item["state"] == "promoted" and item["gap"] == "chat"
 
 
 def test_page_strings_cover_every_code(ids):

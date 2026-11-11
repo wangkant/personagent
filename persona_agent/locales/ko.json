@@ -286,7 +286,7 @@
 "set aside after a long time without a new reaction": "오랫동안 새로운 반응이 없어 제외되었습니다",
 "observing": "관찰 중",
 "stopped using {n} learned {rows} about that reply": "그 답장에 대해 배운 내용 {n}개를 더 쓰지 않습니다",
-"waiting for your reaction to its retry": "재시도에 대한 반응을 기다리고 있습니다",
+"under observation: it takes effect when one more agreeing reaction arrives, and your next reaction to its retry is weighed as that reaction": "관찰 중입니다. 일치한 반응이 한 번 더 오면 적용되며, 재시도에 대한 다음 반응이 그 반응으로 판정됩니다",
 "nothing to learn": "배울 것이 없습니다",
 "{strong} of {need} strong reactions so far": "강한 반응 지금까지 {strong}/{need}개",
 "{events} of {need} agreeing reactions so far": "일치한 반응 지금까지 {events}/{need}개",
@@ -429,5 +429,6 @@
 "{who} liked {said}": "{who}: {said} 호평",
 "{who} moved on from {said}": "{who}: {said}에 반응하지 않음",
 "{who} accepted the second try {said}": "{who}: 두 번째 시도 {said} 수락",
-"{who} moved on from the second try {said}": "{who}: 두 번째 시도 {said}에 반응하지 않음"
+"{who} moved on from the second try {said}": "{who}: 두 번째 시도 {said}에 반응하지 않음",
+"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "선택할 수 없는 값입니다: \"{choice}\". 0부터 {n}까지의 숫자를 입력하십시오."
 }
