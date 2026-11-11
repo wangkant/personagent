@@ -169,3 +169,17 @@ def test_home_is_accepted_after_the_command_too(monkeypatch, tmp_path: Path) -> 
         assert cli.main(argv) == 0
         assert seen["argv"] == ["--x"], argv
         assert Path(seen["home"]) == tmp_path.resolve(), argv
+
+
+def test_the_memory_settings_are_current_and_none_is_retired(tmp_path: Path) -> None:
+    """MEMORY_TIDY_EVERY changed meaning instead of being retired: a retired
+    name refuses to start, and old .env files set it."""
+    home = _home(tmp_path, "LLM_API_KEY=x\nMEMORY_TIDY_EVERY=8\nCHAT_CONTEXT_MESSAGES=120\n"
+                 "MEMORY_CALLS_PER_DAY=40\nMEMORY_PROMPT_CHARS=2400\n"
+                 "MEMORY_EPISODES_MAX=120\nMEMORY_KEEP_RECENT=true\n")
+    assert preflight.retired_settings(home, environ={}) == []
+    assert preflight.retired_problem("personagent doctor --fix", home, environ={}) is None
+    flagged = {f.key for f in preflight.check_config(home)}
+    assert not flagged & {"MEMORY_TIDY_EVERY", "MEMORY_CALLS_PER_DAY",
+                          "MEMORY_PROMPT_CHARS", "MEMORY_EPISODES_MAX",
+                          "MEMORY_KEEP_RECENT"}, flagged

@@ -32,6 +32,7 @@ HEADERS = {welcome.TOKEN_HEADER: TOKEN}
 def workspace(tmp_path, monkeypatch):
     value = welcome.Workspace(tmp_path)
     monkeypatch.setattr(sw, "probe_key", lambda *a, **kw: sw.Probe("http://127.0.0.1", 200, ""))
+    monkeypatch.setattr(welcome, "_vision_works", lambda model, base, key: True)
     yield value
     value.close()
 
@@ -848,11 +849,14 @@ def _activity_service(workspace, monkeypatch, handler):
 
 CONVERSATION = {
     "id": "telegram:-100", "platform": "telegram", "kind": "group",
-    "pending": [{"id": "abc123", "type": "preference_pair", "reply": "dune again", "better": "paddington 2",
-                 "lesson": "Priya hates rewatching Dune.", "created": 5.0, "actions": ["promote", "reject"], "checklist": {"rules": []},
-                 "evidence": [{"speaker": "Priya"}, {"speaker": "Priya"}, {"speaker": ""}]}],
+    "observing": [{"id": "abc123", "type": "preference_pair", "reply": "dune again", "better": "paddington 2",
+                   "lesson": "Priya hates rewatching Dune.", "created": 5.0, "actions": ["promote", "reject"],
+                   "checklist": {"rules": []}, "evidence": [{"speaker": "Priya"}, {"speaker": "Priya"}, {"speaker": ""}],
+                   "standing": {"stage": "observing", "reason": "Priya alone asked for it.", "expires": 9.0,
+                                "secret": "x"}, "by": None}],
     "learned": [{"id": "def456", "type": "positive_example", "reply": "fair", "better": "",
-                 "created": 4.0, "actions": ["rollback"], "evidence": [], "history": [{"state": "x"}]}],
+                 "created": 4.0, "actions": ["rollback"], "evidence": [], "history": [{"state": "x"}],
+                 "standing": None, "by": {"by": "character", "why": "It fits.", "judge": "j"}}],
     "past": [{"id": "old", "type": "preference_pair"}],
     "memories": [{"text": "match night at Sam's", "by": "Sam", "time": 3.0, "auto": False}],
     "decisions": [{"ts": 2.0, "mode": "called", "spoke": True, "reason": "addressed", "excerpt": "sure",
@@ -870,24 +874,30 @@ def test_activity_reads_the_service_with_its_token_and_keeps_only_what_the_view_
         if request.url.path == "/api/dashboard/conversations":
             return httpx.Response(200, json={"conversations": [
                 {"id": "telegram:-100", "platform": "telegram", "kind": "group", "last_activity": 9.0,
-                 "memories": 1, "learned": 1, "pending": 1},
+                 "memories": 1, "learned": 1, "observing": 1, "latest": 7.0},
                 {"id": "private:browser:x", "platform": "browser", "kind": "dm", "last_activity": 8.0,
-                 "memories": 0, "learned": 0, "pending": 0}]})
+                 "memories": 0, "learned": 0, "observing": 0, "latest": 0}]})
         return httpx.Response(200, json=CONVERSATION)
     _activity_service(workspace, monkeypatch, handler)
     listed = client.get("/api/activity", headers=HEADERS).json()
     assert listed["running"] and not listed["off"]
     assert [c["id"] for c in listed["chats"]] == ["telegram:-100", "private:browser:x"]
     assert listed["chats"][0] == {"id": "telegram:-100", "platform": "telegram", "kind": "group",
-                                  "last": 9.0, "review": 1, "learned": 1, "notes": 1}
+                                  "last": 9.0, "observing": 1, "learned": 1, "latest": 7.0, "notes": 1}
     chat = client.get("/api/activity/chat", params={"id": "telegram:-100"}, headers=HEADERS).json()
     assert seen[-1].url.params["id"] == "telegram:-100"
     assert all(r.headers["x-personagent-dashboard-token"] == "service-token" for r in seen)
-    assert chat["review"] == [{"id": "abc123", "kind": "wording", "said": "dune again", "better": "paddington 2",
-                               "lesson": "Priya hates rewatching Dune.", "when": 5.0, "from": ["Priya"], "actions": ["promote", "reject"]}]
+    # Observed items are only read: no decision reaches the view, and nothing is "review".
+    assert "review" not in chat
+    assert chat["observing"] == [{"id": "abc123", "kind": "wording", "said": "dune again", "better": "paddington 2",
+                                  "lesson": "Priya hates rewatching Dune.", "when": 5.0, "from": ["Priya"], "actions": [],
+                                  "standing": {"stage": "observing", "reason": "Priya alone asked for it.",
+                                               "expires": 9.0}}]
     assert chat["learned"][0]["kind"] == "repeat" and chat["learned"][0]["actions"] == ["rollback"]
+    assert chat["learned"][0]["by"] == {"by": "character", "why": "It fits."}
     assert chat["notes"] == [{"text": "match night at Sam's", "by": "Sam", "about": "", "when": 3.0,
-                              "id": "", "conv": ""}]
+                              "id": "", "conv": "", "born": 0, "used": 0, "saidBy": ""}]
+    assert chat["thread"] is None and chat["events"] == chat["removed"] == [] and chat["status"] is None
     # Oldest first, like a chat; the service lists newest first.
     assert [r["text"] for r in chat["recent"]] == ["lol", "sure"] and chat["recent"][0]["count"] == 3
     assert "checklist" not in json.dumps(chat) and "past" not in chat and "history" not in json.dumps(chat)
@@ -905,18 +915,20 @@ def test_activity_decisions_go_to_the_service_as_writes_and_come_back_as_the_cha
         return httpx.Response(200, json=CONVERSATION)
     _activity_service(workspace, monkeypatch, handler)
     url = "/api/activity/decide"
-    chat = client.post(url, headers=HEADERS, json={"id": "abc123", "action": "promote",
+    chat = client.post(url, headers=HEADERS, json={"id": "abc123", "action": "rollback",
                                                    "chat": "telegram:-100"}).json()
     assert chat["id"] == "telegram:-100"
     request = writes[-1]
-    assert request.url.path == "/api/dashboard/candidates/abc123/promote"
+    assert request.url.path == "/api/dashboard/candidates/abc123/rollback"
     assert request.headers["x-personagent-dashboard"] == "1"
     assert request.headers["content-type"] == "application/json"
     assert json.loads(request.content) == {"reason": "local page"}
-    response = client.post(url, headers=HEADERS, json={"id": "stale", "action": "reject", "chat": "telegram:-100"})
+    response = client.post(url, headers=HEADERS, json={"id": "stale", "action": "rollback", "chat": "telegram:-100"})
     assert response.status_code == 400 and response.json()["error"] == "activity_changed"
-    for bad in ({"id": "abc123", "action": "delete", "chat": "x"}, {"id": "../x", "action": "reject", "chat": "x"},
-                {"id": "abc123", "action": "reject", "chat": ""}):
+    # Nobody confirms what the character learns: the view keeps only Undo.
+    for bad in ({"id": "abc123", "action": "promote", "chat": "x"}, {"id": "abc123", "action": "replace", "chat": "x"},
+                {"id": "abc123", "action": "reject", "chat": "x"}, {"id": "abc123", "action": "delete", "chat": "x"},
+                {"id": "../x", "action": "rollback", "chat": "x"}, {"id": "abc123", "action": "rollback", "chat": ""}):
         response = client.post(url, headers=HEADERS, json=bad)
         assert response.status_code == 400 and response.json()["error"] == "invalid_chat", bad
     assert len(writes) == 2   # nothing invalid is ever written
@@ -950,6 +962,56 @@ def test_activity_reads_the_token_where_the_service_keeps_it(workspace, monkeypa
     assert workspace._activity_token() == "env-token"
     sw.write_env(workspace.env, {"AGENT_RUNTIME_DIR": ""})
     assert workspace._activity_token() == "default-token"
+
+
+def test_memory_forget_restore_and_forget_chat_go_to_the_service(client, workspace, monkeypatch):
+    writes = []
+    def handler(request):
+        if request.method == "POST":
+            body = json.loads(request.content)
+            writes.append((request.url.path, body))
+            if body.get("tid") == "r00000000aa":
+                return httpx.Response(409, json={"code": "already_exists"})
+            if body.get("tid") == "r00000000bb":
+                return httpx.Response(404, json={"code": "restore_gone"})
+            if request.url.path.endswith("/forget_chat"):
+                return httpx.Response(200, json={"ok": True, "forgotten": 4})
+            return httpx.Response(200, json={"ok": True, "tid": "r1234567890"})
+        return httpx.Response(200, json=CONVERSATION)
+    _activity_service(workspace, monkeypatch, handler)
+    done = client.post("/api/activity/forget", headers=HEADERS,
+                       json={"chat": "telegram:-100", "kind": "episode", "id": "e0123456789"}).json()
+    assert done["tid"] == "r1234567890" and done["chat"]["id"] == "telegram:-100"
+    assert writes[-1] == ("/api/dashboard/memory/forget",
+                          {"conv": "telegram:-100", "kind": "episode", "id": "e0123456789"})
+    # The older body still forgets a fact, or with no id the always-present note.
+    client.post("/api/activity/forget", headers=HEADERS, json={"chat": "telegram:-100", "note": "m1"})
+    assert writes[-1][1] == {"conv": "telegram:-100", "kind": "note", "id": "m1"}
+    client.post("/api/activity/forget", headers=HEADERS, json={"chat": "telegram:-100"})
+    assert writes[-1][1] == {"conv": "telegram:-100", "kind": "core", "id": ""}
+    back = client.post("/api/activity/restore", headers=HEADERS, json={"chat": "telegram:-100", "tid": "r1234567890"})
+    assert back.json()["id"] == "telegram:-100" and writes[-1] == ("/api/dashboard/memory/restore",
+                                                                  {"tid": "r1234567890"})
+    for tid, code in (("r00000000aa", "activity_restore_exists"), ("r00000000bb", "activity_restore_gone")):
+        r = client.post("/api/activity/restore", headers=HEADERS, json={"chat": "telegram:-100", "tid": tid})
+        assert r.status_code == 400 and r.json()["error"] == code
+    count = len(writes)
+    for path, bad in (("forget", {"chat": "telegram:-100", "kind": "everything", "id": "x"}),
+                      ("restore", {"chat": "telegram:-100", "tid": "../r1"}),
+                      ("restore", {"chat": "", "tid": "r1234567890"}),
+                      ("forget_chat", {"chat": ""})):
+        r = client.post(f"/api/activity/{path}", headers=HEADERS, json=bad)
+        assert r.status_code == 400 and r.json()["error"] == "invalid_chat", bad
+    assert len(writes) == count   # nothing invalid is ever written
+    other = client.post("/api/activity/forget_chat", headers=HEADERS, json={"chat": "telegram:-100"}).json()
+    assert other == {"ok": True, "forgotten": 4}
+    assert writes[-1] == ("/api/dashboard/memory/forget_chat", {"conv": "telegram:-100"})
+    # This page's own chat is forgotten whole, then starts anew.
+    monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
+    before = workspace._page_key()
+    own = client.post("/api/activity/forget_chat", headers=HEADERS, json={"chat": before}).json()
+    assert own == {"ok": True, "forgotten": 4} and workspace._page_key() != before
+    assert writes[-1] == ("/api/dashboard/memory/forget_chat", {"conv": before})
 
 
 def _table(js, code, name):
@@ -1038,9 +1100,178 @@ def test_each_page_language_translates_known_strings_with_their_fields(client, c
         assert isinstance(text, str) and text.strip(), source
 
 
+@pytest.mark.parametrize("code", welcome.PAGE_LANGUAGES)
+def test_every_learning_sentence_is_translated(code):
+    """What says where a learned item stands never falls back to English."""
+    data = json.loads((welcome.ASSETS / "i18n" / f"{code}.json").read_text(encoding="utf-8"))["strings"]
+    english = _page_strings("en")
+    wanted = {k for k in english if k.startswith(("activity", "learned_", "practice_held"))
+              or k.startswith(("tuning_f_promote", "tuning_h_promote"))}
+    assert sorted(wanted - set(data)) == []
+
+
+# Phrases that tell the reader a learned item waits for them, in every page language.
+WAITS_FOR_THE_READER = {
+    "en": ("waiting for you", "await your decision", "awaits your decision", "left to you",
+           "only an admin", "waits for your decision", "until you keep"),
+    "zh": ("待你确认", "等待你", "由你决定", "管理员批准", "待确认"),
+    "zh-TW": ("待你確認", "等待你", "由你決定", "管理員核准", "待確認"),
+    "ja": ("確認待ち", "あなたの判断を待", "管理者のみ"),
+    "ko": ("확인 대기", "결정을 기다리", "관리자만"),
+    "es": ("pendiente de su decisión", "espera su decisión", "solo un administrador"),
+    "fr": ("en attente de votre décision", "attend votre décision", "seul un administrateur"),
+    "de": ("wartet auf sie", "warten auf ihre entscheidung", "nur ein administrator"),
+    "pt-BR": ("aguardando sua decisão", "aguarda sua decisão", "aguarda a sua decisão", "apenas um administrador"),
+    "ru": ("требует вашего решения", "ожидает вашего решения", "только администратор"),
+}
+
+
+@pytest.mark.parametrize("code", ["en", "zh", *welcome.PAGE_LANGUAGES])
+def test_no_page_sentence_says_a_learned_item_waits_for_the_reader(code):
+    if code in ("en", "zh"):
+        strings = _page_strings(code)
+    else:
+        strings = json.loads((welcome.ASSETS / "i18n" / f"{code}.json").read_text(encoding="utf-8"))["strings"]
+    found = [(key, text) for key, text in strings.items()
+             if any(phrase in text.lower() for phrase in WAITS_FOR_THE_READER[code])]
+    assert found == []
+
+
+def test_the_observed_items_in_activity_have_no_buttons_and_light_no_dot():
+    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
+    card = re.search(r"\nfunction change\(item, observed\) \{\n(.*?)\n\}\n", js, re.S).group(1)
+    # The card returns before any button is built.
+    assert card.index("if (observed) return card;") < card.index('el("div", "change-actions")')
+    dot = re.search(r"\nfunction renderActivityDot\(\) \{\n(.*?)\n\}\n", js, re.S).group(1)
+    # Only something new in use lights it, never an item still observed.
+    assert "observing" not in dot and "review" not in dot and "activityLatest()" in dot
+    assert '"activity/decide"' in js and '"promote"' not in js.split("async function decide(item, verb)")[1][:600]
+    html = (welcome.ASSETS / "index.html").read_text(encoding="utf-8")
+    assert 'id="activity-dot" class="dot"' in html
+
+
+def _recorded_reasons() -> set[str]:
+    """Every reason the code can hand decision_log, read from the source."""
+    import ast
+
+    found: set[str] = set()
+
+    def words(node) -> set[str]:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return {node.value}
+        if isinstance(node, ast.IfExp):
+            return words(node.body) | words(node.orelse)
+        return set()
+
+    for path in Path(welcome.__file__).parent.glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call):
+                func = node.func
+                if (getattr(func, "attr", "") == "record" and len(node.args) >= 4
+                        and getattr(getattr(func, "value", None), "id", "") == "decision_log"):
+                    found |= words(node.args[3])
+                elif getattr(func, "id", "") == "silent" and node.args:
+                    found |= words(node.args[0])
+            # `mode, why = "", "below the trigger count"` and `return "judge", "trigger count"`.
+            elif (isinstance(node, (ast.Assign, ast.Return)) and isinstance(node.value, ast.Tuple)
+                  and len(node.value.elts) == 2 and path.name in ("decision.py", "turns.py")):
+                found |= words(node.value.elts[1])
+            elif (path.name == "decision.py" and isinstance(node, ast.Assign)
+                  and isinstance(node.targets[0], ast.Name) and node.targets[0].id.isupper()):
+                found |= words(node.value)
+    # A reason is a few lower-case words; prompt notes among the constants are not.
+    return {text for text in found if re.fullmatch(r"[a-z]+(?: [a-z]+)*", text)}
+
+
+def _reason_map() -> dict[str, str]:
+    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
+    block = re.search(r"const REASONS = \{(.*?)\};", js, re.S).group(1)
+    return dict(re.findall(r'^\s+"?([\w ]+?)"?: "(r_\w+)",', block, re.M))
+
+
+def test_every_reason_the_service_records_reads_as_a_sentence_in_every_language():
+    recorded = _recorded_reasons()
+    assert {"model failed", "blocked", "delivery failed", "proactive", "passed",
+            "below the trigger count", "sleep window", "sticky call"} <= recorded, recorded
+    mapped = _reason_map()
+    assert recorded <= set(mapped), sorted(recorded - set(mapped))
+    assert "answered together" in mapped
+    keys = set(mapped.values()) | {"r_other", "chatViaCoding", "vision_unsupported"}
+    for code in ("en", "zh"):
+        assert not keys - set(_page_strings(code)), (code, keys - set(_page_strings(code)))
+    for code in welcome.PAGE_LANGUAGES:
+        strings = json.loads((welcome.ASSETS / "i18n" / f"{code}.json").read_text(encoding="utf-8"))["strings"]
+        missing = {k for k in keys if not strings.get(k, "").strip()}
+        assert not missing, (code, missing)
+
+
+def test_an_unknown_reason_is_never_shown_raw_and_a_coding_entry_is_labelled():
+    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
+    reason = re.search(r"\nfunction reasonText\(row\) \{\n(.*?)\n\}\n", js, re.S).group(1)
+    assert "row.reason;" not in reason and 't("r_other")' in reason
+    mode = re.search(r"\nfunction modeText\(row\) \{\n(.*?)\n\}\n", js, re.S).group(1)
+    assert "|| row.mode" not in mode
+    shown = re.search(r"\nfunction showMessage\(item, arrived = false\) \{\n(.*?)\n\}\n", js, re.S).group(1)
+    assert 'item.via === "coding"' in shown and 't("chatViaCoding")' in shown
+
+
 def test_page_language_files_are_served_and_nothing_else(client):
     for code in welcome.PAGE_LANGUAGES:
         response = client.get(f"/assets/i18n/{code}.json")
         assert response.status_code == 200 and response.json()["strings"]
     for name in ("en.json", "zh.json", "xx.json", "ja", "ja.json.bak", "..%2Fwelcome.js", "..%2F..%2Fwelcome.py"):
         assert client.get(f"/assets/i18n/{name}").status_code == 404, name
+
+
+def test_vision_is_saved_only_when_the_model_can_read_an_image(client, workspace, monkeypatch):
+    """A model that cannot read images used to be saved as on, then refused
+    every picture three times. The save now asks it once, with the values
+    being saved."""
+    sw.write_env(workspace.env, {"LLM_API_KEY": "chat-key", "LLM_BASE_URL": "https://api.example.com/v1"})
+    monkeypatch.setattr(workspace, "_restart_agent", lambda: None)
+    asked = []
+
+    def probe(model, base, key):
+        asked.append((model, base, key))
+        return model == "vl-model"
+    monkeypatch.setattr(welcome, "_vision_works", probe)
+    url = "/api/features"
+    refused = client.post(url, headers=HEADERS, json={"vision": {"enabled": True, "model": "text-only",
+                                                                  "baseUrl": "https://v.example.com/v1",
+                                                                  "apiKey": "vk"}})
+    check("refused by name", refused.status_code == 400 and refused.json()["error"] == "vision_unsupported",
+          refused.text)
+    check("asked once with what was being saved",
+          asked == [("text-only", "https://v.example.com/v1", "vk")], repr(asked))
+    check("and nothing was saved", not workspace.config().get("VISION_MODEL"), repr(workspace.config()))
+    saved = client.post(url, headers=HEADERS, json={"vision": {"enabled": True, "model": "vl-model",
+                                                                "sameAsChat": True}})
+    check("a model that can see is saved", saved.status_code == 200
+          and workspace.config()["VISION_MODEL"] == "vl-model", saved.text)
+    check("against the chat endpoint", asked[-1] == ("vl-model", "https://api.example.com/v1", "chat-key"))
+    asked.clear()
+    client.post(url, headers=HEADERS, json={"vision": {"enabled": False}})
+    check("turning it off asks nothing", asked == [], repr(asked))
+
+
+def test_the_vision_probe_runs_the_health_check_on_the_values_given(monkeypatch):
+    from persona_agent import health
+
+    seen = []
+
+    def check_vision():
+        seen.append((os.environ.get("VISION_MODEL"), os.environ.get("VISION_BASE_URL"),
+                     os.environ.get("VISION_API_KEY")))
+        return True, "ok"
+    monkeypatch.setattr(health, "check_vision", check_vision)
+    monkeypatch.setenv("VISION_MODEL", "before")
+    monkeypatch.delenv("VISION_API_KEY", raising=False)
+    check("a passing check", welcome._vision_works("vl", "https://v.example/v1", "vk") is True)
+    check("it saw the values given", seen == [("vl", "https://v.example/v1", "vk")], repr(seen))
+    check("and the environment is as it was", os.environ.get("VISION_MODEL") == "before"
+          and "VISION_API_KEY" not in os.environ)
+
+    def failing():
+        raise OSError("HTTP Error 400: model does not support image input")
+    monkeypatch.setattr(health, "check_vision", failing)
+    check("a refusal is a no", welcome._vision_works("vl", "https://v.example/v1", "vk") is False)

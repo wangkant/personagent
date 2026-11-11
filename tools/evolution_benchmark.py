@@ -8,8 +8,9 @@ then has the blind held-out replies scored and plots mean score per round.
 `--judge openai` / `--judge anthropic` send it to a named judge model, which
 should not be the model under test. Scores never feed the learning loop.
 
-The evolve-on arm stubs the human gate: after each tick it promotes what was
-proposed (actor="benchmark" in the ledger).
+The evolve-on arm takes production's path after each tick: the person each
+low-scored reply was for is scripted to reject it, and the live policy and a
+scripted character judge decide (see _promote_pending).
 """
 from __future__ import annotations
 
@@ -147,21 +148,58 @@ def _count_feedback(agent) -> int:
         [agent.feedback_file, agent.promoted_feedback_file]))
 
 
-def _promote_pending(agent) -> int:
-    """Stand in for the human gate: promote what the tick proposed, as
-    `personagent learned promote` would, recorded with actor="benchmark"."""
+BENCH_RECIPIENT = "benchmark-recipient"
+BENCH_JUDGE_REASON = "benchmark: scripted character judge"
+
+
+async def _promote_pending(agent) -> int:
+    """Production's path for the tick's proposals, with the people scripted:
+    the person each low-scored reply was for rejects it, then the live policy
+    and the character's own judgement (_adoption_tick) decide, the judge
+    scripted to adopt. Returns how many the character put in use."""
     from datetime import datetime
+
+    from persona_agent import adoption, evidence
 
     ledger = agent.candidate_ledger
     now = datetime.now().isoformat(timespec="seconds")
-    n = 0
-    for cand in ledger.pending():
-        if ledger.promote(cand["candidate_id"], ts=now, actor="benchmark",
-                          reason="benchmark arm: operator gate stubbed"):
-            n += 1
-    if n:
-        agent._rebuild_promoted_views()
-    return n
+    judging = agent.promote_judge_enabled
+    agent.promote_judge_enabled = False
+    try:
+        for cand in ledger.pending():
+            reply = str(cand.get("reply") or "")
+            scope = cand.get("scope") or {}
+            linked = agent.evidence_log.many(cand.get("evidence") or [])
+            if not reply or not any(e.get("kind") == evidence.KIND_SELF_REVIEW
+                                    for e in linked):
+                continue
+            agent._record_and_corroborate(evidence.make_event(
+                kind=evidence.KIND_REACTION, ts=now,
+                **agent._scope_fields(str(scope.get("conv_id") or "")),
+                speaker_id=BENCH_RECIPIENT, speaker_name="recipient",
+                recipient_id=BENCH_RECIPIENT, reply=reply,
+                reaction_text="that missed", directed=True, direction="at",
+                reaction_type="rejection",
+                adjudication={"accept": True, "better": "",
+                              "mode": str(scope.get("mode") or ""),
+                              "reason": "benchmark: the recipient rejected it"}),
+                now)
+    finally:
+        agent.promote_judge_enabled = judging
+
+    async def scripted(prompt, options, allow_adopt):
+        return adoption.parse_adoption(json.dumps({
+            "decision": "adopt" if allow_adopt else "discard", "choice": "A",
+            "reason": BENCH_JUDGE_REASON}), options, allow_adopt=allow_adopt)
+
+    agent._ask_character = scripted
+    agent.promote_judge_enabled = True
+    agent.promote_judge_batch = max(int(agent.promote_judge_batch), 1000)
+    agent._adoption_state("_adoption_calls", list).clear()
+    try:
+        return (await agent._adoption_tick()).get("adopted", 0)
+    finally:
+        agent.promote_judge_enabled = judging
 
 
 async def run_round(agent, train, holdout, persona_name, evolve_on: bool):
@@ -189,10 +227,10 @@ async def run_round(agent, train, holdout, persona_name, evolve_on: bool):
                 print(f"  [train {scn['id']}] error: {type(e).__name__}: {e}")
         try:
             await agent._evolve_tick()
-            promoted = _promote_pending(agent)
+            promoted = await _promote_pending(agent)
             if promoted:
-                print(f"  [evolve_tick] {promoted} candidate(s) promoted by the "
-                      f"benchmark gate (see _promote_pending)")
+                print(f"  [evolve_tick] {promoted} candidate(s) adopted by the "
+                      f"scripted character judge (see _promote_pending)")
         except Exception as e:
             print(f"  [evolve_tick] error: {type(e).__name__}: {e}")
     out = []

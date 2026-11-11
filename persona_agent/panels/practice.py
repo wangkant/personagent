@@ -434,27 +434,28 @@ class _Trial:
         head = self.chat.text_for(lang)["learning"].split("{text}")[0]
         return text[len(head):] if text.startswith(head) else text
 
-    def _held(self, lang: str, cand: dict) -> str:
-        from .. import langs
+    def _held(self, lang: str, cand: dict) -> tuple[str, str]:
+        """Why an item is not in use yet: a page sentence's key for the holds
+        the character decides itself, else the terminal trial's own reason."""
+        from .. import promotion
 
         check = self.chat.checklist(self.agent, cand)
-        if check.waiting_for() == "why_person":
-            # The terminal names a command here; the page has no terminal.
-            return langs.say("only the admin can approve this kind of change",
-                             "此类改动只能由管理员批准", lang)
-        return self.chat.held_reason(lang, check)
+        if check.decision.gate in promotion.CHARACTER_GATES:
+            return "practice_held_character", ""
+        return "", self.chat.held_reason(lang, check)
 
     def _cand(self, lang: str, cand: dict) -> dict:
         from .. import candidates
 
         t = self.chat.text_for(lang)
         state = cand.get("state", "")
+        key, why = self._held(lang, cand) if state == candidates.STATE_PROPOSED else ("", "")
         return {"kind": t["kind_pair" if cand.get("type") == candidates.TYPE_PAIR else "kind_example"],
                 "reply": self.chat.clip(cand.get("reply"), 80),
                 "better": self.chat.clip(cand.get("better"), 80),
                 "state": self.chat.state_label(lang, state),
                 "inUse": state == candidates.STATE_PROMOTED,
-                "why": self._held(lang, cand) if state == candidates.STATE_PROPOSED else ""}
+                "why": why, "whyKey": key}
 
     def _reason(self, lang: str, turn, what: str) -> str:
         if what not in ("quiet", "joined"):

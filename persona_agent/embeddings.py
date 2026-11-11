@@ -139,6 +139,30 @@ class EmbeddingCache:
             os.close(fd)
         self._lines += len(vectors)
 
+    def drop(self, model: str, key: str) -> bool:
+        """Forget one text's vector now, in memory and in the file, for every
+        model: a forgotten memory leaves nothing behind. Did anything go?"""
+        self._load(model)
+        found = self._stored.pop(key, None) is not None
+        found = self._queries.pop(key, None) is not None or found
+        try:
+            lines = self.path.read_text(encoding="utf-8").splitlines(keepends=True)
+        except FileNotFoundError:
+            return found
+        kept = []
+        for line in lines:
+            try:
+                if json.loads(line).get("key") == key:
+                    continue
+            except (ValueError, AttributeError):
+                pass
+            kept.append(line)
+        if len(kept) != len(lines):
+            atomic_write_text(self.path, "".join(kept), fsync=False)
+            self._lines = len(kept)
+            found = True
+        return found
+
     def prune(self, model: str, keep: set[str]) -> None:
         """Rewrite the file with only `keep` once most of it is dead weight:
         vectors of forgotten memories, rotated rows, another model's."""

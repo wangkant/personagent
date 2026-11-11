@@ -296,11 +296,13 @@ def test_the_owner_profile_is_parsed_once_per_change(
           "haven't analyzed" in a._admin_sticker_pattern_block())
 
 
-def test_a_damaged_owner_profile_fails_the_prompt_every_time(tmp: Path) -> None:
-    """A profile that does not parse stops the prompt, on every build, until
-    the file is repaired: caching must not turn that into one error and then
-    a stale or default answer."""
+def test_a_damaged_owner_profile_gives_the_default_and_one_warning(
+        tmp: Path, caplog) -> None:
+    """A hand-edited or cut-off profile must not fail every reply: the prompt
+    falls back to the moderate default, and the log says so once per file
+    version, not on every build."""
     a = isolated_agent(tmp)
+    a.admin_name = "Kay"
     profile = a.owner_profile_file
     good = json.dumps({"total_msgs": 100, "msgs_with_image": 25,
                        "sticker_only_msgs": 5})
@@ -308,18 +310,22 @@ def test_a_damaged_owner_profile_fails_the_prompt_every_time(tmp: Path) -> None:
     check("damaged profile: starts from a good one",
           "every 4 messages" in a._admin_sticker_pattern_block())
 
-    for label, text, error in (("cut off", '{"total_msgs": 1', ValueError),
-                               ("empty", "", ValueError),
-                               ("a list", "[1, 2, 3]", AttributeError)):
+    for label, text in (("cut off", '{"total_msgs": 1'),
+                        ("empty", ""),
+                        ("a list", "[1, 2, 3]"),
+                        ("a word for a count", '{"total_msgs": "many"}')):
         profile.write_text(text, encoding="utf-8")
-        raised = []
-        for _ in range(2):
-            try:
-                a._admin_sticker_pattern_block()
-            except error:
-                raised.append(True)
-        check(f"damaged profile, {label}: every prompt build raises",
-              raised == [True, True], repr(raised))
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger="agent"):
+            blocks = [a._admin_sticker_pattern_block() for _ in range(3)]
+            group = a._build_group_prompt("g1", "called", "hi")
+        warnings = [r for r in caplog.records if "owner_profile" in r.getMessage()]
+        check(f"damaged profile, {label}: the moderate default every time",
+              all("moderate frequency" in b for b in blocks), repr(blocks))
+        check(f"damaged profile, {label}: a group prompt is still built",
+              isinstance(group.system, str), repr(group))
+        check(f"damaged profile, {label}: exactly one warning",
+              len(warnings) == 1, repr([r.getMessage() for r in warnings]))
     profile.write_text(good, encoding="utf-8")
     check("damaged profile: a repaired file is read again",
           "every 4 messages" in a._admin_sticker_pattern_block())

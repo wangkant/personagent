@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Mapping, Optional, Sequence
 
+from . import chatlangs
 from .config_env import parse_tz_offset
 
 
@@ -222,15 +223,29 @@ def _example_field(value: object) -> str:
 # and no bare 怎么 (怎么了 is a check-in). re.ASCII so `\b` separates an English
 # keyword from adjacent Chinese (帮我google一下).
 _SEARCH_HINT_RE = re.compile(
-    r"\bwho\b|\bwhat\b|\bwhen\b|\bwhere\b|\bwhy\b|\bhow\b|\bwhich\b|"
+    # A bare who/what/how is small talk ("what a day", "how are you") unless
+    # it asks: a question mark, or the shape of a lookup.
+    r"\b(?:who|what|how)\b(?!\s+(?:are|r)\s+(?:you|u|ya)\b|'?s\s+up\b|'?s\s+it\s+going\b)"
+    r"(?=[^\n]*[?？])|"
+    r"\bwho(?:'s|\s+is|\s+was|\s+are|\s+won|\s+made|\s+wrote|\s+sang|\s+invented)\b|"
+    r"\bwhat(?:'s\s+(?:the|a|an|that|this)|\s+is|\s+are|\s+was|\s+were|\s+does|\s+did"
+    r"|\s+happened|\s+time|\s+year)\b|"
+    r"\bhow\s+(?:much|many|to|do|does|did|long|old|far|big|tall)\b|"
+    r"\bmeaning\b|"
+    r"\bwhen\b|\bwhere\b|\bwhy\b|\bwhich\b|"
     r"\bis it\b|\bprice\b|\bnews\b|\blatest\b|\brecent\b|\brelease[sd]?\b|"
     r"\bmeme\b|\bslang\b|\bterm\b|\blook ?up\b|\bsearch\b|\bgoogle\b|"
     r"http|www\.|\.com|\.org|\.net|\.io|\.cn|"
-    # Chinese fact-seeking hints
+    # Chinese fact-seeking hints, both scripts where they differ
     r"是什么|为什么|多少|哪里|哪个|谁是|新闻|最新|查一下|搜一下|价格|怎么做|怎么用"
-    # The other eight languages.
-    r"|何|なに|なぜ|どこ|いつ|だれ|誰|いくら|ニュース|最新|検索|調べ|値段|価格|どうやって|"
-    r"뭐|무엇|왜|어디|언제|누구|얼마|뉴스|최신|검색|찾아|가격|어떻게|"
+    r"|什么意思|啥意思|是谁|是啥|怎么样|是什麼|什麼意思|是誰|誰是|怎麼樣|多少錢|價格|新聞"
+    # 如何 asks only with a question mark: 如何是好 is an idiom.
+    r"|如何(?=[^\n]*[?？])"
+    # The other eight languages. 何 alone is Japanese only in kana text, or
+    # it fires inside Chinese 任何 and 如何.
+    r"|何(?=[\s\S]*[ぁ-ゟ゠-ヿ])|[ぁ-ゟ゠-ヿ][\s\S]*何"
+    r"|なに|なぜ|どこ|いつ|だれ|誰|いくら|ニュース|最新|検索|調べ|値段|価格|どうやって|どういう意味|って意味|"
+    r"뭐|무엇|무슨|뜻|왜|어디|언제|누구|얼마|뉴스|최신|검색|찾아|가격|어떻게|"
     r"(?<![A-Za-z\u00c0-\u024f\u0400-\u04ff])(?:"
     r"qué|por qué|cuándo|dónde|quién|cuánto|cómo|noticias|precio|busca|buscar|"
     r"quoi|pourquoi|quand|où|qui est|combien|comment faire|comment ça|actualités|prix|"
@@ -957,8 +972,15 @@ _SCRIPT_MARK_RANGES: Ranges = (
 # is CUT rather than the turn dropped; per line with `.match()`, so detector
 # and scrubber ask the same question of the same unit.
 _LEAK_LABEL_RE = re.compile(
-    r"(?i)^[\s\-•*]*(input|speaker|intent|decision|style|"
-    r"输入|发言人|意图|决策|风格|分析|判断)\s*[:：]")
+    r"(?i)^[\s\-•*]*(" + "|".join(
+        s.leak_labels for s in chatlangs.SPECS.values() if s.leak_labels)
+    + r")\s*[:：]")
+
+
+def _union(attr: str) -> str:
+    """One alternation of a `chatlangs.Spec` field across every language."""
+    return "|".join(f"(?:{getattr(s, attr)})" for s in chatlangs.SPECS.values()
+                    if getattr(s, attr))
 
 # The bubble separators, spelled once for the three uses in `_split_text`.
 _BUBBLE_SEP_CLASS = "。！？；\n"
@@ -966,6 +988,19 @@ _BUBBLE_SEPARATORS = tuple(_BUBBLE_SEP_CLASS)
 _BUBBLE_SPLIT_RE = re.compile("([" + re.escape(_BUBBLE_SEP_CLASS) + "]+)")
 _BUBBLE_SEP_RUN_RE = re.compile(
     "\\A[" + re.escape(_BUBBLE_SEP_CLASS) + "]+\\Z")
+# Media the bot cannot read: OneBot placeholders, and the "(sent ...)" notes
+# third-party connectors still write for voice, video, files and stickers.
+_BLIND_NOTE_RE = re.compile(
+    r"\[(?:image|voice|video|file|face|reply|sticker)\]"
+    r"|\(sent (?:a voice message|a video|a photo|an image|a sticker|an attachment"
+    r"|a file(?:: [^)\n]*)?|an audio file(?:: [^)\n]*)?)\)"
+    # The fenced notes the engine writes: a named file, a sticker known only by its emoji.
+    rf"|{_WEB_DESC_OPEN}\[(?:file: [^{_WEB_DESC_OPEN}{_WEB_DESC_CLOSE}\n]*"
+    rf"|sticker: [^\w\]{_WEB_DESC_CLOSE}\n]*)\]{_WEB_DESC_CLOSE}")
+_NUMBERED_RUN_RE = re.compile(
+    r'(?m)^\d+\.[ \t]+.*(?:\n\d+\.[ \t]+.*)+|(?<=[:：]\n)\d+\.[ \t]+.*')
+# Where an over-long bubble prefers to wrap: after ". ", "! ", "? " or a CJK end.
+_SENTENCE_END_RE = re.compile(r"[.!?]+(?=\s)|[。！？]+")
 
 # Cap on messages per reply: a runaway of one-word lines would otherwise send
 # one message per line. `_delivery_units` says what the overflow becomes.
@@ -1013,9 +1048,38 @@ _VENDOR_SELF_ID_PATTERNS = (
 
 # Compiled on first use: together they take 20 ms, and most processes that
 # import this module never sanitize a reply.
+# Between "I am" and the name in the other chat languages: a comma or a dash.
+_SELF_ID_GAP = r"[\s,、，:：—–-]*"
+# Being a fan, user or customer of a vendor is not being it.
+_NOT_A_MAKER = (r"fans?\b|fã|usuari[oa]|utilisat(?:eur|rice)|nutzer|kunde|client[ea]?\b|"
+                r"фанат|пользовател|ファン|ユーザー|팬|사용자")
+
+
+def _chatlang_self_id_patterns() -> list[str]:
+    """"I am <vendor>" and "I am ... made by <vendor>" in each chat language."""
+    made_by = _union("made_by")
+    out = []
+    for spec in chatlangs.SPECS.values():
+        if not spec.self_id:
+            continue
+        end = f"(?={spec.name_end})" if spec.name_end else ""
+        out.append(rf"(?:{spec.self_id}){_SELF_ID_GAP}{_VENDOR_NAMES}{end}")
+    if out:
+        self_id = _union("self_id")
+        out.append(rf"(?:{self_id})(?:(?!{_NOT_A_MAKER})[^.!?。！？\n]){{0,40}}?"
+                   rf"(?:(?:{made_by})\s*{_VENDOR_NAMES}|{_VENDOR_NAMES}\s*(?:{made_by}))")
+    return out
+
+
 @functools.lru_cache(maxsize=1)
 def _vendor_self_id_res() -> tuple:
-    return tuple(re.compile(p, re.IGNORECASE) for p in _VENDOR_SELF_ID_PATTERNS)
+    return tuple(re.compile(p, re.IGNORECASE)
+                 for p in (*_VENDOR_SELF_ID_PATTERNS, *_chatlang_self_id_patterns()))
+
+
+@functools.lru_cache(maxsize=1)
+def _assistant_tell_re() -> re.Pattern:
+    return re.compile(_union("assistant_tells"), re.IGNORECASE)
 
 
 @functools.lru_cache(maxsize=1)
@@ -1036,13 +1100,17 @@ def _made_by_re() -> re.Pattern:
         rf"[^.!?\n]{{0,12}}{_VENDOR_NAMES}"
         rf"|{_VENDOR_NAMES}[^。！？\n]{{0,6}}(?:开发|研发|训练|打造|出品|推出|家的)"
         rf"|由[^。！？\n]{{0,10}}{_VENDOR_NAMES}"
-        rf"|(?:底层|内核|基于|跑在|本质上|其实是)[^。！？\n]{{0,6}}{_VENDOR_NAMES}",
+        rf"|(?:底层|内核|基于|跑在|本质上|其实是)[^。！？\n]{{0,6}}{_VENDOR_NAMES}"
+        rf"|(?:{_union('made_by')})\s*{_VENDOR_NAMES}|{_VENDOR_NAMES}\s*(?:{_union('made_by')})"
+        rf"|(?:{_union('from_maker')})\s*{_VENDOR_NAMES}",
         re.IGNORECASE)
 
 
 # Saying it is not the real one is an honest answer, and what it says about
 # the real one is not about itself.
-_NOT_THE_REAL_ONE_RE = re.compile(r"不是|并非|同人|\bnot\b|n't\b|fan[- ]?made", re.IGNORECASE)
+_NOT_THE_REAL_ONE_RE = re.compile(
+    r"不是|并非|同人|\bnot\b|n't\b|fan[- ]?made|\bno\b|\bnicht\b|\bkein|\bне\b|\bpas\b"
+    r"|\bnão\b|じゃない|ではない|ではありません|아니", re.IGNORECASE)
 _THE_REAL_ONE_RE = re.compile(
     r"(?:\bthe\s+(?:real|actual)\b|真正的|真的那个)[^,，;；.!?。！？\n]*", re.IGNORECASE)
 _SENTENCE_RE = re.compile(r"[^.!?。！？\n]+[.!?。！？]*|[.!?。！？\n]+")
@@ -1482,7 +1550,10 @@ class TextProcessing:
         text = re.sub(r'__(.+?)__', r'\1', text)
         text = re.sub(r'(?m)^#{1,6}\s+', '', text)
         text = re.sub(r'(?m)^[\-\*]\s+', '', text)
-        text = re.sub(r'(?m)^\d+\.\s+', '', text)
+        # A list is two numbered lines in a row, or one after "steps:"; one
+        # alone is a date ("3. Oktober").
+        text = _NUMBERED_RUN_RE.sub(
+            lambda m: re.sub(r'(?m)^\d+\.[ \t]+', '', m.group(0)), text)
         text = re.sub(r'`+([^`]+)`+', r'\1', text)
         text = re.sub(r'(?m)^>\s+', '', text)
         text = re.sub(r'(?m)^---+\s*$', '', text)
@@ -1546,6 +1617,12 @@ class TextProcessing:
                 "[Agent] vendor self-identification blocked, dropping "
                 "reply: %r", text[:80])
             return "", "vendor_self_id"
+        # A provider's refusal or sign-off is not the character's line, in
+        # any of the chat languages.
+        if text and _assistant_tell_re().search(text):
+            logger.warning("[Agent] assistant phrasing blocked, dropping "
+                           "reply: %r", text[:80])
+            return "", "assistant_tell"
         # Final gate: a whitelist, so unseen leak shapes fail closed. The cap is
         # applied only after the full text is cleared, or a leak's giveaway
         # character could be cut off. A terse reply counts only as written.
@@ -1769,6 +1846,12 @@ class TextProcessing:
         for body, hard_break in chunks:
             while len(body) > wrap_at:
                 window = body[:wrap_at]
+                # A sentence end first, so a spaced script is not cut mid-clause.
+                ends = [m.end() for m in _SENTENCE_END_RE.finditer(window)]
+                if ends and ends[-1] >= wrap_at // 4:
+                    wrapped.append((body[:ends[-1]].strip(), True))
+                    body = body[ends[-1]:].strip()
+                    continue
                 cut = max(window.rfind(" "), window.rfind("，"),
                           window.rfind("、"), window.rfind(","))
                 if cut < wrap_at // 2:
@@ -2036,10 +2119,10 @@ class TextProcessing:
         image, voice, file...), so the model is told not to make it up."""
         if not text:
             return False
-        had_blind = bool(re.search(r"\[(image|voice|video|file|face|reply)\]|\[forwarded-chat", text))
+        had_blind = bool(_BLIND_NOTE_RE.search(text) or re.search(r"\[forwarded-chat", text))
         if not had_blind:
             return False
-        t = re.sub(r"\[(image|voice|video|file|face|reply)\]", "", text)
+        t = _BLIND_NOTE_RE.sub("", text)
         t = re.sub(r"\[forwarded-chat[^\]]*\]", "", t)
         t = re.sub(r"\[AT:[^\]]+\]|@\S+|\[STICKER:[^\]]+\]", "", t)
         return not t.strip()

@@ -24,6 +24,13 @@ SPEC = Spec(
     everything=frozenset({"全部", "所有", "一切", "全部的", "所有的", "所有事",
                           "全部记忆", "所有记忆"}),
     first_person=FIRST_PERSON,
+    made_by=r"开发|研发|训练|打造|出品|推出|家的",
+    leak_labels=r"输入|发言人|意图|决策|风格|分析|判断",
+    # 不能 only with a service verb: "对不起，我不能帮你搬家" is a friend.
+    assistant_tells=(r"(?:抱歉|对不起)[，,。!！\s]*(?:但是?|不过)?[，,\s]*"
+                     r"我(?:无法|不能(?=回答|提供|协助|满足|回应))"
+                     r"(?:回答|提供|协助|满足|回应|处理|完成|帮助|帮你|帮您)"
+                     r"|希望[^。！？\n]{0,8}(?:有所帮助|有帮助|帮到你|帮到您|帮得上忙)"),
     replies={
         "remember_what": ("记什么？你啥也没说", "说呀，记啥", "要我记啥"),
         "not_instructions": ("我只记事实，不记指令",),
@@ -41,7 +48,7 @@ SPEC = Spec(
                      "卡住了，等会儿再聊"),
     learned_text={
         "head": ("记忆 {memories} 条，学到 {examples} 条回复和 {fixes} 组纠正，"
-                 "{voice} 条等第二个人佐证，{admin} 条等管理员处理"),
+                 "{voice} 条等第二个人佐证，{admin} 条由我自行判断"),
         "score": "，最近自评 {score}/5",
         "pair": "原来：{was}，改成：{better}",
         "someone_else": "另一个聊天里有人",
@@ -52,7 +59,8 @@ SPEC = Spec(
         "corrected": "{who} 纠正了",
         "missed": "{who} 说没答对",
         "liked": "{who} 觉得好",
-        "by_admin": "管理员通过",
+        "by_me": "由我自己决定",
+        "by_person": "人工启用",
         "passed": "{events} 条证据其中 {strong} 条强，通过",
         "why": "原因：{steps}",
         "sep": "，",

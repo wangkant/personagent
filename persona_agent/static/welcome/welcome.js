@@ -23,8 +23,22 @@ const translations = {
     activityHere: "本页面",
     activityGroup: "群聊",
     activityDm: "私聊",
-    activityReview: "待你确认",
-    activityReviewHint: "以下改动将在收到足够的反馈后自动生效，你也可以现在直接决定。",
+    activityObserving: "仍在观察",
+    activityObservingHint: "角色会随着新的反应自行决定这些内容，此处无需你进行任何操作。",
+    activityStageEvents: "目前已有 {have} 次认同的反应，共需 {need} 次。",
+    activityStageStrong: "目前已有回复对象本人的 {have} 次明确纠正，共需 {need} 次。",
+    activityStageSpeakers: "目前已有 {have} 位不同的人认同，共需 {need} 位。",
+    activityStageApproval: "仍需要一位参与者给出正面反应。",
+    activityStageDeciding: "仅凭反应无法确定此条内容，角色正在自行判断。",
+    activityStageObserving: "角色已审视此条内容，决定继续观察。理由：“{reason}”",
+    activityStageHeld: "仅凭反应无法确定此条内容，且高级设置中已关闭角色自行判断，因此它将继续处于观察状态。",
+    activityStageOff: "高级设置中已关闭自动学习，因此此条内容不会投入使用。",
+    activityStageReady: "已满足全部条件，将在角色收到下一次反应时投入使用。",
+    activityExpires: "如果此后没有新的反应，它将于 {date} 被搁置。",
+    activityByReactions: "因反应一致而投入使用。",
+    activityByCharacter: "由角色自行决定投入使用。理由：“{reason}”",
+    activityByPerson: "由人工操作投入使用。",
+    activityFresh: "自你上次查看以来，角色有新学到的内容",
     activityLearned: "学习记录",
     activityNotes: "记忆",
     activityRecent: "近期动态",
@@ -37,18 +51,45 @@ const translations = {
     activityFrom: "来自 {who}",
     activityAbout: "关于 {who}",
     activityRoomNote: "来自群聊",
-    activityCore: "长期记忆",
+    activityCore: "常驻记忆",
     activityForget: "删除",
     activityForgotten: "已删除。",
     listSep: "、",
-    activityKeep: "保留",
-    activityDiscard: "放弃",
     activityUndo: "撤销",
-    activityKept: "已保留，之后的回复将采用此改动。",
-    activityDiscarded: "已放弃此改动。",
     activityUndone: "已撤销，角色不会再使用这一说法。",
     activityQuiet: "未发言",
     activityCount: "×{n}",
+    activityFacts: "事实",
+    activityThread: "此前的对话",
+    activityEvents: "事件",
+    activityRemoved: "最近删除",
+    activityRemovedHint: "角色自行删除的内容可在 30 天内恢复；在本页删除的内容可在 24 小时内恢复。",
+    activityRestore: "恢复",
+    activityRestorePrevious: "恢复上一版本",
+    activityRestored: "已恢复。",
+    activity_restore_exists: "该项已存在。",
+    activity_restore_gone: "该项已无法恢复。",
+    activityUpdated: "更新于 {date}",
+    activityCovers: "涵盖 {from} 至 {to}",
+    activityFirstNoted: "首次记下于 {date}",
+    activityLastUsed: "最近使用于 {date}",
+    activitySaidBy: "由 {name} 所述",
+    activityKindFact: "事实",
+    activityKindEvent: "事件",
+    activityWhyReplaced: "已被更新的事实取代",
+    activityWhyMerged: "已与另一条事实合并",
+    activityWhyEnded: "已不再成立",
+    activityWhyEvicted: "为腾出空间而移除",
+    activityWhyRewritten: "旧版本",
+    activityWhyForgotten: "已在本页删除",
+    activityWhyTerminal: "已通过终端命令删除",
+    activityWhyUnreadable: "无法读取",
+    activityUntil: "可恢复至 {date}",
+    activityFoldUsed: "记忆整理：今日已使用 {used} 次调用，上限为 {cap} 次。",
+    activityFoldPaused: "记忆整理因出错已暂停，下次尝试时间为 {time}。",
+    activityForgetChat: "清除此聊天的记忆",
+    activityForgetChatAsk: "角色将清除在此聊天中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容。其他聊天中记住的内容将予以保留。此操作无法撤销。",
+    activityChatForgotten: "已清除此聊天的记忆。",
     justNow: "刚刚",
     minutesAgo: "{n} 分钟前",
     hoursAgo: "{n} 小时前",
@@ -61,6 +102,12 @@ const translations = {
     r_followup: "延续自己上一条发言",
     r_trigger: "累计消息数已达到条件，考虑主动发言",
     r_first: "首次出现在此聊天中",
+    r_failed: "模型未作出回应",
+    r_blocked: "回复未通过安全检查，已被拦下",
+    r_undelivered: "回复未能送达",
+    r_proactive: "曾考虑主动发起话题，判断后决定不发言",
+    r_together: "已与其他消息在同一条回复中一并作答",
+    r_other: "其他原因",
     m_called: "被点名",
     m_owner: "管理员",
     m_judge: "自行判断后发言",
@@ -141,9 +188,9 @@ const translations = {
     chatHint: "本机对话，你在此处的身份是管理员。",
     newChat: "新对话",
     forgetChat: "清除本次对话的记忆",
-    forgetChatAsk: "角色将清除在本次对话中记下的内容，并开始新的对话。此操作无法撤销。",
+    forgetChatAsk: "角色将清除在本次对话中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容，随后开始新的对话。其他聊天中记住的内容将予以保留。此操作无法撤销。",
     forget_needs_activity: "清除记忆需要先开启动态数据，可在「角色与设置」的高级设置中开启。",
-    forgetChatDone: "已清除本次对话中记下的 {count} 项内容。",
+    forgetChatDone: "已清除本次对话的记忆，并已开始新的对话。",
     forgetChatNone: "本次对话中没有记下任何内容，已开始新的对话。",
     commandsShow: "记忆命令",
     commandsHint: "点击命令即可填入输入框：",
@@ -294,10 +341,12 @@ const translations = {
     permission_required: "角色需要获得在此平台回复的权限。",
     forbidden: "页面授权已失效，请重新打开启动窗口中的本地链接。",
     generic: "操作未能完成，请重试。",
+    vision_unsupported: "此模型无法读取图片。请选择支持视觉的模型，或关闭图片识别。",
     stopped: "聊天平台已暂停。",
     retryChat: "重新发送",
     chatPicture: "{name} 发送的图片",
     chatPictureGone: "该图片已不存在。",
+    chatViaCoding: "经由编程助手",
     closing: "正在关闭…",
   },
   en: {
@@ -320,8 +369,25 @@ const translations = {
     activityHere: "This page",
     activityGroup: "group",
     activityDm: "DM",
-    activityReview: "Waiting for you",
-    activityReviewHint: "These changes are waiting for more reactions before they apply on their own. You can decide now.",
+    activityObserving: "Still under observation",
+    activityObservingHint:
+      "The character decides these items by itself as reactions arrive. Nothing here requires any action from you.",
+    activityStageEvents: "Agreeing reactions so far: {have} of the {need} required.",
+    activityStageStrong:
+      "Clear corrections from the person the reply was addressed to so far: {have} of the {need} required.",
+    activityStageSpeakers: "Different people in agreement so far: {have} of the {need} required.",
+    activityStageApproval: "A positive reaction from a participant is still required.",
+    activityStageDeciding: "Reactions alone cannot settle this item, so the character is deciding it itself.",
+    activityStageObserving: "The character has reviewed this item and continues to observe it. Its reason: “{reason}”",
+    activityStageHeld:
+      "Reactions alone cannot settle this item, and the character's own decisions are turned off in the advanced settings, so it remains under observation.",
+    activityStageOff: "Automatic learning is turned off in the advanced settings, so this item is not put into use.",
+    activityStageReady: "It meets every condition and will be put into use with the next reaction the character receives.",
+    activityExpires: "If no new reaction arrives, it will be set aside on {date}.",
+    activityByReactions: "Put into use because the reactions agreed.",
+    activityByCharacter: "Put into use by the character's own decision. Its reason: “{reason}”",
+    activityByPerson: "Put into use by a person.",
+    activityFresh: "The character has learned something new since your last visit",
     activityLearned: "Learned",
     activityNotes: "Remembers",
     activityRecent: "Recent",
@@ -338,14 +404,41 @@ const translations = {
     activityForget: "Forget",
     activityForgotten: "Forgotten.",
     listSep: ", ",
-    activityKeep: "Keep",
-    activityDiscard: "Discard",
     activityUndo: "Undo",
-    activityKept: "Kept. Later replies will use it.",
-    activityDiscarded: "Discarded.",
     activityUndone: "Undone. The character will no longer phrase it this way.",
     activityQuiet: "Stayed quiet",
     activityCount: "×{n}",
+    activityFacts: "Facts",
+    activityThread: "Earlier in this chat",
+    activityEvents: "Events",
+    activityRemoved: "Recently removed",
+    activityRemovedHint: "Items removed by the character can be restored for 30 days; items forgotten on this page, for 24 hours.",
+    activityRestore: "Restore",
+    activityRestorePrevious: "Restore previous version",
+    activityRestored: "Restored.",
+    activity_restore_exists: "This item already exists.",
+    activity_restore_gone: "This item can no longer be restored.",
+    activityUpdated: "Updated {date}",
+    activityCovers: "Covers {from} to {to}",
+    activityFirstNoted: "First noted {date}",
+    activityLastUsed: "Last used {date}",
+    activitySaidBy: "Said by {name}",
+    activityKindFact: "Fact",
+    activityKindEvent: "Event",
+    activityWhyReplaced: "Replaced by a newer fact",
+    activityWhyMerged: "Merged with another fact",
+    activityWhyEnded: "No longer current",
+    activityWhyEvicted: "Removed to make room",
+    activityWhyRewritten: "Earlier version",
+    activityWhyForgotten: "Forgotten on this page",
+    activityWhyTerminal: "Forgotten with the terminal command",
+    activityWhyUnreadable: "Could not be read",
+    activityUntil: "Restorable until {date}",
+    activityFoldUsed: "Memory consolidation: {used} of {cap} calls used today.",
+    activityFoldPaused: "Memory consolidation is paused after errors; the next attempt is at {time}.",
+    activityForgetChat: "Forget this chat",
+    activityForgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. What it remembers from other chats is kept. This cannot be undone.",
+    activityChatForgotten: "The character has forgotten this chat.",
     justNow: "just now",
     minutesAgo: "{n} min ago",
     hoursAgo: "{n} h ago",
@@ -358,6 +451,12 @@ const translations = {
     r_followup: "following up on its own reply",
     r_trigger: "enough messages to consider joining in",
     r_first: "first time in this chat",
+    r_failed: "the model did not answer",
+    r_blocked: "the reply was held back by a safety check",
+    r_undelivered: "the reply could not be delivered",
+    r_proactive: "considered starting a conversation and decided against it",
+    r_together: "answered in the same reply as another message",
+    r_other: "for another reason",
     m_called: "called",
     m_owner: "admin",
     m_judge: "joined in on its own",
@@ -445,9 +544,9 @@ const translations = {
     chatHint: "A chat on this computer. Here you are the admin.",
     newChat: "New chat",
     forgetChat: "Forget this chat",
-    forgetChatAsk: "The character will forget what it noted in this chat and start a new one. This cannot be undone.",
+    forgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. A new chat then starts. What it remembers from other chats is kept. This cannot be undone.",
     forget_needs_activity: "Forgetting a chat needs activity data, which is switched off. Turn it on in the advanced settings under Character & settings.",
-    forgetChatDone: "Cleared {count} item(s) the character had noted in this chat.",
+    forgetChatDone: "The character has forgotten this chat, and a new chat has started.",
     forgetChatNone: "The character had noted nothing in this chat. A new chat has started.",
     commandsShow: "Memory commands",
     commandsHint: "Select a command to insert it into the message box:",
@@ -615,10 +714,12 @@ const translations = {
     forbidden:
       "The authorization for this page has expired. Reopen the local link shown in the launch window.",
     generic: "The operation did not complete. Try again.",
+    vision_unsupported: "This model cannot read images. Choose a vision model or turn image reading off.",
     stopped: "Chat platform paused.",
     retryChat: "Send again",
     chatPicture: "Picture sent by {name}",
     chatPictureGone: "This picture is no longer available.",
+    chatViaCoding: "via a coding assistant",
     closing: "Closing…",
   },
 };
@@ -709,11 +810,25 @@ const t = (key, fields = {}) =>
 // A shared code in one platform's own words (`token_rejected_zulip`), when it has them.
 const tFor = (key, kind) =>
   translations.en[`${key}_${kind}`] ? t(`${key}_${kind}`) : t(key);
-function toast(text) {
-  $("toast").textContent = text;
-  $("toast").hidden = false;
+// `undo`, when given, is {label, run}: a button in the message that runs it.
+function toast(text, undo) {
+  const box = $("toast");
+  box.textContent = text;
+  if (undo) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "toast-action";
+    button.textContent = undo.label;
+    button.addEventListener("click", () => {
+      clearTimeout(toastTimer);
+      box.hidden = true;
+      undo.run();
+    });
+    box.append(" ", button);
+  }
+  box.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => ($("toast").hidden = true), 5000);
+  toastTimer = setTimeout(() => (box.hidden = true), undo ? 10000 : 5000);
 }
 async function api(path, payload) {
   const response = await fetch(`/api/${path}`, {
@@ -1415,6 +1530,11 @@ const REASONS = {
   "followup window": "r_followup",
   "trigger count": "r_trigger",
   "first appearance": "r_first",
+  "model failed": "r_failed",
+  blocked: "r_blocked",
+  "delivery failed": "r_undelivered",
+  proactive: "r_proactive",
+  "answered together": "r_together",
 };
 // Platforms a chat can come from that Connect apps does not list.
 const CHAT_PLATFORMS = { qq: "QQ", matrix: "Matrix", satori: "Satori" };
@@ -1457,18 +1577,44 @@ function chatBadge(chat) {
 }
 function reasonText(row) {
   const key = REASONS[row.reason];
-  return key ? t(key) : row.reason;
+  // A reason this page does not know yet is still said in the page's words.
+  return key ? t(key) : t("r_other");
 }
 function modeText(row) {
   if (!row.mode) return "";
   const key =
     row.mode === "judge" && !row.spoke ? "m_judge_quiet" : `m_${row.mode}`;
-  return translations[lang]?.[key] || translations.en[key] || row.mode;
+  return translations[lang]?.[key] || translations.en[key] || "";
+}
+// The dot means only "learned something new since you last looked": nothing
+// here waits for the reader, so items under observation never light it.
+const ACTIVITY_SEEN_KEY = "personagent-activity-seen";
+function activityLatest() {
+  return Math.max(0, ...(activity?.chats || []).map((chat) => chat.latest || 0));
+}
+function activitySeen() {
+  try {
+    const value = localStorage.getItem(ACTIVITY_SEEN_KEY);
+    return value === null ? null : Number(value) || 0;
+  } catch {
+    return null;
+  }
+}
+function markActivitySeen() {
+  try {
+    localStorage.setItem(ACTIVITY_SEEN_KEY, String(activityLatest()));
+  } catch {
+    // Without storage the dot simply stays off.
+  }
 }
 function renderActivityDot() {
-  $("activity-dot").hidden = !(activity?.chats || []).some(
-    (chat) => chat.review > 0,
-  );
+  // The first look ever records what is there instead of lighting the dot.
+  if (activity?.chats && (view === "activity" || activitySeen() === null))
+    markActivitySeen();
+  const seen = activitySeen();
+  const dot = $("activity-dot");
+  dot.hidden = seen === null || activityLatest() <= seen;
+  dot.title = dot.hidden ? "" : t("activityFresh");
 }
 function renderActivity() {
   renderActivityDot();
@@ -1520,8 +1666,6 @@ function renderActivity() {
         ),
       );
       row.append(chatBadge(chat), text);
-      if (chat.review)
-        row.append(el("span", "count review", String(chat.review)));
       row.addEventListener("click", () => selectChat(chat.id));
       const item = el("li");
       item.append(row);
@@ -1547,8 +1691,47 @@ function action(key, cls, focus, run) {
   button.addEventListener("click", run);
   return button;
 }
-function change(item, waiting) {
-  const card = el("div", `change${waiting ? " waiting" : ""}`);
+function activityDate(epoch) {
+  return new Date(epoch * 1000).toLocaleDateString(LANGS[lang] || "en", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+// Where an item under observation stands: one sentence, then when it would be
+// set aside. The learned panel shows the same sentences (PA.standing).
+function standingText(info) {
+  if (!info) return [];
+  const counts = {
+    events: ["activityStageEvents", info.events, info.needEvents],
+    strong: ["activityStageStrong", info.strong, info.needStrong],
+    speakers: ["activityStageSpeakers", info.speakers, info.needSpeakers],
+  };
+  let head = "";
+  if (info.stage === "reactions") {
+    const [key, have, need] = counts[info.missing] || [];
+    head = key
+      ? t(key, { have: String(have ?? 0), need: String(need ?? 0) })
+      : t("activityStageApproval");
+  } else if (info.stage === "observing")
+    head = t("activityStageObserving", { reason: info.reason || "" });
+  else if (
+    ["deciding", "held", "off", "ready"].includes(info.stage)
+  )
+    head = t(`activityStage${info.stage[0].toUpperCase()}${info.stage.slice(1)}`);
+  const out = head ? [head] : [];
+  if (info.expires) out.push(t("activityExpires", { date: activityDate(info.expires) }));
+  return out;
+}
+// How an item in use came into use.
+function cameInText(info) {
+  if (!info || !info.by) return "";
+  if (info.by === "character")
+    return t("activityByCharacter", { reason: info.why || "" });
+  return t(info.by === "reactions" ? "activityByReactions" : "activityByPerson");
+}
+function change(item, observed) {
+  const card = el("div", `change${observed ? " observed" : ""}`);
   const top = el("div", "change-top");
   const who = item.from.length
     ? t("activityFrom", { who: item.from.join(t("listSep")) })
@@ -1576,24 +1759,13 @@ function change(item, waiting) {
     }
   } else body.append(el("p", "change-reply", item.said));
   card.append(body);
+  // Observed items are there to be read: their standing, and no buttons.
+  const status = observed ? standingText(item.standing) : [cameInText(item.by)];
+  for (const text of status.filter(Boolean))
+    card.append(el("p", "change-status", text));
+  if (observed) return card;
   const buttons = el("div", "change-actions");
-  const keep = ["replace", "promote"].find((name) =>
-    item.actions.includes(name),
-  );
-  if (waiting) {
-    if (keep)
-      buttons.append(
-        action("activityKeep", "primary small", `${keep}:${item.id}`, () =>
-          decide(item, keep),
-        ),
-      );
-    if (item.actions.includes("reject"))
-      buttons.append(
-        action("activityDiscard", "quiet", `reject:${item.id}`, () =>
-          decide(item, "reject"),
-        ),
-      );
-  } else if (item.actions.includes("rollback"))
+  if (item.actions.includes("rollback"))
     buttons.append(
       action("activityUndo", "secondary", `rollback:${item.id}`, () =>
         decide(item, "rollback"),
@@ -1615,9 +1787,12 @@ function recentLine(row) {
     if (row.answered) item.append(said(row.answered));
     item.append(el("p", "reply", row.text));
   }
+  // A message answered in another's reply was not passed over.
   const why = row.spoke
     ? [modeText(row)]
-    : [t("activityQuiet"), reasonText(row)];
+    : row.reason === "answered together"
+      ? [reasonText(row)]
+      : [t("activityQuiet"), reasonText(row)];
   if (row.count > 1) why.push(t("activityCount", { n: String(row.count) }));
   why.push(ago(row.when));
   item.append(el("small", "why", why.filter(Boolean).join(" · ")));
@@ -1642,48 +1817,20 @@ function renderChat() {
   const parts = [head];
   if (activityError)
     parts.push(el("p", "activity-note error-note", t(activityError)));
-  if (chat.review.length) {
-    const part = section("activityReview", chat.review.length);
-    part.append(el("p", "section-hint", t("activityReviewHint")));
-    for (const item of chat.review) part.append(change(item, true));
-    parts.push(part);
-  }
   if (chat.learned.length) {
     const part = section("activityLearned", chat.learned.length);
     for (const item of chat.learned) part.append(change(item, false));
     parts.push(part);
   }
-  if (chat.core || chat.notes.length) {
-    const part = section("activityNotes");
-    const list = el("ul", "notes");
-    if (chat.core) {
-      const item = el("li");
-      item.append(
-        el("span", "", chat.core),
-        el("small", "", t("activityCore")),
-        action("activityForget", "quiet", "forget:core", () => forget("", "")),
-      );
-      list.append(item);
-    }
-    for (const note of chat.notes) {
-      const item = el("li");
-      item.append(el("span", "", note.text));
-      const tags = [
-        note.about && t("activityAbout", { who: note.about }),
-        note.by && note.by !== "auto" && t("activityFrom", { who: note.by }),
-        note.conv !== chat.id && t("activityRoomNote"),
-      ].filter(Boolean);
-      if (tags.length) item.append(el("small", "", tags.join(" · ")));
-      item.append(
-        action("activityForget", "quiet", `forget:${note.id}`, () =>
-          forget(note.conv, note.id),
-        ),
-      );
-      list.append(item);
-    }
-    part.append(list);
+  if (chat.observing.length) {
+    const part = section("activityObserving", chat.observing.length);
+    part.id = "activity-observing";
+    part.append(el("p", "section-hint", t("activityObservingHint")));
+    for (const item of chat.observing) part.append(change(item, true));
     parts.push(part);
   }
+  const remembers = memorySection(chat);
+  if (remembers) parts.push(remembers);
   const recent = section("activityRecent");
   if (chat.recent.length) {
     const list = el("ul", "recent");
@@ -1701,9 +1848,9 @@ async function loadActivity(withChat) {
     activity = listed;
     activityError = "";
     const chats = activity.chats || [];
-    // Open on a chat with something to decide, else the latest one.
+    // Open on the latest chat; nothing in any chat waits for the reader.
     if (!chats.some((chat) => chat.id === activitySelected))
-      activitySelected = (chats.find((chat) => chat.review) || chats[0] || {}).id || "";
+      activitySelected = (chats[0] || {}).id || "";
     if (withChat && activitySelected) {
       const chat = await api(
         `activity/chat?id=${encodeURIComponent(activitySelected)}`,
@@ -1747,15 +1894,7 @@ async function decide(item, verb) {
       chat: activitySelected,
     });
     if (seq === activitySeq) activityChat = chat;
-    toast(
-      t(
-        verb === "reject"
-          ? "activityDiscarded"
-          : verb === "rollback"
-            ? "activityUndone"
-            : "activityKept",
-      ),
-    );
+    toast(t("activityUndone"));
   } catch (error) {
     toast(t(error.message));
   } finally {
@@ -1763,25 +1902,221 @@ async function decide(item, verb) {
     activityLoop();
   }
 }
-async function forget(conv, note) {
+// ---- What a chat remembers: each group with the actions that work on it.
+// Why the character or a person removed something, as the trash records it.
+const REMOVED_WHY = {
+  replaced: "activityWhyReplaced",
+  merged: "activityWhyMerged",
+  ended: "activityWhyEnded",
+  evicted: "activityWhyEvicted",
+  rolled_up: "activityWhyEvicted",
+  rewritten: "activityWhyRewritten",
+  unreadable: "activityWhyUnreadable",
+};
+const REMOVED_KIND = {
+  note: "activityKindFact",
+  episode: "activityKindEvent",
+  thread: "activityThread",
+  core: "activityCore",
+};
+function removedWhy(row) {
+  if (row.why === "forgotten_page")
+    return t(row.by === "terminal" ? "activityWhyTerminal" : "activityWhyForgotten");
+  return REMOVED_WHY[row.why] ? t(REMOVED_WHY[row.why]) : "";
+}
+function clockTime(epoch) {
+  return new Date(epoch * 1000).toLocaleTimeString(LANGS[lang] || "en", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+// An event's time: one day with its hours, or the days it spans.
+function eventWhen(event) {
+  if (!event.from) return "";
+  const from = new Date(event.from * 1000);
+  const to = new Date((event.to || event.from) * 1000);
+  if (from.toDateString() !== to.toDateString())
+    return `${activityDate(event.from)} – ${activityDate(event.to)}`;
+  const hours =
+    to - from >= 60000
+      ? `${clockTime(event.from)}–${clockTime(event.to)}`
+      : clockTime(event.from);
+  return `${activityDate(event.from)} ${hours}`;
+}
+function memoryItem(text, details, ...buttons) {
+  const item = el("li");
+  const body = el("div", "memory-body");
+  body.append(el("span", "", text));
+  const shown = details.filter(Boolean);
+  if (shown.length) body.append(el("small", "", shown.join(" · ")));
+  item.append(body, ...buttons);
+  return item;
+}
+function memoryGroup(part, key, items) {
+  if (!items.length) return;
+  part.append(el("h4", "memory-group", t(key)));
+  const list = el("ul", "notes");
+  list.append(...items);
+  part.append(list);
+}
+function memorySection(chat) {
+  const notes = chat.notes || [];
+  const events = chat.events || [];
+  const removed = chat.removed || [];
+  if (!chat.core && !chat.thread && !notes.length && !events.length && !removed.length)
+    return null;
+  const part = section("activityNotes");
+  part.id = "activity-memory";
+  const status = chat.status;
+  if (status) {
+    const next = Math.max(status.paused || 0, status.next || 0);
+    part.append(
+      el(
+        "p",
+        "section-hint memory-status",
+        next
+          ? t("activityFoldPaused", { time: clockTime(next) })
+          : t("activityFoldUsed", { used: String(status.used), cap: String(status.cap) }),
+      ),
+    );
+  }
+  const forgetButton = (focus, run) => action("activityForget", "quiet", focus, run);
+  if (chat.core) {
+    const previous = removed.find((row) => row.kind === "core");
+    const buttons = [forgetButton("forget:core", () => forget("core", chat.id, ""))];
+    if (previous)
+      buttons.push(
+        action("activityRestorePrevious", "quiet", `restore:${previous.tid}`, () =>
+          restore(previous.tid),
+        ),
+      );
+    memoryGroup(part, "activityCore", [
+      memoryItem(
+        chat.core,
+        [chat.coreAt && t("activityUpdated", { date: activityDate(chat.coreAt) })],
+        ...buttons,
+      ),
+    ]);
+  }
+  if (chat.thread)
+    memoryGroup(part, "activityThread", [
+      memoryItem(
+        chat.thread.text,
+        [
+          chat.thread.from &&
+            chat.thread.to &&
+            t("activityCovers", {
+              from: activityDate(chat.thread.from),
+              to: activityDate(chat.thread.to),
+            }),
+        ],
+        forgetButton(`forget:thread:${chat.thread.id}`, () =>
+          forget("thread", chat.id, chat.thread.id),
+        ),
+      ),
+    ]);
+  memoryGroup(
+    part,
+    "activityFacts",
+    notes.map((note) =>
+      memoryItem(
+        note.text,
+        [
+          note.about && t("activityAbout", { who: note.about }),
+          note.saidBy && t("activitySaidBy", { name: note.saidBy }),
+          note.by && note.by !== "auto" && t("activityFrom", { who: note.by }),
+          note.conv !== chat.id && t("activityRoomNote"),
+          note.born && t("activityFirstNoted", { date: activityDate(note.born) }),
+          note.used && t("activityLastUsed", { date: activityDate(note.used) }),
+        ],
+        forgetButton(`forget:${note.id}`, () => forget("note", note.conv, note.id)),
+      ),
+    ),
+  );
+  memoryGroup(
+    part,
+    "activityEvents",
+    events.map((event) =>
+      memoryItem(
+        event.text,
+        [eventWhen(event), event.names.join(t("listSep"))],
+        forgetButton(`forget:episode:${event.id}`, () =>
+          forget("episode", chat.id, event.id),
+        ),
+      ),
+    ),
+  );
+  if (removed.length) {
+    const now = Date.now() / 1000;
+    memoryGroup(
+      part,
+      "activityRemoved",
+      removed.map((row) => {
+        const open = row.until > now;
+        return memoryItem(
+          row.text,
+          [
+            t(REMOVED_KIND[row.kind] || "activityKindFact"),
+            removedWhy(row),
+            activityDate(row.at),
+            open && t("activityUntil", { date: `${activityDate(row.until)} ${clockTime(row.until)}` }),
+          ],
+          // Past its time it can no longer come back, so nothing offers it.
+          ...(open
+            ? [action("activityRestore", "quiet", `restore:${row.tid}`, () => restore(row.tid))]
+            : []),
+        );
+      }),
+    );
+    const heading = part.querySelectorAll("h4.memory-group");
+    heading[heading.length - 1].after(el("p", "section-hint", t("activityRemovedHint")));
+  }
+  const whole = el("div", "memory-actions");
+  whole.append(action("activityForgetChat", "quiet", "forget-whole-chat", forgetWholeChat));
+  part.append(whole);
+  return part;
+}
+// One memory write: the view waits, then shows the chat as the service has it.
+async function memoryCall(path, payload, done) {
   if (activityBusy) return;
   activityBusy = true;
   const seq = ++activitySeq;
   renderActivity();
   try {
-    const chat = await api("activity/forget", {
-      chat: activitySelected,
-      conv,
-      note,
-    });
-    if (seq === activitySeq) activityChat = chat;
-    toast(t("activityForgotten"));
+    done(await api(path, payload), seq);
   } catch (error) {
     toast(t(error.message));
   } finally {
     activityBusy = false;
     activityLoop();
   }
+}
+function forget(kind, conv, id) {
+  return memoryCall("activity/forget", { chat: activitySelected, conv, kind, id }, (result, seq) => {
+    if (seq === activitySeq) activityChat = result.chat;
+    const tid = result.tid;
+    toast(
+      t("activityForgotten"),
+      tid ? { label: t("activityUndo"), run: () => restore(tid) } : null,
+    );
+  });
+}
+function restore(tid) {
+  return memoryCall("activity/restore", { chat: activitySelected, tid }, (chat, seq) => {
+    if (seq === activitySeq) activityChat = chat;
+    toast(t("activityRestored"));
+  });
+}
+async function forgetWholeChat() {
+  if (activityBusy) return;
+  const chat = activitySelected;
+  if (!(await ask(t("activityForgetChatAsk"), t("activityForgetChat")))) return;
+  await memoryCall("activity/forget_chat", { chat }, () => {
+    toast(t("activityChatForgotten"));
+    // This page's own chat starts anew, as its own Forget does.
+    if (chat.startsWith("private:browser:"))
+      api("chat/history").then(showHistory, () => {});
+  });
 }
 // As many messages as the server keeps; the history tells the page its number.
 let chatKept = Infinity;
@@ -1853,6 +2188,12 @@ function showMessage(item, arrived = false) {
   if (item.picture !== undefined) {
     if (item.picture) showPicture(node, item.picture);
     else pictureGone(node);
+  }
+  if (item.via === "coding") {
+    const via = el("small", "bubble-via", t("chatViaCoding"));
+    via.dataset.t = "chatViaCoding";
+    Object.assign(via.style, { display: "block", marginTop: "2px", fontSize: "11.5px", opacity: "0.7" });
+    node.append(via);
   }
   if (arrived) node.classList.add("arrived");
   chatSeen = Math.max(chatSeen, item.seq || 0);
@@ -2226,7 +2567,7 @@ $("forget-chat").addEventListener("click", async () => {
   try {
     const done = await api("chat/forget", {});
     showHistory(await api("chat/history"));
-    toast(done.forgotten ? t("forgetChatDone", { count: String(done.forgotten) }) : t("forgetChatNone"));
+    toast(done.forgotten ? t("forgetChatDone") : t("forgetChatNone"));
   } catch (error) {
     toast(t(error.message));
   } finally {
@@ -2346,6 +2687,9 @@ window.PA = {
   t,
   toast,
   ask,
+  // The Activity view's sentences for where an item stands and how it came into use.
+  standing: standingText,
+  cameIn: cameInText,
   refresh,
   showView,
   get state() {

@@ -1,5 +1,6 @@
 """The learned panel: everything the character learned, read from the ledger
-files, so it works whether or not the character is running."""
+files, so it works whether or not the character is running. The character
+decides by itself; a person may step in here, never because anything waits."""
 from __future__ import annotations
 
 import asyncio
@@ -25,17 +26,18 @@ ERRORS: frozenset[str] = frozenset({
 
 ACTOR = "dashboard"
 REASON = "local page"
-TABS = {"in_use": candidates.STATE_PROMOTED, "waiting": candidates.STATE_PROPOSED,
-        "discarded": candidates.STATE_REJECTED, "undone": candidates.STATE_ROLLED_BACK,
-        "replaced": candidates.STATE_SUPERSEDED}
-TAB_OF = {state: tab for tab, state in TABS.items()}
-VERBS = {"keep": "promote", "discard": "reject", "undo": "rollback"}
+TABS = {"in_use": (candidates.STATE_PROMOTED,), "observing": (candidates.STATE_PROPOSED,),
+        "set_aside": (candidates.STATE_REJECTED, candidates.STATE_ROLLED_BACK,
+                      candidates.STATE_SUPERSEDED)}
+TAB_OF = {state: tab for tab, states in TABS.items() for state in states}
+# A person's optional actions, each the dashboard API's own action.
+VERBS = {"use": "promote", "set_aside": "reject", "undo": "rollback", "bring_back": "restore"}
 CANDIDATE_ID = re.compile(r"[0-9A-Za-z_-]{1,64}")
 POOL = re.compile(r"candidate_ledger\.([a-z]{2,3}(?:-[A-Za-z]{2,4})?)\.jsonl")
 LANG = re.compile(r"[a-z]{2,3}(?:-[A-Za-z]{2,4})?")
 MAX_LIMIT = 500
-# Gaps Keep refuses: an earlier character or page chat. Another language's
-# items are used again once the character speaks it.
+# Gaps where putting an item into use is refused: an earlier character or page
+# chat. Another language's items are used again once the character speaks it.
 FINAL_GAPS = ("persona", "chat")
 MAX_EVIDENCE = 40
 _SECRET_SUFFIXES = ("_KEY", "_TOKEN", "_SECRET", "PASSWORD")
@@ -51,6 +53,7 @@ class _Pool:
         self.ledger = candidates.CandidateLedger(runtime / f"candidate_ledger.{lang}.jsonl")
         self.log = evidence.EvidenceLog(runtime / f"evidence.{lang}.jsonl")
         self.policy = promotion.Policy.from_env(env)
+        self.judge = dashboard.Judge.from_env(env, self.policy, access.page_owner(runtime))
         lin = lineage.PersonaLineage(runtime / lineage.FILE_NAME)
         for version, hashes in lin.versions().items():
             evidence.register_persona_lineage(version, hashes)
@@ -157,8 +160,12 @@ def _chat(conv: str) -> dict:
 def _row(cand: dict, live: dict) -> dict:
     history = cand.get("history") or []
     payload = cand.get("payload") or {}
-    return {"id": cand.get("candidate_id", ""), "tab": TAB_OF.get(cand.get("state"), ""),
-            "gap": _gap(cand, live),
+    state = str(cand.get("state") or "")
+    return {"id": cand.get("candidate_id", ""), "tab": TAB_OF.get(state, ""),
+            "state": state, "gap": _gap(cand, live),
+            # Who put it where it is; an observed item has no decider yet.
+            "by": "" if state == candidates.STATE_PROPOSED or not history
+            else dashboard.decided_by(history[-1])["by"],
             "kind": "wording" if cand.get("type") == candidates.TYPE_PAIR else "repeat",
             "said": dashboard._clip(cand.get("reply"), 400),
             "better": dashboard._clip(cand.get("better"), 400),
@@ -195,7 +202,7 @@ def overview(workspace, lang: str = "", tab: str = "", limit: int = 30) -> dict:
         elif name == "in_use":
             chats.add(str((cand.get("scope") or {}).get("conv_id") or ""))
     # Newest change first, so what was just decided is on top.
-    shown = sorted((c for c in rows if c.get("state") == TABS[tab]), key=_order, reverse=True)
+    shown = sorted((c for c in rows if c.get("state") in TABS[tab]), key=_order, reverse=True)
     current = _current(pool.env)
     langs = []
     for code in sorted(set(_pools(pool.runtime)) | {current, pool.lang}):
@@ -211,48 +218,10 @@ def overview(workspace, lang: str = "", tab: str = "", limit: int = 30) -> dict:
 
 # ------------------------------------------------------------- one item ----
 
-def _waiting(pool: _Pool, cand: dict) -> dict:
-    """Why a waiting item has not applied by itself: the promotion rules
-    counted with the policy's own functions, as the terminal trial does."""
-    policy, log = pool.policy, pool.log
-    now = time.time()
-    max_age = policy.max_evidence_age_days * 86400.0
-    counting = [e for e in log.many(cand.get("evidence") or [])
-                if promotion.supports_candidate(e, cand, policy=policy)]
-    supporting = [e for e in counting
-                  if not (max_age > 0 and now - promotion.epoch(e.get("ts")) > max_age)]
-    strong = [e for e in supporting if promotion.anchors(e, cand)]
-    speakers = {str(e.get("speaker_id") or "") for e in supporting} - {""}
-    # As turns._admins: the page chat's sender counts as an admin too.
-    admins = {str(a).strip()[:64] for a in access.identity_from_env(pool.env).admins
-              | access.page_owner(pool.runtime)} - {""}
-    related = promotion.related_events(cand, log.all())
-    against = promotion.counter_evidence(cand, related, now=now, policy=policy)
-    conflicts = promotion.find_conflicts(cand, pool.ledger.all(), policy=policy,
-                                         related_events=related)
-    speakers_ok = not speakers or bool(admins & speakers) or len(speakers) >= policy.min_speakers
-    can_be_strong = evidence.can_be_strong(str(cand.get("type") or ""))
-    if _gap(cand, pool.live):
-        key = "scope"
-    elif not policy.auto_promote:
-        key = "off"
-    elif against:
-        key = "against"
-    elif conflicts:
-        key = "conflict"
-    elif len(strong) < policy.min_strong:
-        key = "strong" if can_be_strong else "person"
-    elif len(supporting) < policy.min_events:
-        key = "events"
-    elif not speakers_ok:
-        key = "speakers"
-    else:
-        key = "ready"
-    return {"key": key, "events": len(supporting), "needEvents": policy.min_events,
-            "strong": len(strong), "needStrong": policy.min_strong, "canBeStrong": can_be_strong,
-            "speakers": len(speakers), "needSpeakers": policy.min_speakers, "speakersOk": speakers_ok,
-            "stale": len(counting) - len(supporting),
-            "maxAgeDays": policy.max_evidence_age_days, "auto": policy.auto_promote}
+def _standing(pool: _Pool, cand: dict) -> dict:
+    """Where an observed item stands, as the Activity view says it."""
+    index = promotion.EvidenceIndex(pool.log.all(), pool.ledger.all())
+    return dashboard.standing(cand, index, pool.policy, pool.judge, time.time())
 
 
 _REASONS = (
@@ -264,21 +233,38 @@ _REASONS = (
 _PLAIN = re.compile(r"local page|operator decision|(promote|reject|rollback|superseded) by operator")
 
 
-def _reason(text, actor: str) -> dict:
-    """A history reason as a key the page translates; the owner's own words
-    from the terminal are kept as typed."""
+def _reason(text, actor: str, decided: dict | None = None) -> dict:
+    """A history reason as a key the page translates; the character's own
+    sentence and the owner's words from the terminal are kept as written."""
+    decided = decided or dashboard.decided_by({"actor": actor, "reason": text})
+    if decided["by"] == "time":
+        return {"key": "expired", "n": decided["days"]}
+    if decided["by"] == "rule":
+        return {"key": f"rule_{decided['why']}", "n": ""}
+    if decided["by"] == "character":
+        return {"key": "said", "n": "", "text": decided["why"]}
     text = str(text or "").strip()
     for pattern, key in _REASONS:
         match = pattern.search(text)
         if match:
             return {"key": key, "n": match.group(1) if match.groups() else ""}
-    if actor == "auto" or not text or _PLAIN.fullmatch(text):
+    if actor == candidates.ACTOR_AUTO or not text or _PLAIN.fullmatch(text):
         return {"key": "", "n": ""}
     return {"key": "note", "n": "", "text": dashboard._clip(text, 200)}
 
 
-def _by(actor) -> str:
-    return {"auto": "auto", ACTOR: "page"}.get(str(actor or ""), "terminal")
+def _by(actor, decided: dict) -> str:
+    """auto, character, rule, time, or for a person: page or terminal."""
+    if decided["by"] in ("character", "rule", "time"):
+        return decided["by"]
+    return {candidates.ACTOR_AUTO: "auto", ACTOR: "page"}.get(str(actor or ""), "terminal")
+
+
+def _step(entry: dict) -> dict:
+    decided = dashboard.decided_by(entry)
+    actor = str(entry.get("actor") or "")
+    return {"state": str(entry.get("state") or ""), "when": _when(entry.get("ts")),
+            "by": _by(actor, decided), "why": _reason(entry.get("reason"), actor, decided)}
 
 
 def _event(ev: dict, cand: dict, pool: _Pool) -> dict:
@@ -295,14 +281,15 @@ def _event(ev: dict, cand: dict, pool: _Pool) -> dict:
 
 
 def _actions(pool: _Pool, cand: dict) -> tuple[list[str], str]:
-    """The page's verbs for this item, and the wording Keep would retire."""
-    legal = dashboard._allowed_actions(str(cand.get("state") or ""))
+    """A person's optional verbs for this item, and the wording putting it
+    into use would retire."""
+    legal = dashboard._allowed_actions(str(cand.get("state") or ""), cand)
     verbs = [verb for verb, action in VERBS.items() if action in legal]
-    # Keeping an item the character would not use changes nothing it says.
+    # Using an item the character would not use changes nothing it says.
     if _gap(cand, pool.live) in FINAL_GAPS:
-        verbs = [verb for verb in verbs if verb != "keep"]
+        verbs = [verb for verb in verbs if verb not in ("use", "bring_back")]
     replaces = ""
-    if "keep" in verbs:
+    if {"use", "bring_back"} & set(verbs):
         rivals = dashboard._active_rivals(cand, pool.ledger.all(), pool.policy)
         if rivals:
             replaces = dashboard._clip(rivals[0].get("better"), 400)
@@ -314,18 +301,26 @@ def _detail(pool: _Pool, cand: dict) -> dict:
     linked = sorted((events[eid] for eid in cand.get("evidence") or [] if eid in events),
                     key=lambda ev: _when(ev.get("ts")))
     verbs, replaces = _actions(pool, cand)
-    history = [{"tab": TAB_OF.get(h.get("state"), ""), "when": _when(h.get("ts")),
-                "by": _by(h.get("actor")), "why": _reason(h.get("reason"), str(h.get("actor") or ""))}
-               for h in cand.get("history") or []]
+    steps = cand.get("history") or []
+    history = [_step(h) for h in steps]
+    review = cand.get("review") or {}
+    if review:
+        # The character's latest look, which changes no state.
+        history.append({"state": "review", "when": _when(review.get("ts")),
+                        "by": "character" if review.get("actor") == candidates.ACTOR_CHARACTER
+                        else "rule", "why": _reason(review.get("reason"), str(review.get("actor") or ""))})
+        history.sort(key=lambda h: h["when"])
     successor = pool.ledger.get(cand.get("superseded_by") or "") if cand.get("superseded_by") else None
     context = (cand.get("payload") or {}).get("context") or []
+    observed = cand.get("state") == candidates.STATE_PROPOSED
     return {**_row(cand, pool.live), "lang": pool.lang,
             "context": [dashboard._clip(line, 300) for line in context if line][:6],
             "events": [_event(ev, cand, pool) for ev in linked[-MAX_EVIDENCE:]],
             "missing": len(cand.get("evidence") or []) - len(linked),
             "history": history, "actions": verbs, "replaces": replaces,
             "replacedBy": dashboard._clip(successor.get("better"), 400) if successor else "",
-            "waiting": _waiting(pool, cand) if cand.get("state") == candidates.STATE_PROPOSED else None}
+            "standing": _standing(pool, cand) if observed else None,
+            "decided": None if observed or not steps else dashboard.decided_by(steps[-1])}
 
 
 def item(workspace, cid: str, lang: str = "") -> dict:
@@ -350,11 +345,15 @@ def _local(pool: _Pool, cid: str, action: str) -> None:
             raise ValueError("learned_busy") from None
         try:
             cand = ledger.get(cid)
-            target = dashboard._ACTIONS.get(action, candidates.STATE_PROMOTED)
-            if cand is None or cand.get("state") not in candidates._ALLOWED_FROM[target]:
+            verb = "promote" if action == "replace" else action
+            if cand is None or verb not in dashboard._allowed_actions(
+                    str(cand.get("state") or ""), cand):
                 raise ValueError("learned_changed")
             ts = datetime.now().isoformat(timespec="seconds")
-            if target == candidates.STATE_PROMOTED:
+            if action == "restore":
+                if not dashboard._restore(pool, cid, ts, REASON):
+                    raise ValueError("learned_changed")
+            elif verb == "promote":
                 if dashboard._promote(pool, cid, action, ts, REASON) is not None:
                     raise ValueError("learned_changed")
             elif not {"reject": ledger.reject, "rollback": ledger.rollback}[action](
@@ -375,11 +374,11 @@ async def decide(workspace, payload: dict) -> dict:
     if cand is None:
         raise ValueError("learned_unknown")
     verbs, replaces = _actions(pool, cand)
-    if verb == "keep" and _gap(cand, pool.live) in FINAL_GAPS:
+    if verb in ("use", "bring_back") and _gap(cand, pool.live) in FINAL_GAPS:
         raise ValueError("learned_scope")
     if verb not in verbs:
         raise ValueError("learned_changed")
-    action = "replace" if verb == "keep" and replaces else VERBS[verb]
+    action = "replace" if verb == "use" and replaces else VERBS[verb]
     # The running character holds its own pool's state, so it decides there.
     remote = None
     if pool.lang == _current(pool.env) and workspace.services.running("agent"):

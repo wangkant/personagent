@@ -35,6 +35,11 @@ PA.strings({
     runtime_log: "Show log",
     runtime_logFailed: "The log could not be read.",
     runtime_seen: "Dismiss",
+    runtime_useTitle: "Model use",
+    runtime_useToday: "Today — requests: {calls}; tokens: {tokens}; cost: {cost}.",
+    runtime_useWeek: "Last 7 days — requests: {calls}; tokens: {tokens}; cost: {cost}.",
+    runtime_useNoCost: "not reported by the provider",
+    runtime_useNone: "No model requests have been recorded yet. The figures are counted on this computer from what the model service reports.",
   },
   zh: {
     runtime_bgTitle: "后台运行",
@@ -71,6 +76,11 @@ PA.strings({
     runtime_log: "查看日志",
     runtime_logFailed: "无法读取日志。",
     runtime_seen: "关闭提示",
+    runtime_useTitle: "模型用量",
+    runtime_useToday: "今日——请求：{calls} 次；Token：{tokens} 个；费用：{cost}。",
+    runtime_useWeek: "近 7 日——请求：{calls} 次；Token：{tokens} 个；费用：{cost}。",
+    runtime_useNoCost: "模型服务未提供",
+    runtime_useNone: "尚无模型请求记录。数据由本机根据模型服务返回的信息统计。",
   },
 });
 (() => {
@@ -236,11 +246,34 @@ PA.strings({
     card.append(actions);
     return card;
   }
+  function spent() {
+    const card = make("div", "card side-card runtime-card");
+    card.append(make("h2", "", PA.t("runtime_useTitle")));
+    const use = info.usage;
+    const box = make("div", "runtime-use");
+    box.id = "runtime-use";
+    if (!use || !use.week || !use.week.calls) {
+      box.append(make("p", "field-note", PA.t("runtime_useNone")));
+      card.append(box);
+      return card;
+    }
+    const locale = PA.lang === "zh" ? "zh-CN" : PA.lang;
+    const count = (n) => new Intl.NumberFormat(locale).format(n || 0);
+    const money = (n) =>
+      n === null || n === undefined
+        ? PA.t("runtime_useNoCost")
+        : new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(n);
+    const line = (key, total) =>
+      make("p", "runtime-line", PA.t(key, { calls: count(total.calls), tokens: count(total.tokens), cost: money(total.cost) }));
+    box.append(line("runtime_useToday", use.today), line("runtime_useWeek", use.week));
+    card.append(box);
+    return card;
+  }
   function render() {
     if (!info) return;
     // The control in use is rebuilt with the rest: give it the focus back.
     const held = root.contains(document.activeElement) ? document.activeElement.id : "";
-    root.replaceChildren(background(), version());
+    root.replaceChildren(background(), version(), spent());
     if (held) document.getElementById(held)?.focus();
   }
   async function load() {

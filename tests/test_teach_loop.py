@@ -153,7 +153,7 @@ async def test_a_correction_then_the_accepted_retry_promotes_the_retry(tmp: Path
     send(a, REPLY, "42")
     await adjudicate(a, matched(a, "42"),
                      dict(CORRECTION, better="that sucks, sorry"))
-    check("b: a later rewrite of the same reply waits for the admin",
+    check("b: a later rewrite of the same reply keeps observing",
           cand(a, "that sucks, sorry")["state"] == "proposed"
           and "conflicting" in held_because(a, "that sucks, sorry")
           and pairs(a) == [(REPLY, RETRY)], str(pairs(a)))
@@ -396,11 +396,11 @@ async def test_the_learned_summary_shows_the_chain(tmp: Path) -> None:
 
     for lang, ask, want in (
             ("en", "Nova what have you learned?",
-             ("0 awaiting a second voice, 0 awaiting the admin",
+             ("0 awaiting a second voice, 0 under my own review",
               "why: alex said it missed, alex accepted the retry, "
               "passed with 2 events, 1 strong")),
             ("zh", "Nova 你学到了什么",
-             ("0 条等第二个人佐证，0 条等管理员处理",
+             ("0 条等第二个人佐证，0 条由我自行判断",
               "原因：alex 说没答对，alex 接受了重答，2 条证据其中 1 条强，通过"))):
         a = make_agent(tmp / lang, lang=lang)
         await complain(a, REJECTION, name="alex")
@@ -717,7 +717,7 @@ async def test_one_reply_has_one_rewrite_across_modes(tmp: Path) -> None:
     await adjudicate(a, matched(a, "42"), dict(CORRECTION, better="oof, rough"))
     send(a, "oof, rough", "42")
     await adjudicate(a, matched(a, "42"), THANKS)
-    check("o: the second rewrite waits for the admin",
+    check("o: the second rewrite is left to the character's judgement",
           pairs(a) == [(REPLY, RETRY)]
           and cand(a, "oof, rough")["state"] == "proposed"
           and "conflicting" in held_because(a, "oof, rough"), str(pairs(a)))
@@ -748,8 +748,13 @@ async def test_the_summary_counts_what_a_person_can_act_on(tmp: Path, monkeypatc
     monkeypatch.setattr(promotion, "decide", spy)
     out = a._handle_memory_command(CONV, "Nova what have you learned?") or ""
     check("p: liked replies and another character's proposals are not counted",
-          "0 awaiting a second voice, 0 awaiting the admin" in out, out)
-    check("p: nothing that cannot promote is decided", decided == [], str(decided))
+          "0 awaiting a second voice, 0 under my own review" in out, out)
+    # The retry alex thanked is a liked reply a person approved: the character
+    # may decide it, so it alone is looked at.
+    liked = [c["candidate_id"] for c in a.candidate_ledger.pending()
+             if c.get("reply") == RETRY]
+    check("p: nothing that cannot promote is decided", decided == liked,
+          str((decided, liked)))
 
 
 async def test_the_summary_names_only_people_in_this_room(tmp: Path) -> None:

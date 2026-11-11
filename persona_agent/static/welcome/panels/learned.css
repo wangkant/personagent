@@ -253,8 +253,22 @@
   color: var(--muted);
   overflow-wrap: anywhere;
 }
+.learned .learned-by {
+  margin-top: 4px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+/* Optional actions sit apart, below the record, never as the item's main point. */
+.learned-optional {
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.learned-optional .field-note {
+  margin: 0 0 4px;
+}
 .learned-actions {
-  margin-top: 14px;
+  margin-top: 6px;
   flex-wrap: wrap;
 }
 .learned-empty {

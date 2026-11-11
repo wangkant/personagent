@@ -8,6 +8,7 @@ import importlib.util
 import json
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
@@ -274,3 +275,41 @@ class Bridge:
 
 def plain_name(*parts: Optional[str]) -> str:
     return next((str(p).strip() for p in parts if p and str(p).strip()), "")
+
+
+def media(kind: str, **fields: Any) -> dict:
+    """A connector `media` segment: something sent that the agent cannot see."""
+    return {"type": "media", "kind": kind, **{k: str(v) for k, v in fields.items() if v}}
+
+
+def has_content(segments: list, bot_id: str) -> bool:
+    """Whether a message holds more than a quote and the bot's own mention."""
+    return any(s["type"] != "reply" and not (s["type"] == "mention" and s.get("user_id") == bot_id)
+               for s in segments)
+
+
+# <@id> and <@!id> are people, <@&id> and <%id> roles, <#id> channels.
+_TAG = re.compile(r"<(@[!&]?|%|#)([0-9A-Za-z]+)>")
+
+
+def tagged_segments(text: str, names: dict[str, str]) -> list[dict]:
+    """Text whose inline tags become mention segments, named from `names`,
+    and readable words, so the model never reads a raw id."""
+    segments: list[dict] = []
+    words = ""
+    at = 0
+    for match in _TAG.finditer(text):
+        words += text[at:match.start()]
+        at = match.end()
+        sigil, ident = match.groups()
+        if sigil in ("@", "@!"):
+            if words:
+                segments.append({"type": "text", "text": words})
+                words = ""
+            segments.append({"type": "mention", "user_id": ident, "name": names.get(ident, "")})
+        else:
+            words += "#channel" if sigil == "#" else "@role"
+    words += text[at:]
+    if words.strip():
+        segments.append({"type": "text", "text": words})
+    return segments

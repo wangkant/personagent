@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import Request
 
-from .. import __version__, home as homes, updates
+from .. import __version__, home as homes, updates, usage
 from ..storage import atomic_write_text
 
 # Error codes this panel raises as ValueError, which the page may show.
@@ -76,7 +76,14 @@ def mount(app, workspace, body) -> None:
             "checkFailed": bool(last.get("failed")),
             "updateKind": kind,
             "lastUpdate": last_update(),
+            "usage": usage.read_summary(usage_file()),
         }
+
+    def usage_file() -> Path:
+        # Beside the memory file, where the character keeps its tally.
+        memory = Path(str(workspace.config().get("MEMORY_FILE") or "memory.json"))
+        memory = memory if memory.is_absolute() else workspace.home / "runtime" / memory
+        return memory.with_name(usage.USAGE_FILE)
 
     @app.get("/api/runtime")
     async def runtime():

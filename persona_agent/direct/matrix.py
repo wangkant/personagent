@@ -21,7 +21,7 @@ from urllib.parse import quote, unquote, urlsplit
 import httpx
 
 from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep,
-                   plain_name, raw_id, split_text)
+                   has_content, media, plain_name, raw_id, split_text)
 from ..storage import atomic_write_text
 
 logger = logging.getLogger("personagent.direct.matrix")
@@ -200,6 +200,20 @@ def media_note(msgtype: str, content: dict) -> str:
     if msgtype == "m.file":
         return f"(sent a file: {name})"
     return f"(sent a {msgtype or 'message'})"
+
+
+def media_segment(msgtype: str, content: dict) -> dict | None:
+    """The media segment for a message the agent cannot see, or None."""
+    name = str(content.get("filename") or content.get("body") or "").strip()
+    if msgtype == "m.audio":
+        return media("voice") if "org.matrix.msc3245.voice" in content else media("file", name=name)
+    if msgtype == "m.video":
+        return media("video")
+    if msgtype == "m.file":
+        return media("file", name=name)
+    if msgtype == "m.image":
+        return media("photo")
+    return None
 
 
 def _caption(content: dict) -> str:
@@ -556,14 +570,17 @@ class Matrix(Platform):
             text = body.strip()
         elif msgtype == "m.image":
             image = await self._image(content)
-            segments.append(image or {"type": "text", "text": media_note(msgtype, content)})
+            segments.append(image or media("photo"))
             if _caption(content):
                 segments.append({"type": "text", "text": _caption(content)})
             text = plain_text(kind, content)
         else:
             text = plain_text(kind, content)
-            segments.append({"type": "text", "text": text})
-        if not any(s["type"] in ("text", "image", "emoji") for s in segments):
+            part = media_segment(msgtype, content)
+            segments.append(part or {"type": "text", "text": text})
+            if part and _caption(content):
+                segments.append({"type": "text", "text": _caption(content)})
+        if not has_content(segments, self.bot_id):
             return None
         return {"conversation_type": "dm" if dm else "group",
                 **({} if dm else {"conversation_id": room_id}),

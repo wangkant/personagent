@@ -169,6 +169,20 @@ def test_an_empty_key_env_is_refused_first_in_the_chosen_language(tmp_path, monk
     check("nothing written", not fresh.exists() or not any(fresh.iterdir()))
 
 
+def test_memory_help_lists_its_four_commands(home, capsys) -> None:
+    from persona_agent import cli
+
+    with pytest.raises(SystemExit) as stop:
+        cli.main(["memory", "--help"])
+    out = capsys.readouterr().out
+    check("help exits 0", stop.value.code == 0)
+    check("usage names the command", out.startswith("usage: personagent memory"), out)
+    for name in ("list", "removed", "forget", "restore"):
+        check(f"lists {name}", f"    {name} " in out, out)
+    check("the top-level list names it", "memory" in cli._usage()
+          and "look at what it remembers" in cli._usage())
+
+
 # ---- T9: the demo's ledger line
 
 def test_each_ledger_verb_is_a_whole_sentence() -> None:

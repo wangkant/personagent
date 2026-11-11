@@ -46,9 +46,11 @@ from pathlib import Path
 import httpx
 
 from . import langs
-from persona_agent import __version__, channels, paths
+from persona_agent import __version__, candidates, channels, paths, promotion
+from persona_agent.access import ADMIN_MODE
 from persona_agent.agent import Agent
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL, env_str
+from persona_agent.decision import is_pass_sentinel
 from persona_agent.endpoints import chat_completions_url
 from persona_agent.home import load_env
 from persona_agent.promotion import Policy
@@ -59,7 +61,8 @@ from persona_agent.transport import SendResult
 EVAL_DATA = paths.seed_file("evals")
 SUITES = ("speak", "persona", "learning")
 JUDGED_SUITES = ("persona", "learning")
-MODES = ("judge", "followup", "called")
+MODES = ("judge", "followup", "called", ADMIN_MODE, "proactive")
+CALLED_MODES = ("called", ADMIN_MODE)
 LABELS = ("speak", "silent")
 BOT = "<bot-name>"
 DEFAULT_NAMES = {"en": "Nova", "zh": "小夏"}
@@ -71,7 +74,9 @@ POLICY_NOTE = (
     "one of them strong: a correction with a better line from the person the "
     "reply was for, or a retry that person accepted. This eval runs the "
     "automatic policy as configured and promotes nothing itself; under a "
-    "stricter policy than the default, every case is expected to be held.")
+    "stricter policy than the default, every case is expected to be held. "
+    "Holds no further reaction can clear are the character's own decision; "
+    "`character_decides` marks a held item that reached one.")
 NOISE_NOTE = (
     "Without a promotion the probe prompt is unchanged, so flips in the "
     "not_promoted row are sampling noise.")
@@ -102,9 +107,7 @@ def strip_pass_sentinel(reply: str) -> str:
     """The model's PASS sentinel as an empty reply: it means "stay quiet", and
     a harness calling _think directly must not grade or learn from it."""
     reply = (reply or "").strip()
-    if re.match(r"PASS\b", reply, re.IGNORECASE):
-        return ""
-    return reply
+    return "" if is_pass_sentinel(reply) else reply
 
 
 # ---------------------------------------------------------------------------
@@ -136,9 +139,12 @@ def _check_speak(c: dict) -> None:
     _need(c, _is_lines(c.get("history")), "history must be 'name: text' lines")
     _need(c, _is_line(c.get("latest")) and _speaker(c["latest"]) != BOT,
           "latest must be a member's 'name: text' line")
-    # A line naming the bot is addressed, and the live turn would be called.
-    _need(c, (BOT in c["latest"]) == (c["mode"] == "called"),
-          "the latest line names the bot exactly when the mode is called")
+    # A line naming the bot is addressed: a called turn, or the owner's.
+    _need(c, (BOT in c["latest"]) == (c["mode"] in CALLED_MODES),
+          "the latest line names the bot exactly when the mode is called or "
+          "owner (never in judge, followup or proactive)")
+    if c["mode"] == "owner":
+        _need(c, c["label"] == "speak", "an owner case calls the bot: label speak")
     if c["mode"] == "followup":
         _need(c, any(_speaker(ln) == BOT for ln in c["history"]),
               "a followup case needs the bot's own line in its history")
@@ -158,14 +164,19 @@ def _check_persona(c: dict) -> None:
 
 
 def _check_learning(c: dict) -> None:
-    for key in ("person", "reply", "correction", "acceptance", "target"):
+    for key in ("person", "reply", "correction", "target"):
         _need(c, isinstance(c.get(key), str) and bool(c[key].strip()),
               f"{key} is required")
+    # Without one, the character decides alone once the fix window passed.
+    acceptance = c.get("acceptance")
+    _need(c, acceptance is None or (isinstance(acceptance, str)
+                                    and bool(acceptance.strip())),
+          "acceptance, when given, is a line")
     _need(c, _is_lines(c.get("context")) and bool(c["context"]),
           "context must be non-empty 'name: text' lines")
     _need(c, _speaker(c["context"][-1]) == c["person"],
           "the reply answers the person's own line")
-    _need(c, BOT in c["correction"] and BOT in c["acceptance"],
+    _need(c, BOT in c["correction"] and (acceptance is None or BOT in acceptance),
           "the correction and the acceptance are addressed to the bot")
     reactor = c.get("reactor")
     _need(c, reactor is None or (isinstance(reactor, str) and reactor.strip()
@@ -368,7 +379,7 @@ def sent_text(agent, raw: str) -> str:
     if final is None:
         return ""
     text = (final[0] or "").strip()
-    return "" if re.match(r"PASS\b", text, re.IGNORECASE) else text
+    return "" if is_pass_sentinel(text) else text
 
 
 async def group_turn(agent, conv: str, lines: list[str], mode: str, name: str,
@@ -376,7 +387,11 @@ async def group_turn(agent, conv: str, lines: list[str], mode: str, name: str,
     latest = seed_group(agent, conv, lines, name)
     agent.last_reply_at[conv] = (time.time() - last_spoke_s
                                  if last_spoke_s is not None else 0.0)
-    raw, intent, _mem = await agent._think(conv, mode, latest)
+    if mode == ADMIN_MODE:
+        agent.admin_ids.add(NAME_UID[_split(lines[-1], name)[0]])
+    # An opener answers no line: the room has gone quiet (proactive.py).
+    raw, intent, _mem = await agent._think(
+        conv, mode, "" if mode == "proactive" else latest)
     return raw or "", intent
 
 
@@ -592,7 +607,7 @@ def speak_metrics(rows: list[dict]) -> dict:
            for mode in MODES if any(r["mode"] == mode for r in rows)}
     out["overall"] = block(rows)
     # The same cases scored for a bot that answers exactly when it is named.
-    out["name_only"] = block([{**r, "spoke": r["mode"] == "called"} for r in rows])
+    out["name_only"] = block([{**r, "spoke": r["mode"] in CALLED_MODES} for r in rows])
     return out
 
 
@@ -867,6 +882,19 @@ async def _settle(agent) -> None:
         await asyncio.gather(*list(agent._bg_tasks), return_exceptions=True)
 
 
+async def _after_fix_window(agent) -> None:
+    """The adoption sweep as it runs once REACT_FIX_WINDOW_S has passed with
+    nobody confirming: the character judges a lone correction itself."""
+    await _settle(agent)
+    policy = agent.promotion_policy
+    agent.promotion_policy = dataclasses.replace(policy, fix_window_s=0.0)
+    try:
+        await agent._adoption_tick()
+        await _settle(agent)
+    finally:
+        agent.promotion_policy = policy
+
+
 async def learning_scenario(agent, judge: Judge, case: dict, name: str) -> dict:
     conv = f"eval-learn-{case['id']}"
     person = case["person"]
@@ -876,6 +904,9 @@ async def learning_scenario(agent, judge: Judge, case: dict, name: str) -> dict:
     ruid = NAME_UID[reactor]
     row = {"id": case["id"], "target": case["target"],
            "expect": expected_outcome(case.get("expect"), agent.promotion_policy)}
+    if not case.get("acceptance") and not agent._judging_on() and row["expect"]:
+        # Nobody confirms it, so only the character's own judgement could.
+        row["expect"] = "held"
     row["before"] = await _probe(agent, judge, case, conv, name)
 
     # The reply being corrected, sent to the person.
@@ -903,8 +934,14 @@ async def learning_scenario(agent, judge: Judge, case: dict, name: str) -> dict:
     if retry:
         _record_sent(agent, conv, retry, intent=intent, uid=ruid, person=reactor,
                      mid=f"{conv}-2")
-    acceptance = _fill(case["acceptance"], name)
-    row["acceptance"] = await _react(agent, conv, reactor, ruid, acceptance)
+    if case.get("acceptance"):
+        acceptance = _fill(case["acceptance"], name)
+        row["acceptance"] = await _react(agent, conv, reactor, ruid, acceptance)
+        # What the acceptance queued for the character is part of the outcome.
+        await _settle(agent)
+    else:
+        row["acceptance"] = None
+        await _after_fix_window(agent)
 
     row["candidates"] = []
     for cand in agent.candidate_ledger.all():
@@ -912,8 +949,15 @@ async def learning_scenario(agent, judge: Judge, case: dict, name: str) -> dict:
                 "reply": cand.get("reply"), "better": cand.get("better"),
                 "lesson": (cand.get("payload") or {}).get("lesson", "")}
         if cand.get("state") == "proposed":
-            item["held_because"] = agent._decide_promotion(
-                cand["candidate_id"]).reason
+            decision = agent._decide_promotion(cand["candidate_id"])
+            item["held_because"] = decision.reason
+            item["held_gate"] = decision.gate
+            item["character_decides"] = promotion.needs_character(decision, cand)
+        if (cand.get("review") or {}).get("reason"):
+            item["observing_because"] = cand["review"]["reason"]
+        last = (cand.get("history") or [{}])[-1]
+        if last.get("actor") == candidates.ACTOR_CHARACTER:
+            item["decided_by_character"] = last.get("reason", "")
         row["candidates"].append(item)
     row["promoted"] = any(c["state"] == "promoted" for c in row["candidates"])
     if row["expect"]:

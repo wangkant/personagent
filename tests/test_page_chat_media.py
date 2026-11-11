@@ -330,11 +330,9 @@ def test_a_delivery_during_forgetting_is_not_counted_as_shown(monkeypatch, works
         asked, release = asyncio.Event(), asyncio.Event()
 
         async def activity_call(method, path, **kwargs):
-            if method == "GET":
-                asked.set()
-                await release.wait()
-                return {"memories": [], "core_note": ""}
-            return {}
+            asked.set()
+            await release.wait()
+            return {"ok": True, "forgotten": 0}
 
         monkeypatch.setattr(workspace, "_activity_call", activity_call)
         old = workspace._page_key()

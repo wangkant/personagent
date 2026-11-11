@@ -59,6 +59,13 @@ SPEC = Spec(
     # and bare 전 "before", so those count only with a particle.
     first_person=(rf"(?<![{_H}])(?:나(?:는|도|를|랑|한테|에게|만)?|내(?:가|꺼|거)?|난"
                   rf"|저(?:는|도|를|랑|한테|에게|만)|제(?:가)?)(?![{_H}])"),
+    self_id=r"(?<![가-힣])(?:저는|나는|제가|내가|전|난)(?![가-힣])",
+    made_by=r"(?:이|가|에서)\s*(?:만든|개발한|훈련시킨|학습시킨)",
+    name_end=r"\s*(?:입니다|이에요|예요|이야|야|이고|고|이라고|라고|이라는|라는)",
+    leak_labels=r"입력|화자|발화자|의도|판단|결정|스타일|분석",
+    assistant_tells=(r"죄송(?:합니다|하지만|해요|하게도)[^.\n]{0,30}"
+                     r"(?:도와\s?(?:드릴|줄)|답변(?:해\s?드릴|드릴|할)|제공(?:해\s?드릴|할)|응답할|처리할)\s?수\s?없"
+                     r"|도움이\s?(?:되었으면|됐으면|되셨으면|되면|되길|되기를)\s?(?:좋겠습니다|좋겠어요|바랍니다|바라요)"),
     replies={
         "remember_what": ("뭘 기억하라고? 아무 말도 안 했잖아", "말을 해야 기억하지",
                           "뭐를 기억해"),
@@ -80,7 +87,7 @@ SPEC = Spec(
     # 의 and labels, so no particle has to agree with a name or a number.
     learned_text={
         "head": ("기억 {memories}개, 배운 답변 {examples}개, 고친 것 {fixes}개, "
-                 "두 번째 확인 대기 {voice}개, 관리자 확인 대기 {admin}개"),
+                 "두 번째 확인 대기 {voice}개, 스스로 판단 중 {admin}개"),
         "score": ", 최근 자체 평가 {score}/5",
         "pair": "원래: {was}, 고친 거: {better}",
         "someone_else": "다른 채팅방의 누군가",
@@ -91,7 +98,8 @@ SPEC = Spec(
         "corrected": "{who}의 지적으로 수정",
         "missed": "{who}의 틀렸다는 말",
         "liked": "{who}의 좋다는 말",
-        "by_admin": "관리자 승인",
+        "by_me": "스스로 결정",
+        "by_person": "수동 적용",
         "passed": "근거 {events}개 중 강한 근거 {strong}개, 통과",
         "why": "이유: {steps}",
         "sep": ", ",

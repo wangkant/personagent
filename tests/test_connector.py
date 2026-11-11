@@ -102,7 +102,8 @@ def test_synthesize_mention_other_user() -> None:
     }
     p = synthesize_onebot_payload(event, QQ_BOT_ID)
     check("other mention: prefixed qq",
-          p["message"][0] == {"type": "at", "data": {"qq": "discord:77"}}, repr(p["message"]))
+          p["message"][0] == {"type": "at", "data": {"qq": "discord:77", "name": "Carl"}},
+          repr(p["message"]))
     check("other mention: no message_id key", "message_id" not in p, repr(p.keys()))
 
 
@@ -229,7 +230,7 @@ def test_a_native_platform_mints_the_ids_onebot_would() -> None:
     check("native: the group id is bare",
           native["group_id"] == "220000", repr(native["group_id"]))
     check("native: a third-party mention is bare",
-          native["message"][0] == {"type": "at", "data": {"qq": "10002"}},
+          native["message"][0] == {"type": "at", "data": {"qq": "10002", "name": "Bob"}},
           repr(native["message"][0]))
     # Not merely "unprefixed" — the conversation must not be folded in either.
     # The dedupe ring already holds NapCat's bare mids, so a namespaced one
@@ -531,6 +532,13 @@ def test_plugin_reply_id_strip() -> None:
 # ---------------------------------------------------------------------------
 # Integration: real Agent + handle_event round-trip
 # ---------------------------------------------------------------------------
+
+def _said(turns) -> list:
+    """Turns as role and content; their times and numbers are checked in
+    tests/test_memory_recent.py."""
+    return [{k: v for k, v in dict(m).items() if k in ("role", "content")}
+            for m in turns or []]
+
 
 def make_agent(tmp: Path, persona: str = "test persona") -> Agent:
     """`persona` is a parameter so a test can hand the ctor a document with a
@@ -1176,7 +1184,7 @@ async def test_a_proactive_turn_keeps_its_cue_transient(tmp: Path) -> None:
 
     async def fake_chat_dm(history, is_admin=False, pkey="",
                                 proactive=False, proactive_cue=""):
-        seen.append(([dict(m) for m in history], proactive, proactive_cue))
+        seen.append((_said(history), proactive, proactive_cue))
         return "hey, been a while", ""
 
     async def fake_send(user_id, message):
@@ -1973,6 +1981,32 @@ async def test_connector_conv_eviction(tmp: Path) -> None:
     check("conv-evict: QQ group state untouched", "123456" in agent.buffers)
 
 
+async def test_an_evicted_conversation_is_written_to_disk_first(tmp: Path) -> None:
+    """Eviction frees memory, not the conversation: its recent lines and the
+    reader's turns reach recent.json before they are dropped."""
+    from persona_agent.transport import _MAX_CONNECTOR_CONVS
+    agent = make_agent(tmp)
+    agent._append_buffer("tg:0", "x", "the room's last words", "9")
+    agent._wake("private:tg:7")
+    agent.dm_history["tg:7"] = [{"role": "user", "content": "hello", "t": 1.0e9 + 9e8,
+                                 "seq": agent._next_seq("private:tg:7")}]
+    agent._recent_dirty.add("private:tg:7")
+    agent._recent_flushed_at = time.monotonic()  # the throttle would hold it back
+    agent._touch_connector_conv("tg:0")
+    agent._touch_connector_conv("private:tg:7")
+    for i in range(1, _MAX_CONNECTOR_CONVS + 1):
+        agent._touch_connector_conv(f"tg:{i}")
+    check("conv-evict-disk: both evicted",
+          "tg:0" not in agent.buffers and "tg:7" not in agent.dm_history)
+    saved = json.loads((tmp / "recent.json").read_text(encoding="utf-8"))["convs"]
+    check("conv-evict-disk: the room's lines were written",
+          [ln["text"] for ln in saved["tg:0"]["lines"]] == ["the room's last words"],
+          repr(saved.get("tg:0")))
+    check("conv-evict-disk: the reader's turns were written",
+          [t["content"] for t in saved["private:tg:7"]["dm"]] == ["hello"],
+          repr(saved.get("private:tg:7")))
+
+
 async def test_connector_inflight_is_pinned(tmp: Path) -> None:
     from persona_agent.transport import _MAX_CONNECTOR_CONVS
 
@@ -2227,7 +2261,7 @@ async def test_dm_send_commit_serialized(tmp: Path) -> None:
     release_send.set()
     await task
     check("private ordering: commit completed under ordered path",
-          agent.dm_history["42"][-1]
+          _said(agent.dm_history["42"])[-1]
           == {"role": "assistant", "content": "first reply"},
           repr(agent.dm_history["42"]))
 
@@ -2988,11 +3022,11 @@ async def test_a_twice_unrenderable_dm_turn_stays_empty(tmp: Path) -> None:
     check("no third call", len(calls) == 2, repr(len(calls)))
 
 
-async def test_a_refused_dm_draft_is_not_retried(tmp: Path) -> None:
-    """The retry answers an accident, never a refusal. A guard that dropped
-    the draft whole decided on the words the model produced; asking again
-    pays twice for the same no, and a message that reliably induces the
-    refused shape would double the provider spend on every turn."""
+async def test_a_refused_dm_draft_is_retried_once_in_a_while(tmp: Path) -> None:
+    """A refused draft would leave the reader in silence, so it is written
+    once more with the reason. A message that reliably induces the refused
+    shape must not double the provider spend on every turn: the same reader
+    gets that second draft only once in a while."""
     agent = make_agent(tmp)
     agent._decide_and_search = _no_search
     calls: list = []
@@ -3004,10 +3038,14 @@ async def test_a_refused_dm_draft_is_not_retried(tmp: Path) -> None:
 
     agent._call_llm = fake_call
     result = await agent.handle_event(_dm_turn_event(9312))
-    check("a refused draft costs exactly one call", len(calls) == 1,
+    check("a refused draft is written once more, with the reason", len(calls) == 2
+          and "vendor_self_id" in calls[1] and "vendor_self_id" not in calls[0],
           repr(len(calls)))
-    check("...and the turn still ships nothing",
+    check("...and two refusals still ship nothing",
           result["handled"] is False and not result["replies"], repr(result))
+    await agent.handle_event(_dm_turn_event(9313))
+    check("the same reader's next refused draft costs exactly one call",
+          len(calls) == 3, repr(len(calls)))
 
 
 async def test_the_retry_answers_from_the_first_drafts_research(tmp: Path) -> None:
@@ -3230,7 +3268,7 @@ async def test_a_failed_dm_turn_keeps_the_readers_words(tmp: Path) -> None:
 
     async def flaky_chat(history, is_admin=False, pkey="", proactive=False,
                          proactive_cue=""):
-        seen.append([dict(m) for m in history])
+        seen.append(_said(history))
         if len(seen) == 1:
             raise RuntimeError("provider blip")
         return "you said your cat is called Momo", ""
@@ -3258,7 +3296,7 @@ async def test_a_failed_dm_turn_keeps_the_readers_words(tmp: Path) -> None:
           repr(last))
     check("next turn: no two user turns in a row", _alternates(seen[1]),
           repr(seen[1]))
-    stored = agent.dm_history["42"]
+    stored = _said(agent.dm_history["42"])
     check("next turn: the merged turn and the reply are committed",
           stored[-2:] == [
               {"role": "user",
@@ -3303,7 +3341,7 @@ async def test_a_half_delivered_dm_commits_what_the_reader_saw(
         "42", _dm_payload("tell me three things", "dm-half-1"), is_admin=False)
     check("partial DM: the return value is unchanged", handled is True,
           repr(handled))
-    stored = agent.dm_history.get("42") or []
+    stored = _said(agent.dm_history.get("42"))
     check("partial DM: the reader's turn and the delivered prefix are kept",
           stored[-2:] == [
               {"role": "user", "content": "tell me three things"},
@@ -3320,7 +3358,7 @@ async def test_a_half_delivered_dm_commits_what_the_reader_saw(
 
 async def test_a_passed_dm_message_reaches_the_next_prompt(tmp: Path) -> None:
     """A PASS sends nothing, and the reader's words went with it. They are
-    kept for the next turn, at most the last three of them, and a proactive
+    kept for the next turn, as many as fit a small budget, and a proactive
     turn neither reads nor spends them: its text is the caller's cue."""
     agent = make_agent(tmp)
     seen: list = []
@@ -3328,7 +3366,7 @@ async def test_a_passed_dm_message_reaches_the_next_prompt(tmp: Path) -> None:
 
     async def chat(history, is_admin=False, pkey="", proactive=False,
                    proactive_cue=""):
-        seen.append([dict(m) for m in history])
+        seen.append(_said(history))
         return replies.pop(0), ""
 
     async def ok_send(user_id, text):
@@ -3363,8 +3401,8 @@ async def test_a_passed_dm_message_reaches_the_next_prompt(tmp: Path) -> None:
     for i, word in enumerate(("one", "two", "three", "four", "five")):
         await agent._handle_dm(
             "42", _dm_payload(word, f"dm-pass-cap-{i}"), is_admin=False)
-    check("PASS: only the last three unanswered messages are kept",
-          seen[-1][-1] == {"role": "user", "content": "two\nthree\nfour\nfive"},
+    check("PASS: short unanswered messages are all kept",
+          seen[-1][-1] == {"role": "user", "content": "one\ntwo\nthree\nfour\nfive"},
           repr(seen[-1][-1]))
     check("PASS: the stored history still alternates",
           _alternates(agent.dm_history["42"]),

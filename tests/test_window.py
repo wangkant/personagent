@@ -632,7 +632,7 @@ def test_the_page_names_its_chat_as_the_owners(tmp_path) -> None:
         workspace.close()
 
 
-async def test_forgetting_a_chat_forgets_each_note_then_starts_a_new_one(tmp_path, monkeypatch) -> None:
+async def test_forgetting_a_chat_asks_the_service_once_then_starts_a_new_one(tmp_path, monkeypatch) -> None:
     workspace = welcome.Workspace(tmp_path)
     before = workspace._conversation
     chat = f"private:browser:{before}"
@@ -640,11 +640,7 @@ async def test_forgetting_a_chat_forgets_each_note_then_starts_a_new_one(tmp_pat
 
     async def call(method, path, **options):
         calls.append((method, path, options.get("json") or options.get("params")))
-        if method == "GET":
-            return {"memories": [{"conv": chat, "id": "n1"}, {"conv": "room", "id": "n2"}], "core_note": "likes tea"}
-        if options["json"]["note"] == "n2":
-            raise ValueError("activity_changed")  # someone forgot it first
-        return {"ok": True}
+        return {"ok": True, "forgotten": 3}
 
     monkeypatch.setattr(workspace, "_activity_call", call)
     monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
@@ -652,7 +648,7 @@ async def test_forgetting_a_chat_forgets_each_note_then_starts_a_new_one(tmp_pat
         done = await workspace.forget_chat()
     finally:
         workspace.close()
-    assert done == {"ok": True, "forgotten": 2}
-    assert [c[2] for c in calls[1:]] == [{"conv": chat, "note": "n1"}, {"conv": "room", "note": "n2"},
-                                         {"conv": chat, "note": ""}]
+    # Only this chat is forgotten; what other chats remember is kept.
+    assert done == {"ok": True, "forgotten": 3}
+    assert calls == [("POST", "/api/dashboard/memory/forget_chat", {"conv": chat})]
     assert workspace._conversation != before and workspace._history == []

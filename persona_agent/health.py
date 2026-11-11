@@ -108,20 +108,64 @@ def check_dm_chat():
     return True, (f"{model} -> {txt[:20]!r}" if txt else f"{model} responded")
 
 
-def check_primary_chat_tools():
-    """The function-calling path the web-search decision uses, on the
-    endpoint the agent sends that model to."""
-    model = os.getenv("LLM_FALLBACK_MODEL") or os.getenv("LLM_MODEL") or DEFAULT_LLM_MODEL
+def _main_model() -> str:
+    # As in the agent, an explicit blank LLM_MODEL stays blank.
+    return os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
+
+
+def _judge_model() -> str:
+    """LLM_JUDGE_MODEL as settings.py resolves it."""
+    return (os.getenv("LLM_JUDGE_MODEL", "").strip()
+            or os.getenv("LLM_FALLBACK_MODEL", "").strip() or _main_model())
+
+
+def _say_ok(model: str) -> tuple:
+    """A few-token answer from `model` where the agent sends it."""
     base, key = _llm_endpoint(model)
-    if not key:
+    if not (key and model):
         return None, "not configured"
-    payload = {"model": model, "max_tokens": 30, "messages": [{"role": "user", "content": "what is the weather today"}],
+    payload = {"model": model, "max_tokens": 16,
+               "messages": [{"role": "user", "content": "reply with: ok"}]}
+    url = chat_completions_url(base)
+    _no_hidden_reasoning(payload, url)
+    r = _post_json(url, payload, {"Authorization": f"Bearer {key}"})
+    txt = ((r["choices"][0]["message"] or {}).get("content") or "").strip()
+    return True, (f"{model} -> {txt[:20]!r}" if txt else f"{model} responded")
+
+
+def check_group_replies():
+    """LLM_MODEL, which writes every group reply."""
+    return _say_ok(_main_model())
+
+
+def check_search_decision():
+    """The judge model the web-search decision goes to, asked for the tool:
+    one that answers without a tool call means search never runs."""
+    model = _judge_model()
+    base, key = _llm_endpoint(model)
+    if not (key and model):
+        return None, "not configured"
+    url = chat_completions_url(base)
+    payload = {"model": model, "max_tokens": 60, "temperature": 0.1,
+               "messages": [{"role": "user", "content": "what is the weather today"}],
                "tools": [{"type": "function", "function": {"name": "web_search",
                           "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}}}],
-               "tool_choice": "auto"}
-    r = _post_json(chat_completions_url(base), payload, {"Authorization": f"Bearer {key}"})
-    has_tools = "tool_calls" in (r["choices"][0]["message"] or {})
-    return True, f"{model} function-calling {'available' if has_tools else 'reachable'}"
+               "tool_choice": {"type": "function", "function": {"name": "web_search"}}}
+    from .llm import known_to_take_thinking, thinking_off
+    thinking_off(payload, url, known_to_take_thinking(url, model))
+    r = _post_json(url, payload, {"Authorization": f"Bearer {key}"})
+    if not (r["choices"][0]["message"] or {}).get("tool_calls"):
+        return False, f"{model} did not call the search tool, so web search will not run"
+    return True, f"{model} function-calling available"
+
+
+def check_reaction_judge():
+    """REACT_MODEL (blank = the judge model), which reads people's reactions."""
+    from .config_env import env_bool
+
+    if not env_bool("REACT_LEARN_ENABLED", True):
+        return None, "turned off"
+    return _say_ok(os.getenv("REACT_MODEL", "").strip() or _judge_model())
 
 
 def check_vision():
@@ -158,8 +202,13 @@ def eval_endpoint(model: str, *, vision_key: str, vision_base: str,
 
 
 def check_eval():
-    """Self-eval model, through the same routing the agent uses."""
-    model = os.getenv("EVAL_MODEL", "")
+    """Self-eval model, resolved and routed as the agent does."""
+    from .config_env import env_bool
+
+    if not env_bool("EVAL_ENABLED", False):
+        return None, "turned off"
+    model = (os.getenv("EVAL_MODEL", "").strip()
+             or os.getenv("LLM_FALLBACK_MODEL", "").strip() or _main_model())
     if not model:
         return None, "not configured"
     base, key = _llm_endpoint(model)
@@ -253,7 +302,9 @@ def check_ledger_sizes():
 CHECKS = [
     ("Ledger sizes",            check_ledger_sizes,     False),
     ("DM chat",                 check_dm_chat,            True),
-    ("Primary chat (/v1 tools)", check_primary_chat_tools, True),
+    ("Group replies",           check_group_replies,      True),
+    ("Web search decision",     check_search_decision,    False),
+    ("Reaction judge",          check_reaction_judge,     False),
     ("Vision",                  check_vision,             False),
     ("Eval",                    check_eval,               False),
     ("Embeddings",              check_embeddings,         False),

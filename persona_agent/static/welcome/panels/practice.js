@@ -52,6 +52,7 @@ PA.strings({
     practice_why_offered: "Earlier learning used for this reply:",
     practice_why_ledger_none: "No member has responded to this reply yet. Select Reply to correct it.",
     practice_why_ledger: "Responses to this reply:",
+    practice_held_character: "reactions alone cannot settle this item, so the character decides it itself",
     practice_learned_open: "Show what was learned",
     practice_learned_hide: "Hide what was learned",
     practice_learned_busy: "Loading…",
@@ -127,6 +128,7 @@ PA.strings({
     practice_why_offered: "此回复使用了以下已学内容：",
     practice_why_ledger_none: "尚无成员对此回复作出反应。点击「回复」即可纠正此回复。",
     practice_why_ledger: "成员对此回复的反应：",
+    practice_held_character: "仅凭反应无法确定此条内容，由角色自行判断",
     practice_learned_open: "查看已学内容",
     practice_learned_hide: "收起已学内容",
     practice_learned_busy: "正在加载…",
@@ -684,7 +686,8 @@ PA.strings({
   function candidateItem(item) {
     const said = item.better ? `“${item.reply}” → “${item.better}”` : `“${item.reply}”`;
     const node = el("li", item.inUse ? "in-use" : "", `${item.kind}: ${said}`);
-    node.append(el("span", "practice-state", ` · ${item.state}${item.why ? ` (${item.why})` : ""}`));
+    const why = item.whyKey ? PA.t(item.whyKey) : item.why;
+    node.append(el("span", "practice-state", ` · ${item.state}${why ? ` (${why})` : ""}`));
     return node;
   }
   async function toggleWhy(entry, row, node) {

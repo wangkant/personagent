@@ -184,6 +184,31 @@ def event_prefiltered(event: dict) -> bool:
     return value is not False and value != 0
 
 
+def _seg_str(seg: dict, key: str, limit: int) -> str:
+    value = seg.get(key)
+    return value.strip()[:limit] if isinstance(value, str) else ""
+
+
+def _media_part(seg: dict) -> Optional[dict]:
+    """A `media` segment as the OneBot part QQ sends for the same thing, so
+    the model reads it as something it cannot see, never as typed words."""
+    kind = seg.get("kind")
+    if kind == "voice":
+        transcript = _seg_str(seg, "transcript", 500)
+        return {"type": "record", "data": {"transcript": transcript} if transcript else {}}
+    if kind == "video":
+        return {"type": "video", "data": {}}
+    if kind == "file":
+        name = _seg_str(seg, "name", 128)
+        return {"type": "file", "data": {"name": name} if name else {}}
+    if kind == "photo":
+        return {"type": "image", "data": {}}
+    if kind == "sticker":
+        emoji = _seg_str(seg, "emoji", 32)
+        return {"type": "image", "data": {"sticker": True, **({"emoji": emoji} if emoji else {})}}
+    return None
+
+
 def synthesize_onebot_payload(
         event: dict, self_mention_id: str, native_platforms=()) -> dict:
     """A neutral inbound event (docs/connectors.md) as the OneBot-v11 payload,
@@ -222,8 +247,11 @@ def synthesize_onebot_payload(
                 message.append({"type": "at", "data": {"qq": self_mention_id}})
                 has_self_mention = True
             else:
-                message.append(
-                    {"type": "at", "data": {"qq": _ns(platform, native, target)}})
+                at = {"qq": _ns(platform, native, target)}
+                name = _seg_str(seg, "name", 64)
+                if name:
+                    at["name"] = name
+                message.append({"type": "at", "data": at})
         elif t == "image":
             url = str(seg.get("url") or "")
             b64 = str(seg.get("b64") or "")
@@ -243,6 +271,13 @@ def synthesize_onebot_payload(
                 if isinstance(value, (str, int)) and str(value).strip():
                     face[key] = str(value).strip()[:64]
             message.append({"type": "face", "data": face})
+        elif t == "media":
+            part = _media_part(seg)
+            if part:
+                message.append(part)
+        elif t == "forward":
+            message.append({"type": "forwarded_from",
+                            "data": {"name": _seg_str(seg, "name", 64)}})
         elif t == "reply":
             reply_id = seg.get("message_id", seg.get("id"))
             data = {}

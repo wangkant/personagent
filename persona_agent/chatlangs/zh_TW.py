@@ -36,6 +36,12 @@ SPEC = Spec(
                           "全部記憶", "所有記憶", "全部记忆", "所有记忆"}),
     # en's 我 excludes 们 only; here 我們 is not the saver either.
     first_person=FIRST_PERSON.replace("我(?!们)", "我(?![們们])"),
+    made_by=r"開發|研發|訓練|打造|出品|推出|家的",
+    leak_labels=r"輸入|發言人|發言者|意圖|決策|風格|分析|判斷",
+    assistant_tells=(r"(?:抱歉|對不起)[，,。!！\s]*(?:但是?|不過)?[，,\s]*"
+                     r"我(?:無法|不能(?=回答|提供|協助|滿足|回應))"
+                     r"(?:回答|提供|協助|滿足|回應|處理|完成|幫助|幫你|幫您)"
+                     r"|希望[^。！？\n]{0,8}(?:有所幫助|有幫助|幫到你|幫到您|幫得上忙)"),
     replies={
         "remember_what": ("記什麼？你什麼都沒說", "說啊，要記啥", "要我記什麼"),
         "not_instructions": ("我只記事實，不記指令",),
@@ -53,7 +59,7 @@ SPEC = Spec(
                      "卡住了，等等再聊"),
     learned_text={
         "head": ("記憶 {memories} 條，學到 {examples} 條回覆和 {fixes} 組糾正，"
-                 "{voice} 條等第二個人佐證，{admin} 條等管理員處理"),
+                 "{voice} 條等第二個人佐證，{admin} 條由我自行判斷"),
         "score": "，最近自評 {score}/5",
         "pair": "原本：{was}，改成：{better}",
         "someone_else": "另一個聊天裡有人",
@@ -64,7 +70,8 @@ SPEC = Spec(
         "corrected": "{who} 糾正了",
         "missed": "{who} 說沒答對",
         "liked": "{who} 覺得不錯",
-        "by_admin": "管理員通過",
+        "by_me": "由我自己決定",
+        "by_person": "人工啟用",
         "passed": "{events} 條證據其中 {strong} 條強，通過",
         "why": "原因：{steps}",
         "sep": "，",

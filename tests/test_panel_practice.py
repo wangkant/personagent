@@ -393,6 +393,22 @@ def test_the_trial_child_without_a_key_says_so(tmp_path, monkeypatch):
     assert json.loads(out.getvalue()) == {"error": "practice_needs_key"}
 
 
+@pytest.mark.parametrize("gate, key", [("person", "practice_held_character"),
+                                       ("against", "practice_held_character"),
+                                       ("conflict", "practice_held_character"),
+                                       ("events", "")])
+def test_an_item_the_character_decides_never_says_the_admin_approves(gate, key):
+    from types import SimpleNamespace
+    from persona_agent import promotion
+    check = SimpleNamespace(decision=promotion.Decision(False, "", gate=gate))
+    fake = SimpleNamespace(chat=SimpleNamespace(checklist=lambda agent, cand: check,
+                                                held_reason=lambda lang, c: "1/2 compatible events"),
+                           agent=None)
+    found = practice._Trial._held(fake, "ja", {})
+    assert found == (key, "" if key else "1/2 compatible events")
+    assert "admin" not in JS.split("practice_held_character")[1].split("\n")[0]
+
+
 def tables() -> dict[str, dict[str, str]]:
     found = re.findall(r"\n  (en|zh): \{\n(.*?)\n  \},", JS, re.S)
     return {code: dict(re.findall(r'^    (practice_\w+): "(.*)",$', body, re.M)) for code, body in found}

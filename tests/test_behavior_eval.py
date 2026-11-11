@@ -119,25 +119,36 @@ def _isolated(name: str, calls: list[tuple], homes: list[Path]) -> None:
 # Datasets
 # ---------------------------------------------------------------------------
 
+#: Every (mode, label) a speak dataset holds: an owner who calls is answered.
+SPEAK_STRATA = {(m, lbl) for m in be.MODES for lbl in be.LABELS} - {("owner", "silent")}
+
+
 def test_every_dataset_has_a_valid_schema_and_balanced_labels() -> None:
     files = sorted(p.name for p in be.EVAL_DATA.glob("*.jsonl"))
+    # address.jsonl is the zero-cost suite tests/test_addressing.py runs.
     check("every dataset file is a known suite in en and zh",
-          files == sorted(f"{s}.{lang}.jsonl" for s in be.SUITES
-                          for lang in ("en", "zh")), str(files))
+          files == sorted([f"{s}.{lang}.jsonl" for s in be.SUITES
+                           for lang in ("en", "zh")] + ["address.jsonl"]), str(files))
     for lang in ("en", "zh"):
         speak = be.load_cases("speak", lang)
         labels = Counter(c["label"] for c in speak)
         check(f"{lang}: speak labels are balanced",
               0.4 <= labels["silent"] / len(speak) <= 0.6, str(labels))
-        for mode in be.MODES:
-            got = {c["label"] for c in speak if c["mode"] == mode}
-            check(f"{lang}: {mode} cases carry both labels",
-                  got == set(be.LABELS), str(got))
+        strata = Counter((c["mode"], c["label"]) for c in speak)
+        check(f"{lang}: every mode carries its labels, owner and proactive too",
+              set(strata) == SPEAK_STRATA, str(strata))
+        check(f"{lang}: ten owner calls and ten quiet rooms",
+              strata[("owner", "speak")] == 10
+              and strata[("proactive", "speak")] + strata[("proactive", "silent")] == 10,
+              str(strata))
         channels = Counter(c["channel"] for c in be.load_cases("persona", lang))
         check(f"{lang}: persona covers groups and DMs",
               channels["group"] >= 5 and channels["dm"] >= 5, str(channels))
-        check(f"{lang}: learning has scenarios",
-              len(be.load_cases("learning", lang)) >= 5)
+        learning = be.load_cases("learning", lang)
+        check(f"{lang}: learning has scenarios", len(learning) >= 5)
+        check(f"{lang}: some corrections are never confirmed, and still expected learned",
+              sum(not c.get("acceptance") and c.get("expect") == "promoted"
+                  for c in learning) >= 5)
     for suite in be.SUITES:
         check(f"{suite}: en and zh measure the same number of cases",
               len(be.load_cases(suite, "en")) == len(be.load_cases(suite, "zh")))
@@ -150,14 +161,26 @@ def test_a_mislabelled_row_is_refused() -> None:
         be._check_speak(row)
     with pytest.raises(ValueError, match="followup"):
         be._check_speak({**row, "mode": "followup", "latest": "alex: hi"})
+    with pytest.raises(ValueError, match="owner"):
+        be._check_speak({**row, "mode": "owner"})
+    with pytest.raises(ValueError, match="proactive"):
+        be._check_speak({**row, "mode": "proactive"})
+
+
+@pytest.mark.parametrize("raw,kept", [
+    ("PASS", ""), ("pass.", ""), ("**PASS**", ""),
+    ("Pass auf dich auf", "Pass auf dich auf"),
+    ("pass lol, my voice is cursed", "pass lol, my voice is cursed")])
+def test_only_the_bare_word_pass_is_silence_in_the_eval(raw, kept) -> None:
+    check(f"{raw!r} scored as {kept!r}", be.strip_pass_sentinel(raw) == kept)
 
 
 def test_a_short_run_still_covers_every_stratum() -> None:
-    picked = be.take(be.load_cases("speak", "en"), 6, be._STRATA["speak"])
-    check("limit is honoured", len(picked) == 6)
+    n = len(SPEAK_STRATA)
+    picked = be.take(be.load_cases("speak", "en"), n, be._STRATA["speak"])
+    check("limit is honoured", len(picked) == n)
     check("every mode and label is present",
-          {(c["mode"], c["label"]) for c in picked}
-          == {(m, lbl) for m in be.MODES for lbl in be.LABELS})
+          {(c["mode"], c["label"]) for c in picked} == SPEAK_STRATA)
 
 
 # ---------------------------------------------------------------------------
@@ -244,7 +267,7 @@ async def test_speak_suite_drives_the_real_think(tmp, monkeypatch, homes) -> Non
     check("accuracy is the share labelled speak",
           m["overall"]["accuracy"] == round((len(cases) - silent) / len(cases), 3))
     kinds = Counter(k for k, _ in calls)
-    gated = sum(c["mode"] != "called" for c in cases)
+    gated = sum(c["mode"] in ("judge", "followup", "proactive") for c in cases)
     check("the gate decided every judge and followup turn",
           kinds["gate"] == gated, str(kinds))
     check("the main model wrote every reply", kinds["reply"] == len(cases))
@@ -262,6 +285,30 @@ async def test_speak_suite_needs_no_judge(tmp, monkeypatch, homes) -> None:
           m["n"] == 6 and m["false_silence"] == m["should_speak"] == 3
           and m["false_speak"] == 0, str(m))
     check("no judge was configured", report["models"]["judge_model"] is None)
+
+
+async def test_owner_and_quiet_room_cases_take_the_live_prompts(
+        tmp, monkeypatch, homes) -> None:
+    users: list[str] = []
+
+    def reply(system: str, user: str) -> str:
+        users.append(user)
+        return "hey"
+    stub_models(monkeypatch, speak=True, reply=reply)
+    cases = [c for c in be.load_cases("speak", "en")
+             if c["mode"] in ("owner", "proactive")]
+    with be.deployment_root(tmp / "home") as home:
+        agent = be.build_agent(home, lang="en", persona="p", persona_name="Nova", env=ENV)
+        try:
+            rows = await be.run_speak(agent, cases, "Nova")
+        finally:
+            await agent.aclose()
+    check("every case ran", len(rows) == 20 and all(r["spoke"] for r in rows),
+          str([r.get("error") for r in rows]))
+    check("an owner case is the owner's turn",
+          sum("the owner" in u for u in users) == 10, str(users[:1]))
+    check("a quiet-room case is an opener, with no line to answer",
+          sum("gone quiet" in u for u in users) == 10, str(users[-1:]))
 
 
 async def test_every_try_runs_in_a_fresh_deployment(tmp, monkeypatch, homes) -> None:
@@ -550,3 +597,90 @@ async def test_an_asked_back_bystander_is_held_under_the_policy_as_configured(
     e = {r["id"]: r for r in report["suites"]["learning"]["cases"]}["le-e"]
     check("a stricter configured policy expects the hold it produces",
           not e["promoted"] and e["expect"] == "held" and e["policy_ok"], str(e))
+
+
+ADOPTION_MARK = '"decision":"adopt|discard|observe"'
+
+
+def _write_learning(tmp: Path, monkeypatch, rows: list[dict]) -> None:
+    data = tmp / "evals"
+    data.mkdir()
+    (data / "learning.en.jsonl").write_text(
+        "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    monkeypatch.setattr(be, "EVAL_DATA", data)
+
+
+async def test_a_judgement_spawned_by_the_acceptance_is_in_the_row(
+        tmp, monkeypatch, homes) -> None:
+    # A lone correction with no fix window: its judgement is queued in the
+    # background and finishes only after the person has moved on.
+    _write_learning(tmp, monkeypatch, [LEARN[2]])
+    asked: list[str] = []
+
+    def adjudicate(prompt: str) -> dict:
+        if ADOPTION_MARK in prompt:
+            asked.append(prompt)
+            return {"decision": "observe", "choice": "", "reason": "worth watching"}
+        if "MOVEON" in prompt:
+            return {"reaction": "neutral", "accept": False, "reason": "moved on",
+                    "better": "", "ask": "", "scenario": ""}
+        return {"reaction": "correction", "accept": True, "reason": "wrong",
+                "better": "just pick one", "ask": "", "scenario": "wrong"}
+
+    stub_models(monkeypatch, reply=lambda system, user: RETRY, adjudicate=adjudicate)
+    stub_judge(monkeypatch, lambda p: {"follows": False, "reason": "r"})
+    report = await be.run(_args(tmp, "--suite", "learning"),
+                          env={**ENV, "REACT_FIX_WINDOW_S": "0"})
+    d = report["suites"]["learning"]["cases"][0]
+    check("the character was asked once", len(asked) == 1, str(len(asked)))
+    check("its verdict is in the row, not left for after the read",
+          any(c.get("observing_because") == "worth watching"
+              for c in d["candidates"]), str(d["candidates"]))
+
+
+async def test_a_lone_correction_is_learned_through_the_characters_decision(
+        tmp, monkeypatch, homes) -> None:
+    case = {"id": "le-n", "person": "sam",
+            "context": ["sam: <bot-name> deploy failed again"],
+            "reply": "check the logs and roll back",
+            "correction": "<bot-name> CORRECT just say sorry first",
+            "probe": {"history": [], "latest": "sam: <bot-name> PROBE laptop died"},
+            "target": "One line of sympathy, no advice.", "expect": "promoted"}
+    check("a case without an acceptance line is valid",
+          be._check_learning(case) is None)
+    _write_learning(tmp, monkeypatch, [case])
+    asked: list[str] = []
+
+    def adjudicate(prompt: str) -> dict:
+        if ADOPTION_MARK in prompt:
+            asked.append(prompt)
+            return {"decision": "adopt", "choice": "A", "reason": "kinder and asked for"}
+        return {"reaction": "correction", "accept": True, "reason": "wrong",
+                "better": "oof, sorry, that is rough", "ask": "", "scenario": "wrong"}
+
+    def reply(system: str, user: str) -> str:
+        if "PROBE" not in user:
+            return RETRY
+        return "oof, rough one" if "oof, sorry, that is rough" in system else "check the logs"
+
+    stub_models(monkeypatch, reply=reply, adjudicate=adjudicate)
+    stub_judge(monkeypatch, lambda p: {
+        "follows": "oof" in p.split("reply:")[-1], "reason": "r"})
+    report = await be.run(_args(tmp, "--suite", "learning"), env=ENV)
+    n = report["suites"]["learning"]["cases"][0]
+    check("no acceptance was sent", "error" not in n and n["acceptance"] is None, str(n))
+    check("the character was asked exactly once", len(asked) == 1, str(len(asked)))
+    check("it promoted the correction on its own decision",
+          n["promoted"] and n["policy_ok"]
+          and any(c["state"] == "promoted" and c.get("decided_by_character")
+                  for c in n["candidates"]), str(n["candidates"]))
+    check("and the probe follows it now", n["outcome"] == "learned", str(n))
+
+    off = tmp / "off"
+    off.mkdir()
+    report = await be.run(_args(off, "--suite", "learning"),
+                          env={**ENV, "PROMOTE_JUDGE_ENABLED": "0"})
+    n = report["suites"]["learning"]["cases"][0]
+    check("with the character's judgement off, a lone correction is expected held",
+          not n["promoted"] and n["expect"] == "held" and n["policy_ok"]
+          and len(asked) == 1, str(n))

@@ -311,6 +311,50 @@ async def test_a_down_or_slow_endpoint_changes_nothing_and_says_so_once(
               a._embedding_backfill is None)
 
 
+def with_events(a: Agent) -> Agent:
+    """MEMORIES with importance and use, plus an event and a summary of g1."""
+    a.memories["g1"][0].update(imp=2, uses=1)
+    a.memories["g1"][1].update(imp=4)
+    a.episode_store.add("g1", {"text": "the kitten went to the vet",
+                               "t0": time.time() - 7200, "t1": time.time() - 3600})
+    a.episode_store.set_thread("g1", "talking about a sick kitten", 1.0, 2.0)
+    return a
+
+
+async def test_events_and_the_summary_are_embedded_too(tmp: Path) -> None:
+    a = with_events(seeded(tmp, **EMBEDDING))
+    endpoint = StubEndpoint()
+    client = serve(a, endpoint)
+    try:
+        await prepared(a)
+    finally:
+        await client.aclose()
+    sent = [t for batch in endpoint.requests for t in batch]
+    check("the event and the summary get vectors",
+          "the kitten went to the vet" in sent and "talking about a sick kitten" in sent,
+          repr(sent))
+    check("and only once each", sent.count("the kitten went to the vet") == 1, repr(sent))
+
+
+async def test_a_down_endpoint_keeps_the_memory_order_with_events(
+        tmp: Path, monkeypatch) -> None:
+    monkeypatch.setattr(embeddings, "QUERY_TIMEOUT_S", 0.05)
+    plain = with_events(seeded(tmp / "plain"))
+    expected = plain._memories_for_prompt("g1", QUERY)
+    check("the event is recalled beside the facts",
+          "kitten went to the vet" in expected and "Mochi" in expected, expected)
+    check("deterministic: the same block twice",
+          plain._memories_for_prompt("g1", QUERY) == expected)
+    a = with_events(seeded(tmp / "on", **EMBEDDING))
+    client = serve(a, StubEndpoint(status=503))
+    try:
+        await a._prepare_retrieval(QUERY, "g1")
+    finally:
+        await client.aclose()
+    check("a down endpoint ranks exactly as no embeddings",
+          a._memories_for_prompt("g1", QUERY) == expected)
+
+
 async def test_the_startup_probe_reports_an_unreachable_endpoint(tmp: Path, caplog) -> None:
     caplog.set_level(logging.INFO, logger="agent")
     a = seeded(tmp, **EMBEDDING)

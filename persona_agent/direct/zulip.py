@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep,
-                   plain_name, raw_id, split_text)
+                   has_content, media, plain_name, raw_id, split_text)
 
 logger = logging.getLogger("personagent.direct.zulip")
 
@@ -27,6 +27,7 @@ LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 DEACTIVATED = {"USER_DEACTIVATED", "REALM_DEACTIVATED"}
 UPLOAD = re.compile(r"(!?)\[([^\]]*)\]\((/user_uploads/(\d+)/([^)\s]+))\)")
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
+VIDEO_EXT = (".mp4", ".webm", ".mov", ".mkv")
 # The quote-and-reply header: a silent mention of the author and a link to the message.
 QUOTE = re.compile(r"^@_\*\*([^*|]*)\|(\d+)\*\* \[[^\]]*\]\(([^)]*)\):?\s*\n"
                    r"(`{3,}|~{3,})quote\n(.*?)\n\4[ \t]*(?:\n|$)", re.DOTALL)
@@ -207,17 +208,19 @@ class Zulip(Platform):
             if rest.lower().endswith(IMAGE_EXT) and len(images) < MAX_IMAGES:
                 images.append((realm, rest))
             else:
-                files.append(label or rest.rsplit("/", 1)[-1])
-        text = UPLOAD.sub(lambda m: "" if m.group(5).lower().endswith(IMAGE_EXT) else m.group(2), text)
+                files.append((label or rest.rsplit("/", 1)[-1], rest.lower()))
+        # An upload's link is dropped: the model reads it as the media below.
+        text = UPLOAD.sub("", text)
         text = re.sub(r"[ \t]+", " ", text).strip()
         if text:
             segments.append({"type": "text", "text": text})
         for realm, rest in images:
             image = await self._image(realm, rest)
-            segments.append(image or {"type": "text", "text": "(sent a photo)"})
-        for label in files:
-            segments.append({"type": "text", "text": f"(sent a file: {label})"})
-        if not any(s["type"] in ("text", "image") for s in segments):
+            segments.append(image or media("photo"))
+        for label, kind in files:
+            segments.append(media("photo") if kind.endswith(IMAGE_EXT) else media("video")
+                            if kind.endswith(VIDEO_EXT) else media("file", name=label))
+        if not has_content(segments, self.bot_id):
             return None
         if message.get("type") == "stream":
             stream = str(message.get("stream_id") or "")

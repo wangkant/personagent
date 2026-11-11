@@ -193,11 +193,11 @@ def test_uploaded_images_are_inlined_and_their_links_never_passed_on():
     event = run(platform.event(channel_message(
         content="look [cat.png](/user_uploads/2/ab/cd/cat.png) and [notes.pdf](/user_uploads/2/ef/gh/notes.pdf)"),
         []))
-    assert event["text"] == "look and notes.pdf"
+    assert event["text"] == "look and"
     kinds = [s["type"] for s in event["segments"]]
-    assert kinds == ["text", "image", "text"]
+    assert kinds == ["text", "image", "media"]
     assert base64.b64decode(event["segments"][1]["b64"]) == PNG
-    assert event["segments"][2]["text"] == "(sent a file: notes.pdf)"
+    assert event["segments"][2] == {"type": "media", "kind": "file", "name": "notes.pdf"}
     assert "user_uploads" not in json.dumps(event)
     # The short-lived link is fetched without the key.
     assert "Authorization" not in asked[1].headers
@@ -209,7 +209,7 @@ def test_an_image_too_big_is_described_instead():
             return ok(url="/user_uploads/temporary/big.png")
         return httpx.Response(200, content=b"0" * (base.MAX_INLINE_IMAGE_BYTES + 1))
     event = run(bot(handler).event(channel_message(content="[big.png](/user_uploads/2/a/b/big.png)"), []))
-    assert event["segments"] == [{"type": "text", "text": "(sent a photo)"}]
+    assert event["segments"] == [{"type": "media", "kind": "photo"}]
 
 
 # ---------------------------------------------------------------- run

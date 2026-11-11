@@ -39,6 +39,8 @@ COMMANDS = {
                "check the setup and every upstream service"),
     "learned": ("persona_agent.ledger_admin", "main",
                 "review, promote or roll back what it learned"),
+    "memory": ("persona_agent.memory_admin", "main",
+               "look at what it remembers, forget an item or bring one back"),
     "eval": ("persona_agent.evals", "main",
              "measure speaking, persona and learning on labelled cases"),
 }

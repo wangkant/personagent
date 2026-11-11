@@ -550,7 +550,7 @@ async def test_vision_caption_request_shape(sleeps) -> None:
     check("caption: no backoff on success", sleeps == [], repr(sleeps))
 
 
-@pytest.mark.parametrize("status", [400, 429, 500, 502, 503, 504])
+@pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
 async def test_vision_caption_retries_a_retryable_status(status, sleeps) -> None:
     agent = VisionHarness(PNG, *[VisionResponse(status)] * 3)
     got = await agent._describe_image_vision(IMAGE_URL)
@@ -566,7 +566,7 @@ async def test_vision_caption_retries_a_retryable_status(status, sleeps) -> None
     check(f"caption {status}: one backoff before it", sleeps == [1], repr(sleeps))
 
 
-@pytest.mark.parametrize("status", [401, 403, 404, 422])
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 422])
 async def test_vision_caption_does_not_retry_other_statuses(status, sleeps) -> None:
     agent = VisionHarness(PNG, VisionResponse(status))
     got = await agent._describe_image_vision(IMAGE_URL)
@@ -859,9 +859,9 @@ async def test_a_vision_400_from_an_endpoint_still_to_be_asked(sleeps) -> None:
     agent._api_quirks.clear()
     got = await agent._describe_image_vision(IMAGE_URL)
     sent = ["thinking" in p["json"] for p in agent.vision.posts]
-    check("caption 400: three tries, the first resent without the switch",
-          got is None and sent == [True, False, False, False], repr((got, sent)))
-    check("caption 400: 1 s then 2 s backoff", sleeps == [1, 2], repr(sleeps))
+    check("caption 400: resent once without the switch, then given up",
+          got is None and sent == [True, False], repr((got, sent)))
+    check("caption 400: no backoff", sleeps == [], repr(sleeps))
     check("caption 400: the endpoint is still to be asked",
           agent._api_quirks == {}, repr(agent._api_quirks))
 
@@ -1435,3 +1435,13 @@ async def test_ssrf_redirect_hops(tmp: Path) -> None:
           data2 == b"\x89PNG\r\n\x1a\nIMGDATA"
           and fetched == ["http://hop.invalid/a", "http://hop.invalid/b"],
           repr((data2, fetched)))
+
+
+async def test_a_model_that_cannot_read_images_is_asked_once_per_picture(sleeps) -> None:
+    """A 400 such as "model does not support image input" used to be retried
+    twice: three refused calls per picture, every time it was sent."""
+    agent = VisionHarness(PNG, *[VisionResponse(400)] * 3)
+    got = await agent._describe_image_vision(IMAGE_URL)
+    check("vision 400: no caption", got is None, repr(got))
+    check("vision 400: one call", len(agent.vision.posts) == 1, repr(len(agent.vision.posts)))
+    check("vision 400: no backoff", sleeps == [], repr(sleeps))

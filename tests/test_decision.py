@@ -4,12 +4,20 @@ tests/test_connector.py drives them through the real one."""
 from __future__ import annotations
 
 import random
+from pathlib import Path
 
-from persona_agent import decision
+import pytest
+
+from persona_agent import chat, decision
 from persona_agent.access import ADMIN_MODE
 from persona_agent.textproc import SLEEP_PASS_PROB, SUB_TRIGGER_PASS_PROB
 
-from helpers import check
+from helpers import check, isolated_agent
+
+#: Only the bare word is the sentinel; a reply that starts with it is a reply.
+PASS_ROWS = [("PASS", True), ("pass.", True), (" PASS ", True), ("**PASS**", True),
+             ("Pass auf dich auf", False), ("pass lol, my voice is cursed", False),
+             ("Pass, not for me", False), ("pass the salt", False)]
 
 
 def mode(**kw) -> tuple[str, str]:
@@ -79,3 +87,32 @@ def test_pacing_draws_at_the_configured_odds(monkeypatch) -> None:
     monkeypatch.setattr(random, "random", lambda: 0.99)
     check("draws above both odds speak",
           decision.pacing_skip("judge", first_appearance=False, sleep_hour=True) == "")
+
+
+@pytest.mark.parametrize("raw,is_pass", PASS_ROWS)
+def test_only_the_bare_word_pass_is_a_pass(tmp: Path, raw: str, is_pass: bool) -> None:
+    agent = isolated_agent(tmp)
+    final = agent._final_reply(raw, log_ctx="test")
+    check(f"{raw!r} is {'a PASS' if is_pass else 'sent'}",
+          final.verdict == (decision.PASS if is_pass else decision.SEND), repr(final))
+
+
+@pytest.mark.parametrize("raw,is_pass", PASS_ROWS)
+async def test_the_practice_chat_reads_pass_the_same_way(tmp: Path, raw: str,
+                                                         is_pass: bool) -> None:
+    agent = isolated_agent(tmp, react_learn_enabled=False)
+    trial = chat.Trial(agent, conv="g1")
+    turn = trial._commit_group(
+        chat.Turn(speaker="Ann", uid="7", text="hi", mode="called", conv="g1"),
+        raw, "chat", "", [])
+    check(f"{raw!r} is {'a PASS' if is_pass else 'sent'} in the practice chat",
+          (turn.quiet == "pass") == is_pass and bool(turn.reply) != is_pass,
+          repr(turn))
+    probe_agent = isolated_agent(tmp / "probe", react_learn_enabled=False)
+
+    async def think(conv, mode, text="", caller_override=None):
+        return raw, "chat", ""
+    probe_agent._think = think
+    probe = await chat.Trial(probe_agent, conv="g1").probe("Ann", "7", "hi")
+    check(f"{raw!r} is {'a PASS' if is_pass else 'an answer'} in a probe",
+          (probe.quiet == "pass") == is_pass, repr(probe))

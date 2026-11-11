@@ -7,12 +7,14 @@ import logging
 import random
 import re
 import time
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import httpx
 
 from .access import ADMIN_MODE
 from .endpoints import adapt_rejected_payload, chat_completions_url, endpoint_for
+from .usage import USAGE_FILE, UsageBook
 from .textproc import (
     _as_protocol_object,
 )
@@ -101,6 +103,23 @@ def _error_text(e: BaseException, status) -> str:
     if status in (None, 401, 402, 403, 429):
         text += " " + _response_text(e).lower()
     return text
+
+
+class ProviderError(Exception):
+    """An error a provider sent inside a 200, such as OpenRouter's upstream
+    failure; `status_code` routes it as the same HTTP status would."""
+
+    def __init__(self, body: dict) -> None:
+        error = body.get("error")
+        error = error if isinstance(error, dict) else {"message": str(error or "")}
+        code = error.get("code")
+        try:
+            self.status_code = int(code) if code is not None else None
+        except (TypeError, ValueError):
+            self.status_code = None
+        message = str(error.get("message") or "")[:300] or "the answer had no choices"
+        super().__init__(f"provider error {code}: {message}" if code is not None
+                         else f"provider error: {message}")
 
 # Long keep-alive: turns are further apart than httpx's 5s expiry. The other
 # two are httpx's defaults, spelled out because `Limits` resets omitted ones.
@@ -245,6 +264,7 @@ class ModelCalls:
                     break
                 refused.append(field)
         if isinstance(status, int) and 200 <= status < 300:
+            self._count_usage(model, resp)
             for field in refused:
                 self._remember_refusal(url, model, field)
             if asking and "thinking" in payload:
@@ -254,6 +274,39 @@ class ModelCalls:
             for item in [k for k in reported if k[0] == _host(url)]:
                 reported.discard(item)
         return resp
+
+    def _count_usage(self, model: str, resp) -> None:
+        """Add one answered request to the per-model tally the page shows; a
+        tally that cannot be kept never costs the call."""
+        memory_file = getattr(self, "memory_file", None)
+        if not memory_file:
+            return
+        try:
+            body = resp.json()
+        except Exception:
+            return
+        if not isinstance(body, dict):
+            return
+        book = self.__dict__.get("_usage_book")
+        if book is None:
+            book = self.__dict__["_usage_book"] = UsageBook(
+                Path(memory_file).with_name(USAGE_FILE))
+        now = time.time()
+        book.add(model, body.get("usage"), now)
+        wait = book.due(now)
+        try:
+            if not wait:
+                book.flush(now)
+            elif not self.__dict__.get("_usage_flush"):
+                def later() -> None:
+                    self.__dict__["_usage_flush"] = None
+                    try:
+                        book.flush(time.time())
+                    except OSError as e:
+                        logger.debug("[Agent] model use tally not written: %s", e)
+                self.__dict__["_usage_flush"] = asyncio.get_running_loop().call_later(wait, later)
+        except (OSError, RuntimeError) as e:
+            logger.debug("[Agent] model use tally not written: %s", e)
 
     def _fatal_reported_hosts(self) -> set:
         reported = self.__dict__.get("_fatal_reported")
@@ -361,7 +414,10 @@ class ModelCalls:
             resp = await self._post_chat(_url, _key, payload,
                                          timeout=self.llm_timeout_s)
             resp.raise_for_status()
-            return resp.json()
+            body = resp.json()
+            if isinstance(body, dict) and (body.get("error") or not body.get("choices")):
+                raise ProviderError(body)
+            return body
 
         # Web search grounding; a failure never blocks the reply.
         if enable_search:
@@ -413,6 +469,20 @@ class ModelCalls:
                             cur_model = self.llm_fallback_model
                             attempt = 0  # give the fallback model its own retry budget
                             continue
+                    # A hang or a dropped connection: a retry on the same model
+                    # would spend the turn's budget before the backup is asked.
+                    if (kind == "transient" and isinstance(e, httpx.TransportError)
+                            and self.llm_fallback_model
+                            and cur_model != self.llm_fallback_model and not last_try):
+                        self._fallback_until[cur_model] = max(
+                            self._fallback_until.get(cur_model, 0.0),
+                            time.time() + self.llm_fallback_duration_s)
+                        logger.warning(
+                            "[Agent] model=%s did not answer (%s); switching to fallback=%s",
+                            cur_model, type(e).__name__, self.llm_fallback_model)
+                        cur_model = self.llm_fallback_model
+                        attempt = 0
+                        continue
                     # Transient: exponential backoff + jitter, retry same model.
                     if (kind in ("transient", "rate_limit")
                             and attempt < self.api_max_retries):
@@ -431,8 +501,8 @@ class ModelCalls:
                             time.time() + self.llm_fallback_duration_s)
                         if cur_model != self.llm_fallback_model and not last_try:
                             logger.warning(
-                                "[Agent] model=%s failed (%s); last attempt on fallback=%s",
-                                cur_model, kind, self.llm_fallback_model)
+                                "[Agent] model=%s failed (%s); last attempt on fallback=%s: %s",
+                                cur_model, kind, self.llm_fallback_model, e)
                             cur_model = self.llm_fallback_model
                             attempt = 0  # give the fallback model its own retry budget
                             continue
@@ -524,6 +594,9 @@ class ModelCalls:
             if not text:
                 logger.warning("[Agent] LLM returned empty text; finish_reason=%s (model=%s)",
                                finish, used_model)
+        elif not text and finish == "content_filter":
+            logger.warning("[Agent] the provider's content filter withheld the answer "
+                           "(model=%s)", used_model)
         elif not text:
             logger.warning("[Agent] LLM returned empty text; finish_reason=%s (model=%s)",
                            finish, used_model)
@@ -632,6 +705,12 @@ class ModelCalls:
         # Rate threshold exceeded → arm the (self-throttling) downgrade
         if len(self.model_calls) >= self.llm_rate_threshold:
             self._freq_fallback_until = now + self.llm_fallback_duration_s
+            if self.llm_fallback_model == self.model:
+                logger.warning(
+                    "[Agent] busy (%d calls in %ds): unasked turns use the same model; "
+                    "set LLM_FALLBACK_MODEL to a cheaper one",
+                    len(self.model_calls), self.llm_rate_window_s)
+                return self.model
             logger.warning(
                 "[Agent] high call rate (%d/%ds); self-initiated modes fall back to %s for %ds",
                 len(self.model_calls), self.llm_rate_window_s,

@@ -113,14 +113,28 @@ class AgentSettings:
 
     # ---- conversation -----------------------------------------------------
     chat_trigger_count: int = 30
+    #: Recent messages kept per chat, for replies and for consolidation; a
+    #: reply reads at most the last 60, and fewer when this is below 30.
     chat_context_messages: int = 120
     chat_followup_window_s: int = 120
     memory_file: str = "memory.json"
+    #: Notes per chat; past it, the least useful note the character wrote goes.
     memory_max_per_conversation: int = 50
-    #: New auto notes in a chat before a model pass tidies them; 0 turns it off.
+    #: Notes written in replies since the last consolidation that also start
+    #: one; 0 turns off every memory model call.
     memory_tidy_every: int = 8
-    #: A room's notes about someone also reach other rooms they talk in.
+    #: A room's notes about someone also reach other rooms they talk in;
+    #: reported speech never does.
     memory_share_rooms: bool = False
+    #: Consolidation calls per day for all chats together; 0 turns them off.
+    memory_calls_per_day: int = 40
+    #: Characters of remembered material in a reply: the summary of earlier
+    #: conversation, facts and events.
+    memory_prompt_chars: int = 2400
+    #: Events kept per chat before the least useful are removed.
+    memory_episodes_max: int = 120
+    #: Keep each chat's recent messages on disk for 72 hours.
+    memory_keep_recent: bool = True
     message_debounce_sec: float = 2.5
     #: Persona document; ``None`` means the agent loads ``PERSONA_FILE``, so
     #: file reads stay out of this record.
@@ -264,6 +278,23 @@ class AgentSettings:
         lambda env: env_int("PROMOTE_MAX_FEEDBACK", 500, minimum=0, env=env))
     #: When evidence may grant a candidate authority.
     promotion_policy: promotion.Policy = _env(promotion.Policy.from_env)
+    #: The character decides the holds no further reaction can clear
+    #: (disagreeing evidence, rival rewrites, liked replies, disputes).
+    promote_judge_enabled: bool = _env(
+        lambda env: env_bool("PROMOTE_JUDGE_ENABLED", True, env=env))
+    #: Blank resolves to ``react_model``.
+    promote_judge_model: str = _env(
+        lambda env: env_str("PROMOTE_JUDGE_MODEL", "", strip=True, env=env))
+    promote_judge_interval_s: float = _env(
+        lambda env: env_float("PROMOTE_JUDGE_INTERVAL_S", 900.0, minimum=60.0,
+                              env=env))
+    #: Judgements per interval, shared by the sweep and the reaction triggers.
+    promote_judge_batch: int = _env(
+        lambda env: env_int("PROMOTE_JUDGE_BATCH", 5, minimum=1, env=env))
+    #: A waiting item with no new reaction for this long is set aside; 0 = never.
+    promote_observe_max_days: float = _env(
+        lambda env: env_float("PROMOTE_OBSERVE_MAX_DAYS", 30.0, minimum=0.0,
+                              env=env))
 
     def __post_init__(self) -> None:
         self.base_url = self.base_url.rstrip("/")
@@ -294,6 +325,7 @@ class AgentSettings:
         self.eval_model = self.eval_model or self.llm_fallback_model or self.model
         self.evolve_model = self.evolve_model or self.eval_model
         self.react_model = self.react_model or self.llm_judge_model
+        self.promote_judge_model = self.promote_judge_model or self.react_model
         # Canonical ids: "qq:1" and a native "aiocqhttp:1" both read as "1".
         natives = self.connector_qq_platforms = access.split_ids(
             self.connector_qq_platforms)
@@ -363,6 +395,17 @@ class AgentSettings:
                 minimum=0, maximum=10_000, env=env),
             memory_share_rooms=env_bool(
                 "MEMORY_SHARE_ROOMS", declared["memory_share_rooms"], env=env),
+            memory_calls_per_day=env_int(
+                "MEMORY_CALLS_PER_DAY", declared["memory_calls_per_day"],
+                minimum=0, maximum=10_000, env=env),
+            memory_prompt_chars=env_int(
+                "MEMORY_PROMPT_CHARS", declared["memory_prompt_chars"],
+                minimum=200, maximum=100_000, env=env),
+            memory_episodes_max=env_int(
+                "MEMORY_EPISODES_MAX", declared["memory_episodes_max"],
+                minimum=1, maximum=10_000, env=env),
+            memory_keep_recent=env_bool(
+                "MEMORY_KEEP_RECENT", declared["memory_keep_recent"], env=env),
             admin_ids=identity.written["ADMIN_IDS"],
             admin_name=_str("ADMIN_NAME"),
             admin_relationship=_str("ADMIN_RELATIONSHIP"),

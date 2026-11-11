@@ -209,3 +209,37 @@ def test_the_result_of_the_last_update_shows_once(page) -> None:
     assert len(lines) == runtime.LOG_TAIL and lines[-1] == "line 99"
     assert page.client.post("/api/runtime/update/seen", json={}, headers=HEADERS).json() == {"ok": True}
     assert page.client.get("/api/runtime", headers=HEADERS).json()["lastUpdate"] is None
+
+
+def test_the_panel_shows_what_the_models_used_today_and_this_week(page) -> None:
+    from persona_agent import usage
+
+    assert page.client.get("/api/runtime", headers=HEADERS).json()["usage"]["week"]["calls"] == 0
+    now = time.time()
+    book = usage.UsageBook(page.home / "runtime" / usage.USAGE_FILE)
+    book.add("main", {"prompt_tokens": 900, "completion_tokens": 100, "cost": 0.01}, now)
+    book.add("judge", {"prompt_tokens": 50}, now)
+    book.add("main", {"prompt_tokens": 10}, now - 3 * 86400)
+    book.add("main", {"prompt_tokens": 10}, now - 9 * 86400)
+    book.flush(now)
+    seen = page.client.get("/api/runtime", headers=HEADERS).json()["usage"]
+    assert (seen["today"]["calls"], seen["today"]["tokens"], seen["today"]["cost"]) == (2, 1050, 0.01)
+    assert (seen["week"]["calls"], seen["week"]["tokens"]) == (3, 1060)
+    assert [m["model"] for m in seen["models"]] == ["main", "judge"]
+
+
+def test_the_use_line_is_in_every_page_language() -> None:
+    import re
+
+    source = (welcome.ASSETS / "panels" / "runtime.js").read_text(encoding="utf-8")
+    keys = ("runtime_useTitle", "runtime_useToday", "runtime_useWeek", "runtime_useNoCost",
+            "runtime_useNone")
+    for key in keys:
+        assert source.count(f"    {key}: ") == 2, key
+    assert 'id = "runtime-use"' in source
+    for code in welcome.PAGE_LANGUAGES:
+        strings = json.loads((welcome.ASSETS / "i18n" / f"{code}.json").read_text(encoding="utf-8"))["strings"]
+        missing = [k for k in keys if not strings.get(k, "").strip()]
+        assert not missing, (code, missing)
+        for key in ("runtime_useToday", "runtime_useWeek"):
+            assert sorted(re.findall(r"\{\w+\}", strings[key])) == ["{calls}", "{cost}", "{tokens}"], (code, key)

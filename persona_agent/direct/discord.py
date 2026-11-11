@@ -13,7 +13,8 @@ from typing import Any
 
 import httpx
 
-from .base import Platform, Refused, Unsupported, backoff_sleep, plain_name, raw_id, split_text
+from .base import (Platform, Refused, Unsupported, backoff_sleep, has_content, media, plain_name,
+                   raw_id, split_text, tagged_segments)
 
 logger = logging.getLogger("personagent.direct.discord")
 
@@ -24,6 +25,8 @@ INTENTS = (1 << 0) | (1 << 9) | (1 << 12) | (1 << 15)
 # Close codes after which reconnecting with the same settings cannot work.
 FATAL = {4004: "token_rejected", 4010: "invalid_shard", 4011: "sharding_required",
          4012: "invalid_api_version", 4013: "invalid_intents", 4014: "message_content_intent_off"}
+# The message flag Discord sets on a voice message.
+VOICE_FLAG = 1 << 13
 # Close codes after which the session cannot be resumed.
 FRESH = {4007, 4009}
 
@@ -186,16 +189,22 @@ class Discord(Platform):
                                                        quoted_author.get("username"))})
         if mentioned:
             segments.append({"type": "mention", "user_id": self.bot_id, "name": ""})
-        if text:
-            segments.append({"type": "text", "text": text})
-        for attachment in data.get("attachments") or []:
-            if str(attachment.get("content_type") or "").startswith("image/") and attachment.get("url"):
-                segments.append({"type": "image", "url": attachment["url"]})
-            else:
-                segments.append({"type": "text", "text": f"(sent a file: {attachment.get('filename', '')})"})
-        for sticker in data.get("sticker_items") or []:
+        body = data
+        snapshots = data.get("message_snapshots") or []
+        if not text and not data.get("attachments") and snapshots:
+            # A forward carries no author; what it says is in the snapshot.
+            body = (snapshots[0] or {}).get("message") or {}
+            text = str(body.get("content") or "")
+            segments.append({"type": "forward", "name": ""})
+        names = {str(m.get("id")): plain_name((m.get("member") or {}).get("nick"), m.get("global_name"),
+                                               m.get("username"))
+                 for m in data.get("mentions") or [] if isinstance(m, dict)}
+        segments.extend(tagged_segments(text, names))
+        for attachment in body.get("attachments") or []:
+            segments.append(_attachment(attachment, voice=bool(int(body.get("flags") or 0) & VOICE_FLAG)))
+        for sticker in body.get("sticker_items") or []:
             segments.append({"type": "emoji", "name": str(sticker.get("name") or ""), "id": str(sticker.get("id"))})
-        if not any(s["type"] in ("text", "image", "emoji") for s in segments):
+        if not has_content(segments, self.bot_id):
             return None
         try:
             sent_at = int(datetime.fromisoformat(str(data.get("timestamp")).replace("Z", "+00:00")).timestamp())
@@ -238,3 +247,14 @@ class Discord(Platform):
 
     async def close(self) -> None:
         await self.client.aclose()
+
+
+def _attachment(attachment: dict, voice: bool) -> dict:
+    kind = str(attachment.get("content_type") or "")
+    if kind.startswith("image/") and attachment.get("url"):
+        return {"type": "image", "url": attachment["url"]}
+    if voice and kind.startswith("audio/"):
+        return media("voice")
+    if kind.startswith("video/"):
+        return media("video")
+    return media("file", name=attachment.get("filename"))

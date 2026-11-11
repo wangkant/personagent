@@ -941,6 +941,8 @@ async def test_a_proactive_opener_reaches_a_connector_room(tmp: Path) -> None:
 
     agent.outbox.liveness_s = 90.0
     await agent.outbox.pull("fw1", wait_s=0)
+    # As if someone had answered the first opener.
+    agent._openers().pop(room, None)
     before = list(agent.buffers[room])
     task = asyncio.create_task(agent._maybe_proactive_groups())
     await _ack_next(agent, status="failed")
@@ -974,8 +976,9 @@ async def test_a_proactive_dm_reaches_a_connector_user(tmp: Path) -> None:
           agent.dm_history.get(uid, []) == history_before)
     await agent.outbox.pull("fw1", wait_s=0, acks=[
         {"delivery_id": delivery["delivery_id"], "status": "sent", "sent_items": 1}])
+    # Turns also carry when they were said; the words are what is checked here.
     check("DM opener: in the history after it", await asyncio.wait_for(task, 3)
-          and agent.dm_history[uid][-1]
+          and {k: v for k, v in agent.dm_history[uid][-1].items() if k in ("role", "content")}
           == {"role": "assistant", "content": "how did the exam go"})
 
     agent.last_proactive_at.clear()

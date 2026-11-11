@@ -35,7 +35,8 @@ _LEARNED_EN = {
     "corrected": "{who} corrected it",
     "missed": "{who} said it missed",
     "liked": "{who} liked it",
-    "by_admin": "promoted by the admin",
+    "by_me": "decided by me",
+    "by_person": "put in use by hand",
     "passed": "passed with {events} events, {strong} strong",
     "why": "why: {steps}",
     "sep": ", ",
@@ -132,7 +133,7 @@ class DataViews:
                 and evidence_mod.persona_identity(scope) == identity)
 
     def _learned_summary(self, group_id: str, lang: str = "") -> str:
-        """What this room has taught the bot, chat-sized: counts, what waits,
+        """What this room has taught the bot, chat-sized: counts, what it still observes,
         the latest promotion and why, in chat language `lang` (default: the
         agent's). Reads state only."""
         code = lang or self.chat_lang
@@ -160,7 +161,7 @@ class DataViews:
         else:
             head = (f"{memories} memor{'y' if memories == 1 else 'ies'}, "
                     f"{n_ex} repl{'y' if n_ex == 1 else 'ies'} and {n_pr} fix{'' if n_pr == 1 else 'es'} learned, "
-                    f"{voice} awaiting a second voice, {admin} awaiting the admin")
+                    f"{voice} awaiting a second voice, {admin} under my own review")
         if scores:
             score = f"{sum(scores) / len(scores):.1f}"
             head += (text["score"].format(score=score) if text
@@ -201,29 +202,39 @@ class DataViews:
         return "\n".join(kept)
 
     def _learning_status(self, current_scope: dict):
-        """(waiting for a second voice, waiting for the admin, latest active
-        candidate) for this conversation, in one pass over each ledger. Liked
-        replies are not counted: only a person can promote them."""
+        """(waiting for a second voice, under the character's own review,
+        latest active candidate) for this conversation, in one pass over each
+        ledger. With automatic learning stopped nothing waits on anyone, so
+        neither is counted. A liked reply counts only once the character
+        could decide it: a person's approval is among its evidence."""
         cands = self.candidate_ledger.all()
         events = self.evidence_log.all()
         waiting = [c for c in cands
                    if c.get("state") == candidates_mod.STATE_PROPOSED
-                   and evidence_mod.can_be_strong(str(c.get("type") or ""))
                    and self._scope_authorizes(c.get("scope"), current_scope)]
         voice = admin = 0
-        if waiting and not self.promotion_policy.auto_promote:
-            admin = len(waiting)
-        elif waiting:
+        if waiting and self.promotion_policy.auto_promote:
             index = promotion_mod.EvidenceIndex(events, cands)
             now, admins = time.time(), self._admins()
             for c in waiting:
+                strong = evidence_mod.can_be_strong(str(c.get("type") or ""))
+                # Cheap first: an example no person approved cannot be decided.
+                if not strong and not any(
+                        e.get("kind") == evidence_mod.KIND_REACTION
+                        and e.get("reaction_type") == "positive"
+                        for e in index.linked(c)):
+                    continue
                 decision = promotion_mod.decide(
                     c, linked_events=index.linked(c), related_events=index.related(c),
                     peers=index.peers(c), now=now,
                     policy=self.promotion_policy, admin_ids=admins)
-                if decision.blocked_by:
-                    admin += 1
-                else:
+                if promotion_mod.needs_character(decision, c):
+                    # With its own decisions switched off the character reviews nothing.
+                    admin += 1 if self._judging_on() else 0
+                elif strong and not any(
+                        e.get("kind") == evidence_mod.KIND_SELF_REVIEW
+                        for e in index.linked(c)):
+                    # The agent's own rewrite: no person's event can make it strong.
                     voice += 1
         active = [c for c in cands
                   if c.get("state") == candidates_mod.STATE_PROMOTED
@@ -270,8 +281,11 @@ class DataViews:
                 strong += 1
         history = [h for h in cand.get("history") or ()
                    if h.get("state") == candidates_mod.STATE_PROMOTED]
-        if history and history[-1].get("actor") != "auto":
-            steps.append(say["by_admin"])
+        last = history[-1].get("actor") if history else "auto"
+        if last == candidates_mod.ACTOR_CHARACTER:
+            steps.append(say["by_me"])
+        elif last != "auto":
+            steps.append(say["by_person"])
         else:
             steps.append(say["passed"].format(events=len(supporting), strong=strong))
         return say["why"].format(steps=say["sep"].join(steps))

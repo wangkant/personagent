@@ -1,10 +1,13 @@
 """The Activity API: is it running, why did it speak, what has it learned.
 
 The local page's Activity view (persona_agent/welcome.py) reads
-``/api/dashboard/...`` server to server. Everything is read-only except
-promote, reject and roll back, which go through the candidate ledger the way
-``personagent learned`` does, rebuild the retrieval views, and record the
-actor ``dashboard``.
+``/api/dashboard/...`` server to server. The character decides what it learns
+by itself; each item says where it stands and who decided it. Everything is
+read-only except a person's optional promote, reject, roll back and restore,
+which go through the candidate ledger the way ``personagent learned`` does,
+rebuild the retrieval views, and record the actor ``dashboard``; and the
+forget and restore of what a chat remembers, which ``personagent memory``
+also calls while the service runs.
 
 Every request needs the header ``X-Personagent-Dashboard-Token`` with the
 secret in ``<runtime>/dashboard.token``, which the service creates when it
@@ -19,8 +22,10 @@ import functools
 import json
 import logging
 import os
+import re
 import secrets
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -29,8 +34,8 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 from . import (access, candidates, channels, decision_log, embeddings, evidence,
-               langs, lineage, promotion)
-from .config_env import env_bool, env_int
+               langs, learning as learning_rules, lineage, memstate, promotion)
+from .config_env import env_bool, env_float, env_int
 from .paths import ROOT, resolve_runtime_lang_file, runtime_dir
 from .settings import content_lang
 from .storage import atomic_write_text
@@ -54,8 +59,19 @@ _SECRET_SUFFIXES = ("_KEY", "_TOKEN", "_SECRET", "PASSWORD")
 _ACTIONS = {"promote": candidates.STATE_PROMOTED,
             "reject": candidates.STATE_REJECTED,
             "rollback": candidates.STATE_ROLLED_BACK}
-# "replace" promotes in place of the rewrite of the same reply that is in use.
-_VERBS = (*_ACTIONS, "replace")
+# "replace" promotes in place of the rewrite of the same reply that is in use;
+# "restore" brings back what the character set aside (candidates.restorable).
+_VERBS = (*_ACTIONS, "replace", "restore")
+
+# Who made a decision, as the page names it, read from the ledger's own reasons.
+_EXPIRED = re.compile(re.escape(learning_rules.REASON_EXPIRED)
+                      .replace(re.escape("{days}"), r"(\d+(?:\.\d+)?)"))
+_RULES = {learning_rules.REASON_POLICY: "policy", learning_rules.REASON_LESSON: "lesson",
+          learning_rules.REASON_BLOCKED: "blocked", learning_rules.REASON_CONFIRMED: "confirmed"}
+_AUTOMATIC = frozenset({candidates.ACTOR_AUTO, candidates.ACTOR_CHARACTER})
+# What the Activity view's one sentence per observed item needs.
+STANDING_SENT = ("stage", "missing", "reason", "expires", "events", "needEvents",
+                 "strong", "needStrong", "speakers", "needSpeakers")
 
 router = APIRouter()
 _token = ""
@@ -273,6 +289,12 @@ class _Learning:
         for version, hashes in self.lineage.versions().items():
             evidence.register_persona_lineage(version, hashes)
 
+    def judge(self) -> "Judge":
+        if self.agent is not None:
+            return Judge(self.agent._judging_on(),
+                         float(self.agent.promote_observe_max_days or 0), self.agent._admins())
+        return Judge.from_env(None, self.policy, access.page_owner(runtime_dir()))
+
     def rebuild(self) -> bool:
         if self.agent is not None:
             return self.agent._rebuild_promoted_views() != (-1, -1)
@@ -286,6 +308,124 @@ class _Learning:
         except OSError:
             return False
         return True
+
+
+# ---------------------------------------------------------------- standing --
+
+class Judge:
+    """What the running character's own decisions depend on: its switch
+    (learning._judging_on), the observation limit and the admins."""
+
+    def __init__(self, judging: bool, observe_days: float, admins) -> None:
+        self.judging = bool(judging)
+        self.observe_days = max(0.0, float(observe_days or 0))
+        self.admins = frozenset(admins or ())
+
+    @classmethod
+    def from_env(cls, env, policy, page_owners=()) -> "Judge":
+        """As settings.py and turns._admins read them, for the files alone."""
+        judging = env_bool("PROMOTE_JUDGE_ENABLED", True, env=env) and policy.auto_promote
+        days = env_float("PROMOTE_OBSERVE_MAX_DAYS", 30.0, minimum=0.0, env=env)
+        admins = access.identity_from_env(env).admins | frozenset(page_owners)
+        return cls(judging, days, admins)
+
+
+def decided_by(entry: dict | None) -> dict:
+    """Who made one history step and why: the reactions, the character, a
+    rule, the time limit or a person."""
+    entry = entry or {}
+    actor, reason = str(entry.get("actor") or ""), str(entry.get("reason") or "")
+    expired = _EXPIRED.fullmatch(reason)
+    expiry = getattr(candidates, "JUDGE_EXPIRY", None)
+    if actor in _AUTOMATIC and (expired or (expiry and entry.get("judge") == expiry)):
+        return {"by": "time", "why": "", "days": expired.group(1) if expired else ""}
+    if reason in _RULES and actor in _AUTOMATIC:
+        return {"by": "rule", "why": _RULES[reason]}
+    if actor == candidates.ACTOR_CHARACTER:
+        return {"by": "character", "why": _clip(reason, 200)}
+    if actor == candidates.ACTOR_AUTO:
+        return {"by": "reactions", "why": ""}
+    return {"by": "person", "why": ""}
+
+
+def _admin_ids(admins) -> set[str]:
+    return {evidence._text(a, 64) for a in admins} - {""}
+
+
+def standing(cand: dict, index: promotion.EvidenceIndex, policy, judge: Judge,
+             now: float | None = None) -> dict:
+    """Where an item under observation stands, from the policy's own decision
+    and the character's latest look; nothing here waits for a person."""
+    now = time.time() if now is None else now
+    linked, related = index.linked(cand), index.related(cand)
+    decision = promotion.decide(cand, linked_events=linked, related_events=related,
+                                peers=index.peers(cand), now=now, policy=policy,
+                                admin_ids=judge.admins)
+    max_age = policy.max_evidence_age_days * 86400.0
+    counting = [e for e in linked if promotion.supports_candidate(e, cand, policy=policy)]
+    fresh = [e for e in counting
+             if not (max_age > 0 and now - promotion.epoch(e.get("ts")) > max_age)]
+    speakers = {str(e.get("speaker_id") or "") for e in fresh} - {""}
+    speakers_ok = (not speakers or bool(_admin_ids(judge.admins) & speakers)
+                   or len(speakers) >= policy.min_speakers)
+    can_be_strong = evidence.can_be_strong(str(cand.get("type") or ""))
+    out = {"stage": "", "missing": "", "reason": "", "since": 0.0, "expires": 0.0,
+           "events": decision.supporting, "needEvents": policy.min_events,
+           "strong": decision.strong, "needStrong": policy.min_strong,
+           "canBeStrong": can_be_strong, "speakers": len(speakers),
+           "needSpeakers": policy.min_speakers, "speakersOk": speakers_ok,
+           "stale": len(counting) - len(fresh), "maxAgeDays": policy.max_evidence_age_days}
+    if decision.gate == promotion.GATE_OFF:
+        out["stage"] = "off"
+        return out
+    if promotion.needs_character(decision, cand):
+        if not judge.judging:
+            out["stage"] = "held"
+        else:
+            group = promotion.conflict_group(cand, index.peers(cand), policy=policy,
+                                             related_events=related)
+            seen = sorted({str(e.get("event_id") or "") for e in linked + related} - {""})
+            peers = sorted(str(c.get("candidate_id") or "") for c in group[1:])
+            review = cand.get("review") or {}
+            # The character looks again whenever the evidence or the rivals change.
+            if (review and sorted(review.get("seen") or []) == seen
+                    and sorted(review.get("peers") or []) == peers):
+                out.update(stage="observing", reason=_clip(review.get("reason"), 300),
+                           since=_epoch(review.get("ts")))
+            else:
+                out["stage"] = "deciding"
+    elif decision.gate == promotion.GATE_OK:
+        out["stage"] = "ready"
+    else:
+        out["stage"] = "reactions"
+        if decision.gate in (promotion.GATE_EVENTS, promotion.GATE_STRONG,
+                             promotion.GATE_SPEAKERS):
+            out["missing"] = decision.gate
+        elif decision.supporting < policy.min_events:
+            out["missing"] = promotion.GATE_EVENTS
+        elif can_be_strong and decision.strong < policy.min_strong:
+            out["missing"] = promotion.GATE_STRONG
+        elif (cand.get("type") == candidates.TYPE_EXAMPLE
+              and decision.person_support < 1):
+            out["missing"] = "approval"
+        else:
+            out["missing"] = promotion.GATE_SPEAKERS
+    # As learning._expire_observing: the newest reaction, or the item itself.
+    if judge.judging and judge.observe_days > 0:
+        stamps = [promotion.epoch(e.get("ts")) for e in linked + related]
+        stamps.append(promotion.epoch(cand.get("created_at")))
+        newest = max(stamps)
+        if newest:
+            out["expires"] = newest + judge.observe_days * 86400.0
+    return out
+
+
+def in_use_by(cand: dict) -> dict:
+    """How an item in use came into use: its latest step into use."""
+    for entry in reversed(cand.get("history") or []):
+        if entry.get("state") == candidates.STATE_PROMOTED:
+            return decided_by(entry)
+    return {"by": "", "why": ""}
 
 
 # ---------------------------------------------------------- conversations ---
@@ -310,6 +450,9 @@ def _conversation_keys(agent, ledger_rows: list[dict]) -> dict[str, float]:
             touch(key, max((_epoch(i.get("time")) for i in items), default=0.0))
         for key in agent.core_memory:
             touch(key)
+        for key in agent.episode_store.convs():
+            touch(key, max((_epoch(e.get("t1")) for e in agent.episode_store.episodes(key)),
+                           default=0.0))
         for key, ts in list(agent.last_activity_at.items()):
             touch(key, ts)
         for uid, ts in list(agent.last_dm_activity_at.items()):
@@ -326,16 +469,22 @@ def conversations_payload(agent) -> dict:
     by_conv: dict[str, dict[str, int]] = {}
     for cand in rows:
         conv = _routing_key(str((cand.get("scope") or {}).get("conv_id") or ""))
-        counts = by_conv.setdefault(conv, {"learned": 0, "pending": 0})
+        counts = by_conv.setdefault(conv, {"learned": 0, "observing": 0, "latest": 0.0})
         if cand.get("state") == candidates.STATE_PROMOTED:
             counts["learned"] += 1
+            # When something last came into use here: the page's "new" mark.
+            steps = [_epoch(h.get("ts")) for h in cand.get("history") or []
+                     if h.get("state") == candidates.STATE_PROMOTED]
+            counts["latest"] = max([counts["latest"], *steps])
         elif cand.get("state") == candidates.STATE_PROPOSED:
-            counts["pending"] += 1
+            counts["observing"] += 1
     out = []
     page = {channels.dm_routing_key(owner) for owner in access.page_owner(runtime_dir())}
     for key, last in _conversation_keys(agent, rows).items():
-        # A page chat replaced by New chat never comes back; only the current one is listed.
-        if page and channels.platform_of(key) == access.PAGE_PLATFORM and key not in page:
+        # A page chat replaced by New chat never comes back; it is listed only
+        # while it still remembers something, so that can be read and forgotten.
+        if (page and channels.platform_of(key) == access.PAGE_PLATFORM and key not in page
+                and not (agent is not None and _memory_count(agent, key))):
             continue
         counts = by_conv.get(key, {})
         out.append({
@@ -345,36 +494,40 @@ def conversations_payload(agent) -> dict:
             "last_activity": last,
             "memories": len(agent.memories.get(key, [])) if agent is not None else 0,
             "learned": counts.get("learned", 0),
-            "pending": counts.get("pending", 0),
+            "observing": counts.get("observing", 0),
+            "latest": counts.get("latest", 0.0),
         })
     out.sort(key=lambda c: -c["last_activity"])
     return {"conversations": out}
 
 
-def _allowed_actions(state: str) -> list[str]:
-    """The buttons a candidate gets: every legal transition, except that a
-    live one is rolled back (reversible) rather than rejected (final)."""
-    return [name for name, target in _ACTIONS.items()
-            if state in candidates._ALLOWED_FROM[target]
-            and not (name == "reject" and state == candidates.STATE_PROMOTED)]
+def _allowed_actions(state: str, cand: dict | None = None) -> list[str]:
+    """What a person may do to a candidate: put an observed one in use or set
+    it aside, undo one in use, bring back what the character set aside."""
+    if state == candidates.STATE_PROPOSED:
+        return ["promote", "reject"]
+    if state == candidates.STATE_PROMOTED:
+        return ["rollback"]
+    return ["restore"] if candidates.restorable(cand) else []
 
 
 def _active_rivals(cand: dict, peers: list[dict], policy) -> list[dict]:
     """Other rewrites of the same reply already in use: one reply never has
-    two active rewrites, so promoting `cand` must replace them."""
-    ids = set(promotion.find_conflicts(cand, peers, policy=policy))
-    return [p for p in peers if p.get("candidate_id") in ids
-            and p.get("state") == candidates.STATE_PROMOTED]
+    two active rewrites, so promoting `cand` must replace them (learning.put_in_use)."""
+    return promotion.active_rivals(cand, peers, policy=policy)
 
 
-def _candidate_view(cand: dict, events: dict, in_use: dict, policy) -> dict:
-    """One candidate as the local page shows it; `personagent learned` has the rest."""
-    actions = _allowed_actions(cand.get("state", ""))
+def _candidate_view(cand: dict, events: dict, in_use: dict, policy,
+                    where: dict) -> dict:
+    """One candidate as the local page shows it; `personagent learned` has the rest.
+    `where` is its standing() while observed, else in_use_by()."""
+    actions = _allowed_actions(cand.get("state", ""), cand)
     if "promote" in actions and _active_rivals(
             cand, in_use.get(str(cand.get("reply") or ""), []), policy):
         actions = ["replace" if a == "promote" else a for a in actions]
     linked = sorted((events[eid] for eid in cand.get("evidence") or [] if eid in events),
                     key=lambda ev: _epoch(ev.get("ts")))
+    observed = cand.get("state") == candidates.STATE_PROPOSED
     return {
         "id": cand.get("candidate_id", ""),
         "type": cand.get("type", ""),
@@ -385,6 +538,8 @@ def _candidate_view(cand: dict, events: dict, in_use: dict, policy) -> dict:
         "evidence": [{"speaker": ev.get("speaker_name") or ev.get("speaker_id") or ""}
                      for ev in linked],
         "actions": actions,
+        "standing": where if observed else None,
+        "by": None if observed else where,
     }
 
 
@@ -398,7 +553,101 @@ def _decision_view(row: dict) -> dict:
             "answered": row.get("answered", ""), "sender": row.get("sender", "")}
 
 
-_GROUPS = {candidates.STATE_PROPOSED: "pending", candidates.STATE_PROMOTED: "learned"}
+# ------------------------------------------------------------------ memory --
+
+MEMORY_KINDS = ("note", "episode", "thread", "core")
+_FORGET_BY = ("page", "terminal")
+REMOVED_LIMIT = 50
+
+
+def _note_view(where: str, item: dict) -> dict:
+    """One remembered fact: who it is about, who said it, when it was first
+    noted and last drawn on."""
+    text = str(item.get("text") or "")
+    by = item.get("saved_by_name") or ("auto" if item.get("auto") else "")
+    return {"text": _clip(text, 500), "time": _epoch(item.get("time")), "by": by,
+            "about": item.get("user_name") or "", "conv": where,
+            # The old text key still names a note that has no id yet.
+            "id": str(item.get("id") or embeddings.text_key(text)),
+            "born": _epoch(item.get("born") or item.get("time")),
+            "used": _epoch(item.get("used")),
+            "said_by_name": str(item.get("said_by_name") or "")}
+
+
+def _episode_view(row: dict) -> dict:
+    return {"id": str(row.get("id") or ""), "text": _clip(row.get("text"), 300),
+            "t0": _epoch(row.get("t0")), "t1": _epoch(row.get("t1") or row.get("t0")),
+            "names": [str(n) for n in row.get("names") or [] if n][:8]}
+
+
+def _thread_view(row: dict | None) -> dict | None:
+    if not row or not row.get("text"):
+        return None
+    return {"id": str(row.get("id") or ""), "text": _clip(row.get("text"), 500),
+            "from_t": _epoch(row.get("from_t")), "to_t": _epoch(row.get("to_t"))}
+
+
+def _removed_view(row: dict) -> dict:
+    return {"tid": str(row.get("tid") or ""), "kind": str(row.get("kind") or ""),
+            "why": str(row.get("why") or ""), "by": str(row.get("by") or ""),
+            "at": _epoch(row.get("at")), "text": _clip(row.get("text"), 500),
+            "until": _epoch(row.get("until"))}
+
+
+def _consolidation(agent, conv: str, now: float) -> dict | None:
+    """Today's consolidation calls against the cap; None while it is off."""
+    settings = getattr(agent, "settings", None)
+    cap = int(getattr(settings, "memory_calls_per_day", 0) or 0)
+    if cap <= 0 or int(getattr(agent, "memory_tidy_every", 0) or 0) <= 0:
+        return None
+    status = memstate.CallBudget(agent.memory_state).status(now, cap, conv)
+    return {key: status[key] for key in ("calls_today", "cap", "paused_until", "next_at")}
+
+
+def _remembered(agent, conv: str) -> dict:
+    """What a chat remembers beyond its facts: when the always-present note
+    changed, the summary, the events, what can be brought back."""
+    now = time.time()
+    store = agent.episode_store
+    events = sorted(store.episodes(conv), key=lambda e: _epoch(e.get("t1") or e.get("t0")),
+                    reverse=True)
+    return {"core_at": float(agent.memory_state.core_at(conv) or 0.0),
+            "thread": _thread_view(store.thread(conv)),
+            "episodes": [_episode_view(e) for e in events[:LIST_LIMIT * 3]],
+            "removed": [_removed_view(r) for r in agent._removed_items(conv, now)][:REMOVED_LIMIT],
+            "memory_status": _consolidation(agent, conv, now)}
+
+
+def memory_listing(agent, conv: str = "") -> dict:
+    """Every chat's memory, or one chat's, and what can be brought back: what
+    `personagent memory` prints."""
+    store = agent.episode_store
+    keys = [conv] if conv else sorted(
+        set(agent.memories) | set(agent.core_memory) | set(store.convs()))
+    chats = []
+    for key in keys:
+        core = agent.core_memory.get(key, "")
+        events = sorted(store.episodes(key), key=lambda e: _epoch(e.get("t0")))
+        entry = {"conv": key,
+                 "core": {"text": core, "at": float(agent.memory_state.core_at(key) or 0.0)}
+                 if core else None,
+                 "thread": _thread_view(store.thread(key)),
+                 "facts": [_note_view(key, item) for item in agent.memories.get(key, [])],
+                 "events": [_episode_view(e) for e in events]}
+        if entry["core"] or entry["thread"] or entry["facts"] or entry["events"]:
+            chats.append(entry)
+    return {"chats": chats,
+            "removed": [dict(_removed_view(r), conv=str(r.get("conv") or ""))
+                        for r in agent._removed_items(conv or None)]}
+
+
+def _memory_count(agent, conv: str) -> int:
+    store = agent.episode_store
+    return (len(agent.memories.get(conv, [])) + len(store.episodes(conv))
+            + bool(store.thread(conv)) + bool(agent.core_memory.get(conv)))
+
+
+_GROUPS = {candidates.STATE_PROPOSED: "observing", candidates.STATE_PROMOTED: "learned"}
 
 
 def conversation_payload(agent, conv_id: str) -> dict:
@@ -408,32 +657,44 @@ def conversation_payload(agent, conv_id: str) -> dict:
     mine = [c for c in rows
             if str((c.get("scope") or {}).get("conv_id") or "") == learning_key]
     mine.sort(key=lambda c: str(c.get("created_at") or ""), reverse=True)
-    shown: dict[str, list[dict]] = {"pending": [], "learned": []}
+    shown: dict[str, list[dict]] = {"observing": [], "learned": []}
     for cand in mine:
         group = _GROUPS.get(cand.get("state"))
         if group and len(shown[group]) < LIST_LIMIT:
             shown[group].append(cand)
     wanted = {eid for group in shown.values() for cand in group
               for eid in cand.get("evidence") or []}
-    events = ({e.get("event_id"): e for e in learning.log.many(wanted)}
-              if wanted else {})
-    # Only a rewrite in use can stand in a pending one's way.
+    # An observed item's standing needs the whole log (related events); read it once.
+    every = learning.log.all() if shown["observing"] else None
+    if every is not None:
+        events = {e.get("event_id"): e for e in every if e.get("event_id") in wanted}
+    else:
+        events = ({e.get("event_id"): e for e in learning.log.many(wanted)}
+                  if wanted else {})
+    # Only a rewrite in use can stand in an observed one's way.
     in_use: dict[str, list[dict]] = {}
-    for cand in rows if shown["pending"] else ():
+    for cand in rows if shown["observing"] else ():
         if cand.get("state") == candidates.STATE_PROMOTED:
             in_use.setdefault(str(cand.get("reply") or ""), []).append(cand)
+    # Where each item stands, or how it came into use.
+    placed: dict[str, dict] = {c.get("candidate_id", ""): in_use_by(c) for c in shown["learned"]}
+    if shown["observing"]:
+        judge = learning.judge()
+        index = promotion.EvidenceIndex(every, rows)
+        now = time.time()
+        for cand in shown["observing"]:
+            full = standing(cand, index, learning.policy, judge, now)
+            placed[cand.get("candidate_id", "")] = {k: full[k] for k in STANDING_SENT}
     memories, core = [], ""
+    remembered = {"core_at": 0.0, "thread": None, "episodes": [], "removed": [],
+                  "memory_status": None}
     if agent is not None:
         kept = [(conv_id, item) for item in reversed(agent.memories.get(conv_id, []))]
         # What its prompt also reads, so the page shows all it knows here.
         kept += agent._notes_from_rooms(conv_id)
-        for where, item in kept:
-            by = item.get("saved_by_name") or ("auto" if item.get("auto") else "")
-            memories.append({"text": _clip(item.get("text"), 500),
-                             "time": _epoch(item.get("time")), "by": by,
-                             "about": item.get("user_name") or "", "conv": where,
-                             "id": embeddings.text_key(item["text"])})
+        memories = [_note_view(where, item) for where, item in kept]
         core = _clip(agent.core_memory.get(conv_id, ""), 600)
+        remembered = _remembered(agent, conv_id)
     return {
         "id": conv_id,
         "platform": channels.platform_of(conv_id),
@@ -441,7 +702,10 @@ def conversation_payload(agent, conv_id: str) -> dict:
         "decisions": [_decision_view(row) for row in decision_log.LOG.recent(conv_id)],
         "memories": memories,
         "core_note": core,
-        **{group: [_candidate_view(c, events, in_use, learning.policy) for c in cands]
+        **remembered,
+        **{group: [_candidate_view(c, events, in_use, learning.policy,
+                                   placed.get(c.get("candidate_id", ""), {}))
+                   for c in cands]
            for group, cands in shown.items()},
     }
 
@@ -458,15 +722,9 @@ def _promote(learning: _Learning, cid: str, action: str, ts: str,
         return 409, {"error": f"another rewrite of this reply is in use ({ids[0][:12]}); "
                               "replace it instead",
                      "code": "active_rival", "rivals": ids}
-    if not rivals:
-        ok = ledger.promote(cid, ts=ts, actor=ACTOR, reason=reason)
-    else:
-        ok = ledger.supersede(rivals[0].get("candidate_id", ""), cid, ts=ts,
-                              actor=ACTOR, reason=reason)
-        # A ledger may hold several live rivals; retire them all.
-        for extra in rivals[1:] if ok else ():
-            ledger.rollback(extra.get("candidate_id", ""), ts=ts, actor=ACTOR,
-                            reason=f"replaced by {cid}")
+    # The same supersede-first logic the character's own adoption uses.
+    ok = learning_rules.put_in_use(ledger, cid, ts=ts, actor=ACTOR, reason=reason,
+                                   policy=learning.policy)
     if not ok:
         return 409, {"error": f"cannot {action} a candidate that is {cand.get('state')}",
                      "code": "illegal_transition"}
@@ -478,8 +736,22 @@ def _promote(learning: _Learning, cid: str, action: str, ts: str,
     return None
 
 
+def _restore(learning: _Learning, cid: str, ts: str, reason: str) -> bool:
+    """Bring back what the character or its time limit set aside; a rewrite
+    of the same reply in use steps aside for it."""
+    ledger = learning.ledger
+    rivals = promotion.active_rivals(ledger.get(cid), ledger.all(), policy=learning.policy)
+    if not ledger.restore(cid, ts=ts, actor=ACTOR, reason=reason):
+        return False
+    for rival in rivals:
+        ledger.rollback(rival.get("candidate_id", ""), ts=ts, actor=ACTOR,
+                        reason=f"replaced by {cid}")
+    return True
+
+
 def apply_action(agent, cid: str, action: str, reason: str = "") -> tuple[int, dict]:
-    """Promote, replace, reject or roll back one candidate, then rebuild the views."""
+    """Promote, replace, reject, roll back or restore one candidate, then
+    rebuild the views."""
     learning = _Learning(agent)
     ledger = learning.ledger
     cand = ledger.get(cid)
@@ -488,11 +760,15 @@ def apply_action(agent, cid: str, action: str, reason: str = "") -> tuple[int, d
     before = cand.get("state", "")
     reason = _clip(reason, 300) or "operator decision"
     ts = datetime.now().isoformat(timespec="seconds")
-    target = _ACTIONS.get(action, candidates.STATE_PROMOTED)
-    if before not in candidates._ALLOWED_FROM[target]:
+    verb = "promote" if action == "replace" else action
+    if verb not in _allowed_actions(before, cand):
         return 409, {"error": f"cannot {action} a candidate that is {before}",
                      "code": "illegal_transition"}
-    if target == candidates.STATE_PROMOTED:
+    if action == "restore":
+        if not _restore(learning, cid, ts, reason):
+            return 409, {"error": "only what the character set aside can be brought back",
+                         "code": "illegal_transition"}
+    elif _ACTIONS[verb] == candidates.STATE_PROMOTED:
         refused = _promote(learning, cid, action, ts, reason)
         if refused is not None:
             return refused
@@ -569,29 +845,106 @@ async def dashboard_action(cid: str, action: str, request: Request):
     return _json(payload, agent, status)
 
 
-@router.post("/api/dashboard/memory/forget", include_in_schema=False)
-async def dashboard_forget(request: Request):
-    """Forget one note of a chat, by its id, or with no id its core note."""
+async def _memory_write(request: Request) -> tuple[dict | None, Response | None]:
+    """The JSON object a memory write sends, or the refusal."""
     refused = _check(request, write=True)
     if refused is not None:
-        return refused
+        return None, refused
     srv = _server()
     try:
         body = await srv._read_body_limited(request, _MAX_BODY)
     except srv.RequestBodyTooLarge:
-        return _refused(413, "body_too_large", "request body too large")
+        return None, _refused(413, "body_too_large", "request body too large")
     try:
         parsed = json.loads(body or b"{}")
     except ValueError:
-        return _refused(400, "invalid_json", "body is not JSON")
+        return None, _refused(400, "invalid_json", "body is not JSON")
     if not isinstance(parsed, dict):
-        return _refused(400, "invalid_json", "body is not an object")
-    conv, note = str(parsed.get("conv") or ""), str(parsed.get("note") or "")
-    if not conv or len(conv) > 512:
+        return None, _refused(400, "invalid_json", "body is not an object")
+    if srv.agent is None:
+        return None, _refused(503, "agent_off", "the character is not running")
+    return parsed, None
+
+
+def _conv_of(parsed: dict) -> str:
+    conv = str(parsed.get("conv") or "")
+    return conv if 0 < len(conv) <= 512 else ""
+
+
+@router.post("/api/dashboard/memory/forget", include_in_schema=False)
+async def dashboard_forget(request: Request):
+    """Forget one remembered item of a chat: a fact (`note`), an event, the
+    summary (`thread`) or the always-present note (`core`). It can be brought
+    back for a day with the trash id it answers."""
+    parsed, refused = await _memory_write(request)
+    if refused is not None:
+        return refused
+    conv = _conv_of(parsed)
+    if not conv:
         return _refused(400, "invalid_id", "give a conversation id")
-    agent = srv.agent
+    # The older body: {conv, note} forgets a fact, {conv} the always-present note.
+    item = str(parsed.get("id") or parsed.get("note") or "")
+    kind = str(parsed.get("kind") or ("note" if item else "core"))
+    if kind not in MEMORY_KINDS or len(item) > 128:
+        return _refused(400, "invalid_kind", "kind is one of " + ", ".join(MEMORY_KINDS))
+    by = parsed.get("by") if parsed.get("by") in _FORGET_BY else "page"
+    agent = _server().agent
     async with agent.locks[conv]:
-        done = agent._forget_note(conv, note) if note else agent._forget_core(conv)
-    if not done:
-        return _refused(409, "already_forgotten", "that note is already gone")
+        tid = agent._forget_item(conv, kind, item, by=by)
+    if not tid:
+        return _refused(409, "already_forgotten", "that item is already gone")
+    # "-": forgotten, but the trash could not keep it, so there is no undo.
+    return _json({"ok": True, "tid": "" if tid == "-" else tid}, agent)
+
+
+@router.post("/api/dashboard/memory/restore", include_in_schema=False)
+async def dashboard_restore(request: Request):
+    """Bring back a removed item while it is still restorable."""
+    parsed, refused = await _memory_write(request)
+    if refused is not None:
+        return refused
+    tid = str(parsed.get("tid") or "")
+    if not tid or len(tid) > 64:
+        return _refused(400, "invalid_id", "give a trash id")
+    by = parsed.get("by") if parsed.get("by") in _FORGET_BY else "page"
+    agent = _server().agent
+    row = agent.memory_trash.get(tid)
+    if row is None:
+        return _refused(404, "restore_gone", "that item can no longer be restored")
+    async with agent.locks[str(row.get("conv") or "")]:
+        result = agent._restore(tid, by=by)
+    if result == "exists":
+        return _refused(409, "already_exists", "that item already exists")
+    if result != "ok":
+        return _refused(404, "restore_gone", "that item can no longer be restored")
     return _json({"ok": True}, agent)
+
+
+@router.post("/api/dashboard/memory/forget_chat", include_in_schema=False)
+async def dashboard_forget_chat(request: Request):
+    """Forget everything one chat remembers, with nothing kept to restore."""
+    parsed, refused = await _memory_write(request)
+    if refused is not None:
+        return refused
+    conv = _conv_of(parsed)
+    if not conv:
+        return _refused(400, "invalid_id", "give a conversation id")
+    agent = _server().agent
+    async with agent.locks[conv]:
+        count = _memory_count(agent, conv)
+        agent._forget_chat(conv)
+    return _json({"ok": True, "forgotten": count}, agent)
+
+
+@router.get("/api/dashboard/memory/list", include_in_schema=False)
+async def dashboard_memory_list(request: Request, conv: str = ""):
+    """What `personagent memory` lists while the service runs."""
+    refused = _check(request)
+    if refused is not None:
+        return refused
+    if len(conv) > 512:
+        return _refused(400, "invalid_id", "give a conversation id")
+    agent = _server().agent
+    if agent is None:
+        return _refused(503, "agent_off", "the character is not running")
+    return _json(memory_listing(agent, conv), agent)
