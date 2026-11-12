@@ -1,7 +1,7 @@
 {
 "default SERVER_HOST or 127.0.0.1": "기본값은 SERVER_HOST, 없으면 127.0.0.1",
 "default SERVER_PORT or 8080": "기본값은 SERVER_PORT, 없으면 8080",
-"A character for your group chats that knows when to stay quiet, and learns from being corrected.": "언제 조용히 있어야 하는지 알고, 고쳐 주면 배우는 그룹 채팅 캐릭터입니다.",
+"An agent that behaves like a person, on every platform you use: it has a character of its own, remembers, learns from the people it talks to, and judges for itself when to speak.": "사용하는 모든 플랫폼에서 사람처럼 행동하는 에이전트입니다. 고유한 캐릭터를 지니고, 기억하며, 대화 상대에게서 배우고, 언제 말할지 스스로 판단합니다.",
 "Run `personagent` to open local setup and chat, or `personagent start --no-browser` to print the local link.": "`personagent`를 실행하면 로컬 설정과 채팅이 열리고, `personagent start --no-browser`는 로컬 링크만 출력합니다.",
 "the folder holding .env, persona.txt and runtime/ (default: AGENT_HOME, this checkout, or ~/personagent)": ".env, persona.txt, runtime/이 있는 폴더 (기본값: AGENT_HOME, 이 체크아웃 또는 ~/personagent)",
 "personagent: --home needs a folder": "personagent: --home에는 폴더가 필요합니다",

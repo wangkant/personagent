@@ -1,7 +1,7 @@
 {
 "default SERVER_HOST or 127.0.0.1": "既定は SERVER_HOST、なければ 127.0.0.1",
 "default SERVER_PORT or 8080": "既定は SERVER_PORT、なければ 8080",
-"A character for your group chats that knows when to stay quiet, and learns from being corrected.": "発言を控えるべき時を判断し、訂正から学習するグループチャット用のキャラクターです。",
+"An agent that behaves like a person, on every platform you use: it has a character of its own, remembers, learns from the people it talks to, and judges for itself when to speak.": "お使いのすべてのプラットフォームで、人のようにふるまうエージェントです。独自のキャラクターを持ち、記憶し、話した相手から学び、いつ発言するかを自分で判断します。",
 "Run `personagent` to open local setup and chat, or `personagent start --no-browser` to print the local link.": "`personagent` でローカルの設定とチャットを開きます。`personagent start --no-browser` ならローカルリンクを表示するだけです。",
 "the folder holding .env, persona.txt and runtime/ (default: AGENT_HOME, this checkout, or ~/personagent)": ".env、persona.txt、runtime/ を置くフォルダー（既定：AGENT_HOME、このチェックアウト、または ~/personagent）",
 "personagent: --home needs a folder": "personagent：--home にはフォルダーが必要です",

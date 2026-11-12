@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent" width="100%">
 </p>
 
-<h3 align="center">一个懂得何时保持沉默、并能从纠正中学习的群聊角色。</h3>
+<h3 align="center">像人一样的智能体，可连接你使用的所有平台。<br>它拥有自己的性格与记忆，从与人的交流中学习，并自行判断何时发言。</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/personagent/"><img src="https://img.shields.io/pypi/v/personagent?style=flat-square&label=PyPI&labelColor=24292f&color=0969da&cacheSeconds=3600" alt="PyPI"></a>
@@ -13,7 +13,7 @@
 
 <p align="center"><a href="https://github.com/wangkant/personagent/blob/main/README.md">English</a> · <strong>简体中文</strong> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.zh-TW.md">繁體中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ja.md">日本語</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ko.md">한국어</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.es.md">Español</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.fr.md">Français</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.de.md">Deutsch</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.pt-BR.md">Português</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ru.md">Русский</a></p>
 
-personagent 是一个用于群聊的角色：可选用现成角色或自行编写，接入任意兼容 OpenAI 接口的模型即可使用。你可以先在本机与角色聊天，再通过同一个本地页面将其接入 QQ、微信、Telegram、Discord 及其他十余个平台。
+personagent 是一个像人一样的智能体（agent）：它拥有自己的性格与记忆，从与人的交流中学习，并自行判断何时发言。它可在你使用的各处运行：QQ、微信、Telegram、Discord 及另外十八个平台的群聊与私聊，本机的窗口，以及 Claude Code、Codex 等编程助手。角色可选用现成的，也可自行编写；接入任意兼容 OpenAI 接口的模型即可使用。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本地页面中的「连接平台」：可扫码连接或填写一至两项即可连接的平台、已折叠的高级平台，以及可接入的编程助手" width="960">
@@ -25,10 +25,17 @@ personagent 是一个用于群聊的角色：可选用现成角色或自行编�
 
 <table>
 <tr>
-<td width="220" valign="top"><strong>懂得何时保持沉默</strong></td>
+<td width="220" valign="top"><strong>拥有自己的性格</strong></td>
 <td valign="top">
-被点名时即回复。无人点名时，由模型判断真人此时是否会接话。<br>
-有人连续刷屏时，角色只回复一条。
+提供七种现成性格。其中三个是社区中早已流行的形象：DeepSeek 鲸鱼娘、GPT 娘（白龙）和 Claude 娘，立绘会眨眼、思考和说话。<br>
+人设可随时改写，角色已学到的内容将保留。
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>有记忆</strong></td>
+<td valign="top">
+每个聊天都有独立的记忆：重新启动后仍在的近期消息、此前对话的摘要、带日期的事件，以及关于成员的事实，均由它自行保持更新。<br>
+它记住的全部内容都列在「动态」中，其中任何一项都可以删除或恢复。
 </td>
 </tr>
 <tr>
@@ -41,22 +48,30 @@ personagent 是一个用于群聊的角色：可选用现成角色或自行编�
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>上手迅速，可接入你的群聊所在的平台</strong></td>
+<td width="220" valign="top"><strong>懂得何时保持沉默</strong></td>
 <td valign="top">
-一条命令即可在电脑上打开，页面支持中文、英文及其他八种语言。<br>
-填写一个模型 Key 即可聊天；再用手机扫码一次或粘贴一至两项，即可接入一个平台。
+在群聊中，被点名时即回复；无人点名时，由模型判断真人此时是否会接话。<br>
+有人连续刷屏时，只回复一条。
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>可选用现成角色，也可自行编写</strong></td>
+<td width="220" valign="top"><strong>连接你的所有平台</strong></td>
 <td valign="top">
-提供七种现成性格。其中三个是社区中早已流行的形象：DeepSeek 鲸鱼娘、GPT 娘（白龙）和 Claude 娘，立绘会眨眼、思考和说话。<br>
-人设可随时改写，角色已学到的内容将保留。
+二十二个聊天平台均可在同一页面中连接，用手机扫码一次或粘贴一至两项即可，群聊与私聊同样适用。<br>
+同一个智能体也在本机窗口中与你对话，并可接入 Claude Code、Codex 和 DeepSeek Harness。<br>
+其他平台可通过 AstrBot、Koishi 或 Matrix 桥接接入，也可自行编写连接器。
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>适配你现有的条件</strong></td>
+<td valign="top">
+可使用任意兼容 OpenAI 接口的模型：OpenRouter 的免费模型、付费服务，或用 Ollama 在本机运行的模型。<br>
+一条命令即可打开，页面支持中文、英文及其他八种语言；填写一个模型 Key 即可开始聊天。
 </td>
 </tr>
 </table>
 
-每个聊天都有独立的记忆：重新启动后仍在的近期消息、此前对话的摘要、带日期的事件，以及关于成员的事实，均由角色自行保持更新。也可以让角色忘记指定内容：`小夏，记住 阿杰不吃辣`、`小夏 忘掉 不吃辣`（[记忆命令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#教导角色)）。「动态」中会显示角色记住的全部内容，其中任何一项都可以删除或恢复（[记忆](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#记忆)）。
+也可以在聊天中让它记住或忘记指定内容：`小夏，记住 阿杰不吃辣`、`小夏 忘掉 不吃辣`（[记忆命令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#教导角色)）。保存哪些内容、保存多久，见使用手册的[记忆](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#记忆)一节。
 
 ## 快速开始
 
@@ -71,7 +86,7 @@ personagent
 
 personagent 本身免费。费用支付给你选择的模型服务，按其价格计算。OpenRouter 的免费模型每天限 50 次请求，部分免费服务商会保留收到的内容；Ollama 在你自己的电脑上运行模型，无需 Key。
 
-## 接入群聊
+## 连接你的平台
 
 在本地页面中打开「连接平台」：
 
@@ -83,7 +98,7 @@ personagent 本身免费。费用支付给你选择的模型服务，按其价�
 
 已连接的平台在每次启动 personagent 时都会自动连接。扫码连接的平台，以及 Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 直接连接；其余平台通过 personagent 在后台下载并运行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入。在没有显示器的服务器上，可在终端中运行 `personagent connect <平台>` 连接上述十个平台中的任意一个，操作步骤和核验方式与页面相同；运行 `personagent up` 即可在不打开浏览器的情况下全部启动。各平台的设置方法见[使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#接入聊天平台)；从零开始接入 QQ 请参阅[部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)。
 
-如果你已在运行 AstrBot、Koishi 或 Matrix，personagent 可以接在其后，仅作为角色运行：请参阅[你自己运行的桥接](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#你自己运行的桥接)、[Satori 连接器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.zh-CN.md)和 [Matrix 连接器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.zh-CN.md)。
+如果你已在运行 AstrBot、Koishi 或 Matrix，personagent 可以接在其后，仅作为智能体运行：请参阅[你自己运行的桥接](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#你自己运行的桥接)、[Satori 连接器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.zh-CN.md)和 [Matrix 连接器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.zh-CN.md)。
 
 ## 编程助手
 

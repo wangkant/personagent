@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent" width="100%">
 </p>
 
-<h3 align="center">一個懂得適時保持安靜、能從他人糾正中學習的群組聊天角色。</h3>
+<h3 align="center">像人一樣的 AI 代理，可連接你使用的所有平台。<br>它擁有自己的個性與記憶，從與人的交流中學習，並自行判斷何時發言。</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/personagent/"><img src="https://img.shields.io/pypi/v/personagent?style=flat-square&label=PyPI&labelColor=24292f&color=0969da&cacheSeconds=3600" alt="PyPI"></a>
@@ -15,7 +15,7 @@
 
 *本頁譯自英文版與簡體中文版，以英文版為準，英文版可能較新。*
 
-personagent 是一個加入群組聊天的角色：可選用現成角色或自行撰寫，接上任何相容 OpenAI 的模型即可使用。先在自己的電腦上與它對話，再從同一個本機頁面將它接入 QQ、微信、Telegram、Discord 及另外十八個平台。
+personagent 是一個像人一樣的 AI 代理（agent）：它擁有自己的個性與記憶，從與人的交流中學習，並自行判斷何時發言。它可在你使用的各處運作：QQ、微信、Telegram、Discord 及另外十八個平台的群組與私訊，你電腦上的視窗，以及 Claude Code、Codex 等程式設計助理。角色可選用現成的，也可自行撰寫；接上任何相容 OpenAI 的模型即可使用。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本機頁面的「連接平台」：可掃描連接或填寫一至兩項即可連接的平台、已收合的進階平台，以及可接入的程式設計助理" width="960">
@@ -27,10 +27,17 @@ personagent 是一個加入群組聊天的角色：可選用現成角色或自�
 
 <table>
 <tr>
-<td width="220" valign="top"><strong>懂得適時保持安靜</strong></td>
+<td width="220" valign="top"><strong>擁有自己的個性</strong></td>
 <td valign="top">
-被點名時即會回覆。無人點名時，由一個模型判斷真人此時是否會接話。<br>
-有人連續洗版時，它只回覆一則。
+提供七種現成個性。其中三個是社群中早已有人繪製的角色：DeepSeek 鯨魚娘、GPT 娘（白龍）和 Claude 娘，立繪會眨眼、思考與開口說話。<br>
+人設可隨時改寫，角色學到的內容會予以保留。
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>有記憶</strong></td>
+<td valign="top">
+每個聊天都有獨立的記憶：重新啟動後仍在的近期訊息、此前對話的摘要、附日期的事件，以及關於成員的事實，均由它自行保持最新。<br>
+它記住的全部內容都列在「動態」中，其中任何一項都可以刪除或還原。
 </td>
 </tr>
 <tr>
@@ -43,22 +50,30 @@ personagent 是一個加入群組聊天的角色：可選用現成角色或自�
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>容易上手，可接入你所在的群組</strong></td>
+<td width="220" valign="top"><strong>懂得適時保持安靜</strong></td>
 <td valign="top">
-一行指令即可在電腦上開啟，頁面提供中文、英文及另外八種語言。<br>
-填入一個模型金鑰即可聊天，再以手機掃描一次或貼上一至兩項，即可接入一個平台。
+在群組中，被點名時即會回覆；無人點名時，由一個模型判斷真人此時是否會接話。<br>
+有人連續洗版時，它只回覆一則。
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>可選用現成角色，也可自行撰寫</strong></td>
+<td width="220" valign="top"><strong>連接你的所有平台</strong></td>
 <td valign="top">
-提供七種現成個性。其中三個是社群中早已有人繪製的角色：DeepSeek 鯨魚娘、GPT 娘（白龍）和 Claude 娘，立繪會眨眼、思考與開口說話。<br>
-人設可隨時改寫，角色學到的內容會予以保留。
+二十二個聊天平台都能在同一個頁面中連接，只需以手機掃描一次或貼上一至兩項，群組與私訊皆適用。<br>
+同一個 AI 代理也會在你電腦上的視窗中回覆，並可在 Claude Code、Codex 和 DeepSeek Harness 中使用。<br>
+其他平台可透過 AstrBot、Koishi 或 Matrix 橋接接入，也可自行撰寫聯結器。
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>沿用你現有的資源</strong></td>
+<td valign="top">
+可使用任何相容 OpenAI 的模型：OpenRouter 的免費模型、付費服務，或以 Ollama 在你電腦上執行的模型。<br>
+一行指令即可開啟，頁面提供中文、英文及另外八種語言；填入一個模型金鑰即可開始聊天。
 </td>
 </tr>
 </table>
 
-每個聊天都有獨立的記憶：重新啟動後仍在的近期訊息、此前對話的摘要、附日期的事件，以及關於成員的事實，均由角色自行保持最新。也可以要求角色忘記指定的內容：`小夏，記住 阿傑不吃辣`、`小夏 忘掉 不吃辣`（[記憶指令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#教導角色)）。「動態」中會顯示角色記住的全部內容，其中任何一項都可以刪除或還原（[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#記憶)）。
+也可以在聊天中要求它記住或忘記指定的內容：`小夏，記住 阿傑不吃辣`、`小夏 忘掉 不吃辣`（[記憶指令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#教導角色)）。會保存哪些內容、保存多久，請參閱使用手冊的[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#記憶)一節。
 
 ## 從這裡開始
 
@@ -73,7 +88,7 @@ personagent
 
 personagent 本身免費。費用支付給你選擇的模型服務，依該服務的價格計算。OpenRouter 的免費模型每天可請求 50 次，部分免費服務商會保留收到的內容；Ollama 在你自己的電腦上執行模型，不需要金鑰。
 
-## 接入你的群組
+## 連接你的平台
 
 在本機頁面開啟「連接平台」：
 
@@ -85,7 +100,7 @@ personagent 本身免費。費用支付給你選擇的模型服務，依該服�
 
 已連接的平台在此後每次啟動 personagent 時都會自動連線。掃描連接的平台，以及 Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 直接連線；其餘平台透過它在背景下載並執行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入。在沒有顯示器的伺服器上，可以在終端機中執行 `personagent connect <平台>`，連接上述十個平台中的任何一個，操作步驟和驗證方式與頁面相同；執行 `personagent up` 即可在不開啟瀏覽器的情況下全部啟動。各平台的設定方式請參閱[使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#接入聊天平台)；從頭接入 QQ 的步驟請參閱[部署教學](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-TW.md)。
 
-若已在執行 AstrBot、Koishi 或 Matrix，personagent 可以接在其後方，僅負責扮演角色：請參閱[你自己執行的橋接](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#你自己執行的橋接)、[Satori 聯結器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.zh-TW.md)和 [Matrix 聯結器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.zh-TW.md)。
+若已在執行 AstrBot、Koishi 或 Matrix，personagent 可以接在其後方，僅作為 AI 代理運作：請參閱[你自己執行的橋接](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#你自己執行的橋接)、[Satori 聯結器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.zh-TW.md)和 [Matrix 聯結器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.zh-TW.md)。
 
 ## 程式設計助理
 

@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent" width="100%">
 </p>
 
-<h3 align="center">黙るべきときを心得ていて、訂正されると学ぶ、グループチャットのためのキャラクター。</h3>
+<h3 align="center">お使いのすべてのプラットフォームで、人のようにふるまうエージェントです。<br>独自のキャラクターを持ち、記憶し、話した相手から学び、いつ発言するかを自分で判断します。</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/personagent/"><img src="https://img.shields.io/pypi/v/personagent?style=flat-square&label=PyPI&labelColor=24292f&color=0969da&cacheSeconds=3600" alt="PyPI"></a>
@@ -15,7 +15,7 @@
 
 *これは英語版 README の翻訳です。基準となるのは英語版で、こちらより新しい場合があります。*
 
-personagent はグループチャットのためのキャラクターです。用意されたものから選ぶか自分で書き、OpenAI 互換の任意のモデルで動かせます。まず自分のコンピューターで会話を試し、その後、同じローカルページから QQ、WeChat、Telegram、Discord をはじめ、さらに 18 のプラットフォームに参加させることができます。
+personagent は、人のようにふるまうエージェントです。独自のキャラクターを持ち、記憶し、話した相手から学び、いつ発言するかを自分で判断します。QQ、WeChat、Telegram、Discord とさらに 18 のプラットフォームのグループチャットと個人チャット、あなたのコンピューター上のウィンドウ、Claude Code や Codex などのコーディングアシスタントなど、お使いの場所のどこでも動作します。キャラクターは選ぶことも自分で書くこともでき、OpenAI 互換の任意のモデルで動作します。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「プラットフォーム連携」画面。スキャンまたは 1〜2 個の値の貼り付けで連携できるプラットフォーム、折りたたまれた上級のプラットフォーム、参加できるコーディングアシスタントが表示されている" width="960">
@@ -27,10 +27,17 @@ personagent はグループチャットのためのキャラクターです。�
 
 <table>
 <tr>
-<td width="220" valign="top"><strong>黙るべきときを心得ています。</strong></td>
+<td width="220" valign="top"><strong>独自のキャラクターを持っています。</strong></td>
 <td valign="top">
-呼ばれれば答えます。それ以外のときは、人ならここで口を挟むかをモデルが判断します。<br>
-メッセージが立て続けに届いても、返信は 1 回です。
+既成の性格が 7 つあります。そのうち 3 つは、コミュニティですでに描かれてきたキャラクター、DeepSeek クジラ娘、GPT ドラゴン娘、Claude お嬢様です。立ち絵はまばたきし、考え、話します。<br>
+ペルソナはいつでも書き直せます。キャラクターが学んだことは残ります。
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>記憶します。</strong></td>
+<td valign="top">
+チャットごとに独立した記憶を持ちます。再起動しても失われない最近のメッセージ、これまでの会話の要約、日付付きの出来事、人についての事実で、これらを自ら最新の状態に保ちます。<br>
+記憶しているすべての内容はアクティビティビューに一覧表示され、どの項目も削除または復元できます。
 </td>
 </tr>
 <tr>
@@ -43,22 +50,30 @@ personagent はグループチャットのためのキャラクターです。�
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>簡単に始められ、グループが集まる場所で動作します。</strong></td>
+<td width="220" valign="top"><strong>黙るべきときを心得ています。</strong></td>
 <td valign="top">
-コマンド 1 つで自分のコンピューター上に開きます。表示は英語、中国語、ほか 8 つの言語から選べます。<br>
-モデルのキーを 1 つ貼り付ければチャットでき、スマートフォンでのスキャンか値を 1〜2 個貼り付けるだけでプラットフォームと連携できます。
+グループでは、呼ばれれば答えます。それ以外のときは、人ならここで口を挟むかをモデルが判断します。<br>
+メッセージが立て続けに届いても、返信は 1 回です。
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>既成のキャラクターにも、自分だけのキャラクターにもできます。</strong></td>
+<td width="220" valign="top"><strong>すべてのプラットフォームに接続します。</strong></td>
 <td valign="top">
-既成の性格が 7 つあります。そのうち 3 つは、コミュニティですでに描かれてきたキャラクター、DeepSeek クジラ娘、GPT ドラゴン娘、Claude お嬢様です。立ち絵はまばたきし、考え、話します。<br>
-ペルソナはいつでも書き直せます。キャラクターが学んだことは残ります。
+22 のチャットプラットフォームを 1 つのページから、スマートフォンでのスキャンか値を 1〜2 個貼り付けるだけで連携でき、グループチャットにも個人チャットにも対応します。<br>
+同じエージェントが、あなたのコンピューター上のウィンドウでも、Claude Code、Codex、DeepSeek Harness の中でも応答します。<br>
+その他のプラットフォームは、AstrBot、Koishi、Matrix のブリッジ、または自分で書くコネクターを通じて追加できます。
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>お手持ちの環境で動作します。</strong></td>
+<td valign="top">
+OpenAI 互換の任意のモデルを使えます。OpenRouter の無料モデル、有料サービス、または Ollama で自分のコンピューター上で動かすモデルです。<br>
+コマンド 1 つで開き、表示は英語、中国語、ほか 8 つの言語から選べます。モデルのキーを 1 つ貼り付ければチャットを始められます。
 </td>
 </tr>
 </table>
 
-チャットごとに独立した記憶を持ちます。再起動しても失われない最近のメッセージ、これまでの会話の要約、日付付きの出来事、人についての事実で、キャラクターがこれらを自ら最新の状態に保ちます。頼めば忘れます：`ノヴァ、覚えて：ケイはベジタリアン`、`ノヴァ、忘れて、ベジタリアンのこと`（[記憶コマンド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶コマンド)）。アクティビティビューには記憶しているすべての内容が表示され、どの項目も削除または復元できます（[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶)）。
+チャットで頼めば、覚えることも忘れることもできます：`ノヴァ、覚えて：ケイはベジタリアン`、`ノヴァ、忘れて、ベジタリアンのこと`（[記憶コマンド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶コマンド)）。何をどのくらいの期間保持するかは、ガイドの[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶)の節に記載しています。
 
 ## はじめに
 
@@ -73,7 +88,7 @@ Windows では専用のウィンドウで開き、macOS と Linux ではブラ�
 
 personagent 自体は無料です。料金は、選んだモデルサービスに、そのサービスの料金で支払います。OpenRouter の無料モデルは 1 日 50 リクエストまで使え、無料のプロバイダーの中には受け取った内容を保持するところもあります。Ollama ならキーなしで自分のコンピューター上でモデルを動かせます。
 
-## グループに参加させる
+## プラットフォームを連携する
 
 ローカルページで **プラットフォーム連携** を開きます。
 
@@ -85,7 +100,7 @@ personagent 自体は無料です。料金は、選んだモデルサービス�
 
 連携中のプラットフォームは personagent を起動するたびに再び起動します。スキャンで連携するプラットフォームと Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat には personagent が自分で接続し、それ以外は personagent がダウンロードしてバックグラウンドで動かす [AstrBot](https://github.com/AstrBotDevs/AstrBot) を経由します。ディスプレイのないサーバーでは、personagent が自分で接続するこれらのプラットフォームを、ターミナルから `personagent connect <platform>` を使ってページと同じ手順と確認で接続でき、`personagent up` でブラウザーなしですべてを起動できます。プラットフォームごとの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#チャットに入れる)に、QQ をゼロからつなぐ手順は[中国語のデプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)にあります。
 
-すでに AstrBot、Koishi、Matrix を運用している場合は、personagent をその背後でキャラクターとして動かすことができます。[自分で動かすブリッジ](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#自分で動かすブリッジ)、[Satori コネクター](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ja.md)、[Matrix コネクター](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ja.md)を参照してください。
+すでに AstrBot、Koishi、Matrix を運用している場合は、personagent をその背後でエージェントとして動かすことができます。[自分で動かすブリッジ](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#自分で動かすブリッジ)、[Satori コネクター](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ja.md)、[Matrix コネクター](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ja.md)を参照してください。
 
 ## コーディングアシスタント
 

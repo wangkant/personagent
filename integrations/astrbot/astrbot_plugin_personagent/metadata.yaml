@@ -1,6 +1,6 @@
 name: astrbot_plugin_personagent
 display_name: personagent
-short_desc: 让 personagent 角色进群：会判断什么时候该闭嘴，被纠正后经得起检验才学会。A group-chat character that knows when to stay quiet and learns from being corrected.
+short_desc: 把 personagent 接入 AstrBot 支持的平台：一个像人一样的智能体，拥有自己的性格与记忆，从与人的交流中学习，并自行判断何时发言。Connects personagent, an agent that behaves like a person, to the platforms AstrBot supports.
 desc: |
   AstrBot 把消息交给 [personagent](https://github.com/wangkant/personagent) 的途径，用于 personagent 自己不直接连接的平台。
   角色只在被叫到、或判断真人会接话时开口；别人纠正它、它的第二次回答被接受后，才把更好的说法记下来，一个捣乱的人教不坏它；

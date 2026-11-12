@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent" width="100%">
 </p>
 
-<h3 align="center">Eine Figur für Ihre Gruppenchats, die weiß, wann sie besser schweigt, und aus Korrekturen lernt.</h3>
+<h3 align="center">Ein Agent, der sich wie ein Mensch verhält, auf allen Plattformen, die Sie nutzen.<br>Er hat eine eigene Persönlichkeit, merkt sich Dinge, lernt von den Menschen, mit denen er spricht, und entscheidet selbst, wann er sich äußert.</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/personagent/"><img src="https://img.shields.io/pypi/v/personagent?style=flat-square&label=PyPI&labelColor=24292f&color=0969da&cacheSeconds=3600" alt="PyPI"></a>
@@ -15,7 +15,7 @@
 
 *Dies ist eine Übersetzung der englischen README, die maßgeblich ist und aktueller sein kann.*
 
-personagent ist eine Figur für Ihre Gruppenchats: Wählen Sie eine fertige aus oder schreiben Sie Ihre eigene, und betreiben Sie sie mit einem beliebigen OpenAI-kompatiblen Modell. Chatten Sie zunächst auf Ihrem eigenen Rechner mit ihr, und holen Sie sie dann von derselben lokalen Seite aus in QQ, WeChat, Telegram, Discord und achtzehn weitere Plattformen.
+personagent ist ein Agent, der sich wie ein Mensch verhält: Er hat eine eigene Persönlichkeit, merkt sich Dinge, lernt von den Menschen, mit denen er spricht, und entscheidet selbst, wann er sich äußert. Er läuft überall dort, wo Sie ihn brauchen: in Gruppenchats und Einzelchats auf QQ, WeChat, Telegram, Discord und achtzehn weiteren Plattformen, in einem Fenster auf Ihrem Rechner und in Programmierassistenten wie Claude Code und Codex. Seine Persönlichkeit wählen Sie aus oder schreiben sie selbst, und er läuft mit einem beliebigen OpenAI-kompatiblen Modell.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Die Ansicht Plattformen verbinden der lokalen Seite: die Plattformen, die per Scan oder mit ein bis zwei eingefügten Werten verbunden werden, die eingeklappten erweiterten Plattformen und die Programmierassistenten, denen die Figur beitreten kann" width="960">
@@ -27,10 +27,17 @@ personagent ist eine Figur für Ihre Gruppenchats: Wählen Sie eine fertige aus 
 
 <table>
 <tr>
-<td width="220" valign="top"><strong>Die Figur weiß, wann sie besser schweigt.</strong></td>
+<td width="220" valign="top"><strong>Er hat eine eigene Persönlichkeit.</strong></td>
 <td valign="top">
-Die Figur antwortet, wenn sie angesprochen wird. Andernfalls beurteilt ein Modell, ob sich ein Mensch an dieser Stelle beteiligen würde.<br>
-Auf eine Flut von Nachrichten kommt eine einzige Antwort.
+Sieben fertige Persönlichkeiten. Drei davon sind Figuren, die die Community längst zeichnet: das DeepSeek-Walmädchen, das GPT-Drachenmädchen und die Claude-Dame, mit Porträts, die blinzeln, nachdenken und sprechen.<br>
+Sie können die Persona jederzeit umschreiben. Was die Figur gelernt hat, bleibt erhalten.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>Er merkt sich Dinge.</strong></td>
+<td valign="top">
+Jeder Chat hat sein eigenes Gedächtnis: letzte Nachrichten, die einen Neustart überstehen, eine Zusammenfassung des bisherigen Gesprächs, datierte Ereignisse und Fakten über Personen, die er selbst aktuell hält.<br>
+Alles, was er sich merkt, steht in der Ansicht <strong>Aktivität</strong>; jeder Eintrag dort lässt sich vergessen oder zurückholen.
 </td>
 </tr>
 <tr>
@@ -43,22 +50,30 @@ Jede Änderung wird festgehalten, und jede lässt sich zurücknehmen.
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>Die Figur ist schnell gestartet und dort präsent, wo Ihre Gruppe ist.</strong></td>
+<td width="220" valign="top"><strong>Die Figur weiß, wann sie besser schweigt.</strong></td>
 <td valign="top">
-Ein Befehl öffnet sie auf Ihrem Rechner, auf Englisch, Chinesisch oder in acht weiteren Sprachen.<br>
-Fügen Sie einen Modellschlüssel ein, beginnen Sie den Chat und verbinden Sie anschließend eine Plattform per Scan mit dem Smartphone oder mit ein bis zwei eingefügten Werten.
+In einer Gruppe antwortet die Figur, wenn sie angesprochen wird. Andernfalls beurteilt ein Modell, ob sich ein Mensch an dieser Stelle beteiligen würde.<br>
+Auf eine Flut von Nachrichten kommt eine einzige Antwort.
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>Die Figur kann eine fertige sein oder Ihre eigene.</strong></td>
+<td width="220" valign="top"><strong>Er verbindet sich mit all Ihren Plattformen.</strong></td>
 <td valign="top">
-Sieben fertige Persönlichkeiten. Drei davon sind Figuren, die die Community längst zeichnet: das DeepSeek-Walmädchen, das GPT-Drachenmädchen und die Claude-Dame, mit Porträts, die blinzeln, nachdenken und sprechen.<br>
-Sie können die Persona jederzeit umschreiben. Was die Figur gelernt hat, bleibt erhalten.
+Zweiundzwanzig Chat-Plattformen werden von einer einzigen Seite aus verbunden, per Scan mit dem Smartphone oder mit ein bis zwei eingefügten Werten, für Gruppenchats ebenso wie für Einzelchats.<br>
+Derselbe Agent antwortet in einem Fenster auf Ihrem Rechner sowie in Claude Code, Codex und DeepSeek Harness.<br>
+Jede weitere Plattform lässt sich über eine AstrBot-, Koishi- oder Matrix-Brücke oder einen selbst geschriebenen Konnektor anbinden.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>Er funktioniert mit dem, was Sie haben.</strong></td>
+<td valign="top">
+Jedes OpenAI-kompatible Modell: die kostenlosen Modelle von OpenRouter, ein kostenpflichtiger Dienst oder ein Modell, das mit Ollama auf Ihrem eigenen Rechner läuft.<br>
+Ein Befehl öffnet ihn, auf Englisch, Chinesisch oder in acht weiteren Sprachen, und ein eingefügter Modellschlüssel startet den Chat.
 </td>
 </tr>
 </table>
 
-Jeder Chat hat sein eigenes Gedächtnis: letzte Nachrichten, die einen Neustart überstehen, eine Zusammenfassung des bisherigen Gesprächs, datierte Ereignisse und Fakten über Personen, die die Figur selbst aktuell hält. Auf Wunsch vergisst die Figur Gespeichertes wieder: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([Gedächtnis-Befehle](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis-befehle)). Die Ansicht **Aktivität** zeigt alles, was sie sich merkt, und jeder Eintrag dort lässt sich vergessen oder zurückholen ([Gedächtnis](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis)).
+Auf Wunsch im Chat merkt er sich Dinge oder vergisst sie wieder: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([Gedächtnis-Befehle](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis-befehle)). Was er speichert und wie lange, steht im Abschnitt [Gedächtnis](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis) des Handbuchs.
 
 ## Erste Schritte
 
@@ -73,7 +88,7 @@ Unter Windows öffnet es sich in einem eigenen Fenster, unter macOS und Linux im
 
 personagent ist kostenlos. Sie bezahlen den gewählten Modelldienst zu dessen eigenen Preisen. Die kostenlosen Modelle von OpenRouter erlauben 50 Anfragen pro Tag, und manche kostenlosen Anbieter speichern, was sie erhalten; Ollama führt ein Modell ganz ohne Schlüssel auf Ihrem eigenen Computer aus.
 
-## In Ihre Gruppe einbinden
+## Ihre Plattformen verbinden
 
 Öffnen Sie **Plattformen verbinden** auf der lokalen Seite:
 
@@ -85,7 +100,7 @@ personagent ist kostenlos. Sie bezahlen den gewählten Modelldienst zu dessen ei
 
 Verbundene Plattformen werden bei jedem Start von personagent automatisch mitgestartet. Die Plattformen mit Scan-Verbindung sowie Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK und Stoat verbindet personagent selbst; die übrigen laufen über ein [AstrBot](https://github.com/AstrBotDevs/AstrBot), das personagent herunterlädt und im Hintergrund betreibt. Auf einem Server ohne Bildschirm verbindet `personagent connect <platform>` jede dieser zehn Plattformen im Terminal, mit denselben Schritten und Prüfungen wie die Seite, und `personagent up` startet alles ohne Browser. Die Einrichtung für jede Plattform steht im [Benutzerhandbuch](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#in-einen-chat-bringen), und die vollständige Einrichtung von QQ in der [chinesischen Deployment-Anleitung](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
 
-Sie betreiben bereits AstrBot, Koishi oder Matrix? personagent kann als Figur dahinter laufen: siehe [Brücken, die Sie selbst betreiben](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#brücken-die-sie-selbst-betreiben), den [Satori-Konnektor](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.de.md) und den [Matrix-Konnektor](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.de.md).
+Sie betreiben bereits AstrBot, Koishi oder Matrix? personagent kann als Agent dahinter laufen: siehe [Brücken, die Sie selbst betreiben](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#brücken-die-sie-selbst-betreiben), den [Satori-Konnektor](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.de.md) und den [Matrix-Konnektor](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.de.md).
 
 ## Programmierassistenten
 

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "personagent"
 version = "1.4.2"
-description = "A character for your group chats that knows when to stay quiet, and learns from being corrected."
+description = "An agent that behaves like a person, on every platform you use: it has a character of its own, remembers, learns from the people it talks to, and judges for itself when to speak."
 readme = "README.md"
 requires-python = ">=3.10"
 # Noncommercial use only. The bundled AstrBot plugin and connector SDK are MIT,
@@ -14,7 +14,7 @@ license = "PolyForm-Noncommercial-1.0.0 AND MIT AND CC-BY-NC-SA-4.0"
 license-files = ["LICENSE", "integrations/astrbot/astrbot_plugin_personagent/LICENSE", "persona_agent/static/characters/LICENSE.md"]
 authors = [{ name = "Qiankang Wang" }]
 keywords = [
-    "llm", "agent", "persona", "chatbot", "group-chat", "astrbot", "onebot",
+    "llm", "agent", "persona", "chatbot", "multi-platform", "group-chat", "memory", "astrbot", "onebot",
     "prompt-engineering", "self-evolution", "few-shot", "rag",
 ]
 classifiers = [

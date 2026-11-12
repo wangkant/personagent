@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent" width="100%">
 </p>
 
-<h3 align="center">언제 조용히 있어야 할지 알고, 지적받으면 배우는 그룹 채팅 캐릭터.</h3>
+<h3 align="center">사용하는 모든 플랫폼에서 사람처럼 행동하는 에이전트입니다.<br>고유한 캐릭터를 지니고, 기억하며, 대화 상대에게서 배우고, 언제 말할지 스스로 판단합니다.</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/personagent/"><img src="https://img.shields.io/pypi/v/personagent?style=flat-square&label=PyPI&labelColor=24292f&color=0969da&cacheSeconds=3600" alt="PyPI"></a>
@@ -15,7 +15,7 @@
 
 *이 문서는 영어 README를 번역한 것입니다. 기준이 되는 영어 README가 더 최신일 수 있습니다.*
 
-personagent는 그룹 채팅에 들어가는 캐릭터입니다. 준비된 캐릭터를 고르거나 직접 써서, OpenAI 호환 모델이라면 어떤 모델로든 실행할 수 있습니다. 먼저 사용자의 컴퓨터에서 대화해 보고, 같은 로컬 페이지에서 QQ, WeChat, Telegram, Discord와 그 밖의 18개 플랫폼에 연결하십시오.
+personagent는 사람처럼 행동하는 에이전트입니다. 고유한 캐릭터를 지니고, 기억하며, 대화 상대에게서 배우고, 언제 말할지 스스로 판단합니다. QQ, WeChat, Telegram, Discord와 그 밖의 18개 플랫폼의 그룹 채팅과 개인 채팅, 사용자의 컴퓨터에 있는 창, Claude Code, Codex 같은 코딩 어시스턴트 등 사용하는 모든 곳에서 작동합니다. 캐릭터는 직접 고르거나 쓸 수 있으며, OpenAI 호환 모델이라면 어떤 모델로든 실행됩니다.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="로컬 페이지의 플랫폼 연결 화면. 스캔하거나 값 한두 개를 붙여넣어 연결하는 플랫폼, 접힌 고급 플랫폼, 참여할 수 있는 코딩 어시스턴트가 표시되어 있습니다" width="960">
@@ -27,10 +27,17 @@ personagent는 그룹 채팅에 들어가는 캐릭터입니다. 준비된 캐�
 
 <table>
 <tr>
-<td width="220" valign="top"><strong>언제 조용히 있어야 할지 압니다.</strong></td>
+<td width="220" valign="top"><strong>고유한 캐릭터를 지닙니다.</strong></td>
 <td valign="top">
-부르면 답합니다. 그 밖에는 사람이라면 끼어들었을지를 모델이 판단합니다.<br>
-메시지가 몰려와도 한 번만 답합니다.
+준비된 성격은 7가지입니다. 그중 셋은 커뮤니티에서 이미 그려 온 캐릭터인 DeepSeek 고래 소녀, GPT 드래곤 소녀, Claude 아가씨로, 초상화가 눈을 깜빡이고, 생각하고, 말합니다.<br>
+페르소나는 언제든 다시 쓸 수 있습니다. 캐릭터가 배운 것은 그대로 남습니다.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>기억합니다.</strong></td>
+<td valign="top">
+대화마다 기억이 따로 있습니다. 다시 시작해도 남는 최근 메시지, 이전 대화 요약, 날짜가 붙은 사건, 사람에 관한 사실이며, 스스로 최신 상태로 유지합니다.<br>
+기억하는 모든 것은 활동 보기에 표시되며, 그 안의 어떤 항목이든 삭제하거나 복원할 수 있습니다.
 </td>
 </tr>
 <tr>
@@ -43,22 +50,30 @@ personagent는 그룹 채팅에 들어가는 캐릭터입니다. 준비된 캐�
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>시작하기 쉽고, 그룹이 있는 곳에서 지냅니다.</strong></td>
+<td width="220" valign="top"><strong>언제 조용히 있어야 할지 압니다.</strong></td>
 <td valign="top">
-명령 하나로 사용자의 컴퓨터에서 열리며, 영어, 중국어 또는 다른 8개 언어로 볼 수 있습니다.<br>
-모델 키 하나만 붙여 넣으면 채팅할 수 있고, 휴대폰 스캔 한 번이나 값 한두 개를 붙여 넣어 플랫폼을 연결합니다.
+그룹에서는 부르면 답합니다. 그 밖에는 사람이라면 끼어들었을지를 모델이 판단합니다.<br>
+메시지가 몰려와도 한 번만 답합니다.
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>준비된 캐릭터를 고르거나 직접 만들 수 있습니다.</strong></td>
+<td width="220" valign="top"><strong>모든 플랫폼에 연결됩니다.</strong></td>
 <td valign="top">
-준비된 성격은 7가지입니다. 그중 셋은 커뮤니티에서 이미 그려 온 캐릭터인 DeepSeek 고래 소녀, GPT 드래곤 소녀, Claude 아가씨로, 초상화가 눈을 깜빡이고, 생각하고, 말합니다.<br>
-페르소나는 언제든 다시 쓸 수 있습니다. 캐릭터가 배운 것은 그대로 남습니다.
+채팅 플랫폼 22개를 한 페이지에서 휴대폰 스캔 한 번이나 값 한두 개를 붙여 넣어 연결하며, 그룹 채팅과 개인 채팅 모두에서 작동합니다.<br>
+같은 에이전트가 사용자의 컴퓨터에 있는 창에서도, Claude Code, Codex, DeepSeek Harness 안에서도 답합니다.<br>
+그 밖의 플랫폼은 AstrBot, Koishi, Matrix 브리지 또는 직접 작성한 커넥터를 통해 추가할 수 있습니다.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>지금 가진 환경에서 작동합니다.</strong></td>
+<td valign="top">
+OpenAI 호환 모델이라면 무엇이든 사용할 수 있습니다. OpenRouter의 무료 모델, 유료 서비스, 또는 Ollama로 사용자의 컴퓨터에서 실행하는 모델입니다.<br>
+명령 하나로 열리며 영어, 중국어 또는 다른 8개 언어로 볼 수 있고, 모델 키 하나만 붙여 넣으면 채팅을 시작합니다.
 </td>
 </tr>
 </table>
 
-대화마다 기억이 따로 있습니다. 다시 시작해도 남는 최근 메시지, 이전 대화 요약, 날짜가 붙은 사건, 사람에 관한 사실이며, 캐릭터가 스스로 최신 상태로 유지합니다. 잊으라고 하면 잊습니다. `노바 기억해: 민수는 채식주의자야`, `노바 잊어: 채식`([기억 명령](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#기억-명령)). 활동 보기는 캐릭터가 기억하는 모든 것을 보여 주며, 그 안의 어떤 항목이든 삭제하거나 복원할 수 있습니다([기억](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#기억)).
+채팅에서 부탁하면 기억하거나 잊기도 합니다. `노바 기억해: 민수는 채식주의자야`, `노바 잊어: 채식`([기억 명령](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#기억-명령)). 무엇을 얼마 동안 보관하는지는 가이드의 [기억](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#기억) 절에 나와 있습니다.
 
 ## 시작하기
 
@@ -73,7 +88,7 @@ Windows에서는 전용 창에서 열리고, macOS와 Linux에서는 브라우�
 
 personagent는 무료입니다. 비용은 선택한 모델 서비스에, 그 서비스의 요금대로 냅니다. OpenRouter의 무료 모델은 하루 50회까지 요청할 수 있고, 일부 무료 제공자는 받은 내용을 보관합니다. Ollama는 키 없이 사용자의 컴퓨터에서 모델을 실행합니다.
 
-## 그룹에 넣기
+## 플랫폼 연결하기
 
 로컬 페이지에서 **플랫폼 연결**을 여십시오.
 
@@ -85,7 +100,7 @@ personagent는 무료입니다. 비용은 선택한 모델 서비스에, 그 서
 
 연결된 플랫폼은 personagent가 시작될 때마다 함께 다시 시작됩니다. 스캔하여 연결하는 플랫폼과 Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat는 personagent가 직접 연결하고, 나머지는 personagent가 내려받아 백그라운드에서 실행하는 [AstrBot](https://github.com/AstrBotDevs/AstrBot)을 거칩니다. 디스플레이가 없는 서버에서는 personagent가 직접 연결하는 이 플랫폼들을 터미널에서 `personagent connect <platform>`으로 페이지와 같은 단계와 확인을 거쳐 연결할 수 있고, `personagent up`으로 브라우저 없이 모든 것을 시작합니다. 플랫폼별 설정 방법은 [사용자 가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#채팅에-넣기)에, QQ를 처음부터 연결하는 방법은 [중국어 배포 가이드](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)에 있습니다.
 
-이미 AstrBot, Koishi, Matrix를 운영 중입니까? personagent를 그 뒤에서 캐릭터로 실행할 수 있습니다. [직접 실행하는 브리지](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#직접-실행하는-브리지), [Satori 커넥터](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ko.md), [Matrix 커넥터](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ko.md)를 참고하십시오.
+이미 AstrBot, Koishi, Matrix를 운영 중입니까? personagent를 그 뒤에서 에이전트로 실행할 수 있습니다. [직접 실행하는 브리지](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#직접-실행하는-브리지), [Satori 커넥터](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ko.md), [Matrix 커넥터](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ko.md)를 참고하십시오.
 
 ## 코딩 어시스턴트
 

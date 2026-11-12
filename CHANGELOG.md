@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **personagent is described as an agent that behaves like a person, on every platform you use.** The README in all ten languages, the cover picture, the package description and the terminal help no longer introduce it as a character for group chats only. The README's opening table now lists what makes it like a person (its character, memory, learning and judgement of when to speak) and then where it works, and the section "Put it in your group" is named "Connect your platforms". No ability changed.
+
 ## [1.4.2] — 2026-11-12
 
 The character decides by itself what it learns, and nothing waits for a person any longer; a memory that keeps the thread of each chat across restarts, with dated events and facts it keeps current; the character's abilities after an audit; and `personagent connect <platform>` for servers without a display.

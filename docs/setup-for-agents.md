@@ -4,7 +4,7 @@ A user gave you this file and asked you to install and set up personagent for th
 
 ## What you are setting up
 
-personagent is a character for group chats. It answers when called, judges when a person would join in, and learns from corrections people make. It runs on the user's computer as a Python package. A local web page at `http://127.0.0.1:<port>` handles setup, a one-to-one chat with the character, and connections to QQ, WeChat, Telegram, Discord and eighteen other chat apps. Replies come from any OpenAI-compatible model service the user has a key for.
+personagent is an agent that behaves like a person, with a character of its own, on the chat platforms its user is on. In a group it answers when called and judges when a person would join in; in a private chat it answers each message. It remembers, and it learns from corrections people make. It runs on the user's computer as a Python package. A local web page at `http://127.0.0.1:<port>` handles setup, a one-to-one chat with the character, and connections to QQ, WeChat, Telegram, Discord and eighteen other chat apps. Replies come from any OpenAI-compatible model service the user has a key for.
 
 Everything it stores lives in one **home folder**: `.env` (settings and keys), `persona.txt` (the character), `runtime/` (memory and what it learned) and `platforms/` (chat app connections).
 

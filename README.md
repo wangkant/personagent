@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/assets/personagent-cover.webp" alt="personagent" width="100%">
 </p>
 
-<h3 align="center">A character for your group chats that knows when to stay quiet, and learns from being corrected.</h3>
+<h3 align="center">An agent that behaves like a person, on every platform you use.<br>It has a character of its own, remembers, learns from the people it talks to, and judges for itself when to speak.</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/personagent/"><img src="https://img.shields.io/pypi/v/personagent?style=flat-square&label=PyPI&labelColor=24292f&color=0969da&cacheSeconds=3600" alt="PyPI"></a>
@@ -13,7 +13,7 @@
 
 <p align="center"><strong>English</strong> · <a href="https://github.com/wangkant/personagent/blob/main/README.zh-CN.md">简体中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.zh-TW.md">繁體中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ja.md">日本語</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ko.md">한국어</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.es.md">Español</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.fr.md">Français</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.de.md">Deutsch</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.pt-BR.md">Português</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ru.md">Русский</a></p>
 
-personagent is a character for your group chats: pick a ready one or write your own, and run it on any OpenAI-compatible model. Start by chatting with it on your own computer, then bring it into QQ, WeChat, Telegram, Discord and eighteen more from the same local page.
+personagent is an agent that behaves like a person: it has a character of its own, remembers, learns from the people it talks to, and judges for itself when to speak. It works wherever you do: in group chats and private chats on QQ, WeChat, Telegram, Discord and eighteen more platforms, in a window on your computer, and inside coding assistants such as Claude Code and Codex. You pick or write its character, and it runs on any OpenAI-compatible model.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="The Connect apps view of the local page: the platforms that connect by scanning a code or by pasting one or two values, the advanced platforms collapsed, and the coding assistants it can join" width="960">
@@ -25,10 +25,17 @@ personagent is a character for your group chats: pick a ready one or write your 
 
 <table>
 <tr>
-<td width="220" valign="top"><strong>It knows when to stay quiet.</strong></td>
+<td width="220" valign="top"><strong>It has a character of its own.</strong></td>
 <td valign="top">
-It answers when called. Otherwise a model judges whether a person would chime in.<br>
-A burst of messages gets one reply.
+Seven ready personalities. Three are characters the community already draws: the DeepSeek whale girl, the GPT dragon girl and the Claude lady, with portraits that blink, think and talk.<br>
+Rewrite the persona whenever you like. What the character learned is kept.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>It remembers.</strong></td>
+<td valign="top">
+Each chat has its own memory: recent messages that survive a restart, a summary of earlier conversation, dated events and facts about people, which it keeps current by itself.<br>
+Everything it remembers is listed in the Activity view, where any item can be forgotten or brought back.
 </td>
 </tr>
 <tr>
@@ -41,22 +48,30 @@ Every change is on record, and any of them can be rolled back.
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>It is easy to start, and lives where your group is.</strong></td>
+<td width="220" valign="top"><strong>It knows when to stay quiet.</strong></td>
 <td valign="top">
-One command opens it on your computer, in English, Chinese or eight more languages.<br>
-Paste one model key to chat, then connect an app with a phone scan or one or two pasted values.
+In a group it answers when called. Otherwise a model judges whether a person would chime in.<br>
+A burst of messages gets one reply.
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>It can be a ready character, or your own.</strong></td>
+<td width="220" valign="top"><strong>It connects to all your platforms.</strong></td>
 <td valign="top">
-Seven ready personalities. Three are characters the community already draws: the DeepSeek whale girl, the GPT dragon girl and the Claude lady, with portraits that blink, think and talk.<br>
-Rewrite the persona whenever you like. What the character learned is kept.
+Twenty-two chat platforms connect from one page, by a phone scan or one or two pasted values, for group chats and private chats alike.<br>
+The same agent answers in a window on your computer and inside Claude Code, Codex and DeepSeek Harness.<br>
+Any other platform can be added through an AstrBot, Koishi or Matrix bridge, or a connector you write.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>It works with what you have.</strong></td>
+<td valign="top">
+Any OpenAI-compatible model: OpenRouter's free models, a paid service, or one running on your own computer with Ollama.<br>
+One command opens it, in English, Chinese or eight more languages, and one pasted model key starts the chat.
 </td>
 </tr>
 </table>
 
-Each chat has its own memory: recent messages that survive a restart, a summary of earlier conversation, dated events and facts about people, which the character keeps current by itself. It forgets when asked: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([memory commands](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory-commands)). The Activity view shows everything it remembers, and any item there can be forgotten or brought back ([memory](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory)).
+It also remembers and forgets when asked in chat: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([memory commands](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory-commands)). What it keeps, and for how long, is in the [memory](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory) section of the guide.
 
 ## Start here
 
@@ -71,7 +86,7 @@ It opens in a window of its own on Windows, and in your browser on macOS and Lin
 
 personagent is free. You pay the model service you choose, at its own rates. OpenRouter's free models allow 50 requests a day, and some free providers keep what they receive; Ollama runs a model on your own computer with no key.
 
-## Put it in your group
+## Connect your platforms
 
 Open **Connect apps** in the local page:
 
@@ -83,7 +98,7 @@ Open **Connect apps** in the local page:
 
 Connected apps start again each time personagent starts. The scan-to-connect apps, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat are connected by personagent itself; the rest go through an [AstrBot](https://github.com/AstrBotDevs/AstrBot) it downloads and runs in the background. On a server without a display, `personagent connect <platform>` connects any of those ten from the terminal, with the same steps and checks as the page, and `personagent up` starts everything without a browser. Setup for each app is in the [user guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#put-it-in-a-chat), and QQ from zero in the [Chinese deployment guide](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
 
-Already running AstrBot, Koishi or Matrix? personagent can sit behind it as the character: see [bridges you run yourself](https://github.com/wangkant/personagent/blob/main/docs/guide.md#bridges-you-run-yourself), the [Satori connector](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.md) and the [Matrix connector](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.md).
+Already running AstrBot, Koishi or Matrix? personagent can sit behind it as the agent: see [bridges you run yourself](https://github.com/wangkant/personagent/blob/main/docs/guide.md#bridges-you-run-yourself), the [Satori connector](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.md) and the [Matrix connector](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.md).
 
 ## Coding agents
 

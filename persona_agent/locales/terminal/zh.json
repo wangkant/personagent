@@ -1,7 +1,7 @@
 {
 "default SERVER_HOST or 127.0.0.1": "默认取 SERVER_HOST 的值，未设置时为 127.0.0.1",
 "default SERVER_PORT or 8080": "默认取 SERVER_PORT 的值，未设置时为 8080",
-"A character for your group chats that knows when to stay quiet, and learns from being corrected.": "一个懂得何时保持沉默、并能从纠正中学习的群聊角色。",
+"An agent that behaves like a person, on every platform you use: it has a character of its own, remembers, learns from the people it talks to, and judges for itself when to speak.": "像人一样的智能体，可连接你使用的所有平台：拥有自己的性格与记忆，从与人的交流中学习，并自行判断何时发言。",
 "Run `personagent` to open local setup and chat, or `personagent start --no-browser` to print the local link.": "运行 `personagent` 可打开本地设置和聊天页面；运行 `personagent start --no-browser` 则仅输出本地链接。",
 "the folder holding .env, persona.txt and runtime/ (default: AGENT_HOME, this checkout, or ~/personagent)": "存放 .env、persona.txt 和 runtime/ 的文件夹（默认依次为 AGENT_HOME、当前代码目录或 ~/personagent）",
 "personagent: --home needs a folder": "personagent：--home 后须指定一个文件夹",
