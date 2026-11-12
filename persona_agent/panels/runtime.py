@@ -12,12 +12,15 @@ from fastapi import Request
 
 from .. import __version__, home as homes, updates, usage
 from ..storage import atomic_write_text
+from ..window import ACTIONS
 
 # Error codes this panel raises as ValueError, which the page may show.
 ERRORS: frozenset[str] = frozenset({
-    "background_unavailable", "update_none", "update_by_hand", "update_tool_missing",
+    "background_unavailable", "window_unavailable", "update_none", "update_by_hand", "update_tool_missing",
     "update_clone_changed", "update_not_started"})
 LOG_TAIL = 60
+# The key the app window's own page sends to draw and use the window's bar.
+WINDOW_HEADER = "X-Personagent-Window"
 
 
 def start_update(home: Path, commands: list[list[str]]) -> None:
@@ -97,6 +100,36 @@ def mount(app, workspace, body) -> None:
             raise ValueError("background_unavailable")
         save_app_settings(desktop, background=on)
         return await asyncio.to_thread(summary)
+
+    def own_window(request: Request):
+        """The frameless window, for the page inside it and nobody else: a
+        browser tab on the same address draws no window bar."""
+        window = getattr(app.state, "window", None)
+        if (window is None or not getattr(window, "frameless", False)
+                or not window.is_own_page(request.headers.get(WINDOW_HEADER, ""))):
+            return None
+        return window
+
+    def frame(window) -> dict:
+        # Without a title bar of its own the window leaves the bar and its buttons to the page.
+        return {"frameless": window is not None, "maximized": bool(window is not None and window.maximized)}
+
+    @app.get("/api/window")
+    async def window_frame(request: Request):
+        window = own_window(request)
+        if window is not None:
+            window.frame_seen()
+        return frame(window)
+
+    @app.post("/api/window")
+    async def window_control(request: Request):
+        action = str((await body(request)).get("action") or "")
+        window = own_window(request)
+        if window is None or action not in ACTIONS:
+            raise ValueError("window_unavailable")
+        if not await asyncio.to_thread(window.control, action):
+            raise ValueError("window_unavailable")
+        return frame(window)
 
     @app.post("/api/runtime/hide")
     async def hide(request: Request):

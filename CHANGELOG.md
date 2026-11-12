@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **On Windows the app window has no title bar of its own.** The page's top bar is the bar: dragging it or the empty part of the side bar moves the window, a double click maximizes it, and Minimize, Maximize or Restore, and Close are at its right end, named in the page's language. Close does what the system's button did: it hides the window when personagent is set to keep running in the background, and asks first while a platform is connected. The window keeps the system's resize borders, shadow, snapping and taskbar entry, and a maximized window leaves the taskbar visible. The top bar now stays in place when a long page scrolls. With the taskbar set to hide itself, a maximized window stops two pixels short of that edge so the taskbar can still be called up. A WebView2 too old for this, a page that does not load, and the window on macOS and Linux keep the system's title bar, and a browser tab opened on the same address shows no window buttons.
+
 ## [1.4.3] — 2026-11-12
 
 personagent is now described as an agent that behaves like a person, on every platform you use, and this release makes it more like one where it shows: replies go out at a typing pace, and what a model wrote as ordinary prose is sent as separate, readable sentences.

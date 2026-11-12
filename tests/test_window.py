@@ -45,7 +45,7 @@ class _Event:
 class _Window:
     def __init__(self, gone: threading.Event, url: str | None) -> None:
         self.events = types.SimpleNamespace(**{name: _Event() for name in (
-            "closing", "shown", "loaded", "minimized", "restored", "maximized")})
+            "closing", "shown", "loaded", "minimized", "restored", "maximized", "before_show")})
         self.url = url
         self.calls: list[str] = []
         self.asked: list[tuple[str, str]] = []
@@ -54,6 +54,12 @@ class _Window:
 
     def restore(self) -> None:
         self.calls.append("restore")
+
+    def minimize(self) -> None:
+        self.calls.append("minimize")
+
+    def maximize(self) -> None:
+        self.calls.append("maximize")
 
     def show(self) -> None:
         self.calls.append("show")
@@ -94,6 +100,8 @@ def webview(monkeypatch):
 
     def start(func, **options):
         module.started = options
+        # pywebview calls these on the window's own thread, before it shows.
+        module.window.events.before_show.fire()
         if module.shows:
             module.window.events.shown.set()
             module.window.events.loaded.set()
@@ -124,7 +132,10 @@ def test_the_page_opens_in_a_private_window_with_the_app_icon(webview, tmp_path)
     assert app.run() is True and app.error == ""
     title, options = webview.created
     # Windows gets there by way of an empty first page; see AppWindow.run.
-    assert (title, seen["url"]) == ("personagent", "http://127.0.0.1:1/#token=t")
+    assert (title, seen["url"]) == ("personagent", app.page_url)
+    # The address, and after it the key only this window's page is given.
+    assert app.page_url == f"http://127.0.0.1:1/#token=t&frame={app.frame_key}" and len(app.frame_key) >= 16
+    assert app.is_own_page(app.frame_key) and not app.is_own_page("") and not app.is_own_page("guess")
     assert options["text_select"] is True, "a link in the page can be copied"
     assert webview.started["private_mode"] is True
     assert webview.started["storage_path"] == str(tmp_path / "webview")
@@ -189,19 +200,23 @@ def test_quit_from_the_page_closes_without_asking(webview, tmp_path) -> None:
 
 
 def test_without_webview2_windows_gets_no_window(webview, tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(sys, "platform", "win32")
+    done = _frameless(monkeypatch, regions=True)
     webview.renderer = "mshtml"
     app = window.AppWindow("http://127.0.0.1:1/", storage=tmp_path)
     assert app.run() is False
+    # The browser that takes over is told to draw no window bar.
+    assert done["stripped"] == 1 and app.frameless is False
     assert "WebView2" in app.error and webview.window.calls == ["destroy"]
     assert webview.started["gui"] == "edgechromium"
 
 
 def test_a_window_that_never_appears_counts_as_none(webview, tmp_path, monkeypatch) -> None:
+    done = _frameless(monkeypatch, regions=True)
     monkeypatch.setattr(window, "SHOWN_WITHIN", 0.05)
     webview.shows = False
     app = window.AppWindow("http://127.0.0.1:1/", storage=tmp_path)
     assert app.run() is False and app.error
+    assert done["stripped"] == 1 and app.frameless is False
 
 
 def test_no_pywebview_means_no_window(tmp_path, monkeypatch) -> None:
@@ -652,3 +667,109 @@ async def test_forgetting_a_chat_asks_the_service_once_then_starts_a_new_one(tmp
     assert done == {"ok": True, "forgotten": 3}
     assert calls == [("POST", "/api/dashboard/memory/forget_chat", {"conv": chat})]
     assert workspace._conversation != before and workspace._history == []
+
+
+# ---------------------------------------------------------------- frameless
+
+def _frameless(monkeypatch, *, regions: bool):
+    """Windows, with the two native steps stood in for; what they were asked to do."""
+    done = {"stripped": 0, "undone": 0}
+
+    def strip(shown):
+        done["stripped"] += 1
+        return object(), lambda: done.__setitem__("undone", done["undone"] + 1)
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(window, "_strip_title_bar", strip)
+    monkeypatch.setattr(window, "_text_menus", lambda shown: regions)
+    return done
+
+
+def test_on_windows_the_title_bar_goes_before_the_window_shows(webview, tmp_path, monkeypatch) -> None:
+    done = _frameless(monkeypatch, regions=True)
+    seen = {}
+
+    def person(shown) -> None:
+        app.frame_seen()
+        seen["frameless"] = app.frameless
+        shown.press_close()
+
+    webview.person = person
+    app = window.AppWindow("http://127.0.0.1:1/", storage=tmp_path)
+    assert app.run() is True
+    assert seen == {"frameless": True} and done == {"stripped": 1, "undone": 0}
+
+
+def test_a_webview_whose_page_cannot_move_the_window_keeps_the_title_bar(webview, tmp_path, monkeypatch) -> None:
+    done = _frameless(monkeypatch, regions=False)
+    seen = {}
+
+    def person(shown) -> None:
+        seen["frameless"] = app.frameless
+        shown.press_close()
+
+    webview.person = person
+    app = window.AppWindow("http://127.0.0.1:1/", storage=tmp_path)
+    assert app.run() is True
+    assert seen == {"frameless": False} and done == {"stripped": 1, "undone": 1}
+
+
+@pytest.mark.parametrize("asks, undone", [(True, 0), (False, 1)])
+def test_a_page_that_never_draws_the_bar_gives_the_window_its_own_back(webview, tmp_path, monkeypatch,
+                                                                         asks, undone) -> None:
+    done = _frameless(monkeypatch, regions=True)
+    monkeypatch.setattr(window, "PAGE_WITHIN", 0.1)
+    seen = {}
+
+    def person(shown) -> None:
+        if asks:
+            app.frame_seen()
+        time.sleep(1.0)
+        seen["frameless"] = app.frameless
+        shown.press_close()
+
+    webview.person = person
+    app = window.AppWindow("http://127.0.0.1:1/", storage=tmp_path)
+    assert app.run() is True
+    assert seen == {"frameless": asks} and done["undone"] == undone
+
+
+def test_elsewhere_the_window_keeps_its_title_bar(webview, tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(window, "_strip_title_bar", lambda shown: pytest.fail("only Windows drops the title bar"))
+    app = window.AppWindow("http://127.0.0.1:1/", storage=tmp_path)
+    assert app.run() is True and app.frameless is False
+    assert app.control("minimize") is False, "nothing to do once it closed"
+
+
+def test_the_pages_buttons_do_what_a_title_bars_do(webview, tmp_path) -> None:
+    seen = {}
+
+    def person(shown) -> None:
+        seen["before"] = [app.control(action) for action in ("minimize", "maximize", "restore")]
+        seen["calls"] = list(shown.calls)
+        seen["unknown"] = app.control("format-disk")
+        shown.events.maximized.fire()
+        seen["maximized"] = app.maximized
+        shown.events.restored.fire()
+        seen["restored"] = app.maximized
+        # Close goes the way the system's button does: here nothing asks, so it closes.
+        seen["close"] = app.control("close")
+
+    webview.person = person
+    app = window.AppWindow("http://127.0.0.1:1/", storage=tmp_path)
+    assert app.control("close") is False, "no window yet"
+    assert app.run() is True
+    assert seen == {"before": [True, True, True], "calls": ["minimize", "maximize", "restore"],
+                    "unknown": False, "maximized": True, "restored": False, "close": True}
+    assert webview.window.calls[-1] == "destroy"
+
+
+def test_a_window_closed_before_its_page_asked_is_left_alone(webview, tmp_path, monkeypatch) -> None:
+    done = _frameless(monkeypatch, regions=True)
+    monkeypatch.setattr(window, "PAGE_WITHIN", 0.2)
+    app = window.AppWindow("http://127.0.0.1:1/", storage=tmp_path)
+    assert app.run() is True
+    time.sleep(0.5)
+    assert done["undone"] == 0, "nothing is done to a window that is gone"
+

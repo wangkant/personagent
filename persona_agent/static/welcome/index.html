@@ -80,6 +80,16 @@
               >本地应用已就绪</span
             ><button class="quiet" id="exit" data-t="exit">退出</button>
           </div>
+          <div class="window-controls" id="window-controls" hidden>
+            <button type="button" id="window-minimize" aria-label="Minimize" data-t-aria="winMin" data-t-title="winMin">
+              <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5h10" /></svg></button
+            ><button type="button" id="window-maximize" aria-label="Maximize" data-t-aria="winMax" data-t-title="winMax">
+              <svg class="when-normal" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" /></svg
+              ><svg class="when-maximized" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="2.5" width="7" height="7" /><path d="M2.5 2.5v-2h7v7h-2" /></svg></button
+            ><button type="button" id="window-close" aria-label="Close" data-t-aria="winClose" data-t-title="winClose">
+              <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0 0l10 10M10 0L0 10" /></svg>
+            </button>
+          </div>
         </header>
         <section id="setup-view" class="page setup-page" hidden>
           <h1 data-t="hero">设置角色</h1>

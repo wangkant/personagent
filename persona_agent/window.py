@@ -7,7 +7,9 @@ window opens, `personagent start` falls back to the browser.
 from __future__ import annotations
 
 import contextlib
+import hmac
 import importlib.util
+import secrets
 import signal
 import socket
 import sys
@@ -23,6 +25,10 @@ SIZE = (1200, 820)
 MIN_SIZE = (400, 560)
 # How long the window has to appear before it counts as not opening.
 SHOWN_WITHIN = 30
+# How long the page has to ask for its title bar before the window takes its own back.
+PAGE_WITHIN = 25
+# What the page's own title bar may ask of a frameless window.
+ACTIONS = ("minimize", "maximize", "restore", "close")
 
 
 def available() -> bool:
@@ -56,12 +62,15 @@ def alert(text: str) -> None:
         ctypes.windll.user32.MessageBoxW(None, text, TITLE, 0x30)
 
 
-def _text_menus(window) -> None:
+def _text_menus(window) -> bool:
     """pywebview turns right-click off on Windows. Put it back where there is
-    text to paste into or to copy: an API key is often pasted that way."""
+    text to paste into or to copy: an API key is often pasted that way.
+    Also lets the page mark part of itself as the bar the window is moved by;
+    True when this WebView2 can do that."""
     from System import Func, Type  # pythonnet, which pywebview has loaded
 
     form = window.native
+    found = {"regions": False}
 
     def on_menu(sender, args) -> None:
         target = args.ContextMenuTarget
@@ -71,8 +80,125 @@ def _text_menus(window) -> None:
         core = form.browser.webview.CoreWebView2
         core.Settings.AreDefaultContextMenusEnabled = True
         core.ContextMenuRequested += on_menu
+        # `app-region: drag` in the page; an older runtime has no such setting.
+        with contextlib.suppress(Exception):
+            core.Settings.IsNonClientRegionSupportEnabled = True
+            found["regions"] = bool(core.Settings.IsNonClientRegionSupportEnabled)
 
     form.Invoke(Func[Type](enable))
+    return found["regions"]
+
+
+# Window messages and metrics the frameless window handles (winuser.h).
+_WM_NCDESTROY, _WM_NCCALCSIZE = 0x0082, 0x0083
+_SM_CYSIZEFRAME, _SM_CXPADDEDBORDER = 33, 92
+# shellapi.h: is there a taskbar that hides itself at this edge of this screen,
+# and how far a maximized page stays from it.
+_ABM_GETAUTOHIDEBAREX = 0x0000000B
+_HIDDEN_TASKBAR_GAP = 2
+# SetWindowPos: keep place, size and order, and work the frame out again.
+_FRAME_CHANGED = 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020
+
+
+def _strip_title_bar(window):
+    """Take the title bar off a Windows window and leave everything else the
+    system gives one: the resize borders at the sides and the bottom, the
+    shadow, snapping and the taskbar entry. The page draws its own bar.
+
+    Returns what must stay referenced while the window lives, or None when
+    the title bar is still there."""
+    import ctypes
+    from ctypes import wintypes
+
+    from System import Func, Type
+
+    form = window.native
+    # Libraries of our own: pywebview calls the shared ones with other argument types.
+    user32, comctl32, shell32 = ctypes.WinDLL("user32"), ctypes.WinDLL("comctl32"), ctypes.WinDLL("shell32")
+    result_t = ctypes.c_ssize_t
+    proc_t = ctypes.WINFUNCTYPE(result_t, wintypes.HWND, wintypes.UINT, wintypes.WPARAM,
+                                wintypes.LPARAM, ctypes.c_size_t, ctypes.c_size_t)
+
+    class MonitorInfo(ctypes.Structure):
+        _fields_ = [("size", wintypes.DWORD), ("monitor", wintypes.RECT), ("work", wintypes.RECT),
+                    ("flags", wintypes.DWORD)]
+
+    class AppBar(ctypes.Structure):
+        _fields_ = [("size", wintypes.DWORD), ("hwnd", wintypes.HWND), ("message", wintypes.UINT),
+                    ("edge", wintypes.UINT), ("rect", wintypes.RECT), ("lparam", wintypes.LPARAM)]
+
+    comctl32.DefSubclassProc.restype = result_t
+    comctl32.DefSubclassProc.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    comctl32.SetWindowSubclass.restype = wintypes.BOOL
+    comctl32.SetWindowSubclass.argtypes = [wintypes.HWND, proc_t, ctypes.c_size_t, ctypes.c_size_t]
+    comctl32.RemoveWindowSubclass.argtypes = [wintypes.HWND, proc_t, ctypes.c_size_t]
+    user32.IsZoomed.argtypes = [wintypes.HWND]
+    user32.GetDpiForWindow.argtypes = [wintypes.HWND]
+    user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                                    ctypes.c_int, ctypes.c_int, wintypes.UINT]
+    user32.MonitorFromWindow.restype = wintypes.HANDLE
+    user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+    user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MonitorInfo)]
+    shell32.SHAppBarMessage.restype = ctypes.c_size_t
+    shell32.SHAppBarMessage.argtypes = [wintypes.DWORD, ctypes.POINTER(AppBar)]
+
+    def frame_height(hwnd) -> int:
+        dpi = user32.GetDpiForWindow(hwnd) or 96
+        return (user32.GetSystemMetricsForDpi(_SM_CYSIZEFRAME, dpi)
+                + user32.GetSystemMetricsForDpi(_SM_CXPADDEDBORDER, dpi))
+
+    def leave_hidden_taskbar(hwnd, rect) -> None:
+        """A page that covers the whole screen counts as full screen, and a
+        taskbar set to hide itself would never come back: stop short of its edge."""
+        info = MonitorInfo()
+        info.size = ctypes.sizeof(MonitorInfo)
+        if not user32.GetMonitorInfoW(user32.MonitorFromWindow(hwnd, 2), ctypes.byref(info)):
+            return
+        for edge, side, step in ((0, "left", 1), (1, "top", 1), (2, "right", -1), (3, "bottom", -1)):
+            bar = AppBar()
+            bar.size, bar.edge, bar.rect = ctypes.sizeof(AppBar), edge, info.monitor
+            if shell32.SHAppBarMessage(_ABM_GETAUTOHIDEBAREX, ctypes.byref(bar)):
+                setattr(rect, side, getattr(rect, side) + step * _HIDDEN_TASKBAR_GAP)
+
+    def proc(hwnd, message, wparam, lparam, _subclass, _data):
+        if message == _WM_NCCALCSIZE and wparam:
+            # The system works out the sides and the bottom; the top stays where
+            # the window begins, so there is no title bar. A maximized window
+            # reaches past the screen by its frame, and the top comes back in.
+            rect = ctypes.cast(ctypes.c_void_p(lparam), ctypes.POINTER(wintypes.RECT))
+            top = rect[0].top
+            result = comctl32.DefSubclassProc(hwnd, message, wparam, lparam)
+            if result == 0:
+                with contextlib.suppress(Exception):
+                    zoomed = bool(user32.IsZoomed(hwnd))
+                    rect[0].top = top + (frame_height(hwnd) if zoomed else 0)
+                    if zoomed:
+                        leave_hidden_taskbar(hwnd, rect[0])
+            return result
+        if message == _WM_NCDESTROY:
+            comctl32.RemoveWindowSubclass(hwnd, callback, 1)
+        return comctl32.DefSubclassProc(hwnd, message, wparam, lparam)
+
+    callback = proc_t(proc)
+    done = {"ok": False}
+
+    def install() -> None:
+        hwnd = form.Handle.ToInt64()
+        if comctl32.SetWindowSubclass(hwnd, callback, 1, 0):
+            user32.SetWindowPos(hwnd, None, 0, 0, 0, 0, _FRAME_CHANGED)
+            done["ok"] = True
+
+    def undo() -> None:
+        """Give the window its title bar back."""
+        def remove() -> None:
+            hwnd = form.Handle.ToInt64()
+            comctl32.RemoveWindowSubclass(hwnd, callback, 1)
+            user32.SetWindowPos(hwnd, None, 0, 0, 0, 0, _FRAME_CHANGED)
+        form.Invoke(Func[Type](remove))
+
+    # Called from the window's own thread before it shows, so no title bar is ever drawn.
+    install()
+    return (callback, undo) if done["ok"] else None
 
 
 @contextlib.contextmanager
@@ -127,6 +253,15 @@ class AppWindow:
         self._told = False
         # A window started for the background is created minimized.
         self._minimized = start_hidden
+        #: The window has no title bar of its own: the page draws the bar and its buttons.
+        self.frameless = False
+        self.maximized = False
+        # The frameless window's message handler and how to undo it; .NET holds no reference.
+        self._frame = None
+        self._frame_seen = threading.Event()
+        # Only the page inside this window knows it: a browser tab on the same
+        # address neither draws the window's bar nor presses its buttons.
+        self.frame_key = secrets.token_urlsafe(16)
 
     @property
     def can_hide(self) -> bool:
@@ -222,8 +357,62 @@ class AppWindow:
         self._leaving = True
         return None
 
-    def _sized(self, minimized: bool) -> Callable[[], None]:
-        return lambda: setattr(self, "_minimized", minimized)
+    def _sized(self, minimized: bool, maximized: bool | None = None) -> Callable[[], None]:
+        def note() -> None:
+            self._minimized = minimized
+            if maximized is not None:
+                self.maximized = maximized
+        return note
+
+    def control(self, action: str) -> bool:
+        """What the page's own title bar asks for: one of ACTIONS. False when
+        there is no window to do it to."""
+        if not self.opened or self._leaving or action not in ACTIONS:
+            return False
+        try:
+            if action == "minimize":
+                self._window.minimize()
+            elif action == "maximize":
+                self._window.maximize()
+            elif action == "restore":
+                self._window.restore()
+            else:
+                # As the system's close button: it may hide the window or ask first,
+                # so the page is not kept waiting for the answer.
+                threading.Thread(target=self._window.destroy, name="personagent-close", daemon=True).start()
+        except Exception:
+            return False
+        return True
+
+    def _before_show(self) -> None:
+        with contextlib.suppress(Exception):
+            self._frame = _strip_title_bar(self._window)
+            self.frameless = self._frame is not None
+
+    @property
+    def page_url(self) -> str:
+        """The address this window loads: `url` and the key its page shows for the bar."""
+        return f"{self.url}{'&' if '#' in self.url else '#'}frame={self.frame_key}"
+
+    def is_own_page(self, key: str) -> bool:
+        return hmac.compare_digest(str(key or ""), self.frame_key)
+
+    def frame_seen(self) -> None:
+        """The page asked how the window stands, so it draws the bar and the buttons."""
+        self._frame_seen.set()
+
+    def _framed_again(self) -> None:
+        """The window gets its own title bar back."""
+        if self.frameless:
+            self.frameless = False
+            with contextlib.suppress(Exception):
+                self._frame[1]()
+
+    def _unless_seen(self) -> None:
+        # A page that never came up draws no buttons: nobody is left with a
+        # window that cannot be closed.
+        if not self._frame_seen.wait(PAGE_WITHIN) and not self._leaving:
+            self._framed_again()
 
     def run(self) -> bool:
         """Show the window and block until it closes. False when none opened."""
@@ -251,12 +440,19 @@ class AppWindow:
                 self.close()
             else:
                 if windows:
+                    regions = False
                     with contextlib.suppress(Exception):
                         if self._window.events.loaded.wait(SHOWN_WITHIN):
-                            _text_menus(self._window)
+                            regions = _text_menus(self._window)
+                    if not regions:
+                        # The page could not be the bar the window is moved by.
+                        self._framed_again()
                     with contextlib.suppress(Exception):
                         self._make_tray()
-                    self._window.load_url(self.url)
+                    self._window.load_url(self.page_url)
+                    if self.frameless:
+                        threading.Thread(target=self._unless_seen, name="personagent-frame",
+                                         daemon=True).start()
                 self.opened = True
                 if self.start_hidden:
                     self.hide()
@@ -265,15 +461,17 @@ class AppWindow:
             # WebView2 takes its menu setting from the next load on, so Windows
             # starts on an empty page and `ready` loads the real one after it.
             self._window = webview.create_window(
-                TITLE, None if windows else self.url, width=SIZE[0], height=SIZE[1],
+                TITLE, None if windows else self.page_url, width=SIZE[0], height=SIZE[1],
                 min_size=MIN_SIZE, text_select=True, zoomable=True,
                 # Started for the background: no window flashes up before it hides.
                 minimized=self.start_hidden and windows)
             events = self._window.events
             events.closing += self._closing
             events.minimized += self._sized(True)
-            events.restored += self._sized(False)
-            events.maximized += self._sized(False)
+            events.restored += self._sized(False, False)
+            events.maximized += self._sized(False, True)
+            if windows:
+                events.before_show += self._before_show
             with _interrupt(self.close):
                 # Private: nothing the page stores outlives the window.
                 webview.start(ready, gui=_toolkit(), private_mode=True,
@@ -282,6 +480,9 @@ class AppWindow:
             self.error = repr(error)
             return False
         finally:
+            if not self.opened:
+                # No window after all: the browser that takes over draws no window bar.
+                self.frameless = False
             if self._tray is not None:
                 with contextlib.suppress(Exception):
                     self._tray.Visible = False
