@@ -285,7 +285,7 @@ Ein Konnektor meldet sich bei der Plattform an, leitet jede Nachricht an persona
 
 ### Plattformen, die personagent selbst verbindet
 
-personagent verbindet diese zehn Plattformen selbst, in einem einzigen Hintergrundprozess. Sie benötigen weder AstrBot noch NapCat. Lässt sich eine davon nicht laden, starten die übrigen dennoch.
+personagent verbindet diese zehn Plattformen selbst, in einem einzigen Hintergrundprozess. Sie benötigen weder AstrBot noch NapCat. Lässt sich eine davon nicht laden, starten die übrigen dennoch. Auf diesen Plattformen gehen Antworten Nachricht für Nachricht hinaus, jede nach ungefähr der Zeit, die das Tippen braucht; Telegram, Discord und Matrix zeigen währenddessen die Tippanzeige.
 
 | Plattform | Vorgehen |
 |---|---|

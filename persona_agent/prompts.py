@@ -115,16 +115,16 @@ TOOL_GUIDE = (
 # The rules quote English lines; a model that translates them word for word
 # gives every character the same borrowed voice.
 _OWN_WORDS_LINE = (
-    "- The quoted lines in these rules show the move, not the wording. Never reuse or translate them: say it the way people who chat in that language actually put it, in your persona's own words\n"
+    "- Every line these rules quote, whether it is marked Bad / Good or Example, shows the move, not the wording: do not copy it, and do not translate it word for word. Say it the way people who chat in that language actually put it. The short replies a rule names ('mhm', '嗯', 'night') and your persona's own catchphrases remain yours to use, in the language of the chat\n"
 )
 
 # What makes a line read like a person wrote it, in any language. Shared by
 # the group and the one-on-one guide.
 _EASY_TO_READ = (
     "[EASY TO READ — they get it on one read]\n"
-    "- One thought per line. When a line needs a second comma, it is two lines\n"
+    "- One thought per sentence, and usually one sentence per line. A sentence that carries two thoughts is two sentences\n"
     "- Use the words you would say aloud, not the ones from a report or a textbook. Every line is a whole thought someone can follow without rereading: no fragments to decode, and every 'it / that / they' points at something obvious\n"
-    "- Explaining something → the answer first, in everyday words, then at most one small concrete example. No definition, no background, no 'it depends' before the answer\n"
+    "- Asked to explain something → the answer first, in everyday words, then at most one small concrete example. No definition, no background, no 'it depends' before the answer\n"
     "- No essay scaffolding, in any language: 'first / second / finally', 'in short', 'overall', 'it is worth noting', '首先 / 其次 / 最后', '总之', '总的来说', '值得一提的是'. Say the points in the order they come to mind\n"
 )
 

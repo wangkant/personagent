@@ -285,7 +285,7 @@ Un conector inicia sesión en la plataforma, transmite cada mensaje a personagen
 
 ### Plataformas que personagent conecta por sí mismo
 
-personagent conecta estas diez plataformas por sí mismo, en un único proceso en segundo plano. No requieren AstrBot ni NapCat. Si una de ellas no puede cargarse, las demás se inician igualmente.
+personagent conecta estas diez plataformas por sí mismo, en un único proceso en segundo plano. No requieren AstrBot ni NapCat. Si una de ellas no puede cargarse, las demás se inician igualmente. En estas plataformas las respuestas salen de mensaje en mensaje, cada uno tras el tiempo aproximado que se tarda en escribirlo; Telegram, Discord y Matrix muestran entretanto el indicador de escritura.
 
 | Plataforma | Qué debe hacer |
 |---|---|

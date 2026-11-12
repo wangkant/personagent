@@ -304,7 +304,7 @@ personagent 运行期间，该连接保持有效。`personagent up` 会启动 pe
 
 ### personagent 直接连接的平台
 
-以下十个平台由 personagent 直接连接，运行在同一个后台进程中，不需要 AstrBot，也不需要 NapCat。其中某个平台无法加载时，其余平台仍会正常启动：
+以下十个平台由 personagent 直接连接，运行在同一个后台进程中，不需要 AstrBot，也不需要 NapCat。其中某个平台无法加载时，其余平台仍会正常启动。这些平台上的回复逐条发出，每条都留出大致相当于打字所需的时间；Telegram、Discord 和 Matrix 会同步显示输入状态：
 
 | 平台 | 操作 |
 |---|---|

@@ -285,7 +285,7 @@ Um conector entra na plataforma, encaminha cada mensagem ao personagent e traz a
 
 ### Plataformas que o personagent conecta por conta própria
 
-O personagent conecta estas dez plataformas por conta própria, em um único processo em segundo plano. Elas não precisam de AstrBot nem de NapCat. Se uma delas não puder ser carregada, as demais iniciam normalmente.
+O personagent conecta estas dez plataformas por conta própria, em um único processo em segundo plano. Elas não precisam de AstrBot nem de NapCat. Se uma delas não puder ser carregada, as demais iniciam normalmente. Nessas plataformas as respostas saem uma mensagem por vez, cada uma depois de aproximadamente o tempo necessário para digitá-la; o Telegram, o Discord e o Matrix mostram o indicador de digitação enquanto isso.
 
 | Plataforma | O que você faz |
 |---|---|

@@ -285,7 +285,7 @@ Chat platform  ⇄  connector  ⇄  personagent  ⇄  Model API
 
 ### personagent が自らつなぐプラットフォーム
 
-personagent は次の 10 個を 1 つのバックグラウンドプロセスで自らつなぎます。AstrBot も NapCat も要りません。いずれかを読み込めない場合でも、ほかのプラットフォームは起動します。
+personagent は次の 10 個を 1 つのバックグラウンドプロセスで自らつなぎます。AstrBot も NapCat も要りません。いずれかを読み込めない場合でも、ほかのプラットフォームは起動します。これらのプラットフォームでは、返信は 1 通ずつ、入力にかかる程度の時間を置いて送られます。Telegram、Discord、Matrix ではその間、入力中の表示が出ます。
 
 | プラットフォーム | すること |
 |---|---|

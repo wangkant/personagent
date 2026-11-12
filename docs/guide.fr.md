@@ -285,7 +285,7 @@ Un connecteur se connecte à la plateforme, transmet chaque message à personage
 
 ### Plateformes connectées par personagent lui-même
 
-personagent connecte lui-même ces dix plateformes, dans un seul processus d'arrière-plan. Elles n'ont besoin ni d'AstrBot ni de NapCat. Si l'une d'elles ne peut pas être chargée, les autres démarrent malgré tout.
+personagent connecte lui-même ces dix plateformes, dans un seul processus d'arrière-plan. Elles n'ont besoin ni d'AstrBot ni de NapCat. Si l'une d'elles ne peut pas être chargée, les autres démarrent malgré tout. Sur ces plateformes, les réponses partent un message à la fois, chacun après le temps qu'il faut à peu près pour l'écrire ; Telegram, Discord et Matrix affichent pendant ce temps l'indicateur de saisie.
 
 | Plateforme | Ce que vous faites |
 |---|---|

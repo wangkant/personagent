@@ -32,9 +32,22 @@ READ_S = (0.8, 2.0)
 TYPING_REFRESH_S = 4.0
 # The longest the sign stays up while the agent has not answered.
 TYPING_WAIT_MAX_S = 60.0
+# The longest one typing call may take, and how long a platform that slow
+# with the sign is left without one.
+TYPING_CALL_MAX_S = 2.0
+TYPING_OFF_S = 30.0
+# An outbox delivery: the most its pauses add up to, and the longest it waits
+# behind replies to the same chat. The agent's outbox gives up on a connector
+# whose next pull is 90 s late (outbox.LIVENESS_S), and one pull can carry
+# ten, so a run of deliveries stops pausing and queuing after this long.
+OUTBOX_PACE_MAX_S = 6.0
+OUTBOX_QUEUE_MAX_S = 5.0
+OUTBOX_RUN_MAX_S = 45.0
 
 # Typing time the first item of a reply already spent waiting for the agent.
 _spent: contextvars.ContextVar[float] = contextvars.ContextVar("personagent_direct_spent", default=0.0)
+# What is left of the pauses a send may take; None for no limit.
+_budget: contextvars.ContextVar[Optional[float]] = contextvars.ContextVar("personagent_direct_budget", default=None)
 
 OnEvent = Callable[[dict, Any], Awaitable[None]]
 
@@ -234,8 +247,12 @@ class Bridge:
         self._turns = asyncio.Semaphore(MAX_CONCURRENT_TURNS)
         self._tasks: set[asyncio.Task] = set()
         self._sleep = asyncio.sleep
-        # One lock per chat, kept only while a reply to it is going out.
+        self._sign_off_until = 0.0
+        self._outbox_until = 0.0
+        # One lock per chat, kept only while a reply to it is going out, and
+        # how many replies hold or wait for it.
         self._order: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
+        self._queued: dict[str, int] = {}
         if self.paced:
             platform.pace = self._pace
 
@@ -283,26 +300,60 @@ class Bridge:
         except Unsupported:
             return "unsupported", 0
         items = delivery.get("items") or []
-        sent = await self._send(target, items)
+        # The agent counts a connector as gone when its next pull is late, so a
+        # run of deliveries neither pauses long nor queues long behind replies.
+        now = time.monotonic()
+        if now >= self._outbox_until:
+            self._outbox_until = now + OUTBOX_RUN_MAX_S
+        left = self._outbox_until - now
+        sent = await self._send(target, items, budget=min(OUTBOX_PACE_MAX_S, left),
+                                queue_s=min(OUTBOX_QUEUE_MAX_S, left))
         return ("sent" if sent == len(items) else "partial" if sent else "failed"), sent
 
-    async def _send(self, target: Any, items: list, *, spent: float = 0.0) -> int:
+    async def _send(self, target: Any, items: list, *, spent: float = 0.0,
+                    budget: Optional[float] = None, queue_s: Optional[float] = None) -> int:
+        """Send `items` to one chat in order. `spent`: typing time the first
+        item has had already. `budget`: the most the pauses may add up to.
+        `queue_s`: the longest to wait behind other replies to the same chat;
+        after that the items go out beside them."""
         if not self.paced:
             return await self.platform.send(target, items)
         key = self.platform.place(target)
+        if queue_s is not None:
+            deadline = time.monotonic() + queue_s
+            while self._queued.get(key) and time.monotonic() < deadline:
+                await asyncio.sleep(0.2)
+            if self._queued.get(key):
+                return await self._send_now(target, items, spent, budget)
         lock = self._order.get(key)
         if lock is None:
             lock = self._order[key] = asyncio.Lock()
-        async with lock:
-            _spent.set(max(0.0, spent))
-            return await self.platform.send(target, items)
+        # Counted before the wait, so "nobody is queued" means the lock is free to take.
+        self._queued[key] = self._queued.get(key, 0) + 1
+        try:
+            async with lock:
+                return await self._send_now(target, items, spent, budget)
+        finally:
+            if self._queued[key] > 1:
+                self._queued[key] -= 1
+            else:
+                del self._queued[key]
+
+    async def _send_now(self, target: Any, items: list, spent: float, budget: Optional[float]) -> int:
+        _spent.set(max(0.0, spent))
+        _budget.set(budget)
+        return await self.platform.send(target, items)
 
     async def _pace(self, target: Any, item: dict) -> None:
         """The time a person takes to type `item`, with the typing sign up;
         the first item of a reply has spent part of it waiting for the agent."""
-        spent = _spent.get()
+        delay = item_delay(item) - _spent.get()
         _spent.set(0.0)
-        await self._typing_for(target, item_delay(item) - spent)
+        budget = _budget.get()
+        if budget is not None:
+            delay = min(delay, budget)
+            _budget.set(budget - max(delay, 0.0))
+        await self._typing_for(target, delay)
 
     async def _typing_while_waiting(self, target: Any) -> None:
         await self._sleep(random.uniform(*READ_S))
@@ -311,13 +362,37 @@ class Bridge:
     async def _typing_for(self, target: Any, seconds: float) -> None:
         left = seconds
         while left > 0:
-            try:
-                await self.platform.typing(target)
-            except Exception as exc:        # a sign must never cost a reply
-                logger.debug("%s: the typing sign failed: %s", self.platform.kind, type(exc).__name__)
+            took = await self._sign(target)
             step = min(left, TYPING_REFRESH_S)
-            await self._sleep(step)
-            left -= step
+            # A slow sign has used part of the pause; a quick one is not counted.
+            took = took if took >= 0.05 else 0.0
+            if step > took:
+                await self._sleep(step - took)
+            left -= max(step, took)
+
+    async def _sign(self, target: Any) -> float:
+        """Put the typing sign up, and how long that took. A sign must never
+        cost a reply: it gets two seconds, and a platform that is that slow
+        with it (one limiting the calls) is left alone for a while."""
+        started = time.monotonic()
+        if started < self._sign_off_until:
+            return 0.0
+        call = asyncio.ensure_future(self.platform.typing(target))
+        try:
+            # Not wait_for: before Python 3.12 it can swallow the cancel that ends the sign.
+            done, _ = await asyncio.wait({call}, timeout=TYPING_CALL_MAX_S)
+            if not done:
+                self._sign_off_until = time.monotonic() + TYPING_OFF_S
+                logger.debug("%s: the typing sign took too long", self.platform.kind)
+            elif not call.cancelled() and call.exception() is not None:
+                logger.debug("%s: the typing sign failed: %s", self.platform.kind,
+                             type(call.exception()).__name__)
+        finally:
+            if not call.done():
+                call.cancel()
+                # Whatever the cancelled call ends with has been dealt with here.
+                call.add_done_callback(lambda done: done.cancelled() or done.exception())
+        return time.monotonic() - started
 
     async def _receive(self, stop: asyncio.Event) -> None:
         """Run the platform until stopped, starting it again after anything

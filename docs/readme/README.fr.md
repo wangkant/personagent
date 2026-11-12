@@ -37,7 +37,7 @@ Vous pouvez réécrire la fiche du personnage à tout moment. Ce qu'il a appris 
 <td width="220" valign="top"><strong>Il parle comme une personne.</strong></td>
 <td valign="top">
 Il écrit comme on écrit dans une discussion : des phrases courtes et simples dans la langue de la conversation, sans listes, sans titres ni formules d'assistant, et il le dit quand il ne sait pas.<br>
-Une réponse arrive en quelques messages courts, chacun après le temps qu'il faut pour l'écrire, avec l'indicateur de saisie affiché sur les plateformes qui en ont un.<br>
+Sur la plupart des plateformes, une réponse arrive en quelques messages courts, séparés par le temps d'une saisie ; Telegram, Discord et Matrix affichent en plus l'indicateur de saisie.<br>
 Il récupère les autocollants que les gens envoient et les utilise quand ils conviennent, et la nuit il n'intervient guère à moins d'être appelé.<br>
 Si vous l'activez, il lance une conversation après un long silence et revient sur les projets que les gens ont évoqués.
 </td>
@@ -68,7 +68,7 @@ Une rafale de messages reçoit une seule réponse.
 <tr>
 <td width="220" valign="top"><strong>Il se connecte à toutes vos plateformes.</strong></td>
 <td valign="top">
-Vingt-deux plateformes de discussion se connectent depuis une seule page, en scannant un code avec votre téléphone ou en collant une ou deux valeurs, pour les discussions de groupe comme pour les discussions privées.<br>
+Vingt-deux plateformes de discussion se connectent depuis une seule page, en scannant un code avec votre téléphone ou en collant une ou deux valeurs. La plupart acceptent les discussions de groupe comme les discussions privées.<br>
 Le même agent répond dans une fenêtre sur votre ordinateur ainsi que dans Claude Code, Codex et DeepSeek Harness.<br>
 Toute autre plateforme peut être ajoutée par un pont AstrBot, Koishi ou Matrix, ou par un connecteur que vous écrivez.
 </td>

@@ -19,7 +19,7 @@ from . import memtrash
 from . import people
 from . import ranking
 from .addressing import _HAS_CJK, mentions_name, names_regex
-from .textproc import _focus_tokens
+from .textproc import _FULL_STOP_RE, _focus_tokens
 
 logger = logging.getLogger("agent")
 
@@ -637,6 +637,8 @@ class Memory:
                 tag = ""
             lines.append(f"{tag}{it['text']}")
         lines += events
+        # One note, one line: a full stop inside a note must not start a new message.
+        lines = [_FULL_STOP_RE.sub(" ", line).strip() for line in lines]
         return say("recall_head") + "\n" + "\n".join(lines)
 
     def _recall_events(self, conv: str, callers: frozenset[str],

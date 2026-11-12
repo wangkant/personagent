@@ -37,7 +37,7 @@ Puede modificar el perfil del personaje en cualquier momento. Lo que ha aprendid
 <td width="220" valign="top"><strong>Habla como una persona.</strong></td>
 <td valign="top">
 Escribe como escriben las personas en un chat: frases cortas y sencillas en el idioma de la conversación, sin listas, títulos ni fórmulas de asistente, y dice que no sabe algo cuando no lo sabe.<br>
-La respuesta llega en varios mensajes cortos, cada uno tras el tiempo que se tarda en escribirlo, con el indicador de escritura visible en las plataformas que lo tienen.<br>
+En la mayoría de las plataformas, la respuesta llega en varios mensajes cortos, con una pausa entre ellos como la de quien escribe; Telegram, Discord y Matrix muestran además el indicador de escritura.<br>
 Recoge los stickers que envían las personas y los usa cuando encajan, y de madrugada apenas interviene si no lo llaman.<br>
 Si usted lo activa, inicia una conversación tras un silencio prolongado y retoma los planes que las personas mencionaron.
 </td>
@@ -68,7 +68,7 @@ Una ráfaga de mensajes recibe una sola respuesta.
 <tr>
 <td width="220" valign="top"><strong>Se conecta a todas sus plataformas.</strong></td>
 <td valign="top">
-Veintidós plataformas de chat se conectan desde una sola página, escaneando un código con el teléfono o pegando uno o dos valores, tanto para chats de grupo como para chats privados.<br>
+Veintidós plataformas de chat se conectan desde una sola página, escaneando un código con el teléfono o pegando uno o dos valores. La mayoría admite tanto chats de grupo como chats privados.<br>
 El mismo agente responde en una ventana de su equipo y dentro de Claude Code, Codex y DeepSeek Harness.<br>
 Cualquier otra plataforma puede añadirse mediante un puente de AstrBot, Koishi o Matrix, o con un conector que usted mismo escriba.
 </td>

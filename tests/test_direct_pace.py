@@ -209,3 +209,162 @@ def test_matrix_shows_typing_in_the_room_and_orders_by_room(tmp_path, monkeypatc
     kinds = [("typing", body.get("typing")) if "/typing/" in path else ("send", None)
              for _method, path, body in calls]
     assert kinds == [("typing", True), ("send", None), ("typing", False)]
+
+
+class Stuck(Chat):
+    """A platform whose typing call hangs, as one being rate limited does."""
+
+    async def typing(self, target):
+        self.log.append(("typing", target))
+        await asyncio.sleep(30)
+
+
+def test_a_typing_call_that_hangs_is_given_up_and_left_alone_for_a_while(tmp_path, monkeypatch):
+    monkeypatch.setattr(base.random, "uniform", lambda low, high: low)
+    monkeypatch.setattr(base, "TYPING_CALL_MAX_S", 0.2)
+    log: list = []
+    made = bridge(Stuck(log), None, tmp_path, log)
+
+    async def scenario():
+        started = asyncio.get_running_loop().time()
+        sent = await made._send("-100", texts("on my way", "x" * 30, "ok"))
+        return sent, asyncio.get_running_loop().time() - started
+    sent, took = run(scenario())
+    assert sent == 3
+    # One call was tried and timed out; the rest of the reply went without a sign.
+    assert [entry for entry in log if entry[0] == "typing"] == [("typing", "-100")]
+    assert took < 2.0
+    # The time the call used counts as part of the first pause.
+    assert log[1][0] == "sleep" and log[1][1] < 1.9
+
+
+def test_an_outbox_delivery_pauses_six_seconds_at_most(tmp_path, monkeypatch):
+    monkeypatch.setattr(base.random, "uniform", lambda low, high: low)
+    log: list = []
+    made = bridge(Chat(log), None, tmp_path, log)
+    assert run(made.deliver({"reply_handle": "-100", "items": texts("x" * 30, "x" * 30, "x" * 30)})) == ("sent", 3)
+    assert sum(entry[1] for entry in log if entry[0] == "sleep") == pytest.approx(base.OUTBOX_PACE_MAX_S)
+    assert [entry[2] for entry in log if entry[0] == "send"] == ["x" * 30] * 3
+    # A reply after it is paced in full again.
+    log.clear()
+    assert run(made._send("-100", texts("x" * 30))) == 1
+    assert sum(entry[1] for entry in log if entry[0] == "sleep") == pytest.approx(5.4)
+
+
+def test_an_outbox_delivery_does_not_queue_long_behind_a_reply(tmp_path, monkeypatch):
+    monkeypatch.setattr(base.random, "uniform", lambda low, high: low)
+    monkeypatch.setattr(base, "OUTBOX_QUEUE_MAX_S", 0.3)
+    log: list = []
+    made = bridge(Chat(log), None, tmp_path, log)
+
+    async def scenario():
+        gate = asyncio.Event()
+        real_sleep = made._sleep
+
+        async def held(seconds):
+            await real_sleep(seconds)
+            await gate.wait()
+        made._sleep = held
+        reply = asyncio.create_task(made._send("-100", texts("a long reply")))
+        await asyncio.sleep(0.05)
+        made._sleep = real_sleep
+        delivered = await made.deliver({"reply_handle": "-100", "items": texts("morning")})
+        went_first = ("send", "-100", "a long reply") not in log
+        gate.set()
+        await reply
+        return delivered, went_first
+    delivered, went_first = run(scenario())
+    assert delivered == ("sent", 1) and went_first
+
+
+class Failing(Chat):
+    """A platform that refuses the typing call at once, as for one chat it may not write in."""
+
+    async def typing(self, target):
+        self.log.append(("typing", target))
+        raise ConnectionError("403")
+
+
+def test_a_typing_call_that_fails_at_once_is_only_skipped(tmp_path, monkeypatch):
+    monkeypatch.setattr(base.random, "uniform", lambda low, high: low)
+    log: list = []
+    made = bridge(Failing(log), None, tmp_path, log)
+    assert run(made._send("-100", texts("on my way", "ok"))) == 2
+    # The next message, and any other chat, still tries the sign.
+    assert [entry for entry in log if entry[0] == "typing"] == [("typing", "-100")] * 2
+
+
+def test_cancelling_the_wait_ends_the_sign_and_the_call_in_flight(tmp_path):
+    log: list = []
+    platform = Stuck(log)
+    made = base.Bridge(platform, None, base.Status(tmp_path))
+
+    async def scenario():
+        made._sleep = lambda seconds: asyncio.sleep(0)
+        waiting = asyncio.create_task(made._typing_while_waiting("42"))
+        await asyncio.sleep(0.05)
+        before = len(asyncio.all_tasks())
+        waiting.cancel()
+        await asyncio.gather(waiting, return_exceptions=True)
+        await asyncio.sleep(0)
+        return waiting.cancelled(), before - len(asyncio.all_tasks())
+    cancelled, ended = run(scenario())
+    assert cancelled
+    # The waiting task and the typing call it had started are both gone.
+    assert ended == 2
+    assert log == [("typing", "42")]
+
+
+def test_a_delivery_never_queues_behind_a_reply_that_is_itself_waiting(tmp_path, monkeypatch):
+    monkeypatch.setattr(base.random, "uniform", lambda low, high: low)
+    monkeypatch.setattr(base, "OUTBOX_QUEUE_MAX_S", 0.3)
+    log: list = []
+    made = bridge(Chat(log), None, tmp_path, log)
+
+    async def scenario():
+        gate = asyncio.Event()
+        real_sleep = made._sleep
+
+        held_once = []
+
+        async def held(seconds):
+            await real_sleep(seconds)
+            # Only the first reply is held; the delivery and the second reply pause as usual.
+            if not held_once:
+                held_once.append(True)
+                await gate.wait()
+        made._sleep = held
+        first = asyncio.create_task(made._send("-100", texts("first reply")))
+        second = asyncio.create_task(made._send("-100", texts("second reply")))
+        await asyncio.sleep(0.05)
+        assert made._queued == {"-100": 2}
+        delivered = await made.deliver({"reply_handle": "-100", "items": texts("morning")})
+        order = [entry[2] for entry in log if entry[0] == "send"]
+        gate.set()
+        await asyncio.gather(first, second)
+        return delivered, order
+    delivered, order = run(scenario())
+    assert delivered == ("sent", 1) and order == ["morning"]
+    assert made._queued == {}
+
+
+def test_a_long_run_of_deliveries_stops_pausing(tmp_path, monkeypatch):
+    monkeypatch.setattr(base.random, "uniform", lambda low, high: low)
+    log: list = []
+    made = bridge(Chat(log), None, tmp_path, log)
+
+    async def scenario():
+        await made.deliver({"reply_handle": "-100", "items": texts("x" * 30)})
+        # The run began 44 seconds ago: one second of it is left.
+        made._outbox_until = base.time.monotonic() + 1.0
+        log.clear()
+        await made.deliver({"reply_handle": "-200", "items": texts("x" * 30, "x" * 30)})
+        paused = sum(entry[1] for entry in log if entry[0] == "sleep")
+        # Past its end a new run begins with the next delivery.
+        made._outbox_until = base.time.monotonic() - 1.0
+        log.clear()
+        await made.deliver({"reply_handle": "-300", "items": texts("x" * 30)})
+        return paused, sum(entry[1] for entry in log if entry[0] == "sleep")
+    paused, fresh = run(scenario())
+    assert paused <= 1.0 + 0.01
+    assert fresh == pytest.approx(5.4)

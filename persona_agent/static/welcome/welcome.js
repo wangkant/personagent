@@ -2255,6 +2255,8 @@ function typingBubble() {
   const node = bubble("", "bot pending typing");
   node.setAttribute("role", "status");
   node.setAttribute("aria-label", t("thinking"));
+  // Relabelled when the language changes.
+  node.dataset.tAria = "thinking";
   const dots = el("span", "dots");
   dots.append(el("i"), el("i"), el("i"));
   node.append(dots);
@@ -2291,8 +2293,15 @@ async function reveal(items, spent = 0) {
     avatarMood("talking", Array.from(item.text || "").length);
   }
 }
-function showHistory(history) {
+// A reply that is still arriving stops: its typing sign goes, and what it had
+// not shown yet comes with the next look at the chat.
+function stopReveal() {
   chatEpoch += 1;
+  for (const node of $("messages").querySelectorAll(".bubble.typing")) node.remove();
+  avatarMood("");
+}
+function showHistory(history) {
+  stopReveal();
   for (const node of $("messages").querySelectorAll(".bubble")) dropBubble(node);
   if (history.kept) chatKept = history.kept;
   chatSeen = 0;
@@ -2356,6 +2365,8 @@ async function send(text, mine = null) {
   $("chat-empty").hidden = true;
   $("message").value = "";
   syncSend();
+  // What the character was sending on its own comes back in order with the answer.
+  stopReveal();
   mine ||= bubble(text, "user");
   const pending = typingBubble();
   const asked = performance.now();
@@ -2382,6 +2393,7 @@ async function send(text, mine = null) {
     pending.replaceChildren();
     pending.removeAttribute("role");
     pending.removeAttribute("aria-label");
+    delete pending.dataset.tAria;
     pending.textContent = t(error.message);
     pending.className = "bubble failed";
     const retry = document.createElement("button");

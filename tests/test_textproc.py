@@ -636,8 +636,8 @@ def test_the_whole_dash_family_degrades_to_a_hyphen() -> None:
               out == f"sit down{sub}soup is ready", f"{raw!r} -> {out!r}")
         # And the same under zh, where the whole-reply drop was measured.
         out_zh = TP._sanitize_reply(f"坐吧{chr(c)}汤好了", "zh")
-        # Between Chinese words the comma is the full-width one.
-        sub_zh = "，" if c == 0x2014 else sub
+        # One tight dash between Chinese words may be a route or a range: a space.
+        sub_zh = " " if c == 0x2014 else sub
         check(f"...and under the zh gate too (U+{c:04X})",
               out_zh == f"坐吧{sub_zh}汤好了", repr(out_zh))
     # U+2212 MINUS SIGN is Sm, not Pd, so the scan above cannot reach it; it

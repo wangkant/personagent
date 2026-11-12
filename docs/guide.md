@@ -285,7 +285,7 @@ A connector logs in to the platform, passes each message to personagent and carr
 
 ### Platforms personagent connects itself
 
-personagent connects these ten itself, in one background process. They need neither AstrBot nor NapCat. If one of them cannot be loaded, the others still start.
+personagent connects these ten itself, in one background process. They need neither AstrBot nor NapCat. If one of them cannot be loaded, the others still start. Replies on these platforms go out one message at a time, each after about the time it takes to type; Telegram, Discord and Matrix show the typing sign meanwhile.
 
 | Platform | What you do |
 |---|---|
