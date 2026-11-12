@@ -243,3 +243,52 @@ def test_the_use_line_is_in_every_page_language() -> None:
         assert not missing, (code, missing)
         for key in ("runtime_useToday", "runtime_useWeek"):
             assert sorted(re.findall(r"\{\w+\}", strings[key])) == ["{calls}", "{cost}", "{tokens}"], (code, key)
+
+
+# ---------------------------------------------------------------- the window's own bar
+
+def test_a_browser_tab_and_a_framed_window_are_told_to_draw_no_bar(page) -> None:
+    assert page.client.get("/api/window").status_code == 403
+    assert page.client.post("/api/window", json={"action": "minimize"}).status_code == 403
+    assert page.client.get("/api/window", headers=HEADERS).json() == {"frameless": False, "maximized": False}
+    refused = page.client.post("/api/window", json={"action": "minimize"}, headers=HEADERS)
+    assert (refused.status_code, refused.json()) == (400, {"error": "window_unavailable"})
+    # A window that kept its title bar: the page's buttons are not shown and do nothing.
+    own = {**HEADERS, runtime.WINDOW_HEADER: "its-key"}
+    page.app.state.window = types.SimpleNamespace(
+        can_hide=True, frameless=False, maximized=False, frame_seen=lambda: None,
+        control=lambda action: True, is_own_page=lambda key: key == "its-key")
+    assert page.client.get("/api/window", headers=own).json()["frameless"] is False
+    assert page.client.post("/api/window", json={"action": "minimize"}, headers=own).status_code == 400
+
+
+def test_the_bar_s_buttons_reach_the_window(page) -> None:
+    asked, seen = [], []
+
+    def control(action: str) -> bool:
+        asked.append(action)
+        if action == "maximize":
+            shown.maximized = True
+        return action != "close"
+
+    shown = types.SimpleNamespace(frameless=True, maximized=False, frame_seen=lambda: seen.append(1),
+                                  control=control, is_own_page=lambda key: key == "its-key")
+    page.app.state.window = shown
+    own = {**HEADERS, runtime.WINDOW_HEADER: "its-key"}
+    # A browser tab on the same address has the token and not the window's key:
+    # it draws no window bar, presses no button, and does not count as the page having asked.
+    for tab in (HEADERS, {**HEADERS, runtime.WINDOW_HEADER: "guess"}):
+        assert page.client.get("/api/window", headers=tab).json() == {"frameless": False, "maximized": False}
+        refused = page.client.post("/api/window", json={"action": "close"}, headers=tab)
+        assert (refused.status_code, refused.json()) == (400, {"error": "window_unavailable"})
+    assert seen == [] and asked == []
+    assert page.client.get("/api/window", headers=own).json() == {"frameless": True, "maximized": False}
+    assert seen == [1], "the window is told the page draws the bar"
+    done = page.client.post("/api/window", json={"action": "maximize"}, headers=own)
+    assert done.json() == {"frameless": True, "maximized": True}
+    assert page.client.post("/api/window", json={"action": "minimize"}, headers=own).status_code == 200
+    # Not one of the four, and one the window could not do.
+    for action in ("resize-top", "", "close"):
+        refused = page.client.post("/api/window", json={"action": action}, headers=own)
+        assert (refused.status_code, refused.json()) == (400, {"error": "window_unavailable"}), action
+    assert asked == ["maximize", "minimize", "close"]

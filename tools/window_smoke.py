@@ -159,12 +159,26 @@ def main(argv: list[str] | None = None) -> int:
             if "unsafe-eval" in str(js("1 + 1")):
                 policy["widened"] = True
                 # A new query makes this a real load; the same address would only move within the page.
-                seen["app"]._window.load_url(seen["app"].url.replace("#", "?policy=widened#", 1))
+                seen["app"]._window.load_url(seen["app"].page_url.replace("#", "?policy=widened#", 1))
                 print("      (the bridge needs eval here: policy widened for this run)", flush=True)
                 time.sleep(2)
             loaded = until("document.readyState === 'complete' && document.querySelectorAll('.nav').length >= 6", 60)
             check("the page loaded in the window with its six views", loaded is True, loaded)
             check("the page's own script ran", js("typeof window.PA === 'object' && typeof window.PA.t === 'function'") is True)
+            bar = "document.body.classList.contains('frameless') && !document.getElementById('window-controls').hidden"
+            if sys.platform == "win32":
+                # On Windows the window has no title bar: the page is the bar and holds its buttons.
+                check("the window has no title bar and the page draws the bar",
+                      seen["app"].frameless is True and until(bar, 20) is True, js(bar))
+                js("document.getElementById('window-maximize').click()")
+                check("Maximize in the page's bar maximizes the window",
+                      until("document.body.classList.contains('maximized')", 20) is True and seen["app"].maximized)
+                js("document.getElementById('window-maximize').click()")
+                check("and Restore brings it back",
+                      until("!document.body.classList.contains('maximized')", 20) is True and not seen["app"].maximized)
+            else:
+                check("elsewhere the window keeps the system's title bar",
+                      seen["app"].frameless is False and js(bar) is False, js(bar))
             js("document.querySelector('.nav[data-view=settings]').click()")
             check("the settings view opens", until(f"{VISIBLE}('setup-view')", 20) is True)
             for selector, value in (("#provider", "other"), ("#base-url", model_url),

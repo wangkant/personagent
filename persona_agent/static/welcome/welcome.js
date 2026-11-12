@@ -133,6 +133,11 @@ const translations = {
     localReady: "本地应用已就绪",
     running: "正在运行",
     exit: "退出",
+    winMin: "最小化",
+    winMax: "最大化",
+    winRestore: "还原",
+    winClose: "关闭",
+    winFailed: "窗口没有响应。",
     hero: "设置角色",
     intro: "填写模型密钥即可开始聊天，其余设置均有默认值。",
     modelTitle: "连接模型",
@@ -491,6 +496,11 @@ const translations = {
     localReady: "Local app ready",
     running: "Running",
     exit: "Quit",
+    winMin: "Minimize",
+    winMax: "Maximize",
+    winRestore: "Restore",
+    winClose: "Close",
+    winFailed: "The window did not respond.",
     hero: "Set up your character",
     intro:
       "Add a model API key and start chatting. Everything else has a sensible default.",
@@ -818,6 +828,10 @@ const token =
   fragment.get("token") ||
   sessionStorage.getItem("personagent-setup-token") ||
   "";
+// Only the page inside the app window is given this key: with it the page
+// draws the window's bar and may press its buttons.
+const frameKey = fragment.get("frame") || sessionStorage.getItem("personagent-frame") || "";
+if (fragment.has("frame")) sessionStorage.setItem("personagent-frame", frameKey);
 if (fragment.has("token")) {
   sessionStorage.setItem("personagent-setup-token", token);
   history.replaceState(null, "", location.pathname);
@@ -859,6 +873,7 @@ async function api(path, payload) {
     headers: {
       "Content-Type": "application/json",
       "X-Personagent-Setup-Token": token,
+      ...(frameKey && path === "window" ? { "X-Personagent-Window": frameKey } : {}),
     },
     body: payload === undefined ? undefined : JSON.stringify(payload),
     credentials: "omit",
@@ -887,6 +902,7 @@ function renderText() {
     label(node, t(node.dataset.t));
   for (const node of document.querySelectorAll("[data-t-aria]"))
     node.setAttribute("aria-label", t(node.dataset.tAria));
+  for (const node of document.querySelectorAll("[data-t-title]")) node.title = t(node.dataset.tTitle);
   $("message").placeholder = t("message");
   for (const image of document.querySelectorAll("#messages .picture img")) image.alt = pictureAlt();
 }
@@ -2789,6 +2805,46 @@ $("exit").addEventListener("click", async () => {
     $("exit").disabled = false;
   }
 });
+// A window without a title bar of its own: the top bar moves it (app-region
+// in the style sheet, which also gives the top edge its resize border) and
+// holds the buttons a title bar has.
+let frame = { frameless: false, maximized: false };
+let frameTimer = null;
+function renderFrame() {
+  document.body.classList.toggle("frameless", frame.frameless);
+  document.body.classList.toggle("maximized", frame.frameless && frame.maximized);
+  $("window-controls").hidden = !frame.frameless;
+  const key = frame.maximized ? "winRestore" : "winMax";
+  const button = $("window-maximize");
+  button.dataset.tAria = button.dataset.tTitle = key;
+  button.setAttribute("aria-label", t(key));
+  button.title = t(key);
+}
+async function loadFrame() {
+  try {
+    frame = await api("window");
+  } catch {
+    // In a browser tab, or before the page is let in: the window keeps its own bar.
+  }
+  renderFrame();
+}
+async function windowDo(action) {
+  try {
+    frame = await api("window", { action });
+    renderFrame();
+  } catch {
+    toast(t("winFailed"));
+  }
+}
+$("window-minimize").addEventListener("click", () => windowDo("minimize"));
+$("window-maximize").addEventListener("click", () => windowDo(frame.maximized ? "restore" : "maximize"));
+$("window-close").addEventListener("click", () => windowDo("close"));
+// Maximizing, restoring and snapping all change the size: ask how the window stands.
+window.addEventListener("resize", () => {
+  if (!frame.frameless) return;
+  clearTimeout(frameTimer);
+  frameTimer = setTimeout(loadFrame, 150);
+});
 // What a panel under /assets/panels builds its part of the page with. Panel
 // scripts run after this file and before the first state arrives.
 window.PA = {
@@ -2846,6 +2902,8 @@ window.PA = {
   },
 };
 (async () => {
+  // First, and not waited for: a frameless window needs its buttons whatever else loads.
+  loadFrame();
   await loadLang(lang);
   if (!token) {
     renderText();

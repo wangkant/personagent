@@ -253,6 +253,99 @@ main {
 .top-actions select:focus-visible {
   outline: 2px solid var(--ink);
 }
+/* A window without a title bar of its own (Windows): the top bar and the side
+   bar move it, and the bar holds the buttons a title bar has. */
+body.frameless .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding-right: 150px;
+}
+body.frameless .topbar,
+body.frameless .sidebar {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+body.frameless :is(.topbar, .sidebar) :is(a, button, select, input, textarea, label, summary) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+/* What lies over the bars is not part of them. */
+body.frameless :is(dialog, .closed-overlay, #toast) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+/* The label gives way before the actions reach the window's buttons. */
+body.frameless .topbar > div:first-child {
+  min-width: 0;
+  overflow: hidden;
+}
+body.frameless #page-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The bar stays on screen: what sticks or scrolls into view stops below it. */
+body.frameless .activity-chats {
+  top: 64px;
+}
+html:has(body.frameless) {
+  scroll-padding-top: 56px;
+}
+.window-controls {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+}
+.window-controls[hidden] {
+  display: none;
+}
+.window-controls button {
+  width: 46px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 0;
+  color: var(--ink-soft);
+}
+.window-controls svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+.window-controls button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.window-controls button:active {
+  background: var(--deep);
+}
+.window-controls button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+#window-close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+#window-close:active {
+  background: #a3261a;
+  color: #fff;
+}
+#window-close:focus-visible {
+  outline-color: #c42b1c;
+}
+.window-controls .when-maximized,
+body.maximized .window-controls .when-normal {
+  display: none;
+}
+body.maximized .window-controls .when-maximized {
+  display: block;
+}
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -2154,5 +2247,38 @@ button:active:not(:disabled) {
   .dots i {
     animation: none;
     opacity: 0.7;
+  }
+}
+/* Without a title bar the window's buttons take the right end of the top bar. */
+@media (max-width: 960px) {
+  body.frameless .status-pill {
+    display: none;
+  }
+}
+@media (max-width: 600px) {
+  /* Two rows: the first is as tall as the window's buttons and ends before
+     them, and the actions pass underneath. */
+  body.frameless .topbar {
+    height: 88px;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    row-gap: 4px;
+    padding-right: 16px;
+  }
+  body.frameless .topbar > div:first-child {
+    flex-basis: 100%;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    padding-right: 128px;
+  }
+  body.frameless .top-actions {
+    margin-left: auto;
+  }
+  body.frameless .chat-page {
+    height: calc(100dvh - 88px);
+  }
+  html:has(body.frameless) {
+    scroll-padding-top: 96px;
   }
 }
