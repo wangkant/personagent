@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.3] — 2026-11-12
+
+personagent is now described as an agent that behaves like a person, on every platform you use, and this release makes it more like one where it shows: replies go out at a typing pace, and what a model wrote as ordinary prose is sent as separate, readable sentences.
+
 ### Added
 
 - **Replies on the platforms personagent connects itself arrive at a typing pace.** On Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, QQ and WeChat a reply used to go out as a burst. Each message now follows the time a person takes to type it (six to eight characters a second and a short pause, at most seven seconds), as on QQ through OneBot, and the wait for the model counts toward the first one. Telegram, Discord and Matrix show their typing sign meanwhile, and shortly after a private message or a message addressed to the character arrives. A typing sign that the platform is slow to accept is given up after two seconds, so it delays a message by two seconds at most. A reply to a chat waits for the reply before it. A message the character sends on its own pauses six seconds at most in all and waits five seconds at most behind a reply.
@@ -611,7 +615,8 @@ An unsupported character degraded to a missing glyph instead of silencing the re
 
 The first release: learning from real reactions, the JSON reply protocol, the whitelist reply validator, few-shot retrieval over read-only seeds and a learned `runtime/`, the platform-neutral gateway with an AstrBot forwarder, the sticker pipeline, opt-in proactive mode, a cheap gate model before the reply model, and the SSRF guard. 0.1.1 stopped a single positive signal from banking an example and let a rejection withdraw a learned one.
 
-[Unreleased]: https://github.com/wangkant/personagent/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/wangkant/personagent/compare/v1.4.3...HEAD
+[1.4.3]: https://github.com/wangkant/personagent/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/wangkant/personagent/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/wangkant/personagent/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/wangkant/personagent/compare/v1.3.1...v1.4.0
