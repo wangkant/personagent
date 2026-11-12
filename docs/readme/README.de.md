@@ -36,6 +36,7 @@ Sie können die Persona jederzeit umschreiben. Was die Figur gelernt hat, bleibt
 <tr>
 <td width="220" valign="top"><strong>Er schreibt wie ein Mensch.</strong></td>
 <td valign="top">
+Er schreibt so, wie Menschen in einem Chat schreiben: kurze, einfache Sätze in der Sprache des Gesprächs, ohne Listen, Überschriften oder Assistentenfloskeln, und er sagt es, wenn er etwas nicht weiß.<br>
 Eine Antwort kommt als einige kurze Nachrichten, jede nach der Zeit, die das Tippen braucht; auf Plattformen mit Tippanzeige ist diese währenddessen zu sehen.<br>
 Er sammelt die Sticker, die andere senden, und verwendet sie, wo sie passen. Nachts beteiligt er sich kaum, solange er nicht angesprochen wird.<br>
 Wenn Sie es aktivieren, beginnt er nach längerer Stille selbst ein Gespräch und kommt auf Pläne zurück, die erwähnt wurden.

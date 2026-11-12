@@ -36,6 +36,7 @@ Reescreva a persona quando quiser. O que o personagem aprendeu é mantido.
 <tr>
 <td width="220" valign="top"><strong>Ele fala como uma pessoa.</strong></td>
 <td valign="top">
+Ele escreve como as pessoas escrevem em um chat: frases curtas e simples no idioma da conversa, sem listas, títulos nem frases de assistente, e diz que não sabe quando não sabe.<br>
 A resposta chega em algumas mensagens curtas, cada uma depois do tempo necessário para digitá-la, com o indicador de digitação visível nas plataformas que o oferecem.<br>
 Ele guarda as figurinhas que as pessoas enviam e as usa quando combinam, e de madrugada quase não participa, a menos que seja chamado.<br>
 Se você ativar, ele inicia uma conversa depois de um longo silêncio e retoma os planos que as pessoas mencionaram.

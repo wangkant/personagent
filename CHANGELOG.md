@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Sentences a model wrote as ordinary prose are no longer run together.** The default style never sends a Chinese or Japanese full stop, an ellipsis or a long dash. They used to be removed, which joined three sentences into one long message with spaces, glued the words on both sides of an ellipsis together, and left two English clauses with nothing between them. A full stop now ends a message, and short sentences still share a line. An ellipsis between words becomes a comma in Chinese, Japanese and Korean and three dots elsewhere. A long dash between words becomes a comma.
+- **The speaking rules ask for text that is easy to read.** In groups and in private chats the character is told to keep one thought to a line, to use the words people say aloud, to give the answer first with at most one small example, and to leave out essay connectives such as "first, second, finally" and "in short" in any language. The lines the rules quote as examples are no longer to be reused or translated.
 - **personagent is described as an agent that behaves like a person, on every platform you use.** The README in all ten languages, the cover picture, the package description and the terminal help no longer introduce it as a character for group chats only. The README's opening table now lists what makes it like a person (its character, memory, learning and judgement of when to speak) and then where it works, and the section "Put it in your group" is named "Connect your platforms". No ability changed.
 
 ## [1.4.2] — 2026-11-12

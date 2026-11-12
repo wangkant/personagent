@@ -34,6 +34,7 @@ Rewrite the persona whenever you like. What the character learned is kept.
 <tr>
 <td width="220" valign="top"><strong>It talks like a person.</strong></td>
 <td valign="top">
+It writes the way people write in a chat: short, plain sentences in the language of the conversation, with no lists, headings or assistant phrases, and it says so when it does not know something.<br>
 A reply comes as a few short messages, each after the time it takes to type, with the typing sign up where the platform has one.<br>
 It picks up the stickers people send and uses them where they fit, and at night it mostly stays out of the talk unless called.<br>
 If you turn it on, it starts a conversation after a long silence and comes back to plans people mentioned.

@@ -357,7 +357,8 @@ def test_the_optional_charsets_are_opt_in_and_the_default_strips_not_drops() -> 
     at all). What is left here is the three that really are registers: a
     persona choosing to trail off, to hum, or to narrate a sequence."""
     cases = [
-        ("sure… if you say so", "sure if you say so",
+        # Between words the glyph was a pause: it is spelled as three dots.
+        ("sure… if you say so", "sure... if you say so",
          "ellipsis", "U+2026"),
         ("la la ♪ done", "la la done", "music", "U+266A"),
         ("s1 → s2", "s1 s2", "arrows", "U+2192"),
@@ -612,13 +613,13 @@ def test_the_whole_dash_family_degrades_to_a_hyphen() -> None:
 
     THE INVARIANT IS "NO DASH SILENCES A REPLY", not "every dash becomes a
     hyphen", and the difference is U+2014. The em dash has its own older rule
-    one line above the map — `.replace('——', ' ').replace('—', ' ')` — because
-    the Chinese 破折号 reads as a PAUSE rather than as a hyphen, and that rule
-    predates this whole tier. It is named here as a deliberate exception
+    one line above the map (`_dash_pause`), because the Chinese 破折号 reads
+    as a PAUSE rather than as a hyphen: between words it becomes a comma.
+    That rule predates this whole tier. It is named here as a deliberate exception
     rather than quietly excluded from the scan, so that a future reader can
     see it is a decision instead of a hole."""
     expected = {0x2010: "-", 0x2011: "-", 0x2012: "-", 0x2013: "-",
-                0x2014: " ",   # the 破折号 pause rule, older than this tier
+                0x2014: ", ",  # the 破折号 pause rule, older than this tier
                 0x2015: "-"}
     dashes = [c for c in range(0x2000, 0x2070)
               if unicodedata.category(chr(c)) == "Pd"]
@@ -635,8 +636,10 @@ def test_the_whole_dash_family_degrades_to_a_hyphen() -> None:
               out == f"sit down{sub}soup is ready", f"{raw!r} -> {out!r}")
         # And the same under zh, where the whole-reply drop was measured.
         out_zh = TP._sanitize_reply(f"坐吧{chr(c)}汤好了", "zh")
+        # Between Chinese words the comma is the full-width one.
+        sub_zh = "，" if c == 0x2014 else sub
         check(f"...and under the zh gate too (U+{c:04X})",
-              out_zh == f"坐吧{sub}汤好了", repr(out_zh))
+              out_zh == f"坐吧{sub_zh}汤好了", repr(out_zh))
     # U+2212 MINUS SIGN is Sm, not Pd, so the scan above cannot reach it; it
     # was already mapped and stays checked.
     check("the minus sign still degrades too (U+2212)",
@@ -1072,8 +1075,8 @@ def test_a_reply_that_only_trails_off_is_delivered() -> None:
     keeps = ReplyStyle(charsets=frozenset({"ellipsis"}))
     check("a persona that keeps the glyph keeps it",
           TP._sanitize_reply("……", "zh", keeps) == "……")
-    check("in a sentence the glyph is still stripped",
-          TP._sanitize_reply("sure… ok", "en") == "sure ok")
+    check("in a sentence the glyph is spelled as the pause it was",
+          TP._sanitize_reply("sure… ok", "en") == "sure... ok")
 
 
 def test_a_homoglyph_splice_is_refused_and_ordinary_multilingual_text_is_not() -> None:

@@ -36,6 +36,7 @@ Vous pouvez réécrire la fiche du personnage à tout moment. Ce qu'il a appris 
 <tr>
 <td width="220" valign="top"><strong>Il parle comme une personne.</strong></td>
 <td valign="top">
+Il écrit comme on écrit dans une discussion : des phrases courtes et simples dans la langue de la conversation, sans listes, sans titres ni formules d'assistant, et il le dit quand il ne sait pas.<br>
 Une réponse arrive en quelques messages courts, chacun après le temps qu'il faut pour l'écrire, avec l'indicateur de saisie affiché sur les plateformes qui en ont un.<br>
 Il récupère les autocollants que les gens envoient et les utilise quand ils conviennent, et la nuit il n'intervient guère à moins d'être appelé.<br>
 Si vous l'activez, il lance une conversation après un long silence et revient sur les projets que les gens ont évoqués.

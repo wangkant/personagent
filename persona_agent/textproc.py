@@ -1015,6 +1015,55 @@ def _counted_list(run: str) -> str:
         return run
     return re.sub(r"(?m)^\d+\.[ \t]+", "", run)
 
+
+# --- Pauses the default style does not send, kept as pauses ----------------
+# A Chinese or Japanese full stop, an ellipsis and a long dash are never sent;
+# what they separated must still read as separate, not run together.
+_FULL_STOP_RE = re.compile(r"。+(?!\d)")
+# What may not open a line: a closing mark stays with the sentence it closes.
+_CLOSING_MARKS = "”’」』）)】》〉,，、!?！？:：;；~～"
+# Sentences share one line up to this many characters; a longer one starts its own message.
+_SENTENCE_PACK = 24
+_ELLIPSIS_MID_RE = re.compile(r"(?<=[^\s…])[ \t]*…+[ \t]*(?=[^\s…])")
+_DASH_MID_RE = re.compile(r"(?<=[^\s—])[ \t]*—+[ \t]*(?=[^\s—])")
+_CJK_CHAR_RE = re.compile(r"[㐀-鿿぀-ヿ가-힯]")
+
+
+def _full_stops_to_lines(text: str) -> str:
+    """Sentences that ended in 。, the stop removed: short ones share a line,
+    a longer one starts a new line, which is sent as its own message."""
+    lines = []
+    for line in text.split("\n"):
+        parts = [p.strip() for p in _FULL_STOP_RE.split(line)]
+        cur = parts[0]
+        for part in parts[1:]:
+            if not part:
+                continue
+            if not cur or part[0] in _CLOSING_MARKS or len(cur) + len(part) < _SENTENCE_PACK:
+                cur = f"{cur} {part}".strip()
+            else:
+                lines.append(cur)
+                cur = part
+        lines.append(cur)
+    return "\n".join(lines)
+
+
+def _ellipsis_pause(match: re.Match) -> str:
+    """An ellipsis between words as the pause it stood for: a comma in
+    Chinese, Japanese and Korean, three dots elsewhere."""
+    text = match.string
+    before, after = text[match.start() - 1], text[match.end()]
+    if _CJK_CHAR_RE.match(before):
+        return "" if after in _CLOSING_MARKS else "，"
+    return "..." if after in _CLOSING_MARKS else "... "
+
+
+def _dash_pause(match: re.Match) -> str:
+    """A long dash between words as a comma; beside a mark it adds nothing."""
+    text = match.string
+    before, after = text[match.start() - 1], text[match.end()]
+    return " " if before in _CLOSING_MARKS or after in _CLOSING_MARKS else ", "
+
 # Cap on messages per reply: a runaway of one-word lines would otherwise send
 # one message per line. `_delivery_units` says what the overflow becomes.
 MAX_REPLY_MESSAGES = 24
@@ -1606,8 +1655,11 @@ class TextProcessing:
             text = re.sub(r'。+', '...', text)
             if not style.keeps(0x2026):
                 text = re.sub(r'…+', '...', text)
-        text = re.sub(r'。+(?!\d)', ' ', text)
-        text = text.replace('——', ' ').replace('—', ' ')
+        if not style.keeps(0x2026):
+            text = _ELLIPSIS_MID_RE.sub(_ellipsis_pause, text)
+            text = re.sub(r'(?<=[A-Za-z0-9])…+', '...', text)
+        text = _full_stops_to_lines(text)
+        text = _DASH_MID_RE.sub(_dash_pause, text).replace('—', ' ')
         text = text.replace('；', ',').replace(';', ',')
         # Chinese takes the full-width comma; some models type the ASCII one.
         text = re.sub(r'(?<=[㐀-鿿]) ?, ?(?=[㐀-鿿])', '，', text)

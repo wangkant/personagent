@@ -36,6 +36,7 @@ Puede modificar el perfil del personaje en cualquier momento. Lo que ha aprendid
 <tr>
 <td width="220" valign="top"><strong>Habla como una persona.</strong></td>
 <td valign="top">
+Escribe como escriben las personas en un chat: frases cortas y sencillas en el idioma de la conversación, sin listas, títulos ni fórmulas de asistente, y dice que no sabe algo cuando no lo sabe.<br>
 La respuesta llega en varios mensajes cortos, cada uno tras el tiempo que se tarda en escribirlo, con el indicador de escritura visible en las plataformas que lo tienen.<br>
 Recoge los stickers que envían las personas y los usa cuando encajan, y de madrugada apenas interviene si no lo llaman.<br>
 Si usted lo activa, inicia una conversación tras un silencio prolongado y retoma los planes que las personas mencionaron.

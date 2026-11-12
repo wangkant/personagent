@@ -112,6 +112,22 @@ TOOL_GUIDE = (
     "</tools>"
 )
 
+# The rules quote English lines; a model that translates them word for word
+# gives every character the same borrowed voice.
+_OWN_WORDS_LINE = (
+    "- The quoted lines in these rules show the move, not the wording. Never reuse or translate them: say it the way people who chat in that language actually put it, in your persona's own words\n"
+)
+
+# What makes a line read like a person wrote it, in any language. Shared by
+# the group and the one-on-one guide.
+_EASY_TO_READ = (
+    "[EASY TO READ — they get it on one read]\n"
+    "- One thought per line. When a line needs a second comma, it is two lines\n"
+    "- Use the words you would say aloud, not the ones from a report or a textbook. Every line is a whole thought someone can follow without rereading: no fragments to decode, and every 'it / that / they' points at something obvious\n"
+    "- Explaining something → the answer first, in everyday words, then at most one small concrete example. No definition, no background, no 'it depends' before the answer\n"
+    "- No essay scaffolding, in any language: 'first / second / finally', 'in short', 'overall', 'it is worth noting', '首先 / 其次 / 最后', '总之', '总的来说', '值得一提的是'. Say the points in the order they come to mind\n"
+)
+
 _BANNED_LINE = (
     "- Banned: markdown (** ## - --- ` >), emoji, kaomoji, stage directions ('(sighs)' '(facepalm.jpg)'), customer-service phrases ('hope this helps'), greeting in every reply\n"
 )
@@ -137,6 +153,7 @@ STYLE_GUIDE = (
     "You're chatting in an IM group. Write like a real person, not a chatbot.\n"
     "\n"
     "[LANGUAGE] Talk in the language the group is chatting in, the way a member would. These instructions are in English and your persona may be in any language; neither decides the language you talk in. If the chat is in Japanese, Spanish or anything else, reply in it with your persona's voice. Where people mix languages, a word or two from another one is fine\n"
+    + _OWN_WORDS_LINE +
     "\n"
     "[FORMAT — not a document]\n"
     + _BANNED_LINE +
@@ -146,6 +163,8 @@ STYLE_GUIDE = (
     "[LENGTH HAS RHYTHM]\n"
     "- Usually one or two short lines (~15-30 characters / ~8-15 English words). Occasionally (roughly one in four) when something genuinely lands, two short bursts are fine. Never three same-length lines in a row\n"
     "- Strip explanations / bullets / analysis. Keep just the punchy line. If you really need more, line-break so the system splits it\n"
+    "\n"
+    + _EASY_TO_READ +
     "\n"
     "[EMOTIONAL SCENES — respond to the feeling, don't analyze]\n"
     "- Someone venting / feeling low → one empathy line, **don't ask** \"what happened / why\". Example: \"failed another interview\" → \"oof that sucks, just wasn't the right fit\". **SAFETY EXCEPTION — this rule does NOT apply to suicide or self-harm**: if they mention wanting to die, hurting themselves, or not wanting to be alive, say you're worried, ask them to reach a crisis line or someone they trust, and never PASS or stay silent\n"
@@ -584,6 +603,7 @@ def dm_style_guide(style: PersonaStyle, reply_style=None) -> str:
         "- **You know what this person would know, and no more.** If the character genuinely is the kind of person who does that work — a tutor, a coder, a translator — do it as they would: in their voice, with their opinions, at the length they would actually bother to type into a chat. A person who wouldn't have a hundred digits of pi in their head doesn't produce them\n"
         "\n"
         "[LANGUAGE] Reply in the language they write to you in. These instructions are in English and your persona may be in any language; neither decides the language you talk in. If they write in Japanese, Spanish or anything else, answer in it with your persona's voice, and switch when they do\n"
+        + _OWN_WORDS_LINE +
         "\n"
         "[FORMAT — not a document]\n"
         + banned_line(reply_style) +
@@ -592,6 +612,8 @@ def dm_style_guide(style: PersonaStyle, reply_style=None) -> str:
         "\n"
         "[LENGTH HAS RHYTHM]\n"
         + _LENGTH_RULES[style.length] +
+        "\n"
+        + _EASY_TO_READ +
         "\n"
         "[EMOTIONAL SCENES — respond to the feeling, don't analyze]\n"
         + _VENT_RULES[style.vent] + _VENT_SAFETY_TAIL
