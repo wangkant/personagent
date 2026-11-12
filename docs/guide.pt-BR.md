@@ -742,7 +742,7 @@ A 1.0 renomeou a maioria das configurações, e o personagent não inicia enquan
 
 ## Status e outros documentos
 
-O personagent 1.4.1 está no PyPI. A CI executa os testes no Linux com Python 3.10–3.14 e no Windows com Python 3.12. Outros trabalhos de CI instalam o pacote, acionam o comando e a página local e abrem a janela do aplicativo no Linux, no macOS e no Windows.
+O personagent 1.4.2 está no PyPI. A CI executa os testes no Linux com Python 3.10–3.14 e no Windows com Python 3.12. Outros trabalhos de CI instalam o pacote, acionam o comando e a página local e abrem a janela do aplicativo no Linux, no macOS e no Windows.
 
 O caminho direto OneBot (`/v1/onebot`) está obsoleto, mas permanece durante toda a 1.x. Os scripts em `tools/` foram feitos para serem executados a partir de um clone, e [tools.md](tools.pt-BR.md) os descreve.
 

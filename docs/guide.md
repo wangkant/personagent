@@ -742,7 +742,7 @@ The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet)
 
 ## Status and other docs
 
-personagent 1.4.1 is on PyPI. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12. Further CI jobs install the package and drive the command and the local page, and open the app window on Linux, macOS and Windows.
+personagent 1.4.2 is on PyPI. CI runs the tests on Linux with Python 3.10–3.14 and on Windows with Python 3.12. Further CI jobs install the package and drive the command and the local page, and open the app window on Linux, macOS and Windows.
 
 The direct OneBot route (`/v1/onebot`) is deprecated but kept through 1.x. The scripts in `tools/` are meant to be run from a clone, and [tools.md](tools.md) describes them.
 

@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] — 2026-11-12
+
 The character decides by itself what it learns, and nothing waits for a person any longer; a memory that keeps the thread of each chat across restarts, with dated events and facts it keeps current; the character's abilities after an audit; and `personagent connect <platform>` for servers without a display.
 
 ### Added
@@ -598,7 +600,8 @@ An unsupported character degraded to a missing glyph instead of silencing the re
 
 The first release: learning from real reactions, the JSON reply protocol, the whitelist reply validator, few-shot retrieval over read-only seeds and a learned `runtime/`, the platform-neutral gateway with an AstrBot forwarder, the sticker pipeline, opt-in proactive mode, a cheap gate model before the reply model, and the SSRF guard. 0.1.1 stopped a single positive signal from banking an example and let a rejection withdraw a learned one.
 
-[Unreleased]: https://github.com/wangkant/personagent/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/wangkant/personagent/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/wangkant/personagent/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/wangkant/personagent/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/wangkant/personagent/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/wangkant/personagent/compare/v1.3.0...v1.3.1
