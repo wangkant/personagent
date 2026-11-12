@@ -279,6 +279,7 @@ class Zulip(Platform):
         where = self._where(target)
         sent = 0
         for item in items:
+            await self.pace(target, item)
             try:
                 if item.get("type") == "image" and item.get("b64"):
                     data = base64.b64decode(item["b64"])

@@ -34,6 +34,14 @@ Vous pouvez réécrire la fiche du personnage à tout moment. Ce qu'il a appris 
 </td>
 </tr>
 <tr>
+<td width="220" valign="top"><strong>Il parle comme une personne.</strong></td>
+<td valign="top">
+Une réponse arrive en quelques messages courts, chacun après le temps qu'il faut pour l'écrire, avec l'indicateur de saisie affiché sur les plateformes qui en ont un.<br>
+Il récupère les autocollants que les gens envoient et les utilise quand ils conviennent, et la nuit il n'intervient guère à moins d'être appelé.<br>
+Si vous l'activez, il lance une conversation après un long silence et revient sur les projets que les gens ont évoqués.
+</td>
+</tr>
+<tr>
 <td width="220" valign="top"><strong>Il se souvient.</strong></td>
 <td valign="top">
 Chaque discussion a sa propre mémoire : des messages récents qui survivent à un redémarrage, un résumé de la conversation antérieure, des événements datés et des faits concernant les personnes, qu'il tient à jour lui-même.<br>

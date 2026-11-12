@@ -34,6 +34,14 @@ Sie können die Persona jederzeit umschreiben. Was die Figur gelernt hat, bleibt
 </td>
 </tr>
 <tr>
+<td width="220" valign="top"><strong>Er schreibt wie ein Mensch.</strong></td>
+<td valign="top">
+Eine Antwort kommt als einige kurze Nachrichten, jede nach der Zeit, die das Tippen braucht; auf Plattformen mit Tippanzeige ist diese währenddessen zu sehen.<br>
+Er sammelt die Sticker, die andere senden, und verwendet sie, wo sie passen. Nachts beteiligt er sich kaum, solange er nicht angesprochen wird.<br>
+Wenn Sie es aktivieren, beginnt er nach längerer Stille selbst ein Gespräch und kommt auf Pläne zurück, die erwähnt wurden.
+</td>
+</tr>
+<tr>
 <td width="220" valign="top"><strong>Er merkt sich Dinge.</strong></td>
 <td valign="top">
 Jeder Chat hat sein eigenes Gedächtnis: letzte Nachrichten, die einen Neustart überstehen, eine Zusammenfassung des bisherigen Gesprächs, datierte Ereignisse und Fakten über Personen, die er selbst aktuell hält.<br>

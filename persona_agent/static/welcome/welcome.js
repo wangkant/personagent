@@ -2246,7 +2246,53 @@ function showMessage(item, arrived = false) {
   $("chat-empty").hidden = true;
   return node;
 }
+// A reply arrives the way a person sends it: one message at a time, each after
+// about the time it takes to type, with the typing sign in between.
+const TYPING = { perChar: 130, pause: 350, jitter: 450, most: 2600, whole: 9000 };
+// Showing the chat afresh ends a reply that is still arriving.
+let chatEpoch = 0;
+function typingBubble() {
+  const node = bubble("", "bot pending typing");
+  node.setAttribute("role", "status");
+  node.setAttribute("aria-label", t("thinking"));
+  const dots = el("span", "dots");
+  dots.append(el("i"), el("i"), el("i"));
+  node.append(dots);
+  return node;
+}
+function typingTime(item) {
+  if (item.picture !== undefined) return 600 + Math.random() * 600;
+  const length = Array.from(item.text || "").length;
+  return Math.min(TYPING.most, length * TYPING.perChar + TYPING.pause + Math.random() * TYPING.jitter);
+}
+// `spent`: how long the first message has already been waited for.
+async function reveal(items, spent = 0) {
+  const epoch = chatEpoch;
+  let left = TYPING.whole;
+  for (const item of items) {
+    if (item.seq && item.seq <= chatSeen) continue;
+    if (item.role === "user") {
+      showMessage(item);
+      continue;
+    }
+    const time = Math.min(left, Math.max(0, typingTime(item) - spent));
+    spent = 0;
+    if (time > 0) {
+      const typing = typingBubble();
+      avatarMood("thinking");
+      await new Promise((done) => setTimeout(done, time));
+      typing.remove();
+      left -= time;
+      if (epoch !== chatEpoch) return;
+      // Shown meanwhile by another look at the chat.
+      if (item.seq && item.seq <= chatSeen) continue;
+    }
+    showMessage(item, true);
+    avatarMood("talking", Array.from(item.text || "").length);
+  }
+}
 function showHistory(history) {
+  chatEpoch += 1;
   for (const node of $("messages").querySelectorAll(".bubble")) dropBubble(node);
   if (history.kept) chatKept = history.kept;
   chatSeen = 0;
@@ -2274,13 +2320,7 @@ async function chatLoop() {
       // A reply that started meanwhile brings these messages itself.
       if (!chatting) {
         if (value.chat !== chatTag) showHistory(await api("chat/history"));
-        else {
-          const fresh = value.messages.filter((item) => item.seq > chatSeen);
-          for (const item of fresh) showMessage(item, true);
-          const said = fresh.filter((item) => item.role !== "user");
-          if (said.length)
-            avatarMood("talking", said.reduce((n, item) => n + Array.from(item.text || "").length, 0));
-        }
+        else await reveal(value.messages.filter((item) => item.seq > chatSeen));
       }
     } catch {
       // The next look tries again; a lasting problem shows when a message is sent.
@@ -2317,7 +2357,8 @@ async function send(text, mine = null) {
   $("message").value = "";
   syncSend();
   mine ||= bubble(text, "user");
-  const pending = bubble(t("thinking"), "bot pending");
+  const pending = typingBubble();
+  const asked = performance.now();
   avatarMood("thinking");
   try {
     const value = await api("chat", { text, after: chatSeen });
@@ -2326,14 +2367,21 @@ async function send(text, mine = null) {
     // meanwhile, this message and the reply.
     mine.remove();
     pending.remove();
-    if (value.chat !== chatTag) showHistory(await api("chat/history"));
-    else for (const item of value.messages) if (item.seq > chatSeen) showMessage(item);
     const own = value.messages.filter((item) => item.role === "user").pop();
     const answered = value.messages.some((item) => item.role !== "user" && own && item.seq > own.seq);
-    if (!answered) bubble(t("noReply"), "bot");
-    avatarMood(answered ? "talking" : "", Array.from(value.reply || "").length);
+    if (value.chat !== chatTag) {
+      showHistory(await api("chat/history"));
+      avatarMood(answered ? "talking" : "", Array.from(value.reply || "").length);
+    } else await reveal(value.messages, performance.now() - asked);
+    if (!answered) {
+      bubble(t("noReply"), "bot");
+      avatarMood("");
+    }
   } catch (error) {
     avatarMood("");
+    pending.replaceChildren();
+    pending.removeAttribute("role");
+    pending.removeAttribute("aria-label");
     pending.textContent = t(error.message);
     pending.className = "bubble failed";
     const retry = document.createElement("button");

@@ -26,6 +26,16 @@ _home.load_env = _load_env_outside_the_checkout
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers", "bare_call_wait: keep the real bare-call debounce")
+    config.addinivalue_line(
+        "markers", "typing_pace: keep the typing pace of the direct connectors")
+
+
+@pytest.fixture(autouse=True)
+def _no_typing_pace(request: pytest.FixtureRequest,
+                    monkeypatch: pytest.MonkeyPatch) -> None:
+    """Direct connectors relay replies at once unless a test is marked typing_pace."""
+    if request.node.get_closest_marker("typing_pace") is None:
+        monkeypatch.setattr("persona_agent.direct.base.Bridge.paced", False)
 
 
 @pytest.fixture(autouse=True)

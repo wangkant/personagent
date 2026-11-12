@@ -996,6 +996,19 @@ label.check input:checked {
 .bubble.pending {
   color: var(--muted);
 }
+/* The typing sign: three dots while the character writes. */
+.bubble.typing {
+  padding: 13px 14px;
+  line-height: 0;
+}
+.bubble.typing .dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.bubble.typing .dots i {
+  width: 6px;
+  height: 6px;
+}
 /* A sticker or picture stands on its own, without the bubble's fill. */
 .bubble.picture {
   padding: 0;

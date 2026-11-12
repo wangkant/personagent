@@ -32,6 +32,14 @@ Rewrite the persona whenever you like. What the character learned is kept.
 </td>
 </tr>
 <tr>
+<td width="220" valign="top"><strong>It talks like a person.</strong></td>
+<td valign="top">
+A reply comes as a few short messages, each after the time it takes to type, with the typing sign up where the platform has one.<br>
+It picks up the stickers people send and uses them where they fit, and at night it mostly stays out of the talk unless called.<br>
+If you turn it on, it starts a conversation after a long silence and comes back to plans people mentioned.
+</td>
+</tr>
+<tr>
 <td width="220" valign="top"><strong>It remembers.</strong></td>
 <td valign="top">
 Each chat has its own memory: recent messages that survive a restart, a summary of earlier conversation, dated events and facts about people, which it keeps current by itself.<br>

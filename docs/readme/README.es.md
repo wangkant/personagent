@@ -34,6 +34,14 @@ Puede modificar el perfil del personaje en cualquier momento. Lo que ha aprendid
 </td>
 </tr>
 <tr>
+<td width="220" valign="top"><strong>Habla como una persona.</strong></td>
+<td valign="top">
+La respuesta llega en varios mensajes cortos, cada uno tras el tiempo que se tarda en escribirlo, con el indicador de escritura visible en las plataformas que lo tienen.<br>
+Recoge los stickers que envían las personas y los usa cuando encajan, y de madrugada apenas interviene si no lo llaman.<br>
+Si usted lo activa, inicia una conversación tras un silencio prolongado y retoma los planes que las personas mencionaron.
+</td>
+</tr>
+<tr>
 <td width="220" valign="top"><strong>Recuerda.</strong></td>
 <td valign="top">
 Cada chat tiene su propia memoria: mensajes recientes que se conservan tras un reinicio, un resumen de la conversación anterior, acontecimientos con fecha y hechos sobre las personas, que mantiene actualizados por sí mismo.<br>

@@ -267,6 +267,7 @@ class Weixin(Platform):
             text = str(item.get("text") or "").strip() if item.get("type") == "text" else ""
             if not text:
                 continue        # images need the encrypted CDN upload, not done here
+            await self.pace(target, item)
             try:
                 for piece in split_text(text, MAX_TEXT):
                     answer = await self.call("sendmessage", {"msg": {

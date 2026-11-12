@@ -34,6 +34,14 @@ Reescreva a persona quando quiser. O que o personagem aprendeu é mantido.
 </td>
 </tr>
 <tr>
+<td width="220" valign="top"><strong>Ele fala como uma pessoa.</strong></td>
+<td valign="top">
+A resposta chega em algumas mensagens curtas, cada uma depois do tempo necessário para digitá-la, com o indicador de digitação visível nas plataformas que o oferecem.<br>
+Ele guarda as figurinhas que as pessoas enviam e as usa quando combinam, e de madrugada quase não participa, a menos que seja chamado.<br>
+Se você ativar, ele inicia uma conversa depois de um longo silêncio e retoma os planos que as pessoas mencionaram.
+</td>
+</tr>
+<tr>
 <td width="220" valign="top"><strong>Ele lembra.</strong></td>
 <td valign="top">
 Cada conversa tem sua própria memória: mensagens recentes que sobrevivem a um reinício, um resumo da conversa anterior, eventos datados e fatos sobre as pessoas, que ele mantém atualizados por conta própria.<br>

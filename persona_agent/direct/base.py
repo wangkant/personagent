@@ -4,12 +4,15 @@ agent's connector protocol (docs/connectors.md)."""
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import importlib.util
 import json
 import logging
 import os
+import random
 import re
 import time
+import weakref
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
@@ -23,6 +26,15 @@ MAX_INLINE_IMAGE_BYTES = 4_000_000
 MAX_CONCURRENT_TURNS = 16
 # Waits after a dropped connection: doubling from the first, up to the second.
 RETRY_S = (2.0, 120.0)
+# A person reads a message before starting to answer it.
+READ_S = (0.8, 2.0)
+# A typing sign fades after about five seconds on the platforms that have one.
+TYPING_REFRESH_S = 4.0
+# The longest the sign stays up while the agent has not answered.
+TYPING_WAIT_MAX_S = 60.0
+
+# Typing time the first item of a reply already spent waiting for the agent.
+_spent: contextvars.ContextVar[float] = contextvars.ContextVar("personagent_direct_spent", default=0.0)
 
 OnEvent = Callable[[dict, Any], Awaitable[None]]
 
@@ -169,6 +181,17 @@ class Platform:
         Unsupported when it cannot be reached unprompted."""
         raise NotImplementedError
 
+    def place(self, target: Any) -> str:
+        """The chat `target` is in: replies to one chat go out one after another."""
+        return str(target)
+
+    async def typing(self, target: Any) -> None:
+        """Show that a reply is being written, where the platform has such a
+        sign. The sign fades by itself."""
+
+    async def pace(self, target: Any, item: dict) -> None:
+        """Awaited by `send` before each item goes out; the bridge replaces it."""
+
     async def close(self) -> None:
         pass
 
@@ -179,8 +202,30 @@ async def backoff_sleep(attempt: int) -> None:
     await asyncio.sleep(min(first * (2 ** min(attempt, 16)), last))
 
 
+def typing_delay(text: str) -> float:
+    """Seconds a person takes to type `text`: 6-8 characters a second and a
+    short pause, at most 7. The pace transport.py keeps on QQ."""
+    return min(len(text) / random.uniform(6.0, 8.0) + random.uniform(0.4, 1.2), 7.0)
+
+
+def item_delay(item: dict) -> float:
+    """How long a reply item takes to write; 0 for one no platform sends."""
+    if item.get("type") == "text" and str(item.get("text") or "").strip():
+        return typing_delay(str(item["text"]).strip())
+    if item.get("type") == "image" and item.get("b64"):
+        return random.uniform(0.6, 1.4)
+    return 0.0
+
+
 class Bridge:
-    """Carries one platform's messages to the agent and the replies back."""
+    """Carries one platform's messages to the agent and the replies back.
+
+    Replies go out the way a person sends them: one message at a time, each
+    after the time it takes to type, with the platform's typing sign up
+    meanwhile."""
+
+    #: Off in tests that are not about the pace.
+    paced = True
 
     def __init__(self, platform: Platform, agent: Any, status: Status):
         self.platform = platform
@@ -188,6 +233,11 @@ class Bridge:
         self.status = status
         self._turns = asyncio.Semaphore(MAX_CONCURRENT_TURNS)
         self._tasks: set[asyncio.Task] = set()
+        self._sleep = asyncio.sleep
+        # One lock per chat, kept only while a reply to it is going out.
+        self._order: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
+        if self.paced:
+            platform.pace = self._pace
 
     async def on_event(self, event: dict, target: Any) -> None:
         if not event.get("sender_id") or event.get("sender_id") == self.platform.bot_id:
@@ -199,24 +249,33 @@ class Bridge:
         task.add_done_callback(self._tasks.discard)
 
     async def _turn(self, event: dict, target: Any) -> None:
+        started = time.monotonic()
+        waiting: Optional[asyncio.Task] = None
         async with self._turns:
+            # A message meant for the character gets an answer: the sign goes up while it is written.
+            if self.paced and (event.get("addressed") or event.get("conversation_type") == "dm"):
+                waiting = asyncio.create_task(self._typing_while_waiting(target))
             try:
                 answer = await self.agent.send_event(event)
             except Exception as exc:
                 logger.warning("%s: the agent did not take a message: %s",
                                self.platform.kind, type(exc).__name__)
                 return
-            items = answer.get("replies") or []
-            if not items:
-                return
-            try:
-                sent = await self.platform.send(target, items)
-            except Exception as exc:
-                logger.warning("%s: a reply was not sent: %s", self.platform.kind, type(exc).__name__)
-                return
-            if sent < len(items):
-                logger.warning("%s: %d of %d reply items were not sent", self.platform.kind,
-                               len(items) - sent, len(items))
+            finally:
+                if waiting is not None:
+                    waiting.cancel()
+        items = answer.get("replies") or []
+        if not items:
+            return
+        # Outside the turn limit: typing pauses must not hold up other chats.
+        try:
+            sent = await self._send(target, items, spent=time.monotonic() - started)
+        except Exception as exc:
+            logger.warning("%s: a reply was not sent: %s", self.platform.kind, type(exc).__name__)
+            return
+        if sent < len(items):
+            logger.warning("%s: %d of %d reply items were not sent", self.platform.kind,
+                           len(items) - sent, len(items))
 
     async def deliver(self, delivery: dict) -> tuple[str, int]:
         try:
@@ -224,8 +283,41 @@ class Bridge:
         except Unsupported:
             return "unsupported", 0
         items = delivery.get("items") or []
-        sent = await self.platform.send(target, items)
+        sent = await self._send(target, items)
         return ("sent" if sent == len(items) else "partial" if sent else "failed"), sent
+
+    async def _send(self, target: Any, items: list, *, spent: float = 0.0) -> int:
+        if not self.paced:
+            return await self.platform.send(target, items)
+        key = self.platform.place(target)
+        lock = self._order.get(key)
+        if lock is None:
+            lock = self._order[key] = asyncio.Lock()
+        async with lock:
+            _spent.set(max(0.0, spent))
+            return await self.platform.send(target, items)
+
+    async def _pace(self, target: Any, item: dict) -> None:
+        """The time a person takes to type `item`, with the typing sign up;
+        the first item of a reply has spent part of it waiting for the agent."""
+        spent = _spent.get()
+        _spent.set(0.0)
+        await self._typing_for(target, item_delay(item) - spent)
+
+    async def _typing_while_waiting(self, target: Any) -> None:
+        await self._sleep(random.uniform(*READ_S))
+        await self._typing_for(target, TYPING_WAIT_MAX_S)
+
+    async def _typing_for(self, target: Any, seconds: float) -> None:
+        left = seconds
+        while left > 0:
+            try:
+                await self.platform.typing(target)
+            except Exception as exc:        # a sign must never cost a reply
+                logger.debug("%s: the typing sign failed: %s", self.platform.kind, type(exc).__name__)
+            step = min(left, TYPING_REFRESH_S)
+            await self._sleep(step)
+            left -= step
 
     async def _receive(self, stop: asyncio.Event) -> None:
         """Run the platform until stopped, starting it again after anything

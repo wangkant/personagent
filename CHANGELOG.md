@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Replies on the platforms personagent connects itself arrive at a typing pace.** On Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, QQ and WeChat a reply used to go out as a burst. Each message now follows the time a person takes to type it (six to eight characters a second and a short pause, at most seven seconds), as on QQ through OneBot, and the wait for the model counts toward the first one. Telegram, Discord and Matrix show their typing sign meanwhile, and from the moment a private message or a message addressed to the character arrives. Two replies to one chat no longer interleave.
+- **The page's chat shows a reply the way it is written.** Three dots stand for the character typing, and the messages of a reply appear one at a time instead of together. What the character sends on its own arrives the same way.
+
 ### Changed
 
 - **personagent is described as an agent that behaves like a person, on every platform you use.** The README in all ten languages, the cover picture, the package description and the terminal help no longer introduce it as a character for group chats only. The README's opening table now lists what makes it like a person (its character, memory, learning and judgement of when to speak) and then where it works, and the section "Put it in your group" is named "Connect your platforms". No ability changed.

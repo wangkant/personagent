@@ -345,6 +345,7 @@ class QQ(Platform):
             text = str(item.get("text") or "").strip() if item.get("type") == "text" else ""
             if not text:
                 continue        # images need QQ's media upload first, not done here
+            await self.pace(target, item)
             try:
                 for piece in split_text(text, MAX_TEXT):
                     body: dict = {"msg_type": 0, "content": piece}
