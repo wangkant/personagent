@@ -1,6 +1,6 @@
 # Set up personagent: instructions for a coding agent
 
-A user gave you this file and asked you to install and set up personagent for them. Follow the steps in order. Every command here works with personagent 1.4.1 from PyPI and later. Talk to the user in the language they write in, and use the Chinese names of the page's buttons (given in brackets) when they write in Chinese.
+A user gave you this file and asked you to install and set up personagent for them. Follow the steps in order. Every command here works with personagent 1.4.2 from PyPI and later. Talk to the user in the language they write in, and use the Chinese names of the page's buttons (given in brackets) when they write in Chinese.
 
 ## What you are setting up
 
@@ -10,7 +10,7 @@ Everything it stores lives in one **home folder**: `.env` (settings and keys), `
 
 When you are done:
 
-1. `personagent --version` prints `personagent 1.4.1` or later.
+1. `personagent --version` prints `personagent 1.4.2` or later.
 2. The home folder has `.env` with the user's language, character name and model service, and `persona.txt` with the personality.
 3. The local page is running, the user has the link, has entered their model key there and has chatted with the character.
 4. Any chat apps the user wanted are connected, by the user, in the page.
@@ -25,7 +25,7 @@ When you are done:
 5. **QR-code logins are done by the user.** QQ and WeChat connect by scanning a code with a phone in the page. App tokens for Telegram, Discord and the rest are pasted into the page by the user. The Twitch sign-in, approved through a link the page shows, is done by the user too.
 6. **Do not install system software without asking.** Python, uv, pipx, Homebrew packages, apt packages and lasting changes to PATH, such as in the shell's startup files, all need a yes from the user first. Installing personagent itself is what the user asked for.
 7. **Know what costs money.** The model service charges per message. Verifying the key in the page sends one tiny request. `personagent doctor` probes every configured upstream service with tiny paid requests, so ask before you run it. `personagent demo` and `personagent --version` are free. Do not run `personagent chat`, `personagent demo --online` or `personagent eval` unless the user asks: they call the model, and `eval` calls it hundreds of times.
-8. **Do not run commands that wait for a person.** Bare `personagent`, `personagent init` without `--no-input`, `init --terminal`, `start --terminal`, `chat` and `connect astrbot` without a folder ask questions in a terminal or open the page and keep running. Your shell may count as a terminal: on Windows a stdin redirected from `NUL`, which many agent shells give a command, does, so bare `personagent` and `personagent init` would start the page and never return. Always pass `--no-input` to `init`. `start` and `up` run until stopped, so start them in the background as step 6 shows.
+8. **Do not run commands that wait for a person.** Bare `personagent`, `personagent init` without `--no-input`, `init --terminal`, `start --terminal`, `chat`, `connect astrbot` without a folder and `connect <platform>` without `--no-input` ask questions in a terminal or open the page and keep running. Your shell may count as a terminal: on Windows a stdin redirected from `NUL`, which many agent shells give a command, does, so bare `personagent` and `personagent init` would start the page and never return. Always pass `--no-input` to `init`. `start` and `up` run until stopped, so start them in the background as step 6 shows.
 9. **Always pass `--home`.** Give every command `--home "<home>"`, where `<home>` is the home folder's absolute path. Without it personagent picks a folder by rules that depend on the current directory.
 
 ## 1. Ask the user
@@ -152,7 +152,7 @@ Check the install:
 personagent --version
 ```
 
-It prints `personagent 1.4.1` or later. From here on, `personagent` means the command from your route: the full path, or `uvx personagent`, when it is not on PATH.
+It prints `personagent 1.4.2` or later. From here on, `personagent` means the command from your route: the full path, or `uvx personagent`, when it is not on PATH.
 
 ## 4. Create the home folder
 
@@ -261,7 +261,7 @@ sleep 5
 grep -Eo 'http://127\.0\.0\.1:[0-9]+/#token=[^[:space:]]+' "<home>/start.log"
 ```
 
-Note the process id the second line prints. The log starts with `personagent 1.4.1`, then the link `http://127.0.0.1:<port>/#token=<token>`, then "Keep this window open. Press Ctrl+C to stop." If the log is still empty, wait a few seconds and read it again: the first start after an install takes longer. Nothing costs money until the user verifies a key. Errors go to `start-error.log` on Windows and into `start.log` with bash.
+Note the process id the second line prints. The log starts with `personagent 1.4.2`, then the link `http://127.0.0.1:<port>/#token=<token>`, then "Keep this window open. Press Ctrl+C to stop." If the log is still empty, wait a few seconds and read it again: the first start after an install takes longer. Nothing costs money until the user verifies a key. Errors go to `start-error.log` on Windows and into `start.log` with bash.
 
 The port is chosen anew at every start; `--port N` fixes one. `SERVER_PORT=8080` in `.env` is not the page's port: it belongs to the character's own service, which the page starts behind it.
 
@@ -313,7 +313,9 @@ The user connects apps under **Connect apps** [连接平台] in the page. Your p
 
 personagent connects QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat itself. The first time the user connects any other app, it downloads AstrBot and its own Python 3.12 into `<home>/platforms/`, which takes a while, so tell the user to keep the page open until it finishes. Connected apps start again whenever the page or `personagent up` starts. For QQ, the bot shows up in mobile QQ under Contacts → Bots; until QQ certifies it, it can join only groups the user owns.
 
-From the command line, personagent connects only AstrBot:
+From the command line, personagent connects the ten platforms it serves itself, and AstrBot:
+
+- One of the ten platforms, on a computer without a display: the user runs `personagent --home "<home>" connect telegram` (or `qq`, `wechat`, `discord`, `matrix`, `twitch`, `irc`, `zulip`, `vk`, `stoat`) in their own terminal. It shows the same steps as the page, asks for each value, checks them with the platform and saves them. QQ and WeChat print a code to scan and Twitch prints a link to approve, so these wait for a person. Do not pass a token as an option yourself: an option puts it on the command line, so the values come from the user. `personagent --home "<home>" connect` alone lists the ten platforms and which are connected, and asks nothing.
 
 - An AstrBot the user already runs on this computer: `personagent --home "<home>" connect astrbot "<astrbot folder>"`, where the folder is AstrBot's data folder or the one above it, holding `cmd_config.json`. It copies the plugin, writes one shared token into both sides and keeps existing settings. No group or DM is forwarded until the user lists them under `groups` and `dm_users` in the plugin's settings in AstrBot's WebUI. Then they restart AstrBot or reload its plugins. Add `--qq` to route QQ from AstrBot's OneBot (NapCat) adapter as well.
 - AstrBot in Docker cannot reach 127.0.0.1 on this computer. It needs host networking, or an HTTPS address for personagent passed as `--url https://<address>`.
@@ -326,7 +328,7 @@ The [deployment guide](deploy.md) covers AstrBot, NapCat, Satori, Matrix and pub
 ## 8. Daily use
 
 - **With the page:** `personagent --home "<home>" start` opens the page and resumes the connected apps. The user keeps its window open; **Quit**, Ctrl+C or closing the window stops everything.
-- **Without the page**, on a server or to keep it running: `personagent --home "<home>" up` starts the character and every connected app. It needs the key: without one it prints "Open personagent start to finish setup first." and exits with 2. Ctrl+C stops it, and each process logs to `<home>/runtime/desktop/`. To run it in the background, use the commands from step 6 with `up` in place of `start --no-browser`, inside the `cmd` line too.
+- **Without the page**, on a server or to keep it running: `personagent --home "<home>" up` starts the character and every connected app. It needs the key: without one it prints "Finish the setup first:" with the command that opens the setup, and exits with 2. Ctrl+C stops it, and each process logs to `<home>/runtime/desktop/`. To run it in the background, use the commands from step 6 with `up` in place of `start --no-browser`, inside the `cmd` line too.
 - Run either the page or `up` for one home, never both at once.
 - When the home is the default `~/personagent`, the user can leave out `--home`: a bare `personagent` in a terminal opens the page. Anywhere else, every command needs the same `--home "<home>"`.
 
