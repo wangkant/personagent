@@ -1,16 +1,16 @@
 # Set up personagent: instructions for a coding agent
 
-A user gave you this file and asked you to install and set up personagent for them. Follow the steps in order. Every command here works with personagent 1.4.2 from PyPI and later. Talk to the user in the language they write in, and use the Chinese names of the page's buttons (given in brackets) when they write in Chinese.
+A user gave you this file and asked you to install and set up personagent for them. Follow the steps in order. Every command here works with personagent 1.4.3 from PyPI and later. Talk to the user in the language they write in, and use the Chinese names of the page's buttons (given in brackets) when they write in Chinese.
 
 ## What you are setting up
 
-personagent is a character for group chats. It answers when called, judges when a person would join in, and learns from corrections people make. It runs on the user's computer as a Python package. A local web page at `http://127.0.0.1:<port>` handles setup, a one-to-one chat with the character, and connections to QQ, WeChat, Telegram, Discord and eighteen other chat apps. Replies come from any OpenAI-compatible model service the user has a key for.
+personagent is an agent that behaves like a person, with a character of its own, on the chat platforms its user is on. In a group it answers when called and judges when a person would join in; in a private chat it answers each message. It remembers, and it learns from corrections people make. It runs on the user's computer as a Python package. A local web page at `http://127.0.0.1:<port>` handles setup, a one-to-one chat with the character, and connections to QQ, WeChat, Telegram, Discord and eighteen other chat apps. Replies come from any OpenAI-compatible model service the user has a key for.
 
 Everything it stores lives in one **home folder**: `.env` (settings and keys), `persona.txt` (the character), `runtime/` (memory and what it learned) and `platforms/` (chat app connections).
 
 When you are done:
 
-1. `personagent --version` prints `personagent 1.4.2` or later.
+1. `personagent --version` prints `personagent 1.4.3` or later.
 2. The home folder has `.env` with the user's language, character name and model service, and `persona.txt` with the personality.
 3. The local page is running, the user has the link, has entered their model key there and has chatted with the character.
 4. Any chat apps the user wanted are connected, by the user, in the page.
@@ -152,7 +152,7 @@ Check the install:
 personagent --version
 ```
 
-It prints `personagent 1.4.2` or later. From here on, `personagent` means the command from your route: the full path, or `uvx personagent`, when it is not on PATH.
+It prints `personagent 1.4.3` or later. From here on, `personagent` means the command from your route: the full path, or `uvx personagent`, when it is not on PATH.
 
 ## 4. Create the home folder
 
@@ -261,7 +261,7 @@ sleep 5
 grep -Eo 'http://127\.0\.0\.1:[0-9]+/#token=[^[:space:]]+' "<home>/start.log"
 ```
 
-Note the process id the second line prints. The log starts with `personagent 1.4.2`, then the link `http://127.0.0.1:<port>/#token=<token>`, then "Keep this window open. Press Ctrl+C to stop." If the log is still empty, wait a few seconds and read it again: the first start after an install takes longer. Nothing costs money until the user verifies a key. Errors go to `start-error.log` on Windows and into `start.log` with bash.
+Note the process id the second line prints. The log starts with `personagent 1.4.3`, then the link `http://127.0.0.1:<port>/#token=<token>`, then "Keep this window open. Press Ctrl+C to stop." If the log is still empty, wait a few seconds and read it again: the first start after an install takes longer. Nothing costs money until the user verifies a key. Errors go to `start-error.log` on Windows and into `start.log` with bash.
 
 The port is chosen anew at every start; `--port N` fixes one. `SERVER_PORT=8080` in `.env` is not the page's port: it belongs to the character's own service, which the page starts behind it.
 

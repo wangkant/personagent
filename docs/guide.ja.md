@@ -285,7 +285,7 @@ Chat platform  ⇄  connector  ⇄  personagent  ⇄  Model API
 
 ### personagent が自らつなぐプラットフォーム
 
-personagent は次の 10 個を 1 つのバックグラウンドプロセスで自らつなぎます。AstrBot も NapCat も要りません。いずれかを読み込めない場合でも、ほかのプラットフォームは起動します。
+personagent は次の 10 個を 1 つのバックグラウンドプロセスで自らつなぎます。AstrBot も NapCat も要りません。いずれかを読み込めない場合でも、ほかのプラットフォームは起動します。これらのプラットフォームでは、返信は 1 通ずつ、入力にかかる程度の時間を置いて送られます。Telegram、Discord、Matrix ではその間、入力中の表示が出ます。
 
 | プラットフォーム | すること |
 |---|---|
@@ -742,7 +742,7 @@ personagent が保存するものはすべて、あなたのマシンのホー�
 
 ## 現状とその他の文書
 
-personagent 1.4.2 は PyPI にあります。CI は Linux の Python 3.10–3.14 と Windows の Python 3.12 でテストを実行します。さらに CI のジョブがパッケージをインストールし、コマンドとローカルページを動かし、Linux、macOS、Windows でアプリウィンドウを開きます。
+personagent 1.4.3 は PyPI にあります。CI は Linux の Python 3.10–3.14 と Windows の Python 3.12 でテストを実行します。さらに CI のジョブがパッケージをインストールし、コマンドとローカルページを動かし、Linux、macOS、Windows でアプリウィンドウを開きます。
 
 直接の OneBot 経路（`/v1/onebot`）は非推奨ですが 1.x の間は残ります。`tools/` のスクリプトはクローンから実行するもので、[tools.md](tools.ja.md) で説明しています。
 

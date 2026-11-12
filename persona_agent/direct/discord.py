@@ -226,9 +226,13 @@ class Discord(Platform):
             raise Unsupported()
         return handle
 
+    async def typing(self, target: str) -> None:
+        await self.rest("POST", f"/channels/{target}/typing")
+
     async def send(self, target: str, items: list) -> int:
         sent = 0
         for item in items:
+            await self.pace(target, item)
             try:
                 if item.get("type") == "image" and item.get("b64"):
                     await self.rest("POST", f"/channels/{target}/messages", data={"payload_json": "{}"},

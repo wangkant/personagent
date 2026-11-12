@@ -285,7 +285,7 @@ Ein Konnektor meldet sich bei der Plattform an, leitet jede Nachricht an persona
 
 ### Plattformen, die personagent selbst verbindet
 
-personagent verbindet diese zehn Plattformen selbst, in einem einzigen Hintergrundprozess. Sie benötigen weder AstrBot noch NapCat. Lässt sich eine davon nicht laden, starten die übrigen dennoch.
+personagent verbindet diese zehn Plattformen selbst, in einem einzigen Hintergrundprozess. Sie benötigen weder AstrBot noch NapCat. Lässt sich eine davon nicht laden, starten die übrigen dennoch. Auf diesen Plattformen gehen Antworten Nachricht für Nachricht hinaus, jede nach ungefähr der Zeit, die das Tippen braucht; Telegram, Discord und Matrix zeigen währenddessen die Tippanzeige.
 
 | Plattform | Vorgehen |
 |---|---|
@@ -742,7 +742,7 @@ Der Bereitstellungsleitfaden enthält [die vollständige Checkliste](deploy.de.m
 
 ## Status und weitere Dokumente
 
-personagent 1.4.2 ist auf PyPI. Die CI führt die Tests unter Linux mit Python 3.10–3.14 und unter Windows mit Python 3.12 aus. Weitere CI-Jobs installieren das Paket, steuern den Befehl und die lokale Seite und öffnen das App-Fenster unter Linux, macOS und Windows.
+personagent 1.4.3 ist auf PyPI. Die CI führt die Tests unter Linux mit Python 3.10–3.14 und unter Windows mit Python 3.12 aus. Weitere CI-Jobs installieren das Paket, steuern den Befehl und die lokale Seite und öffnen das App-Fenster unter Linux, macOS und Windows.
 
 Der direkte OneBot-Weg (`/v1/onebot`) ist veraltet, bleibt aber während der gesamten 1.x. Die Skripte in `tools/` sind dafür gedacht, aus einem Klon ausgeführt zu werden, und [tools.md](tools.de.md) beschreibt sie.
 

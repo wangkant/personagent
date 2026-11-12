@@ -442,6 +442,7 @@ class Twitch(Platform):
             text = str(item.get("text") or "").strip() if item.get("type") == "text" else ""
             if not text:
                 continue        # Twitch chat carries text only
+            await self.pace(target, item)
             try:
                 mention = self.logins.get(raw_id(item.get("mention_user_id"), self.kind), "")
                 for i, piece in enumerate(split_text(text, MAX_TEXT - MENTION_ROOM)):

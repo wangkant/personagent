@@ -75,8 +75,9 @@ def _broken_without_a_terminal() -> int:
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="personagent",
-        description=langs.term("A character for your group chats that knows when to stay "
-                    "quiet, and learns from being corrected."),
+        description=langs.term("An agent that behaves like a person, on every platform you use: "
+                    "it has a character of its own, remembers, learns from the people it talks to, "
+                    "and judges for itself when to speak."),
         epilog=langs.term("Run `personagent` to open local setup and chat, or "
                "`personagent start --no-browser` to print the local link."))
     p.add_argument("--version", action="version", version=f"personagent {__version__}")

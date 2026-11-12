@@ -387,10 +387,14 @@ class Stoat(Platform):
         if isinstance(sent, dict) and sent.get("_id"):
             self.mine.append(str(sent["_id"]))
 
+    def place(self, target: str) -> str:
+        return target.partition("/")[0]
+
     async def send(self, target: str, items: list) -> int:
         channel, _, reply = target.partition("/")
         sent = 0
         for item in items:
+            await self.pace(target, item)
             try:
                 if item.get("type") == "image" and item.get("b64"):
                     if self.root is None:

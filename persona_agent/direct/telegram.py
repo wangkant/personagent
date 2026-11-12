@@ -174,11 +174,17 @@ class Telegram(Platform):
             raise Unsupported()
         return handle
 
+    async def typing(self, target: str) -> None:
+        chat, _, thread = target.partition("/")
+        await self.call("sendChatAction", json={
+            "chat_id": chat, "action": "typing", **({"message_thread_id": int(thread)} if thread else {})})
+
     async def send(self, target: str, items: list) -> int:
         chat, _, thread = target.partition("/")
         where: dict = {"chat_id": chat, **({"message_thread_id": int(thread)} if thread else {})}
         sent = 0
         for item in items:
+            await self.pace(target, item)
             try:
                 if item.get("type") == "image" and item.get("b64"):
                     await self.call("sendPhoto", data=where, files={

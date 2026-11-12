@@ -285,7 +285,7 @@ Chat platform  ⇄  connector  ⇄  personagent  ⇄  Model API
 
 ### personagent가 직접 연결하는 플랫폼
 
-personagent는 다음 열 개 플랫폼을 하나의 백그라운드 프로세스에서 직접 연결합니다. AstrBot도 NapCat도 필요하지 않습니다. 이 중 하나를 불러올 수 없더라도 나머지는 정상적으로 시작됩니다.
+personagent는 다음 열 개 플랫폼을 하나의 백그라운드 프로세스에서 직접 연결합니다. AstrBot도 NapCat도 필요하지 않습니다. 이 중 하나를 불러올 수 없더라도 나머지는 정상적으로 시작됩니다. 이들 플랫폼에서 답장은 한 번에 한 메시지씩, 입력하는 데 걸릴 만한 시간을 두고 전송됩니다. Telegram, Discord, Matrix에서는 그동안 입력 중 표시가 나타납니다.
 
 | 플랫폼 | 할 일 |
 |---|---|
@@ -742,7 +742,7 @@ personagent가 저장하는 모든 것은 사용자 컴퓨터의 홈 폴더에 �
 
 ## 현재 상태와 기타 문서
 
-personagent 1.4.2은 PyPI에 있습니다. CI는 Linux의 Python 3.10–3.14와 Windows의 Python 3.12에서 테스트를 실행합니다. 추가 CI 작업이 패키지를 설치하고 명령과 로컬 페이지를 구동하며, Linux, macOS, Windows에서 앱 창을 엽니다.
+personagent 1.4.3은 PyPI에 있습니다. CI는 Linux의 Python 3.10–3.14와 Windows의 Python 3.12에서 테스트를 실행합니다. 추가 CI 작업이 패키지를 설치하고 명령과 로컬 페이지를 구동하며, Linux, macOS, Windows에서 앱 창을 엽니다.
 
 직접 OneBot 경로(`/v1/onebot`)는 폐지 예정이지만 1.x 동안 유지됩니다. `tools/`의 스크립트는 클론에서 실행하는 용도이며 [tools.md](tools.ko.md)에서 설명합니다.
 

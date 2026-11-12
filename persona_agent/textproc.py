@@ -1015,6 +1015,79 @@ def _counted_list(run: str) -> str:
         return run
     return re.sub(r"(?m)^\d+\.[ \t]+", "", run)
 
+
+# --- Pauses the default style does not send, kept as pauses ----------------
+# A Chinese or Japanese full stop, an ellipsis and a long dash are never sent;
+# what they separated must still read as separate, not run together.
+_FULL_STOP_RE = re.compile(r"。+(?!\d)")
+# What may not open a line: a closing mark stays with the sentence it closes.
+_CLOSING_MARKS = "”’」』）)】》〉,，、!?！？:：;；~～"
+# Sentences share one line up to this many characters; a longer one starts its
+# own message, and a whole reply gains at most this many messages that way.
+_SENTENCE_PACK = 40
+_SENTENCE_BREAKS = 3
+# Between two words only: before a sticker marker, an emoji or a mark there is
+# nothing to pause for, and a comma would be left dangling.
+_ELLIPSIS_MID_RE = re.compile(r"(?<=[^\W_])[ \t]*…+[ \t]*(?=[^\W_])")
+_DASH_MID_RE = re.compile(r"(?<=[^\W_])[ \t]*—+[ \t]*(?=[^\W_])")
+_HAN_RE = re.compile(r"[㐀-鿿]")
+_KANA_RE = re.compile(r"[぀-ヿ]")
+_LATIN_RE = re.compile(r"[A-Za-zÀ-ɏ]")
+
+
+def _full_stops_to_lines(text: str) -> str:
+    """Sentences that ended in 。, the stop removed: short ones share a line,
+    a longer one starts a new line, which is sent as its own message."""
+    lines: list[str] = []
+    spare = _SENTENCE_BREAKS
+    for line in text.split("\n"):
+        parts = [p.strip() for p in _FULL_STOP_RE.split(line)]
+        made = [parts[0]]
+        for part in parts[1:]:
+            if not part:
+                continue
+            cur = made[-1]
+            if (not cur or part[0] in _CLOSING_MARKS or spare <= 0
+                    or len(cur) + len(part) < _SENTENCE_PACK):
+                made[-1] = f"{cur} {part}".strip()
+            else:
+                made.append(part)
+                spare -= 1
+        lines.extend(made)
+    return "\n".join(lines)
+
+
+def _pause_mark(text: str, before: str, lang: str) -> str:
+    """The comma a pause becomes after `before`: 、 in Japanese, ， in
+    Chinese, a comma and a space elsewhere."""
+    if _KANA_RE.match(before) or (_HAN_RE.match(before) and (lang == "ja" or _KANA_RE.search(text))):
+        return "、"
+    return "，" if _HAN_RE.match(before) else ", "
+
+
+def _ellipsis_pause(match: re.Match, lang: str) -> str:
+    """An ellipsis between words as the pause it stood for: a comma in
+    Chinese and Japanese, three dots elsewhere."""
+    before = match.string[match.start() - 1]
+    if _HAN_RE.match(before) or _KANA_RE.match(before):
+        return _pause_mark(match.string, before, lang)
+    return "... "
+
+
+def _dash_pause(match: re.Match, lang: str) -> str:
+    """A long dash between words as the pause it stood for; between numbers
+    it is a range."""
+    text = match.string
+    before, after = text[match.start() - 1], text[match.end()]
+    if before.isdigit() and after.isdigit():
+        return "-"
+    tight = match.group(0) == "—"
+    if _HAN_RE.match(before) or _KANA_RE.match(before):
+        # 破折号 is written doubled; one tight dash is a range or a route (北京—上海).
+        return " " if tight else _pause_mark(text, before, lang)
+    # A tight dash is a pause in the Latin scripts, a route or a pairing elsewhere.
+    return ", " if not tight or _LATIN_RE.match(before) else " "
+
 # Cap on messages per reply: a runaway of one-word lines would otherwise send
 # one message per line. `_delivery_units` says what the overflow becomes.
 MAX_REPLY_MESSAGES = 24
@@ -1606,8 +1679,11 @@ class TextProcessing:
             text = re.sub(r'。+', '...', text)
             if not style.keeps(0x2026):
                 text = re.sub(r'…+', '...', text)
-        text = re.sub(r'。+(?!\d)', ' ', text)
-        text = text.replace('——', ' ').replace('—', ' ')
+        if not style.keeps(0x2026):
+            text = _ELLIPSIS_MID_RE.sub(lambda m: _ellipsis_pause(m, lang), text)
+            text = re.sub(r'(?<=[A-Za-z0-9가-힯])…+', '...', text)
+        text = _full_stops_to_lines(text)
+        text = _DASH_MID_RE.sub(lambda m: _dash_pause(m, lang), text).replace('—', ' ')
         text = text.replace('；', ',').replace(';', ',')
         # Chinese takes the full-width comma; some models type the ASCII one.
         text = re.sub(r'(?<=[㐀-鿿]) ?, ?(?=[㐀-鿿])', '，', text)

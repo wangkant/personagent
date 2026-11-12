@@ -285,7 +285,7 @@ Um conector entra na plataforma, encaminha cada mensagem ao personagent e traz a
 
 ### Plataformas que o personagent conecta por conta própria
 
-O personagent conecta estas dez plataformas por conta própria, em um único processo em segundo plano. Elas não precisam de AstrBot nem de NapCat. Se uma delas não puder ser carregada, as demais iniciam normalmente.
+O personagent conecta estas dez plataformas por conta própria, em um único processo em segundo plano. Elas não precisam de AstrBot nem de NapCat. Se uma delas não puder ser carregada, as demais iniciam normalmente. Nessas plataformas as respostas saem uma mensagem por vez, cada uma depois de aproximadamente o tempo necessário para digitá-la; o Telegram, o Discord e o Matrix mostram o indicador de digitação enquanto isso.
 
 | Plataforma | O que você faz |
 |---|---|
@@ -742,7 +742,7 @@ A 1.0 renomeou a maioria das configurações, e o personagent não inicia enquan
 
 ## Status e outros documentos
 
-O personagent 1.4.2 está no PyPI. A CI executa os testes no Linux com Python 3.10–3.14 e no Windows com Python 3.12. Outros trabalhos de CI instalam o pacote, acionam o comando e a página local e abrem a janela do aplicativo no Linux, no macOS e no Windows.
+O personagent 1.4.3 está no PyPI. A CI executa os testes no Linux com Python 3.10–3.14 e no Windows com Python 3.12. Outros trabalhos de CI instalam o pacote, acionam o comando e a página local e abrem a janela do aplicativo no Linux, no macOS e no Windows.
 
 O caminho direto OneBot (`/v1/onebot`) está obsoleto, mas permanece durante toda a 1.x. Os scripts em `tools/` foram feitos para serem executados a partir de um clone, e [tools.md](tools.pt-BR.md) os descreve.
 

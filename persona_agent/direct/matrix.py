@@ -671,6 +671,12 @@ class Matrix(Platform):
                                         f"{self._next_txn()}", json=content)
         return str(answer.get("event_id") or "")
 
+    def place(self, target: Any) -> str:
+        return target if isinstance(target, str) else str(target[0])
+
+    async def typing(self, target: Any) -> None:
+        await self._typing(self.place(target), True)
+
     async def send(self, target: Any, items: list) -> int:
         if isinstance(target, str):
             target = (target, "", "")
@@ -683,6 +689,7 @@ class Matrix(Platform):
         sent = 0
         try:
             for item in items:
+                await self.pace(target, item)
                 mention = raw_id(item.get("mention_user_id"), self.kind)
                 if not mention.startswith("@") or mention == self.bot_id or self.is_direct(room_id):
                     mention = ""

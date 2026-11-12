@@ -461,6 +461,7 @@ class IRC(Platform):
                     continue
                 if item.get("type") != "text" or not str(item.get("text") or "").strip():
                     continue
+                await self.pace(target, item)
                 mention = raw_id(item.get("mention_user_id"), self.kind)
                 name = self.names.get(mention, mention) if self._is_channel(target) else ""
                 if re.search(r"[\s\x00-\x1f,:]", name):

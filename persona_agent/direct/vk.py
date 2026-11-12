@@ -282,6 +282,7 @@ class VK(Platform):
     async def send(self, target: str, items: list) -> int:
         sent = 0
         for item in items:
+            await self.pace(target, item)
             try:
                 if item.get("type") == "image" and item.get("b64"):
                     attachment = await self._upload(target, base64.b64decode(item["b64"]))

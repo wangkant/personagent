@@ -304,7 +304,7 @@ personagent 執行期間，該連線保持有效。`personagent up` 會啟動 pe
 
 ### personagent 直接連線的平台
 
-以下十個平台由 personagent 自行連線，執行於同一個背景處理程序中，不需要 AstrBot，也不需要 NapCat。其中某個平台無法載入時，其餘平台仍會正常啟動：
+以下十個平台由 personagent 自行連線，執行於同一個背景處理程序中，不需要 AstrBot，也不需要 NapCat。其中某個平台無法載入時，其餘平台仍會正常啟動。這些平台上的回覆會逐則送出，每則都留出大致相當於打字所需的時間；Telegram、Discord 與 Matrix 會同步顯示輸入狀態：
 
 | 平台 | 操作 |
 |---|---|
@@ -761,7 +761,7 @@ personagent 儲存的所有內容都位於你自己的電腦上的主目錄中�
 
 ## 專案狀態和其他文件
 
-personagent 1.4.2 已發布至 PyPI。CI 在 Linux 上以 Python 3.10–3.14、在 Windows 上以 Python 3.12 執行測試，另有數項作業會安裝套件，實際執行指令和本機頁面，並在 Linux、macOS 和 Windows 上開啟應用程式視窗。
+personagent 1.4.3 已發布至 PyPI。CI 在 Linux 上以 Python 3.10–3.14、在 Windows 上以 Python 3.12 執行測試，另有數項作業會安裝套件，實際執行指令和本機頁面，並在 Linux、macOS 和 Windows 上開啟應用程式視窗。
 
 OneBot 直連入口（`/v1/onebot`）已棄用，於 1.x 期間保留。`tools/` 中的腳本供從原始碼執行時使用，說明請參閱[工具腳本](tools.zh-TW.md)。
 

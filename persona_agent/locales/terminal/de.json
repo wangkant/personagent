@@ -1,7 +1,7 @@
 {
 "default SERVER_HOST or 127.0.0.1": "Standard: SERVER_HOST oder 127.0.0.1",
 "default SERVER_PORT or 8080": "Standard: SERVER_PORT oder 8080",
-"A character for your group chats that knows when to stay quiet, and learns from being corrected.": "Eine Figur für Ihre Gruppenchats, die weiß, wann sie besser schweigt, und aus Korrekturen lernt.",
+"An agent that behaves like a person, on every platform you use: it has a character of its own, remembers, learns from the people it talks to, and judges for itself when to speak.": "Ein Agent, der sich wie ein Mensch verhält, auf allen Plattformen, die Sie nutzen: Er hat eine eigene Persönlichkeit, merkt sich Dinge, lernt von den Menschen, mit denen er spricht, und entscheidet selbst, wann er sich äußert.",
 "Run `personagent` to open local setup and chat, or `personagent start --no-browser` to print the local link.": "Mit `personagent` öffnen Sie die lokale Einrichtung und den Chat; mit `personagent start --no-browser` wird nur der lokale Link ausgegeben.",
 "the folder holding .env, persona.txt and runtime/ (default: AGENT_HOME, this checkout, or ~/personagent)": "der Ordner mit .env, persona.txt und runtime/ (Standard: AGENT_HOME, dieser Checkout oder ~/personagent)",
 "personagent: --home needs a folder": "personagent: --home erfordert einen Ordner",
