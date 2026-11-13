@@ -742,7 +742,7 @@ La versión 1.0 cambió el nombre de la mayoría de los ajustes, y personagent n
 
 ## Estado y otros documentos
 
-personagent 1.4.3 está disponible en PyPI. La CI ejecuta las pruebas en Linux con Python 3.10–3.14 y en Windows con Python 3.12. Otros trabajos de CI instalan el paquete, utilizan el comando y la página local, y abren la ventana de la aplicación en Linux, macOS y Windows.
+personagent 1.4.4 está disponible en PyPI. La CI ejecuta las pruebas en Linux con Python 3.10–3.14 y en Windows con Python 3.12. Otros trabajos de CI instalan el paquete, utilizan el comando y la página local, y abren la ventana de la aplicación en Linux, macOS y Windows.
 
 La vía directa de OneBot (`/v1/onebot`) está obsoleta, pero se mantiene durante la serie 1.x. Los scripts de `tools/` están diseñados para ejecutarse desde un clon, y [tools.md](tools.es.md) los describe.
 
