@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "personagent"
-version = "1.4.3"
+version = "1.4.4"
 description = "An agent that behaves like a person, on every platform you use: it has a character of its own, remembers, learns from the people it talks to, and judges for itself when to speak."
 readme = "README.md"
 requires-python = ">=3.10"
