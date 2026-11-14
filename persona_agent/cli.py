@@ -9,6 +9,7 @@ import argparse
 import importlib
 import os
 import sys
+import textwrap
 
 from persona_agent import langs
 from persona_agent import __version__
@@ -16,33 +17,33 @@ from persona_agent import __version__
 # name -> (module, function, one-line help). The function takes (argv, prog).
 COMMANDS = {
     "start": ("persona_agent.welcome", "main",
-              "open setup and chat in a window of their own"),
+              "Open setup and chat in a window of their own"),
     "shortcut": ("persona_agent.shortcut", "main",
-                 "put personagent on the desktop and in the Start menu (Windows)"),
+                 "Put personagent on the desktop and in the Start menu (Windows)"),
     "up": ("persona_agent.services", "main",
-           "start personagent and its connected chat platforms together"),
+           "Start personagent and its connected chat platforms together"),
     "init": ("persona_agent.setup_wizard", "main",
-             "set up a home: model, key, character, language"),
+             "Set up a home: model, key, character, language"),
     "chat": ("persona_agent.chat", "run",
-             "talk to the character in this terminal"),
+             "Talk to the character in this terminal"),
     "demo": ("persona_agent.demo", "main",
-             "watch it stay quiet and learn from a correction"),
+             "Watch it stay quiet and learn from a correction"),
     "run": ("persona_agent.cli", "_run_server",
-            "start the service the connectors talk to"),
+            "Start the service the connectors talk to"),
     "connect": ("persona_agent.setup_wizard", "connect_main",
-                "connect a chat platform, AstrBot or a coding assistant"),
+                "Connect a chat platform, AstrBot or a coding assistant"),
     "mcp": ("persona_agent.coding", "mcp_main",
-            "serve the character to coding agents over MCP (they start this)"),
+            "Serve the character over MCP (run by coding assistants, not by hand)"),
     "hook": ("persona_agent.coding", "hook_main",
-             "let the character react when a coding agent finishes a turn (they run this)"),
+             "React when a coding agent finishes a turn (run by coding assistants, not by hand)"),
     "doctor": ("persona_agent.doctor", "main",
-               "check the setup and every upstream service"),
+               "Check the setup and every upstream service"),
     "learned": ("persona_agent.ledger_admin", "main",
-                "review, promote or roll back what it learned"),
+                "Review, promote or roll back what it learned"),
     "memory": ("persona_agent.memory_admin", "main",
-               "look at what it remembers, forget an item or bring one back"),
+               "Look at what it remembers, forget an item or bring one back"),
     "eval": ("persona_agent.evals", "main",
-             "measure speaking, persona, learning and memory on labelled cases"),
+             "Measure speaking, persona, learning and memory on labelled cases"),
 }
 
 
@@ -75,17 +76,21 @@ def _broken_without_a_terminal() -> int:
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="personagent",
-        description=langs.term("An agent that behaves like a person, on every platform you use: "
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(langs.term("An agent that behaves like a person, on every platform you use: "
                     "it has a character of its own, remembers, learns from the people it talks to, "
-                    "and judges for itself when to speak."),
-        epilog=langs.term("Run `personagent` to open local setup and chat, or "
-               "`personagent start --no-browser` to print the local link."))
+                    "and judges for itself when to speak."), 78),
+        # Raw, so the command list keeps one line per command.
+        epilog=_usage() + "\n\n" + textwrap.fill(langs.term(
+            "Run `personagent` to open local setup and chat. On a machine without a display, "
+            "use `personagent up` (the service and its platforms) or `personagent run` (the service alone). "
+            "Messages follow AGENT_LANG, else the system language."), 78))
     p.add_argument("--version", action="version", version=f"personagent {__version__}")
     p.add_argument("--home", metavar="DIR",
                    help=langs.term("the folder holding .env, persona.txt and runtime/ "
                         "(default: AGENT_HOME, this checkout, or ~/personagent)"))
     p.add_argument("command", nargs="?", choices=list(COMMANDS), metavar="command",
-                   help=", ".join(COMMANDS))
+                   help=langs.term("one of the commands below"))
     p.add_argument("args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
     return p
 
@@ -126,8 +131,6 @@ def main(argv: list[str] | None = None) -> int:
         args.command = "start"
     if not args.command:
         p.print_help()
-        print()
-        print(_usage())
         return 0
     later_home, rest = _take_home(args.args)
     chosen = later_home or args.home

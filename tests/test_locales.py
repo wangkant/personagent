@@ -64,7 +64,7 @@ def test_the_terminal_language_follows_the_env_file(tmp_path, monkeypatch) -> No
 
 #: What `personagent memory` prints and the start-up refusal for a damaged memory file.
 MEMORY_SENTENCES = (
-    "look at what it remembers, forget an item or bring one back",
+    "Look at what it remembers, forget an item or bring one back",
     "Look at what the character remembers, forget an item, or bring one back.",
     "list what the character remembers (the default)",
     "list what was removed and can still be brought back",

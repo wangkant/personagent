@@ -180,7 +180,7 @@ def test_memory_help_lists_its_four_commands(home, capsys) -> None:
     for name in ("list", "removed", "forget", "restore"):
         check(f"lists {name}", f"    {name} " in out, out)
     check("the top-level list names it", "memory" in cli._usage()
-          and "look at what it remembers" in cli._usage())
+          and "Look at what it remembers" in cli._usage())
 
 
 # ---- T9: the demo's ledger line
