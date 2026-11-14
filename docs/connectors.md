@@ -25,7 +25,35 @@ All four speak the protocol described on this page. To write a new one you
 need this page and an HTTP client. The Python helper in
 `integrations/sdk/personagent_connector.py` signs requests and runs the
 outbox loop for you. It takes the base URL, the token and the connector's
-`connector_id`, and it needs `httpx`.
+`connector_id`, and it needs `httpx`. Its
+[README](../integrations/sdk/README.md) has a complete example.
+
+## Trying it on your own machine
+
+```
+personagent run --port 8080
+curl http://127.0.0.1:8080/health
+```
+
+`personagent run` serves both endpoints below on `127.0.0.1`. It reads
+`CONNECTOR_TOKEN` from the `.env` of the home folder that its startup
+banner names; `--home DIR` picks another one.
+
+- With `CONNECTOR_TOKEN` blank, the agent accepts only programs on the same
+  machine that call `127.0.0.1` or `localhost`, and they send no
+  authentication headers. `personagent init` leaves it blank. The local
+  page, `personagent up` and `personagent connect astrbot` write a random
+  one when it is blank.
+- To set one, put a long random value in `.env`, for example the output of
+  `python -c "import secrets; print(secrets.token_urlsafe(32))"`, give the
+  connector the same value, and restart the agent.
+- `GET /health` answers `{"status": "ok", "agent_enabled": true}` and costs
+  nothing. `"agent_enabled": false` means the agent cannot answer (no
+  `LLM_API_KEY`, or `AGENT_ENABLED=false`), and every event gets
+  `owned: false`. `GET /health/details` also checks the model and the other
+  services, which may cost a little. It takes the `X-Personagent-Token`
+  header when a token is set, and otherwise only a request from the same
+  machine; anything else gets `403` with code `forbidden`.
 
 ## Configuration
 
@@ -73,9 +101,11 @@ the agent, every request carries four headers:
 - `X-Personagent-Signature`: `sha256=` followed by the hex HMAC-SHA256 of
   `timestamp + "." + nonce + "." + body`, keyed with the token.
 
-The body is canonical JSON: UTF-8, sorted keys, compact separators and
-unescaped non-ASCII. The token is also the signing key, so keep it out of
-logs.
+The signature covers the body bytes exactly as they are sent, so any valid
+JSON in UTF-8 passes. Canonical JSON (sorted keys, compact separators and
+unescaped non-ASCII) is recommended, and the bundled connectors send it, but
+the agent does not require it. The token is also the signing key, so keep it
+out of logs.
 
 Without a token, the agent accepts only local programs that call
 `127.0.0.1` or `localhost` directly. A connector must refuse to send to
@@ -108,7 +138,8 @@ Each request carries one message in and returns the replies to it.
 
 The required fields are `platform`, `conversation_type` (`group` or `dm`),
 `sender_id`, `message_id` and `sent_at`, plus `conversation_id` for groups.
-`sent_at` is when the platform stamped the message, in unix seconds. The
+`sent_at` is when the platform stamped the message, in whole unix seconds (a
+string of digits is accepted too). The
 character sees each message with this time. A group message that is more
 than 10 minutes old when it arrives, within two minutes of the platform's
 first message since the agent started, is a backlog delivered after a
@@ -171,12 +202,54 @@ The response looks like this:
   mention the way the platform does. An item with `"reason": "excuse"` is
   the short message the character sends in a DM when the model failed, not a
   reply. Send it like the others, or handle it as an error.
-- `owned`: the agent has taken this conversation. When it is true, stop any
+- `owned`: the agent has taken the message, because it passed the agent's
+  allowlists, whatever the persona then does. When it is true, stop any
   other bot logic from answering, even if `replies` is empty, because the
-  persona chose to stay quiet. When it is false, the message is yours to
-  handle. Either the conversation is not on the agent's allowlists, or the
-  agent cannot answer at all (no `LLM_API_KEY`, or `AGENT_ENABLED=false`). In
-  the second case the agent's log carries one ERROR line naming the cause.
+  persona may have chosen to stay quiet. When it is false, the agent took no
+  part in the message: the conversation is not on the agent's allowlists,
+  the agent cannot answer at all (no `LLM_API_KEY`, or `AGENT_ENABLED=false`),
+  or the `message_id` has been received before (see "Repeated messages"
+  below). When the agent cannot answer, its log carries one ERROR line
+  naming the cause.
+- `handled`: true when this request's own turn delivered something, a reply
+  or the answer to a memory command. It is meant for logs and statistics.
+  Decide on `owned`, and send whatever `replies` holds whatever `handled`
+  says: an excuse, for example, comes with `handled: false`.
+
+The combinations a connector meets:
+
+| Response | When | What the connector does |
+|---|---|---|
+| `handled: true`, `owned: true`, replies present | A normal reply. | Send `replies` and keep other bot logic quiet. |
+| `handled: false`, `owned: true`, `replies: []` | The persona stayed quiet; the event was the bot's own echo; the message was folded into the turn of a later message (see "Messages sent close together"); a memory command whose answer comes later through the outbox; a group event with `proactive`. | Send nothing and keep other bot logic quiet. |
+| `handled: false`, `owned: true`, one reply with `"reason": "excuse"` | The model failed in a DM. | Send it, or handle it as an error. |
+| `handled: false`, `owned: false`, `replies: []` | The conversation is not on the allowlists, the agent cannot answer, or the `message_id` is a repeat. | For a `message_id` you have posted before, do nothing. Otherwise the message is yours to handle. |
+
+Further rules:
+
+- **Repeated messages.** The agent remembers the last 2,000 messages it
+  admitted, across all conversations. The key is `platform`, the
+  conversation (a group's `conversation_id`, a DM's `sender_id`) and
+  `message_id`; for a platform in `CONNECTOR_QQ_PLATFORMS` it is the bare
+  `message_id`. The list is saved under the home's `runtime/` folder from
+  time to time and at shutdown, so it survives a restart. A message posted
+  again, such as a platform's redelivery or a retry after a timeout, gets
+  `{"handled": false, "owned": false, "replies": []}` at once, even while
+  the first request is still running, and its replies come only in the first
+  response. Do not answer it: keep a record of the `message_id`s you have
+  posted. A turn goes on when its caller gives up, so after a timeout the
+  replies are lost; allow enough time instead of retrying. A message the
+  allowlists refused is not remembered and is judged again when posted again.
+- **Messages sent close together.** Messages of one conversation that arrive
+  within a short debounce (2.5 seconds, or 5 seconds after a group message
+  that only calls the persona by name) become one turn, which answers them
+  together. Messages that wait behind a turn in progress are likewise read
+  into the next turn. Only the request of the newest message carries the
+  replies; each earlier request returns
+  `{"handled": false, "owned": true, "replies": []}`. In a group, a reply's
+  `mention_user_id` names the person the persona answers, who may have sent
+  an earlier message rather than the one whose request carries the reply.
+  Memory commands are not merged; see the last point.
 - The request lasts until the turn is over, which is a short debounce plus
   the model's time. A turn's model calls share one budget of
   1.5 × `LLM_TIMEOUT_S`, retries included, in a group and in a DM alike, and
@@ -296,6 +369,29 @@ with code `outbox_disabled` means the operator turned it off with
 `CONNECTOR_OUTBOX_ENABLED`. In both cases, wait a long while before you pull
 again.
 
+## Errors
+
+An error answers `{"error": "...", "code": "..."}`. `code` is stable, so
+branch on it. `error` is a sentence for a person reading a log, and its
+wording may change.
+
+| Status | `code` | Endpoint | Cause |
+|---|---|---|---|
+| 400 | `invalid_schema` | both | The body is not a JSON object; a required field is missing or empty; `conversation_type` is neither `group` nor `dm`; `segments` is not a list; a body of the wrong kind (see "Body kinds"); a pull without a usable `connector_id` (at most 128 characters), with a `wait_s` or `max_deliveries` that is not a number, or with more than 1,000 acks. |
+| 400 | `client_disconnected` | both | The caller hung up while sending the body. |
+| 403 | `unauthenticated` | both | No `CONNECTOR_TOKEN`, and the caller is not on the agent's machine. |
+| 403 | `non_local_request` | both | No `CONNECTOR_TOKEN`, and the request carries a header a local program does not send: `Origin`, a `Sec-Fetch-Site` other than `none`, a `Host` other than `localhost`, `127.0.0.1` or `::1`, or a proxy header such as `X-Forwarded-For`. |
+| 403 | `invalid_envelope` | both | `CONNECTOR_TOKEN` is set, and the token or a header is missing or wrong, the signature does not match, the timestamp is more than five minutes off, the nonce was used before, or the replay guard is full. |
+| 403 | `stale_event` | events | `sent_at` is not a whole number of seconds, or is more than `CONNECTOR_MAX_EVENT_AGE_S` (24 hours) away from the agent's clock in either direction. A value in milliseconds lies far in the future. |
+| 404 | `outbox_disabled` | outbox | `CONNECTOR_OUTBOX_ENABLED=false`, or the agent is off (`AGENT_ENABLED=false`). |
+| 408 | `body_timeout` | both | The body took more than 30 seconds to arrive. |
+| 413 | `body_too_large` | both | The body is larger than `SERVER_MAX_BODY_BYTES` (8,000,000 bytes), usually because of an inline image. |
+| 429 | `capacity_exceeded` | both | Too many requests at once: more than `CONNECTOR_MAX_INFLIGHT` turns (64 by default) on the event endpoint, or 16 pulls on the outbox. The `Retry-After` header gives the seconds to wait: 3, or 5 for the outbox. |
+
+A wrong path gets `404 {"detail": "Not Found"}` and a wrong method, such as
+`GET /v1/events`, gets `405 {"detail": "Method Not Allowed"}`. These come
+from the web framework and carry no `code`.
+
 ## Speaking first without the outbox
 
 A connector that cannot poll can still open a DM. Its own scheduler, such as
@@ -340,4 +436,5 @@ own bot quiet) and dropped unread.
    and `capabilities: ["outbox"]`, then run the pull loop: pull, deliver each
    delivery through its `reply_handle`, and ack on the next pull.
 
-`integrations/sdk/personagent_connector.py` handles steps 3 and 4.
+`integrations/sdk/personagent_connector.py` handles steps 3 and 4. Its
+[README](../integrations/sdk/README.md) shows them in one short program.

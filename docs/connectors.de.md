@@ -15,7 +15,20 @@ Dieses Repository enthält vier Konnektoren:
 
 Programmierassistenten sind keine Chat-Plattformen und haben deshalb einen eigenen Zugang: einen MCP-Server, `personagent mcp`, beschrieben in der [Benutzeranleitung](guide.de.md#programmierassistenten).
 
-Alle vier sprechen das auf dieser Seite beschriebene Protokoll. Um einen neuen Konnektor zu schreiben, benötigen Sie diese Seite und einen HTTP-Client. Das Python-Hilfsmodul in `integrations/sdk/personagent_connector.py` signiert Anfragen und führt die Outbox-Schleife für Sie aus. Es erwartet die Basis-URL, das Token und die `connector_id` des Konnektors und benötigt `httpx`.
+Alle vier sprechen das auf dieser Seite beschriebene Protokoll. Um einen neuen Konnektor zu schreiben, benötigen Sie diese Seite und einen HTTP-Client. Das Python-Hilfsmodul in `integrations/sdk/personagent_connector.py` signiert Anfragen und führt die Outbox-Schleife für Sie aus. Es erwartet die Basis-URL, das Token und die `connector_id` des Konnektors und benötigt `httpx`. Seine [README](../integrations/sdk/README.de.md) enthält ein vollständiges Beispiel.
+
+## Auf dem eigenen Rechner ausprobieren
+
+```
+personagent run --port 8080
+curl http://127.0.0.1:8080/health
+```
+
+`personagent run` stellt die beiden unten beschriebenen Endpunkte auf `127.0.0.1` bereit. `CONNECTOR_TOKEN` liest es aus der `.env` des Home-Ordners, den sein Startbanner nennt; `--home DIR` wählt einen anderen.
+
+- Ist `CONNECTOR_TOKEN` leer, nimmt der Agent nur Programme auf demselben Rechner an, die `127.0.0.1` oder `localhost` aufrufen, und diese senden keine Authentifizierungs-Header. `personagent init` lässt den Wert leer. Die lokale Seite, `personagent up` und `personagent connect astrbot` schreiben einen zufälligen Wert, wenn er leer ist.
+- Um einen festzulegen, tragen Sie einen langen Zufallswert in `.env` ein, etwa die Ausgabe von `python -c "import secrets; print(secrets.token_urlsafe(32))"`, geben dem Konnektor denselben Wert und starten den Agenten neu.
+- `GET /health` antwortet `{"status": "ok", "agent_enabled": true}` und kostet nichts. `"agent_enabled": false` bedeutet, dass der Agent nicht antworten kann (kein `LLM_API_KEY` oder `AGENT_ENABLED=false`), und jedes Ereignis erhält `owned: false`. `GET /health/details` prüft zusätzlich das Modell und die übrigen Dienste, was etwas kosten kann. Es verlangt den Header `X-Personagent-Token`, wenn ein Token gesetzt ist, und andernfalls eine Anfrage vom selben Rechner; alles andere erhält `403` mit dem Code `forbidden`.
 
 ## Konfiguration
 
@@ -49,7 +62,7 @@ Beide Endpunkte unten verwenden dasselbe Verfahren. Wenn `CONNECTOR_TOKEN` beim 
 - `X-Personagent-Nonce`: ein neuer Zufallswert. Eine wiederverwendete Nonce wird abgelehnt.
 - `X-Personagent-Signature`: `sha256=`, gefolgt vom hexadezimalen HMAC-SHA256 von `timestamp + "." + nonce + "." + body`, mit dem Token als Schlüssel.
 
-Der Body ist kanonisches JSON: UTF-8, sortierte Schlüssel, kompakte Trennzeichen und unmaskiertes Nicht-ASCII. Das Token ist zugleich der Signaturschlüssel; es darf daher nicht in Protokollen erscheinen.
+Die Signatur deckt die Bytes des Bodys genau so ab, wie sie gesendet werden; jedes gültige JSON in UTF-8 besteht daher die Prüfung. Kanonisches JSON (sortierte Schlüssel, kompakte Trennzeichen und unmaskiertes Nicht-ASCII) wird empfohlen und von den mitgelieferten Konnektoren gesendet, der Agent verlangt es aber nicht. Das Token ist zugleich der Signaturschlüssel; es darf daher nicht in Protokollen erscheinen.
 
 Ohne Token akzeptiert der Agent nur lokale Programme, die `127.0.0.1` oder `localhost` direkt aufrufen. Ein Konnektor muss sich weigern, an etwas anderes zu senden als an eine Loopback-URL oder eine HTTPS-URL mit Token.
 
@@ -78,7 +91,7 @@ Jede Anfrage überträgt eine Nachricht und gibt die Antworten darauf zurück.
 }
 ```
 
-Pflichtfelder sind `platform`, `conversation_type` (`group` oder `dm`), `sender_id`, `message_id` und `sent_at`, bei Gruppen zusätzlich `conversation_id`. `sent_at` ist der Zeitstempel, den die Plattform der Nachricht gegeben hat, in Unix-Sekunden. Die Figur sieht jede Nachricht mit diesem Zeitpunkt. Eine Gruppennachricht, die beim Eintreffen älter als 10 Minuten ist, und zwar innerhalb von zwei Minuten nach der ersten Nachricht der Plattform seit dem Start des Agenten, ist ein nach einem Neustart zugestellter Rückstau: Sie wird als Kontext aufbewahrt und nicht beantwortet. Nach diesen zwei Minuten hält ein altes `sent_at` keine Nachricht mehr zurück, sodass auch ein Konnektor, dessen Uhr nachgeht, weiterhin eine Antwort erhält. Senden Sie die unveränderten IDs der Plattform. Das Präfix fügt der Agent hinzu.
+Pflichtfelder sind `platform`, `conversation_type` (`group` oder `dm`), `sender_id`, `message_id` und `sent_at`, bei Gruppen zusätzlich `conversation_id`. `sent_at` ist der Zeitstempel, den die Plattform der Nachricht gegeben hat, in ganzen Unix-Sekunden (eine Zeichenkette aus Ziffern wird ebenfalls angenommen). Die Figur sieht jede Nachricht mit diesem Zeitpunkt. Eine Gruppennachricht, die beim Eintreffen älter als 10 Minuten ist, und zwar innerhalb von zwei Minuten nach der ersten Nachricht der Plattform seit dem Start des Agenten, ist ein nach einem Neustart zugestellter Rückstau: Sie wird als Kontext aufbewahrt und nicht beantwortet. Nach diesen zwei Minuten hält ein altes `sent_at` keine Nachricht mehr zurück, sodass auch ein Konnektor, dessen Uhr nachgeht, weiterhin eine Antwort erhält. Senden Sie die unveränderten IDs der Plattform. Das Präfix fügt der Agent hinzu.
 
 Der Konnektor setzt `addressed`. Es ist wahr, wenn die Nachricht den Bot erwähnt, auf eine Nachricht des Bots antwortet oder nach den eigenen Regeln der Plattform an den Bot gerichtet ist. Der Agent erkennt seinen Namen im Text auch selbst. Ein Zitat seiner eigenen Nachricht oder ein @ an den Bot wertet er als Reaktion, aus der er lernen darf; setzen Sie `addressed` daher bei Antworten an den Bot. Ein Zitat der Nachricht eines anderen Mitglieds ist nie eine Reaktion auf den Bot. Eine Erwähnung des Bots innerhalb einer weitergeleiteten Nachricht richtet sich nicht an den Bot; setzen Sie `addressed` dafür daher nicht.
 
@@ -118,7 +131,22 @@ Die Antwort hat folgende Form:
 ```
 
 - `replies`: Senden Sie sie der Reihe nach, jede als eigene Nachricht. Ist `mention_user_id` vorhanden, enthält es die zu erwähnende ID mit Präfix. Stellen Sie die Erwähnung so dar, wie es auf der Plattform üblich ist. Ein Eintrag mit `"reason": "excuse"` ist keine Antwort, sondern die kurze Nachricht, die die Figur in einer DM sendet, wenn das Modell fehlgeschlagen ist. Senden Sie ihn wie die anderen oder behandeln Sie ihn als Fehler.
-- `owned`: Der Agent hat diese Unterhaltung übernommen. Ist der Wert wahr, verhindern Sie, dass andere Bot-Logik antwortet, selbst wenn `replies` leer ist, denn die Figur hat sich für Schweigen entschieden. Ist er falsch, liegt die Nachricht in der Verantwortung des Konnektors. Entweder steht die Unterhaltung nicht auf den Zulassungslisten des Agenten, oder der Agent kann gar nicht antworten (kein `LLM_API_KEY` oder `AGENT_ENABLED=false`). Im zweiten Fall steht im Log des Agenten eine ERROR-Zeile mit der Ursache.
+- `owned`: Der Agent hat die Nachricht übernommen, weil sie die Zulassungslisten des Agenten passiert hat, unabhängig davon, was die Figur danach tut. Ist der Wert wahr, verhindern Sie, dass andere Bot-Logik antwortet, selbst wenn `replies` leer ist, denn die Figur hat sich womöglich für Schweigen entschieden. Ist er falsch, war der Agent an der Nachricht nicht beteiligt: Die Unterhaltung steht nicht auf den Zulassungslisten des Agenten, der Agent kann gar nicht antworten (kein `LLM_API_KEY` oder `AGENT_ENABLED=false`), oder die `message_id` ist schon einmal eingegangen (siehe „Wiederholte Nachrichten“ unten). Kann der Agent nicht antworten, steht in seinem Log eine ERROR-Zeile mit der Ursache.
+- `handled`: wahr, wenn der eigene Durchgang dieser Anfrage etwas geliefert hat, eine Antwort oder das Ergebnis eines Gedächtnis-Befehls. Der Wert dient Logs und Statistiken. Entscheiden Sie anhand von `owned`, und senden Sie, was `replies` enthält, gleich welchen Wert `handled` hat: Eine `excuse`-Nachricht etwa kommt mit `handled: false`.
+
+Die Kombinationen, denen ein Konnektor begegnet:
+
+| Antwort | Wann | Was der Konnektor tut |
+|---|---|---|
+| `handled: true`, `owned: true`, mit Antworten | Eine normale Antwort. | `replies` senden und andere Bot-Logik schweigen lassen. |
+| `handled: false`, `owned: true`, `replies: []` | Die Figur hat geschwiegen; das Ereignis war das Echo des Bots selbst; die Nachricht wurde in den Durchgang einer späteren Nachricht übernommen (siehe „Kurz nacheinander gesendete Nachrichten“); ein Gedächtnis-Befehl, dessen Ergebnis später über die Outbox kommt; ein Gruppenereignis mit `proactive`. | Nichts senden und andere Bot-Logik schweigen lassen. |
+| `handled: false`, `owned: true`, eine Antwort mit `"reason": "excuse"` | Das Modell ist in einer DM fehlgeschlagen. | Sie senden oder als Fehler behandeln. |
+| `handled: false`, `owned: false`, `replies: []` | Die Unterhaltung steht nicht auf den Zulassungslisten, der Agent kann nicht antworten, oder die `message_id` ist eine Wiederholung. | Bei einer bereits gesendeten `message_id` nichts tun. Andernfalls liegt die Nachricht in der Verantwortung des Konnektors. |
+
+Weitere Regeln:
+
+- **Wiederholte Nachrichten.** Der Agent merkt sich die letzten 2.000 Nachrichten, die er zugelassen hat, über alle Unterhaltungen hinweg. Der Schlüssel besteht aus `platform`, der Unterhaltung (der `conversation_id` einer Gruppe, der `sender_id` einer DM) und `message_id`; für eine Plattform in `CONNECTOR_QQ_PLATFORMS` ist es die `message_id` ohne Präfix. Die Liste wird von Zeit zu Zeit und beim Beenden im Ordner `runtime/` des Home-Ordners gespeichert und übersteht daher einen Neustart. Eine erneut gesendete Nachricht, etwa eine erneute Zustellung der Plattform oder ein Wiederholungsversuch nach einer Zeitüberschreitung, erhält sofort `{"handled": false, "owned": false, "replies": []}`, auch während die erste Anfrage noch läuft, und ihre Antworten kommen nur mit der ersten. Beantworten Sie sie nicht: Führen Sie Buch über die `message_id`s, die Sie gesendet haben. Ein Durchgang läuft weiter, wenn sein Aufrufer aufgibt; nach einer Zeitüberschreitung gehen die Antworten daher verloren. Planen Sie genug Zeit ein, statt es erneut zu versuchen. Eine von den Zulassungslisten abgewiesene Nachricht wird nicht gespeichert und bei erneutem Senden neu beurteilt.
+- **Kurz nacheinander gesendete Nachrichten.** Nachrichten einer Unterhaltung, die innerhalb einer kurzen Entprellung eintreffen (2,5 Sekunden, oder 5 Sekunden nach einer Gruppennachricht, die die Figur nur beim Namen ruft), werden zu einem Durchgang, der sie gemeinsam beantwortet. Nachrichten, die hinter einem laufenden Durchgang warten, werden ebenso in den nächsten Durchgang übernommen. Nur die Anfrage der neuesten Nachricht trägt die Antworten; jede frühere Anfrage gibt `{"handled": false, "owned": true, "replies": []}` zurück. In einer Gruppe nennt die `mention_user_id` einer Antwort die Person, der die Figur antwortet; sie kann eine frühere Nachricht gesendet haben als die, deren Anfrage die Antwort trägt. Gedächtnis-Befehle werden nicht zusammengefasst; siehe den letzten Punkt.
 - Die Anfrage dauert, bis der Durchgang abgeschlossen ist, also eine kurze Entprellung plus die Zeit des Modells. Die Modellaufrufe eines Durchgangs teilen sich ein einziges Budget von 1,5 × `LLM_TIMEOUT_S`, Wiederholungen eingeschlossen, in einer Gruppe wie in einer DM, und eine Nachricht, die eintrifft, während ein früherer Durchgang ihrer Unterhaltung noch nachdenkt, wartet erst dessen Ende ab und beginnt dann ihren eigenen. Planen Sie mindestens 3 × `LLM_TIMEOUT_S` Sekunden ein (360 mit dem Standardwert).
 - Ein Gedächtnis-Befehl (etwa „remember ...“), der eintrifft, während ein Durchgang seiner Unterhaltung noch nachdenkt, wird erst nach diesem Durchgang beantwortet. Ein Konnektor, der `outbox` deklariert hat, erhält sofort `{"handled": false, "owned": true, "replies": []}` und das Ergebnis später als `follow_up`-Zustellung. Ohne `outbox` kommt das Ergebnis in der Antwort auf eine Anfrage: auf seine eigene oder auf eine andere wartende Anfrage derselben Unterhaltung. Eine Antwort kann also `replies` enthalten, die jemand anderen als den Absender des Ereignisses erwähnen.
 
@@ -187,6 +215,25 @@ Regeln:
 
 Ein 404 ohne `code` bedeutet, dass der Agent die Outbox nicht anbietet. Ein `404` mit dem Code `outbox_disabled` bedeutet, dass der Betreiber sie mit `CONNECTOR_OUTBOX_ENABLED` abgeschaltet hat. Warten Sie in beiden Fällen längere Zeit, bevor Sie erneut abfragen.
 
+## Fehler
+
+Ein Fehler antwortet `{"error": "...", "code": "..."}`. `code` ist stabil; verzweigen Sie danach. `error` ist ein Satz für Menschen, die ein Log lesen, und sein Wortlaut kann sich ändern.
+
+| Status | `code` | Endpunkt | Ursache |
+|---|---|---|---|
+| 400 | `invalid_schema` | beide | Der Body ist kein JSON-Objekt; ein Pflichtfeld fehlt oder ist leer; `conversation_type` ist weder `group` noch `dm`; `segments` ist keine Liste; ein Body der falschen Art (siehe „Body-Arten“); eine Abfrage ohne brauchbare `connector_id` (höchstens 128 Zeichen), mit einem `wait_s` oder `max_deliveries`, das keine Zahl ist, oder mit mehr als 1.000 Acks. |
+| 400 | `client_disconnected` | beide | Der Aufrufer hat die Verbindung beim Senden des Bodys getrennt. |
+| 403 | `unauthenticated` | beide | Kein `CONNECTOR_TOKEN`, und der Aufrufer ist nicht auf dem Rechner des Agenten. |
+| 403 | `non_local_request` | beide | Kein `CONNECTOR_TOKEN`, und die Anfrage trägt einen Header, den ein lokales Programm nicht sendet: `Origin`, ein `Sec-Fetch-Site` außer `none`, einen `Host` außer `localhost`, `127.0.0.1` oder `::1`, oder einen Proxy-Header wie `X-Forwarded-For`. |
+| 403 | `invalid_envelope` | beide | `CONNECTOR_TOKEN` ist gesetzt, und das Token oder ein Header fehlt oder ist falsch, die Signatur stimmt nicht, der Zeitstempel weicht um mehr als fünf Minuten ab, die Nonce wurde schon benutzt, oder der Wiederholungsschutz ist voll. |
+| 403 | `stale_event` | events | `sent_at` ist keine ganze Zahl von Sekunden oder weicht um mehr als `CONNECTOR_MAX_EVENT_AGE_S` (24 Stunden) von der Uhr des Agenten ab, in beide Richtungen. Ein Wert in Millisekunden liegt weit in der Zukunft. |
+| 404 | `outbox_disabled` | outbox | `CONNECTOR_OUTBOX_ENABLED=false`, oder der Agent ist aus (`AGENT_ENABLED=false`). |
+| 408 | `body_timeout` | beide | Der Body brauchte länger als 30 Sekunden. |
+| 413 | `body_too_large` | beide | Der Body ist größer als `SERVER_MAX_BODY_BYTES` (8.000.000 Byte), meist wegen eines eingebetteten Bildes. |
+| 429 | `capacity_exceeded` | beide | Zu viele Anfragen gleichzeitig: mehr als `CONNECTOR_MAX_INFLIGHT` Durchgänge (standardmäßig 64) am Ereignis-Endpunkt oder 16 Abfragen an der Outbox. Der Header `Retry-After` nennt die Wartezeit in Sekunden: 3, bei der Outbox 5. |
+
+Ein falscher Pfad erhält `404 {"detail": "Not Found"}` und eine falsche Methode, etwa `GET /v1/events`, erhält `405 {"detail": "Method Not Allowed"}`. Diese Antworten stammen vom Web-Framework und tragen keinen `code`.
+
 ## Zuerst sprechen ohne die Outbox
 
 Ein Konnektor, der nicht abfragen kann, kann trotzdem eine DM eröffnen. Sein eigener Planer, etwa eine AstrBot-Plugin-Aufgabe oder ein Cron-Eintrag, schickt ein gewöhnliches DM-Ereignis mit `"proactive": true` an `/v1/events`. Der Agent liest den Text als Stichwort für die Figur („seit einem Tag still; die Prüfung war heute Morgen“), schneidet ihn bei 500 Zeichen ab und speichert ihn nie als Worte der Person. Die proaktiven Anweisungen der Engine entscheiden weiterhin über den Durchgang und können die Figur schweigen lassen. Spricht die Figur, kommt die Antwort in der HTTP-Antwort zurück, damit der Planer sie weitergibt.
@@ -211,4 +258,4 @@ Setzen Sie das Flag stets; ohne das Flag speichert der Agent das Stichwort als W
 3. Signieren und senden Sie das Ereignis. Senden Sie `replies` der Reihe nach, und schalten Sie andere Bot-Logik stumm, wenn `owned` wahr ist.
 4. Wenn die Plattform von sich aus senden kann, fügen Sie `connector_id`, `reply_handle` und `capabilities: ["outbox"]` hinzu und führen Sie die Abfrageschleife aus: abfragen, jede Zustellung über ihren `reply_handle` ausliefern und bei der nächsten Abfrage bestätigen.
 
-`integrations/sdk/personagent_connector.py` erledigt die Schritte 3 und 4.
+`integrations/sdk/personagent_connector.py` erledigt die Schritte 3 und 4. Seine [README](../integrations/sdk/README.de.md) zeigt beide in einem kurzen Programm.

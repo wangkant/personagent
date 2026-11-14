@@ -15,7 +15,20 @@ agent 本身從不直接與聊天平台互動，這項工作由聯結器負責�
 
 程式設計助理並非聊天平台，因此採用獨立的方式：一個 MCP 伺服器 `personagent mcp`，詳見[使用手冊](guide.zh-TW.md#程式設計助理)。
 
-這四個聯結器都使用本頁所述的協定。撰寫新的聯結器時，只需要本頁和一個 HTTP 用戶端。`integrations/sdk/personagent_connector.py` 中的 Python 輔助工具會代為簽署請求並執行 outbox 迴圈。它接受基礎 URL、權杖和聯結器的 `connector_id`，並需要 `httpx`。
+這四個聯結器都使用本頁所述的協定。撰寫新的聯結器時，只需要本頁和一個 HTTP 用戶端。`integrations/sdk/personagent_connector.py` 中的 Python 輔助工具會代為簽署請求並執行 outbox 迴圈。它接受基礎 URL、權杖和聯結器的 `connector_id`，並需要 `httpx`。其 [README](../integrations/sdk/README.zh-TW.md) 提供了一個完整範例。
+
+## 在本機試用
+
+```
+personagent run --port 8080
+curl http://127.0.0.1:8080/health
+```
+
+`personagent run` 會在 `127.0.0.1` 上提供下文的兩個端點。它從啟動橫幅所示主目錄的 `.env` 中讀取 `CONNECTOR_TOKEN`；`--home DIR` 可指定其他主目錄。
+
+- `CONNECTOR_TOKEN` 為空時，agent 只接受本機上呼叫 `127.0.0.1` 或 `localhost` 的程式，這些程式不需傳送驗證標頭。`personagent init` 不會設定它。本機頁面、`personagent up` 和 `personagent connect astrbot` 會在它為空時寫入一個隨機值。
+- 如需設定，請在 `.env` 中寫入一個足夠長的隨機值，例如 `python -c "import secrets; print(secrets.token_urlsafe(32))"` 的輸出，為聯結器設定相同的值，然後重新啟動 agent。
+- `GET /health` 傳回 `{"status": "ok", "agent_enabled": true}`，不產生任何費用。`"agent_enabled": false` 表示 agent 無法回覆（未設定 `LLM_API_KEY`，或 `AGENT_ENABLED=false`），此時每個事件都會得到 `owned: false`。`GET /health/details` 還會檢查模型和其他服務，可能產生少量費用。設定了權杖時，它要求帶上 `X-Personagent-Token` 標頭；未設定時只接受本機請求；其他請求會得到 `403` 和錯誤碼 `forbidden`。
 
 ## 設定
 
@@ -49,7 +62,7 @@ QQ 是唯一的例外，為了相容性而保留。其 id 儲存時不帶前綴�
 - `X-Personagent-Nonce`：一個新的隨機值。重複使用的 nonce 會被拒絕。
 - `X-Personagent-Signature`：`sha256=` 後接 `timestamp + "." + nonce + "." + body` 的十六進位 HMAC-SHA256，以權杖為金鑰。
 
-請求本文為標準化 JSON：UTF-8、鍵依序排列、使用緊湊分隔符號，非 ASCII 字元不跳脫。權杖同時也是簽署金鑰，因此不得寫入記錄檔。
+簽章涵蓋實際傳送的請求本文位元組，因此任何以 UTF-8 編碼的有效 JSON 都能通過。建議使用標準化 JSON（鍵依序排列、使用緊湊分隔符號，非 ASCII 字元不跳脫），本儲存庫內附的聯結器也如此傳送，但 agent 並不要求。權杖同時也是簽署金鑰，因此不得寫入記錄檔。
 
 未設定權杖時，agent 只接受直接呼叫 `127.0.0.1` 或 `localhost` 的本機程式。聯結器必須拒絕傳送至迴路 URL 以外的位址，除非是帶有權杖的 HTTPS URL。
 
@@ -78,7 +91,7 @@ QQ 是唯一的例外，為了相容性而保留。其 id 儲存時不帶前綴�
 }
 ```
 
-必填欄位為 `platform`、`conversation_type`（`group` 或 `dm`）、`sender_id`、`message_id` 和 `sent_at`，群組另需 `conversation_id`。`sent_at` 是平台為訊息標記的時間，單位為 unix 秒數。角色看到的每則訊息都附有這一時間。agent 啟動後，在某個平台的第一則訊息到達起兩分鐘內，如果群組訊息到達時已超過 10 分鐘，即視為重新啟動後補送的積壓訊息：只作為上下文保留，不予回覆。兩分鐘之後，較早的 `sent_at` 不再使訊息被擱下，因此時鐘偏慢的聯結器傳來的訊息仍會得到回覆。請傳送平台的原始 id，前綴由 agent 加上。
+必填欄位為 `platform`、`conversation_type`（`group` 或 `dm`）、`sender_id`、`message_id` 和 `sent_at`，群組另需 `conversation_id`。`sent_at` 是平台為訊息標記的時間，單位為 unix 秒數，取整數（也接受純數字字串）。角色看到的每則訊息都附有這一時間。agent 啟動後，在某個平台的第一則訊息到達起兩分鐘內，如果群組訊息到達時已超過 10 分鐘，即視為重新啟動後補送的積壓訊息：只作為上下文保留，不予回覆。兩分鐘之後，較早的 `sent_at` 不再使訊息被擱下，因此時鐘偏慢的聯結器傳來的訊息仍會得到回覆。請傳送平台的原始 id，前綴由 agent 加上。
 
 `addressed` 由聯結器設定。訊息提及機器人、回覆機器人的某則訊息，或依平台本身的規則屬於對機器人發言時，其值為 true。agent 本身也會留意文字中出現的名稱。它會將對自己訊息的引用或對機器人的 @ 視為可供學習的反應，因此回覆機器人的訊息須設定 `addressed`。對其他成員訊息的引用一律不視為對機器人的反應。轉傳訊息中對機器人的提及不算對機器人發言，因此請勿為此設定 `addressed`。
 
@@ -118,7 +131,22 @@ QQ 是唯一的例外，為了相容性而保留。其 id 儲存時不帶前綴�
 ```
 
 - `replies`：依序傳送，每一項作為一則獨立的訊息。存在 `mention_user_id` 時，它是要提及的帶前綴 id。請以平台的方式呈現提及。帶有 `"reason": "excuse"` 的項目是模型出錯時角色在私訊中傳送的簡短說明，而非回覆；可以照常傳送，也可以作為錯誤處理。
-- `owned`：agent 已接管此對話。為 true 時，即使 `replies` 為空，也必須阻止其他機器人邏輯回覆，因為這是人設選擇了沉默。為 false 時，此訊息由你處理。原因可能是此對話不在 agent 的允許清單中，也可能是 agent 根本無法回覆（未設定 `LLM_API_KEY`，或 `AGENT_ENABLED=false`）。後者的情況下，agent 的記錄檔中會有一行 ERROR 註明原因。
+- `owned`：agent 已接管此訊息，即此訊息已通過 agent 的允許清單，無論人設接下來如何應對。為 true 時，即使 `replies` 為空，也必須阻止其他機器人邏輯回覆，因為人設可能選擇了沉默。為 false 時，agent 未參與此訊息：此對話不在 agent 的允許清單中，agent 根本無法回覆（未設定 `LLM_API_KEY`，或 `AGENT_ENABLED=false`），或先前已收到過此 `message_id`（見下文「重複訊息」）。agent 無法回覆時，其記錄檔中會有一行 ERROR 註明原因。
+- `handled`：本請求自身的這一輪送出了內容（回覆或記憶指令的回覆）時為 true，用於記錄與統計。請依據 `owned` 判斷，且無論 `handled` 為何值，都傳送 `replies` 中的全部內容：例如簡短說明就隨 `handled: false` 傳回。
+
+聯結器會遇到以下組合：
+
+| 回應 | 情形 | 聯結器的處理 |
+|---|---|---|
+| `handled: true`、`owned: true`、有回覆 | 正常回覆。 | 傳送 `replies`，並讓其他機器人邏輯保持沉默。 |
+| `handled: false`、`owned: true`、`replies: []` | 人設保持沉默；事件是機器人自身訊息的回傳；此訊息已併入後一則訊息的一輪（見「連續傳送的訊息」）；記憶指令的回覆稍後經 outbox 送達；帶有 `proactive` 的群組事件。 | 不傳送任何內容，並讓其他機器人邏輯保持沉默。 |
+| `handled: false`、`owned: true`、一則帶 `"reason": "excuse"` 的回覆 | 私訊中模型出錯。 | 傳送它，或作為錯誤處理。 |
+| `handled: false`、`owned: false`、`replies: []` | 此對話不在允許清單中，agent 無法回覆，或 `message_id` 重複。 | 對於先前已傳送過的 `message_id`，不做任何處理。否則此訊息由你處理。 |
+
+其他規則：
+
+- **重複訊息。** agent 會記住它最近接納的 2,000 則訊息，不分對話。鍵由 `platform`、對話（群組為 `conversation_id`，私訊為 `sender_id`）和 `message_id` 組成；`CONNECTOR_QQ_PLATFORMS` 中的平台只使用不帶前綴的 `message_id`。此清單會不時儲存到主目錄的 `runtime/` 資料夾，關閉時也會儲存，因此重新啟動後依然有效。再次傳送的訊息（例如平台重新投遞，或逾時後的重試）會立即得到 `{"handled": false, "owned": false, "replies": []}`，即使第一次請求仍在進行；其回覆只會出現在第一次請求的回應中。請勿回覆它，並記錄已傳送過的 `message_id`。呼叫端放棄後，這一輪仍會繼續，因此逾時後回覆即會遺失；請預留足夠的時間，而不要重試。被允許清單拒絕的訊息不會被記住，再次傳送時會重新判斷。
+- **連續傳送的訊息。** 同一對話中在短暫防彈跳時間內抵達的訊息（2.5 秒；群組中只喊人設名字的訊息之後為 5 秒）會合併為一輪，一併回覆。在進行中的一輪之後等候的訊息，同樣會併入下一輪。只有最新一則訊息的請求會帶回回覆；之前的每個請求都傳回 `{"handled": false, "owned": true, "replies": []}`。在群組中，回覆的 `mention_user_id` 指向人設所回覆的人，此人傳送的可能是較早的訊息，而不是帶回回覆的那個請求的訊息。記憶指令不會合併，見最後一條。
 - 請求會持續到這一輪結束為止，也就是一小段防彈跳時間加上模型的處理時間。無論群組或私訊，一輪中所有的模型呼叫（含重試）共用 1.5 × `LLM_TIMEOUT_S` 的時間預算；如果訊息抵達時，同一對話的上一輪仍在思考，它會先等候該輪結束，再開始處理。請至少預留 3 × `LLM_TIMEOUT_S` 秒（預設為 360 秒）。
 - 如果記憶指令（例如「記住……」）抵達時，同一對話的某一輪仍在思考，它會等候該輪結束後才取得回覆。宣告了 `outbox` 的聯結器會立即收到 `{"handled": false, "owned": true, "replies": []}`，回覆稍後以 `follow_up` 投遞送達。未宣告 `outbox` 時，回覆會隨某個回應傳回：可能是該請求本身的回應，也可能是同一對話中另一個正在等候的請求的回應，因此一個回應中可能包含提及事件傳送者以外之人的回覆。
 
@@ -187,6 +215,25 @@ agent 最多會將請求保留 `wait_s` 秒（上限為 30），直到有內容�
 
 不含 `code` 的 404 表示 agent 不提供 outbox。帶有錯誤碼 `outbox_disabled` 的 `404` 表示營運者已透過 `CONNECTOR_OUTBOX_ENABLED` 將其關閉。兩種情況下都應間隔較長時間再拉取。
 
+## 錯誤
+
+發生錯誤時傳回 `{"error": "...", "code": "..."}`。`code` 保持穩定，請依據它分支處理。`error` 是供查看記錄檔的人閱讀的句子，措辭可能變更。
+
+| 狀態碼 | `code` | 端點 | 原因 |
+|---|---|---|---|
+| 400 | `invalid_schema` | 兩者 | 請求本文不是 JSON 物件；缺少必填欄位或欄位為空；`conversation_type` 既不是 `group` 也不是 `dm`；`segments` 不是清單；請求本文類型錯誤（見「請求本文類型」）；拉取請求沒有可用的 `connector_id`（最多 128 個字元），`wait_s` 或 `max_deliveries` 不是數字，或 ack 超過 1,000 筆。 |
+| 400 | `client_disconnected` | 兩者 | 呼叫端在傳送請求本文時中斷了連線。 |
+| 403 | `unauthenticated` | 兩者 | 未設定 `CONNECTOR_TOKEN`，且呼叫端不在 agent 所在的電腦上。 |
+| 403 | `non_local_request` | 兩者 | 未設定 `CONNECTOR_TOKEN`，且請求帶有本機程式不會傳送的標頭：`Origin`、值不為 `none` 的 `Sec-Fetch-Site`、`localhost`、`127.0.0.1` 和 `::1` 以外的 `Host`，或 `X-Forwarded-For` 之類的代理標頭。 |
+| 403 | `invalid_envelope` | 兩者 | 已設定 `CONNECTOR_TOKEN`，而權杖或某個標頭缺失或錯誤、簽章不符、時間戳記相差超過五分鐘、nonce 已用過，或重送防護已滿。 |
+| 403 | `stale_event` | events | `sent_at` 不是整數秒，或與 agent 的時鐘相差超過 `CONNECTOR_MAX_EVENT_AGE_S`（24 小時），無論偏早或偏晚。以毫秒為單位的值會落在遙遠的未來。 |
+| 404 | `outbox_disabled` | outbox | `CONNECTOR_OUTBOX_ENABLED=false`，或 agent 已關閉（`AGENT_ENABLED=false`）。 |
+| 408 | `body_timeout` | 兩者 | 請求本文超過 30 秒仍未送達。 |
+| 413 | `body_too_large` | 兩者 | 請求本文大於 `SERVER_MAX_BODY_BYTES`（8,000,000 位元組），通常是內嵌圖片所致。 |
+| 429 | `capacity_exceeded` | 兩者 | 同時請求過多：事件端點進行中的輪次超過 `CONNECTOR_MAX_INFLIGHT`（預設 64），或 outbox 的拉取超過 16 個。`Retry-After` 回應標頭指出需等候的秒數：3，outbox 為 5。 |
+
+路徑錯誤會得到 `404 {"detail": "Not Found"}`，方法錯誤（例如 `GET /v1/events`）會得到 `405 {"detail": "Method Not Allowed"}`。這兩種回應來自 Web 框架，不含 `code`。
+
 ## 不經 outbox 主動發言
 
 無法輪詢的聯結器也可以主動發起私訊。由它自己的排程器，例如 AstrBot 外掛程式任務或 cron 項目，向 `/v1/events` 傳送一個帶有 `"proactive": true` 的一般私訊事件。agent 會將文字視為提供給人設的提示（「對方已沉默一整天；今天早上有考試」），截斷至 500 字元，且絕不將其儲存為該使用者所說的話。這一輪仍由引擎的主動發言指令決定，人設也可能保持沉默。如果人設開口，回覆會在回應中傳回，由排程器轉送。
@@ -211,4 +258,4 @@ agent 最多會將請求保留 `wait_s` 秒（上限為 30），直到有內容�
 3. 簽署並傳送事件。依序傳送 `replies`，`owned` 為 true 時讓其他機器人邏輯保持沉默。
 4. 如果平台支援主動傳送，請加上 `connector_id`、`reply_handle` 和 `capabilities: ["outbox"]`，然後執行拉取迴圈：拉取，透過 `reply_handle` 送出每次投遞，並在下一次拉取時確認。
 
-`integrations/sdk/personagent_connector.py` 負責第 3 和第 4 步。
+`integrations/sdk/personagent_connector.py` 負責第 3 和第 4 步。其 [README](../integrations/sdk/README.zh-TW.md) 以一個簡短的程式示範這兩步。

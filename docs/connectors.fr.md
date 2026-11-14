@@ -15,7 +15,20 @@ Ce dépôt fournit quatre connecteurs :
 
 Les assistants de programmation ne sont pas des plateformes de discussion ; ils disposent donc de leur propre voie : un serveur MCP, `personagent mcp`, présenté dans le [guide d'utilisation](guide.fr.md#assistants-de-programmation).
 
-Les quatre parlent le protocole décrit sur cette page. Pour en écrire un nouveau, cette page et un client HTTP suffisent. Le module Python `integrations/sdk/personagent_connector.py` signe les requêtes et exécute la boucle de la boîte d'envoi à votre place. Il prend l'URL de base, le jeton et le `connector_id` du connecteur, et il a besoin de `httpx`.
+Les quatre parlent le protocole décrit sur cette page. Pour en écrire un nouveau, cette page et un client HTTP suffisent. Le module Python `integrations/sdk/personagent_connector.py` signe les requêtes et exécute la boucle de la boîte d'envoi à votre place. Il prend l'URL de base, le jeton et le `connector_id` du connecteur, et il a besoin de `httpx`. Son [README](../integrations/sdk/README.fr.md) donne un exemple complet.
+
+## L'essayer sur votre propre machine
+
+```
+personagent run --port 8080
+curl http://127.0.0.1:8080/health
+```
+
+`personagent run` sert les deux points d'accès décrits plus bas sur `127.0.0.1`. Il lit `CONNECTOR_TOKEN` dans le `.env` du dossier personnel que nomme sa bannière de démarrage ; `--home DIR` en choisit un autre.
+
+- Lorsque `CONNECTOR_TOKEN` est vide, l'agent n'accepte que les programmes de la même machine qui appellent `127.0.0.1` ou `localhost`, et ceux-ci n'envoient aucun en-tête d'authentification. `personagent init` le laisse vide. La page locale, `personagent up` et `personagent connect astrbot` en écrivent un aléatoire lorsqu'il est vide.
+- Pour en définir un, inscrivez une longue valeur aléatoire dans `.env`, par exemple la sortie de `python -c "import secrets; print(secrets.token_urlsafe(32))"`, donnez la même valeur au connecteur, puis redémarrez l'agent.
+- `GET /health` répond `{"status": "ok", "agent_enabled": true}` et ne coûte rien. `"agent_enabled": false` signifie que l'agent ne peut pas répondre (pas de `LLM_API_KEY`, ou `AGENT_ENABLED=false`), et chaque événement reçoit `owned: false`. `GET /health/details` vérifie en outre le modèle et les autres services, ce qui peut coûter un peu. Il exige l'en-tête `X-Personagent-Token` lorsqu'un jeton est défini et, sinon, une requête venant de la même machine ; toute autre requête reçoit `403` avec le code `forbidden`.
 
 ## Configuration
 
@@ -49,7 +62,7 @@ Les deux points d'accès ci-dessous utilisent le même schéma. Quand `CONNECTOR
 - `X-Personagent-Nonce` : une nouvelle valeur aléatoire. Un nonce réutilisé est refusé.
 - `X-Personagent-Signature` : `sha256=` suivi du HMAC-SHA256 en hexadécimal de `timestamp + "." + nonce + "." + body`, avec le jeton comme clé.
 
-Le corps est du JSON canonique : UTF-8, clés triées, séparateurs compacts et non-ASCII non échappé. Le jeton sert aussi de clé de signature ; ne le consignez donc jamais dans les journaux.
+La signature porte sur les octets du corps tels qu'ils sont envoyés : tout JSON valide en UTF-8 est donc accepté. Le JSON canonique (clés triées, séparateurs compacts et non-ASCII non échappé) est recommandé, et les connecteurs fournis l'envoient, mais l'agent ne l'exige pas. Le jeton sert aussi de clé de signature ; ne le consignez donc jamais dans les journaux.
 
 Sans jeton, l'agent n'accepte que les programmes locaux qui appellent directement `127.0.0.1` ou `localhost`. Un connecteur doit refuser d'envoyer à autre chose qu'une URL de boucle locale, ou qu'une URL HTTPS avec jeton.
 
@@ -78,7 +91,7 @@ Chaque requête apporte un message et renvoie les réponses à ce message.
 }
 ```
 
-Les champs obligatoires sont `platform`, `conversation_type` (`group` ou `dm`), `sender_id`, `message_id` et `sent_at`, plus `conversation_id` pour les groupes. `sent_at` est le moment où la plateforme a horodaté le message, en secondes unix. Le personnage voit chaque message avec cette heure. Un message de groupe qui date de plus de 10 minutes à son arrivée, dans les deux minutes qui suivent le premier message de la plateforme depuis le démarrage de l'agent, fait partie d'un arriéré remis après un redémarrage : il est conservé comme contexte et ne reçoit pas de réponse. Passé ces deux minutes, un `sent_at` ancien ne retient plus un message, de sorte qu'un connecteur dont l'horloge retarde reçoit tout de même des réponses. Envoyez les identifiants bruts de la plateforme. L'agent ajoute le préfixe.
+Les champs obligatoires sont `platform`, `conversation_type` (`group` ou `dm`), `sender_id`, `message_id` et `sent_at`, plus `conversation_id` pour les groupes. `sent_at` est le moment où la plateforme a horodaté le message, en secondes unix entières (une chaîne de chiffres est aussi acceptée). Le personnage voit chaque message avec cette heure. Un message de groupe qui date de plus de 10 minutes à son arrivée, dans les deux minutes qui suivent le premier message de la plateforme depuis le démarrage de l'agent, fait partie d'un arriéré remis après un redémarrage : il est conservé comme contexte et ne reçoit pas de réponse. Passé ces deux minutes, un `sent_at` ancien ne retient plus un message, de sorte qu'un connecteur dont l'horloge retarde reçoit tout de même des réponses. Envoyez les identifiants bruts de la plateforme. L'agent ajoute le préfixe.
 
 Le connecteur définit `addressed`. Il est vrai quand le message mentionne le bot, répond à l'un des messages du bot ou s'adresse au bot selon les règles propres à la plateforme. L'agent repère également de lui-même son nom dans le texte. Il lit une citation de son propre message, ou une @ au bot, comme une réaction dont il peut apprendre : définissez donc `addressed` sur les réponses au bot. Une citation du message d'un autre membre n'est jamais une réaction au bot. Une mention du bot à l'intérieur d'un message transféré ne s'adresse pas au bot : ne définissez donc pas `addressed` dans ce cas.
 
@@ -118,7 +131,22 @@ La réponse ressemble à ceci :
 ```
 
 - `replies` : envoyez-les dans l'ordre, chacune comme un message séparé. Quand `mention_user_id` est présent, c'est l'identifiant préfixé à mentionner. Affichez la mention comme le fait la plateforme. Un élément portant `"reason": "excuse"` est le court message que le personnage envoie en message privé lorsque le modèle a échoué, et non une réponse. Envoyez-le comme les autres, ou traitez-le comme une erreur.
-- `owned` : l'agent a pris cette conversation. Quand il est vrai, empêchez toute autre logique de bot de répondre, même si `replies` est vide, car le personnage a choisi de se taire. Quand il est faux, le traitement du message vous revient. Soit la conversation n'est pas sur les listes d'autorisation de l'agent, soit l'agent ne peut pas répondre du tout (pas de `LLM_API_KEY`, ou `AGENT_ENABLED=false`). Dans le second cas, le journal de l'agent contient une ligne ERROR qui en indique la cause.
+- `owned` : l'agent a pris le message, parce qu'il a passé les listes d'autorisation de l'agent, quoi que fasse ensuite le personnage. Quand il est vrai, empêchez toute autre logique de bot de répondre, même si `replies` est vide, car le personnage a pu choisir de se taire. Quand il est faux, l'agent n'a pris aucune part au message : la conversation n'est pas sur les listes d'autorisation de l'agent, l'agent ne peut pas répondre du tout (pas de `LLM_API_KEY`, ou `AGENT_ENABLED=false`), ou le `message_id` a déjà été reçu (voir « Messages répétés » plus bas). Lorsque l'agent ne peut pas répondre, son journal contient une ligne ERROR qui en indique la cause.
+- `handled` : vrai lorsque le tour propre à cette requête a livré quelque chose, une réponse ou le résultat d'une commande de mémoire. Il sert aux journaux et aux statistiques. Décidez d'après `owned`, et envoyez ce que contient `replies` quelle que soit la valeur de `handled` : un message `excuse`, par exemple, arrive avec `handled: false`.
+
+Les combinaisons qu'un connecteur rencontre :
+
+| Réponse | Quand | Ce que fait le connecteur |
+|---|---|---|
+| `handled: true`, `owned: true`, avec réponses | Une réponse normale. | Envoyer `replies` et faire taire toute autre logique de bot. |
+| `handled: false`, `owned: true`, `replies: []` | Le personnage s'est tu ; l'événement était l'écho du bot lui-même ; le message a été intégré au tour d'un message ultérieur (voir « Messages envoyés à la suite ») ; une commande de mémoire dont le résultat arrivera plus tard par la boîte d'envoi ; un événement de groupe avec `proactive`. | Ne rien envoyer et faire taire toute autre logique de bot. |
+| `handled: false`, `owned: true`, une réponse avec `"reason": "excuse"` | Le modèle a échoué en message privé. | L'envoyer, ou la traiter comme une erreur. |
+| `handled: false`, `owned: false`, `replies: []` | La conversation n'est pas sur les listes d'autorisation, l'agent ne peut pas répondre, ou le `message_id` est répété. | Pour un `message_id` déjà envoyé, ne rien faire. Sinon, le traitement du message vous revient. |
+
+Autres règles :
+
+- **Messages répétés.** L'agent retient les 2 000 derniers messages qu'il a admis, toutes conversations confondues. La clé est formée de `platform`, de la conversation (le `conversation_id` d'un groupe, le `sender_id` d'un message privé) et de `message_id` ; pour une plateforme de `CONNECTOR_QQ_PLATFORMS`, c'est le `message_id` nu. La liste est enregistrée de temps en temps et à l'arrêt dans le dossier `runtime/` du dossier personnel ; elle survit donc à un redémarrage. Un message envoyé à nouveau, comme une nouvelle livraison de la plateforme ou une nouvelle tentative après un délai dépassé, reçoit aussitôt `{"handled": false, "owned": false, "replies": []}`, même pendant que la première requête est encore en cours, et ses réponses n'arrivent que dans la première. N'y répondez pas : conservez la liste des `message_id` que vous avez envoyés. Un tour se poursuit quand son appelant abandonne ; après un délai dépassé, les réponses sont donc perdues. Prévoyez un délai suffisant plutôt que de réessayer. Un message refusé par les listes d'autorisation n'est pas retenu et sera de nouveau évalué s'il est renvoyé.
+- **Messages envoyés à la suite.** Les messages d'une conversation qui arrivent dans un court anti-rebond (2,5 secondes, ou 5 secondes après un message de groupe qui se contente d'appeler le personnage par son nom) forment un seul tour, qui leur répond ensemble. Les messages qui attendent derrière un tour en cours sont de même lus dans le tour suivant. Seule la requête du message le plus récent porte les réponses ; chaque requête antérieure renvoie `{"handled": false, "owned": true, "replies": []}`. Dans un groupe, le `mention_user_id` d'une réponse désigne la personne à qui répond le personnage, qui a pu envoyer un message antérieur plutôt que celui dont la requête porte la réponse. Les commandes de mémoire ne sont pas regroupées ; voir le dernier point.
 - La requête dure jusqu'à la fin du tour, soit un court anti-rebond plus le temps du modèle. Les appels au modèle d'un tour se partagent un seul budget de 1,5 × `LLM_TIMEOUT_S`, nouvelles tentatives comprises, dans un groupe comme en message privé, et un message qui arrive pendant qu'un tour précédent de sa conversation réfléchit encore attend la fin de ce tour avant de commencer le sien. Prévoyez au moins 3 × `LLM_TIMEOUT_S` secondes (360 avec la valeur par défaut).
 - Une commande de mémoire (comme « remember ... ») qui arrive pendant qu'un tour de sa conversation réfléchit encore reçoit sa réponse après ce tour. Un connecteur qui a déclaré `outbox` reçoit tout de suite `{"handled": false, "owned": true, "replies": []}` puis le résultat plus tard sous forme de livraison `follow_up`. Sans `outbox`, le résultat arrive dans la réponse à une requête : la sienne, ou celle d'une autre requête en attente de la même conversation, si bien qu'une réponse peut porter des `replies` qui mentionnent quelqu'un d'autre que l'expéditeur de l'événement.
 
@@ -187,6 +215,25 @@ Règles :
 
 Un 404 sans `code` signifie que l'agent ne sert pas la boîte d'envoi. Un `404` avec le code `outbox_disabled` signifie que l'opérateur l'a désactivée avec `CONNECTOR_OUTBOX_ENABLED`. Dans les deux cas, attendez longtemps avant de réinterroger.
 
+## Erreurs
+
+Une erreur répond `{"error": "...", "code": "..."}`. `code` est stable : c'est sur lui qu'il faut se fonder. `error` est une phrase destinée à la personne qui lit un journal, et sa formulation peut changer.
+
+| Statut | `code` | Point d'accès | Cause |
+|---|---|---|---|
+| 400 | `invalid_schema` | les deux | Le corps n'est pas un objet JSON ; un champ obligatoire manque ou est vide ; `conversation_type` n'est ni `group` ni `dm` ; `segments` n'est pas une liste ; un corps du mauvais type (voir « Types de corps ») ; une interrogation sans `connector_id` utilisable (128 caractères au plus), avec un `wait_s` ou un `max_deliveries` qui n'est pas un nombre, ou avec plus de 1 000 acks. |
+| 400 | `client_disconnected` | les deux | L'appelant a raccroché pendant l'envoi du corps. |
+| 403 | `unauthenticated` | les deux | Pas de `CONNECTOR_TOKEN`, et l'appelant n'est pas sur la machine de l'agent. |
+| 403 | `non_local_request` | les deux | Pas de `CONNECTOR_TOKEN`, et la requête porte un en-tête qu'un programme local n'envoie pas : `Origin`, un `Sec-Fetch-Site` autre que `none`, un `Host` autre que `localhost`, `127.0.0.1` ou `::1`, ou un en-tête de proxy tel que `X-Forwarded-For`. |
+| 403 | `invalid_envelope` | les deux | `CONNECTOR_TOKEN` est défini, et le jeton ou un en-tête manque ou est faux, la signature ne correspond pas, l'horodatage s'écarte de plus de cinq minutes, le nonce a déjà servi, ou la protection contre le rejeu est pleine. |
+| 403 | `stale_event` | events | `sent_at` n'est pas un nombre entier de secondes, ou s'écarte de plus de `CONNECTOR_MAX_EVENT_AGE_S` (24 heures) de l'horloge de l'agent, dans un sens ou dans l'autre. Une valeur en millisecondes tombe loin dans le futur. |
+| 404 | `outbox_disabled` | outbox | `CONNECTOR_OUTBOX_ENABLED=false`, ou l'agent est arrêté (`AGENT_ENABLED=false`). |
+| 408 | `body_timeout` | les deux | Le corps a mis plus de 30 secondes à arriver. |
+| 413 | `body_too_large` | les deux | Le corps dépasse `SERVER_MAX_BODY_BYTES` (8 000 000 octets), le plus souvent à cause d'une image intégrée. |
+| 429 | `capacity_exceeded` | les deux | Trop de requêtes à la fois : plus de `CONNECTOR_MAX_INFLIGHT` tours (64 par défaut) sur le point d'accès des événements, ou 16 interrogations sur la boîte d'envoi. L'en-tête `Retry-After` donne le nombre de secondes à attendre : 3, ou 5 pour la boîte d'envoi. |
+
+Un chemin erroné reçoit `404 {"detail": "Not Found"}` et une méthode erronée, comme `GET /v1/events`, reçoit `405 {"detail": "Method Not Allowed"}`. Ces réponses viennent du framework web et ne portent pas de `code`.
+
 ## Parler en premier sans la boîte d'envoi
 
 Un connecteur qui ne peut pas interroger peut quand même ouvrir un message privé. Son propre planificateur, comme une tâche de plugin AstrBot ou une entrée cron, envoie à `/v1/events` un événement de message privé ordinaire avec `"proactive": true`. L'agent lit le texte comme un signal adressé au personnage (« calme depuis un jour ; son examen était ce matin »), le tronque à 500 caractères et ne le stocke jamais comme les propos de la personne. Les instructions proactives du moteur décident toujours du tour et peuvent maintenir le personnage silencieux. Si le personnage s'exprime, la réponse revient dans la réponse HTTP et le planificateur la relaie.
@@ -211,4 +258,4 @@ Définissez toujours l'indicateur ; sans lui, l'agent stocke le signal comme les
 3. Signez et envoyez l'événement. Envoyez `replies` dans l'ordre et, quand `owned` est vrai, gardez toute autre logique de bot silencieuse.
 4. Si la plateforme peut envoyer de son propre chef, ajoutez `connector_id`, `reply_handle` et `capabilities: ["outbox"]`, puis exécutez la boucle d'interrogation : interrogez, livrez chaque livraison par son `reply_handle` et confirmez à l'interrogation suivante.
 
-`integrations/sdk/personagent_connector.py` gère les étapes 3 et 4.
+`integrations/sdk/personagent_connector.py` gère les étapes 3 et 4. Son [README](../integrations/sdk/README.fr.md) les montre dans un court programme.
