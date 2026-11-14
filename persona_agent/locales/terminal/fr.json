@@ -213,7 +213,6 @@
 "The shortcuts could not be removed: {0}": "Les raccourcis n'ont pas pu être supprimés : {0}",
 "The hook expects the coding agent's event as a JSON object on standard input.": "Le hook attend l'événement de l'assistant de programmation sous forme d'objet JSON sur l'entrée standard.",
 "  No model key yet: `{0}` sets up the model and key.": "  Aucune clé de modèle n'est encore définie : `{0}` configure le modèle et la clé.",
-"directly connected platforms": "plateformes connectées directement",
 "none connected": "aucune connectée",
 "{0} (state unknown: personagent is not running)": "{0} (état inconnu : personagent n'est pas en cours d'exécution)",
 "{0}: connected": "{0} : connectée",
@@ -358,7 +357,6 @@
 "Web search decision": "Décision de recherche web",
 "Reaction judge": "Évaluation des réactions",
 "turned off": "désactivé",
-"{0} did not call the search tool, so web search will not run": "{0} n'a pas appelé l'outil de recherche : la recherche web ne sera pas effectuée",
 "model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "utilisation du modèle — aujourd'hui : requêtes {0}, jetons {1}, coût {2} ; 7 derniers jours : requêtes {3}, jetons {4}, coût {5}",
 "not reported": "non communiqué",
 "model use: nothing recorded yet": "utilisation du modèle : aucun enregistrement pour l'instant",
@@ -432,5 +430,11 @@
 "Run `{0}` to see everything it learned.": "Lancez `{0}` pour voir tout ce qui a été appris.",
 "It learns from reactions in real chats; practice in `personagent chat` is kept apart and does not show here.": "Il apprend des réactions dans les vraies discussions ; l'entraînement dans `personagent chat` est conservé à part et n'apparaît pas ici.",
 "Chat: This page (key {0})": "Discussion : Cette page (clé {0})",
-"What is said in `personagent chat` is practice, kept apart, and does not show here.": "Ce qui est dit dans `personagent chat` relève de l'entraînement, est conservé à part et n'apparaît pas ici."
+"What is said in `personagent chat` is practice, kept apart, and does not show here.": "Ce qui est dit dans `personagent chat` relève de l'entraînement, est conservé à part et n'apparaît pas ici.",
+"Directly connected platforms": "Plateformes connectées directement",
+"The same problem as the row {0}.": "Le même problème que la ligne {0}.",
+"{0}: not asked, because it is the same model as the row {1}, which failed": "{0} : non interrogé, car c'est le même modèle que la ligne {1}, qui a échoué",
+"{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0} ({1}) n'a pas appelé l'outil de recherche ; le personnage ne cherchera donc jamais sur le web. Définissez LLM_JUDGE_MODEL sur un modèle qui prend en charge les appels d'outils.",
+"Fix first: {0}": "À corriger en premier : {0}",
+"Not critical, but failing: {0}": "Non critique, mais en échec : {0}"
 }

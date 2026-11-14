@@ -111,12 +111,20 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
               f"run `{fix_command()}` to rename them."))
         print("-" * 64)
     results = run_checks()
+    first_with: dict[str, str] = {}
     for r in results:
-        mark = "  -  " if r["ok"] is None else ("  OK " if r["ok"] else " FAIL")
+        # A row not asked because its model already failed above is not a failure of its own.
+        mark = ("  -  " if r["ok"] is None or (r.get("same_as") and r["ok"] is False)
+                else "  OK " if r["ok"] else " FAIL")
         tag = langs.term(" [critical]") if r["critical"] else ""
-        print(f"[{mark}] {_pad(langs.term(r['name']), 34)}{_pad(tag, 11)} {r['ms']:5.0f}ms  {langs.term(r.get('advice') or r['detail'])}")
+        advice = r.get("advice") or ""
+        text = (langs.term(f"The same problem as the row {first_with[advice]}.")
+                if advice in first_with else langs.term(advice or r["detail"]))
+        if advice:
+            first_with.setdefault(advice, r["name"])
+        print(f"[{mark}] {_pad(langs.term(r['name']), 34)}{_pad(tag, 11)} {r['ms']:5.0f}ms  {text}")
     mark, detail = direct_row(direct_platforms(home.find_home()))
-    print(f"[{mark}] {_pad(langs.term('directly connected platforms'), 34)}{_pad('', 11)} {'':7}  {detail}")
+    print(f"[{mark}] {_pad(langs.term('Directly connected platforms'), 34)}{_pad('', 11)} {'':7}  {detail}")
     print("-" * 64)
     print("  " + langs.term(model_use_line(model_use())))
     print("=" * 64)
@@ -127,6 +135,10 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
         print(langs.term("RESULT: services OK, but retired settings must be renamed."))
     else:
         print(langs.term("RESULT: all critical services OK."))
+    urgent, first = first_fix(findings, results)
+    if first:
+        print(langs.term(f"Fix first: {first}" if urgent else f"Not critical, but failing: {first}",
+                         keep=(first,)))
     off = activity_off()
     if off:
         print(langs.term(off))
@@ -135,6 +147,23 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     if notice:
         print(langs.term(notice))
     return 0 if services_ok and not retired else 1
+
+
+def first_fix(findings, results) -> tuple[bool, str]:
+    """(urgent, the first thing to fix) in the terminal's language: a configuration
+    error or a critical row that did not pass is urgent; else a row that failed."""
+    def said(r) -> str:
+        return f"{langs.term(r['name'])}: {langs.term(r.get('advice') or r['detail'])}"
+    for finding in findings:
+        if finding.level == "ERROR":
+            return True, f"{finding.key}: {langs.term(finding.detail)}"
+    for r in results:
+        if r["critical"] and r["ok"] is not True and not r.get("same_as"):
+            return True, said(r)
+    for r in results:
+        if r["ok"] is False and not r.get("same_as"):
+            return False, said(r)
+    return False, ""
 
 
 def model_use() -> dict:

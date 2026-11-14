@@ -213,7 +213,6 @@
 "The shortcuts could not be removed: {0}": "Die Verknüpfungen konnten nicht entfernt werden: {0}",
 "The hook expects the coding agent's event as a JSON object on standard input.": "Der Hook erwartet das Ereignis des Programmierassistenten als JSON-Objekt auf der Standardeingabe.",
 "  No model key yet: `{0}` sets up the model and key.": "  Noch kein Modellschlüssel: `{0}` richtet Modell und Schlüssel ein.",
-"directly connected platforms": "direkt verbundene Plattformen",
 "none connected": "keine verbunden",
 "{0} (state unknown: personagent is not running)": "{0} (Zustand unbekannt: personagent wird nicht ausgeführt)",
 "{0}: connected": "{0}: verbunden",
@@ -358,7 +357,6 @@
 "Web search decision": "Entscheidung über die Websuche",
 "Reaction judge": "Bewertung von Reaktionen",
 "turned off": "ausgeschaltet",
-"{0} did not call the search tool, so web search will not run": "{0} hat das Suchwerkzeug nicht aufgerufen, daher wird die Websuche nicht ausgeführt",
 "model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "Modellnutzung — heute: Anfragen {0}, Tokens {1}, Kosten {2}; letzte 7 Tage: Anfragen {3}, Tokens {4}, Kosten {5}",
 "not reported": "nicht gemeldet",
 "model use: nothing recorded yet": "Modellnutzung: noch nichts erfasst",
@@ -432,5 +430,11 @@
 "Run `{0}` to see everything it learned.": "Führen Sie `{0}` aus, um alles Gelernte zu sehen.",
 "It learns from reactions in real chats; practice in `personagent chat` is kept apart and does not show here.": "Es lernt aus Reaktionen in echten Chats; die Übung in `personagent chat` wird getrennt gespeichert und erscheint hier nicht.",
 "Chat: This page (key {0})": "Chat: Diese Seite (Schlüssel {0})",
-"What is said in `personagent chat` is practice, kept apart, and does not show here.": "Was in `personagent chat` gesagt wird, ist Übung, wird getrennt gespeichert und erscheint hier nicht."
+"What is said in `personagent chat` is practice, kept apart, and does not show here.": "Was in `personagent chat` gesagt wird, ist Übung, wird getrennt gespeichert und erscheint hier nicht.",
+"Directly connected platforms": "Direkt verbundene Plattformen",
+"The same problem as the row {0}.": "Dasselbe Problem wie in der Zeile „{0}“.",
+"{0}: not asked, because it is the same model as the row {1}, which failed": "{0}: nicht abgefragt, da es dasselbe Modell wie in der Zeile „{1}“ ist, die fehlgeschlagen ist",
+"{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0} ({1}) hat das Suchwerkzeug nicht aufgerufen, daher sucht die Figur nie im Web. Setzen Sie LLM_JUDGE_MODEL auf ein Modell, das Werkzeugaufrufe unterstützt.",
+"Fix first: {0}": "Zuerst beheben: {0}",
+"Not critical, but failing: {0}": "Nicht kritisch, aber fehlgeschlagen: {0}"
 }

@@ -213,7 +213,6 @@
 "The shortcuts could not be removed: {0}": "No se pudieron eliminar los accesos directos: {0}",
 "The hook expects the coding agent's event as a JSON object on standard input.": "El hook espera recibir el evento del asistente de programación como un objeto JSON por la entrada estándar.",
 "  No model key yet: `{0}` sets up the model and key.": "  Todavía no hay ninguna clave de modelo: `{0}` configura el modelo y la clave.",
-"directly connected platforms": "plataformas conectadas directamente",
 "none connected": "ninguna conectada",
 "{0} (state unknown: personagent is not running)": "{0} (estado desconocido: personagent no está en ejecución)",
 "{0}: connected": "{0}: conectada",
@@ -358,7 +357,6 @@
 "Web search decision": "Decisión de búsqueda web",
 "Reaction judge": "Evaluación de reacciones",
 "turned off": "desactivado",
-"{0} did not call the search tool, so web search will not run": "{0} no llamó a la herramienta de búsqueda, por lo que la búsqueda web no se ejecutará",
 "model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "uso del modelo — hoy: solicitudes {0}, tokens {1}, costo {2}; últimos 7 días: solicitudes {3}, tokens {4}, costo {5}",
 "not reported": "no informado",
 "model use: nothing recorded yet": "uso del modelo: aún no hay registros",
@@ -432,5 +430,11 @@
 "Run `{0}` to see everything it learned.": "Ejecute `{0}` para ver todo lo aprendido.",
 "It learns from reactions in real chats; practice in `personagent chat` is kept apart and does not show here.": "Aprende de las reacciones en chats reales; la práctica en `personagent chat` se guarda aparte y no aparece aquí.",
 "Chat: This page (key {0})": "Chat: Esta página (clave {0})",
-"What is said in `personagent chat` is practice, kept apart, and does not show here.": "Lo que se dice en `personagent chat` es práctica, se guarda aparte y no aparece aquí."
+"What is said in `personagent chat` is practice, kept apart, and does not show here.": "Lo que se dice en `personagent chat` es práctica, se guarda aparte y no aparece aquí.",
+"Directly connected platforms": "Plataformas conectadas directamente",
+"The same problem as the row {0}.": "El mismo problema que la fila {0}.",
+"{0}: not asked, because it is the same model as the row {1}, which failed": "{0}: no se consultó, porque es el mismo modelo que la fila {1}, que falló",
+"{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0} ({1}) no llamó a la herramienta de búsqueda, así que el personaje nunca busca en la web. Defina LLM_JUDGE_MODEL con un modelo que admita llamadas a herramientas.",
+"Fix first: {0}": "Corrija primero: {0}",
+"Not critical, but failing: {0}": "No es crítico, pero falla: {0}"
 }

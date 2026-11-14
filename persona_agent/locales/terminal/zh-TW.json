@@ -213,7 +213,6 @@
 "The shortcuts could not be removed: {0}": "無法移除捷徑：{0}",
 "The hook expects the coding agent's event as a JSON object on standard input.": "此掛鉤需從標準輸入讀取程式設計助理的事件，格式應為 JSON 物件。",
 "  No model key yet: `{0}` sets up the model and key.": "  尚未設定模型金鑰：可執行 `{0}` 設定模型和金鑰。",
-"directly connected platforms": "直接連接的平台",
 "none connected": "未連接任何平台",
 "{0} (state unknown: personagent is not running)": "{0}（狀態不明：personagent 未在執行）",
 "{0}: connected": "{0}：已連線",
@@ -358,7 +357,6 @@
 "Web search decision": "網路搜尋判斷",
 "Reaction judge": "反應判斷",
 "turned off": "已關閉",
-"{0} did not call the search tool, so web search will not run": "{0} 未呼叫搜尋工具，網路搜尋將不會執行",
 "model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "模型用量——今日：請求 {0}，Token {1}，費用 {2}；近 7 日：請求 {3}，Token {4}，費用 {5}",
 "not reported": "未提供",
 "model use: nothing recorded yet": "模型用量：尚無記錄",
@@ -432,5 +430,11 @@
 "Run `{0}` to see everything it learned.": "執行 `{0}` 可查看學到的全部內容。",
 "It learns from reactions in real chats; practice in `personagent chat` is kept apart and does not show here.": "角色從真實聊天中的反應裡學習；`personagent chat` 中的練習另行保存，不會顯示在此處。",
 "Chat: This page (key {0})": "聊天：本頁面（鍵 {0}）",
-"What is said in `personagent chat` is practice, kept apart, and does not show here.": "在 `personagent chat` 中說的內容屬於練習，另行保存，不會顯示在此處。"
+"What is said in `personagent chat` is practice, kept apart, and does not show here.": "在 `personagent chat` 中說的內容屬於練習，另行保存，不會顯示在此處。",
+"Directly connected platforms": "直接連接的平台",
+"The same problem as the row {0}.": "與「{0}」一行的問題相同。",
+"{0}: not asked, because it is the same model as the row {1}, which failed": "{0}：未單獨詢問，因為它與「{1}」一行為同一模型，而該行未通過",
+"{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0}（{1}）未呼叫搜尋工具，因此角色永遠不會上網搜尋。請將 LLM_JUDGE_MODEL 設為支援工具呼叫的模型。",
+"Fix first: {0}": "首先需要修復：{0}",
+"Not critical, but failing: {0}": "非關鍵項目，但未通過：{0}"
 }

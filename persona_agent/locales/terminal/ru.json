@@ -213,7 +213,6 @@
 "The shortcuts could not be removed: {0}": "Не удалось удалить ярлыки: {0}",
 "The hook expects the coding agent's event as a JSON object on standard input.": "Хук ожидает событие помощника для программирования в виде объекта JSON на стандартном вводе.",
 "  No model key yet: `{0}` sets up the model and key.": "  Ключ модели ещё не задан: `{0}` настроит модель и ключ.",
-"directly connected platforms": "платформы с прямым подключением",
 "none connected": "ни одна не подключена",
 "{0} (state unknown: personagent is not running)": "{0} (состояние неизвестно: personagent не запущен)",
 "{0}: connected": "{0}: подключена",
@@ -358,7 +357,6 @@
 "Web search decision": "Решение о веб-поиске",
 "Reaction judge": "Оценка реакций",
 "turned off": "отключено",
-"{0} did not call the search tool, so web search will not run": "{0}: инструмент поиска не вызван, поэтому веб-поиск выполняться не будет",
 "model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "использование модели — сегодня: запросы {0}, токены {1}, стоимость {2}; за 7 дней: запросы {3}, токены {4}, стоимость {5}",
 "not reported": "не сообщается",
 "model use: nothing recorded yet": "использование модели: записей пока нет",
@@ -432,5 +430,11 @@
 "Run `{0}` to see everything it learned.": "Выполните `{0}`, чтобы увидеть всё усвоенное.",
 "It learns from reactions in real chats; practice in `personagent chat` is kept apart and does not show here.": "Персонаж учится на реакциях в настоящих чатах; практика в `personagent chat` хранится отдельно и здесь не отображается.",
 "Chat: This page (key {0})": "Чат: Эта страница (ключ {0})",
-"What is said in `personagent chat` is practice, kept apart, and does not show here.": "Сказанное в `personagent chat` — это практика: оно хранится отдельно и здесь не отображается."
+"What is said in `personagent chat` is practice, kept apart, and does not show here.": "Сказанное в `personagent chat` — это практика: оно хранится отдельно и здесь не отображается.",
+"Directly connected platforms": "Платформы с прямым подключением",
+"The same problem as the row {0}.": "Та же проблема, что и в строке «{0}».",
+"{0}: not asked, because it is the same model as the row {1}, which failed": "{0}: не опрашивалась, так как это та же модель, что и в строке «{1}», которая не прошла проверку",
+"{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0} ({1}) не вызвала инструмент поиска, поэтому персонаж никогда не ищет в интернете. Укажите в LLM_JUDGE_MODEL модель, которая поддерживает вызов инструментов.",
+"Fix first: {0}": "Исправьте в первую очередь: {0}",
+"Not critical, but failing: {0}": "Не критично, но не проходит: {0}"
 }

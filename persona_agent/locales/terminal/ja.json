@@ -213,7 +213,6 @@
 "The shortcuts could not be removed: {0}": "ショートカットを削除できませんでした：{0}",
 "The hook expects the coding agent's event as a JSON object on standard input.": "このフックは、コーディングアシスタントのイベントを標準入力から JSON オブジェクトとして受け取る必要があります。",
 "  No model key yet: `{0}` sets up the model and key.": "  モデルのキーが未設定です。`{0}` でモデルとキーを設定できます。",
-"directly connected platforms": "直接連携のプラットフォーム",
 "none connected": "連携なし",
 "{0} (state unknown: personagent is not running)": "{0}（状態不明：personagent が実行されていません）",
 "{0}: connected": "{0}：接続済み",
@@ -358,7 +357,6 @@
 "Web search decision": "ウェブ検索の判断",
 "Reaction judge": "反応の判定",
 "turned off": "オフ",
-"{0} did not call the search tool, so web search will not run": "{0} は検索ツールを呼び出さなかったため、ウェブ検索は実行されません",
 "model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "モデルの使用量 — 本日：リクエスト {0}、トークン {1}、費用 {2}／過去 7 日間：リクエスト {3}、トークン {4}、費用 {5}",
 "not reported": "報告なし",
 "model use: nothing recorded yet": "モデルの使用量：まだ記録がありません",
@@ -432,5 +430,11 @@
 "Run `{0}` to see everything it learned.": "学習した内容をすべて見るには `{0}` を実行してください。",
 "It learns from reactions in real chats; practice in `personagent chat` is kept apart and does not show here.": "キャラクターは実際のチャットでの反応から学習します。`personagent chat` での練習は別に保存され、ここには表示されません。",
 "Chat: This page (key {0})": "チャット：このページ（キー {0}）",
-"What is said in `personagent chat` is practice, kept apart, and does not show here.": "`personagent chat` での会話は練習として別に保存され、ここには表示されません。"
+"What is said in `personagent chat` is practice, kept apart, and does not show here.": "`personagent chat` での会話は練習として別に保存され、ここには表示されません。",
+"Directly connected platforms": "直接連携のプラットフォーム",
+"The same problem as the row {0}.": "「{0}」の行と同じ問題です。",
+"{0}: not asked, because it is the same model as the row {1}, which failed": "{0}：「{1}」の行と同じモデルで、その行が失敗したため、問い合わせていません",
+"{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0}（{1}）が検索ツールを呼び出さなかったため、キャラクターはウェブ検索を一切行いません。LLM_JUDGE_MODEL をツール呼び出しに対応したモデルに設定してください。",
+"Fix first: {0}": "最初に修正すべき点：{0}",
+"Not critical, but failing: {0}": "重要ではありませんが失敗しています：{0}"
 }

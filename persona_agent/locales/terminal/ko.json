@@ -213,7 +213,6 @@
 "The shortcuts could not be removed: {0}": "바로 가기를 제거할 수 없습니다: {0}",
 "The hook expects the coding agent's event as a JSON object on standard input.": "이 훅은 코딩 어시스턴트의 이벤트를 표준 입력에서 JSON 객체로 받아야 합니다.",
 "  No model key yet: `{0}` sets up the model and key.": "  아직 모델 키가 없습니다. 다음 명령으로 모델과 키를 설정할 수 있습니다: `{0}`",
-"directly connected platforms": "직접 연결 플랫폼",
 "none connected": "연결된 플랫폼 없음",
 "{0} (state unknown: personagent is not running)": "{0} (상태 알 수 없음: personagent가 실행 중이 아닙니다)",
 "{0}: connected": "{0}: 연결됨",
@@ -358,7 +357,6 @@
 "Web search decision": "웹 검색 여부 판단",
 "Reaction judge": "반응 판단",
 "turned off": "꺼짐",
-"{0} did not call the search tool, so web search will not run": "{0}: 검색 도구를 호출하지 않았으므로 웹 검색이 실행되지 않습니다",
 "model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "모델 사용량 — 오늘: 요청 {0}, 토큰 {1}, 비용 {2}; 최근 7일: 요청 {3}, 토큰 {4}, 비용 {5}",
 "not reported": "제공되지 않음",
 "model use: nothing recorded yet": "모델 사용량: 아직 기록이 없습니다",
@@ -432,5 +430,11 @@
 "Run `{0}` to see everything it learned.": "학습한 내용을 모두 보려면 `{0}`을(를) 실행하십시오.",
 "It learns from reactions in real chats; practice in `personagent chat` is kept apart and does not show here.": "캐릭터는 실제 채팅의 반응에서 학습합니다. `personagent chat`에서의 연습은 따로 보관되며 여기에 표시되지 않습니다.",
 "Chat: This page (key {0})": "채팅: 이 페이지 (키 {0})",
-"What is said in `personagent chat` is practice, kept apart, and does not show here.": "`personagent chat`에서 나눈 대화는 연습으로 따로 보관되며 여기에 표시되지 않습니다."
+"What is said in `personagent chat` is practice, kept apart, and does not show here.": "`personagent chat`에서 나눈 대화는 연습으로 따로 보관되며 여기에 표시되지 않습니다.",
+"Directly connected platforms": "직접 연결 플랫폼",
+"The same problem as the row {0}.": "「{0}」 행과 같은 문제입니다.",
+"{0}: not asked, because it is the same model as the row {1}, which failed": "{0}: 「{1}」 행과 같은 모델이며 그 행이 실패했으므로 따로 묻지 않았습니다",
+"{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0}({1})이(가) 검색 도구를 호출하지 않아 캐릭터가 웹 검색을 전혀 하지 않습니다. LLM_JUDGE_MODEL을 도구 호출을 지원하는 모델로 설정하십시오.",
+"Fix first: {0}": "먼저 고칠 항목: {0}",
+"Not critical, but failing: {0}": "필수는 아니지만 실패한 항목: {0}"
 }

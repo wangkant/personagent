@@ -213,7 +213,6 @@
 "The shortcuts could not be removed: {0}": "Não foi possível remover os atalhos: {0}",
 "The hook expects the coding agent's event as a JSON object on standard input.": "O hook espera o evento do assistente de programação como um objeto JSON na entrada padrão.",
 "  No model key yet: `{0}` sets up the model and key.": "  Ainda não há chave de modelo: `{0}` configura o modelo e a chave.",
-"directly connected platforms": "plataformas conectadas diretamente",
 "none connected": "nenhuma conectada",
 "{0} (state unknown: personagent is not running)": "{0} (estado desconhecido: o personagent não está em execução)",
 "{0}: connected": "{0}: conectada",
@@ -358,7 +357,6 @@
 "Web search decision": "Decisão de pesquisa na web",
 "Reaction judge": "Avaliação de reações",
 "turned off": "desativado",
-"{0} did not call the search tool, so web search will not run": "{0} não chamou a ferramenta de pesquisa, portanto a pesquisa na web não será executada",
 "model use — today: requests {0}, tokens {1}, cost {2}; last 7 days: requests {3}, tokens {4}, cost {5}": "uso do modelo — hoje: solicitações {0}, tokens {1}, custo {2}; últimos 7 dias: solicitações {3}, tokens {4}, custo {5}",
 "not reported": "não informado",
 "model use: nothing recorded yet": "uso do modelo: ainda não há registros",
@@ -432,5 +430,11 @@
 "Run `{0}` to see everything it learned.": "Execute `{0}` para ver tudo o que foi aprendido.",
 "It learns from reactions in real chats; practice in `personagent chat` is kept apart and does not show here.": "Aprende com as reações em conversas reais; a prática em `personagent chat` fica separada e não aparece aqui.",
 "Chat: This page (key {0})": "Conversa: Esta página (chave {0})",
-"What is said in `personagent chat` is practice, kept apart, and does not show here.": "O que é dito em `personagent chat` é prática, fica separado e não aparece aqui."
+"What is said in `personagent chat` is practice, kept apart, and does not show here.": "O que é dito em `personagent chat` é prática, fica separado e não aparece aqui.",
+"Directly connected platforms": "Plataformas conectadas diretamente",
+"The same problem as the row {0}.": "O mesmo problema da linha {0}.",
+"{0}: not asked, because it is the same model as the row {1}, which failed": "{0}: não consultado, porque é o mesmo modelo da linha {1}, que falhou",
+"{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0} ({1}) não chamou a ferramenta de busca, então o personagem nunca pesquisa na web. Defina LLM_JUDGE_MODEL como um modelo que aceite chamadas de ferramentas.",
+"Fix first: {0}": "Corrija primeiro: {0}",
+"Not critical, but failing: {0}": "Não é crítico, mas está falhando: {0}"
 }
