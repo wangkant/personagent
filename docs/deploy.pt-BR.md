@@ -80,14 +80,25 @@ Em um servidor sem monitor, conecte as plataformas que o personagent conecta por
 
 | Plataforma | O que você faz | Limites |
 |---|---|---|
-| QQ (bot oficial) | Leia um QR code com o QQ no celular; ele cria um bot ou seleciona um que você já criou. A alternativa é colar o AppID e o AppSecret. | Até que o bot seja certificado, o QQ só permite que ele entre em grupos dos quais você é o proprietário. As permissões de mensagens de grupo são definidas no QQ. |
+| QQ (bot oficial) | Leia um QR code com o QQ no celular; ele cria um bot ou seleciona um que você já criou. A alternativa é colar o AppID e o AppSecret. | Até que o bot seja certificado, o QQ só permite que ele entre em grupos dos quais você é o proprietário. Em um grupo, ele só recebe as mensagens que o mencionam com @, a menos que o proprietário do grupo ative o recebimento de todas as mensagens no perfil do bot nesse grupo; até lá, ele não consegue participar por iniciativa própria. |
 | WeChat pessoal | Leia o código com o WeChat (a API de bots iLink da Tencent). | Somente conversas individuais. O WeChat não entrega mensagens de grupo a esses bots. |
 | Telegram | Cole o token do @BotFather. | |
 | Discord | Cole o token do bot, com Message Content Intent ativado. | |
 
 **Pelo AstrBot gerenciado.** Todas as outras plataformas passam por um AstrBot que o personagent baixa, junto com o próprio runtime Python 3.12, e executa sem interface. Ele não tem painel e não precisa de um segundo login. KOOK, Feishu/Lark (conexão persistente), DingTalk (modo Stream), Slack (Socket Mode, e o link do guia preenche o aplicativo), Bot de IA do WeCom (conexão persistente), Mattermost e Misskey solicitam um ou dois valores. O grupo Avançado requer um endereço público ou outro software: Aplicativo do WeCom, Conta Oficial do WeChat, webhook do QQ, OneBot v11 (NapCat) e Satori. O LINE não é oferecido.
 
-Nos dois caminhos, uma plataforma conectada responde a todo grupo e conversa privada que a plataforma entrega ao bot. Isso muda quando `ACCESS_GROUPS` ou `ACCESS_DM_USERS` tem uma entrada para essa plataforma (veja [as listas de permissão do personagent](#por-um-astrbot-que-você-já-executa)). Os IDs chegam como `<platform>:<id>`, por exemplo `qq_official:<openid>`, `weixin_oc:<id>`, `telegram:<id>` e `discord:<id>`. O bot oficial do QQ vê openids, não números de QQ. Conectar uma plataforma diretamente remove a conexão do AstrBot para essa mesma plataforma.
+Nos dois caminhos, uma plataforma conectada responde a todo grupo e conversa privada que a plataforma entrega ao bot. Para limitar, use **Responder apenas nestes grupos** na página (veja [Mantenha sob controle](#mantenha-sob-controle)). A página salva isso como `ACCESS_GROUPS`, e `ACCESS_DM_USERS` faz o mesmo para as mensagens privadas; quando qualquer um dos dois tem uma entrada para uma plataforma, essa plataforma fica restrita às suas entradas (veja [as listas de permissão do personagent](#por-um-astrbot-que-você-já-executa)). Os IDs chegam como `<platform>:<id>`, por exemplo `qq_official:<openid>`, `weixin_oc:<id>`, `telegram:<id>` e `discord:<id>`. O bot oficial do QQ vê openids, não números de QQ. Conectar uma plataforma diretamente remove a conexão do AstrBot para essa mesma plataforma.
+
+## Mantenha sob controle
+
+Tudo o que segue é feito na página local. As configurações ficam em **Personagem e configurações** → **Configurações avançadas** e passam a valer quando você clica em **Salvar**.
+
+- **Tornar-se o administrador.** Envie uma mensagem privada ao personagem e, em **Administrador e acesso**, clique em **Escolher entre as conversas recentes** e depois em **Sou eu** ao lado da sua conta. É assim que se faz com o bot oficial do QQ, que vê um openid em vez do seu número do QQ.
+- **Responder apenas em alguns grupos.** Na mesma lista, marque **Responder neste grupo** em cada grupo a manter, ou informe os IDs em **Responder apenas nestes grupos**. Quando um grupo de uma plataforma está na lista, o personagem deixa de responder nos outros grupos dessa plataforma.
+- **Pausar todas as respostas.** Desative **Responder às mensagens** em **Outras configurações**. O personagem continua conectado, mas não responde a nada até você reativar a opção.
+- **Desfazer algo que ele aprendeu.** Em **Atividade**, escolha a conversa e clique em **Desfazer** ao lado do item, ou execute `personagent learned rollback <id>`.
+- **Removê-lo de um grupo.** Remova o bot na própria plataforma. Desconectá-lo em **Conectar plataformas** apenas encerra a conexão do personagent; o bot continua membro dos seus grupos.
+- **Se ele for removido ou restringido.** Um grupo que removeu o bot simplesmente deixa de lhe enviar mensagens, e não há nada a reconectar. Se a plataforma banir o bot ou deixá-lo offline, a conexão de uma plataforma que o personagent conecta por conta própria é interrompida e **Conectar plataformas** mostra o motivo.
 
 ## Por um AstrBot que você já executa
 

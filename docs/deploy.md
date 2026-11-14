@@ -188,7 +188,7 @@ user guide lists [what the other six need and their limits](guide.md#platforms-p
 
 | Platform | What you do | Limits |
 |---|---|---|
-| QQ (official bot) | Scan a QR code with mobile QQ, which creates a bot or picks one you made. Pasting the AppID and AppSecret is the fallback. | Until the bot is certified, QQ lets it join only groups you own. Group message permissions are set in QQ. |
+| QQ (official bot) | Scan a QR code with mobile QQ, which creates a bot or picks one you made. Pasting the AppID and AppSecret is the fallback. | Until the bot is certified, QQ lets it join only groups you own. In a group it receives only messages that @ it, unless the group owner turns on receiving all messages on the bot's profile in that group; until then it cannot join in unprompted. |
 | Personal WeChat | Scan with WeChat (Tencent's iLink bot API). | One-to-one chats only. WeChat gives such bots no group messages. |
 | Telegram | Paste the token from @BotFather. | |
 | Discord | Paste the bot token, with Message Content Intent on. | |
@@ -203,13 +203,42 @@ public address or other software: WeCom app, WeChat Official Account, QQ
 webhook, OneBot v11 (NapCat) and Satori. LINE is not offered.
 
 On both paths, a connected platform answers every group and DM the platform
-delivers to the bot. That changes once `ACCESS_GROUPS` or `ACCESS_DM_USERS`
-lists an entry for that platform (see
-[personagent's own allowlists](#through-an-astrbot-you-already-run)). Ids
+delivers to the bot. To limit it, use **Reply only in these groups** on the
+page (see [Keeping it in check](#keeping-it-in-check)). The page saves it as
+`ACCESS_GROUPS`, and `ACCESS_DM_USERS` does the same for private messages;
+once either lists an entry for a platform, that platform is restricted to its
+entries (see [personagent's own allowlists](#through-an-astrbot-you-already-run)). Ids
 arrive as `<platform>:<id>`, for example `qq_official:<openid>`,
 `weixin_oc:<id>`, `telegram:<id>` and `discord:<id>`. The official QQ bot
 sees openids, not QQ numbers. Connecting a platform directly removes an
 AstrBot connection for the same platform.
+
+## Keeping it in check
+
+Everything below is done on the local page. The settings are under
+**Character & settings** → **Advanced settings** and apply when you click
+**Save**.
+
+- **Make yourself the admin.** Send the character one private message, then
+  under **Admin and access** click **Choose from recent chats** and click
+  **This is me** next to your account. This is the way on the official QQ
+  bot, which sees an openid instead of your QQ number.
+- **Reply only in some groups.** In the same list, tick **Reply in this
+  group** for each group to keep, or enter the ids under **Reply only in
+  these groups**. Once one group of a platform is listed, the character no
+  longer replies in that platform's other groups.
+- **Pause all replies.** Turn off **Reply to messages** under **Other
+  settings**. The character stays connected and replies to nothing until you
+  turn it back on.
+- **Undo something it learned.** In **Activity**, pick the chat and click
+  **Undo** next to the item, or run `personagent learned rollback <id>`.
+- **Remove it from a group.** Remove the bot in the platform itself.
+  Disconnecting it under **Connect apps** only ends personagent's
+  connection; the bot stays a member of its groups.
+- **When it is removed or restricted.** A group that removed the bot simply
+  sends it nothing more, and there is nothing to reconnect. When the platform
+  bans the bot or takes it offline, the connection of a platform personagent
+  connects itself stops, and **Connect apps** shows the reason.
 
 ## Through an AstrBot you already run
 

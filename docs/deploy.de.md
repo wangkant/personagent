@@ -80,14 +80,25 @@ Auf einem Server ohne Bildschirm verbinden Sie die Plattformen, die personagent 
 
 | Plattform | Vorgehen | Einschränkungen |
 |---|---|---|
-| QQ (offizieller Bot) | Scannen Sie einen QR-Code mit der mobilen QQ-App, die einen Bot erstellt oder einen von Ihnen erstellten auswählt. Alternativ fügen Sie AppID und AppSecret ein. | Bis der Bot zertifiziert ist, lässt QQ ihn nur Gruppen beitreten, deren Inhaber Sie sind. Berechtigungen für Gruppennachrichten werden in QQ gesetzt. |
+| QQ (offizieller Bot) | Scannen Sie einen QR-Code mit der mobilen QQ-App, die einen Bot erstellt oder einen von Ihnen erstellten auswählt. Alternativ fügen Sie AppID und AppSecret ein. | Bis der Bot zertifiziert ist, lässt QQ ihn nur Gruppen beitreten, deren Inhaber Sie sind. In einer Gruppe empfängt er nur Nachrichten, die ihn per @ erwähnen, es sei denn, der Gruppeninhaber aktiviert im Profil des Bots in dieser Gruppe den Empfang aller Nachrichten; bis dahin kann er sich nicht von selbst einbringen. |
 | Persönliches WeChat | Scannen Sie mit WeChat (Tencents iLink-Bot-API). | Nur Einzelchats. WeChat gibt solchen Bots keine Gruppennachrichten. |
 | Telegram | Fügen Sie das Token von @BotFather ein. | |
 | Discord | Fügen Sie das Bot-Token ein; der Message Content Intent muss aktiviert sein. | |
 
 **Über das verwaltete AstrBot.** Jede andere Plattform läuft über ein AstrBot, das personagent zusammen mit einer eigenen Python-3.12-Laufzeit herunterlädt und headless ausführt. Es hat kein Dashboard und erfordert keine zweite Anmeldung. KOOK, Feishu/Lark (lange Verbindung), DingTalk (Stream-Modus), Slack (Socket Mode, und der Link im Leitfaden füllt die App vor), WeCom-KI-Bot (lange Verbindung), Mattermost und Misskey erfordern ein bis zwei Werte. Die Gruppe **Erweitert** erfordert eine öffentliche Adresse oder zusätzliche Software: WeCom-App, offizielles WeChat-Konto, QQ-Webhook, OneBot v11 (NapCat) und Satori. LINE wird nicht angeboten.
 
-Auf beiden Wegen antwortet eine verbundene Plattform in jeder Gruppe und jeder DM, die die Plattform dem Bot zustellt. Das ändert sich, sobald `ACCESS_GROUPS` oder `ACCESS_DM_USERS` einen Eintrag für diese Plattform enthält (siehe [personagents eigene Zulassungslisten](#über-ein-astrbot-das-sie-bereits-betreiben)). IDs kommen als `<platform>:<id>` an, zum Beispiel `qq_official:<openid>`, `weixin_oc:<id>`, `telegram:<id>` und `discord:<id>`. Der offizielle QQ-Bot sieht openids, keine QQ-Nummern. Wird eine Plattform direkt verbunden, entfällt eine AstrBot-Verbindung für dieselbe Plattform.
+Auf beiden Wegen antwortet eine verbundene Plattform in jeder Gruppe und jeder DM, die die Plattform dem Bot zustellt. Zum Einschränken verwenden Sie auf der Seite **Nur in diesen Gruppen antworten** (siehe [Unter Kontrolle behalten](#unter-kontrolle-behalten)). Die Seite speichert dies als `ACCESS_GROUPS`, und `ACCESS_DM_USERS` leistet dasselbe für Direktnachrichten; sobald eine der beiden einen Eintrag für eine Plattform enthält, ist diese Plattform auf ihre Einträge beschränkt (siehe [personagents eigene Zulassungslisten](#über-ein-astrbot-das-sie-bereits-betreiben)). IDs kommen als `<platform>:<id>` an, zum Beispiel `qq_official:<openid>`, `weixin_oc:<id>`, `telegram:<id>` und `discord:<id>`. Der offizielle QQ-Bot sieht openids, keine QQ-Nummern. Wird eine Plattform direkt verbunden, entfällt eine AstrBot-Verbindung für dieselbe Plattform.
+
+## Unter Kontrolle behalten
+
+Alles Folgende erledigen Sie auf der lokalen Seite. Die Einstellungen befinden sich unter **Figur & Einstellungen** → **Erweiterte Einstellungen** und gelten, sobald Sie auf **Speichern** klicken.
+
+- **Sich selbst zum Administrator machen.** Senden Sie der Figur eine Direktnachricht, klicken Sie dann unter **Administrator und Zugriff** auf **Aus letzten Chats auswählen** und neben Ihrem Konto auf **Das bin ich**. So gehen Sie beim offiziellen QQ-Bot vor, der statt Ihrer QQ-Nummer eine openid sieht.
+- **Nur in bestimmten Gruppen antworten.** Aktivieren Sie in derselben Liste **In dieser Gruppe antworten** für jede Gruppe, die bleiben soll, oder tragen Sie die IDs unter **Nur in diesen Gruppen antworten** ein. Sobald eine Gruppe einer Plattform aufgeführt ist, antwortet die Figur in den übrigen Gruppen dieser Plattform nicht mehr.
+- **Alle Antworten pausieren.** Schalten Sie unter **Weitere Einstellungen** die Option **Auf Nachrichten antworten** aus. Die Figur bleibt verbunden, antwortet aber auf nichts, bis Sie die Option wieder einschalten.
+- **Etwas Gelerntes rückgängig machen.** Wählen Sie in **Aktivität** den Chat und klicken Sie neben dem Eintrag auf **Rückgängig machen**, oder führen Sie `personagent learned rollback <id>` aus.
+- **Aus einer Gruppe entfernen.** Entfernen Sie den Bot in der Plattform selbst. Das Trennen unter **Plattformen verbinden** beendet nur die Verbindung von personagent; der Bot bleibt Mitglied seiner Gruppen.
+- **Wenn er entfernt oder eingeschränkt wird.** Eine Gruppe, die den Bot entfernt hat, sendet ihm einfach nichts mehr, und es muss nichts neu verbunden werden. Sperrt die Plattform den Bot oder nimmt sie ihn offline, endet die Verbindung einer Plattform, die personagent selbst verbindet, und **Plattformen verbinden** nennt den Grund.
 
 ## Über ein AstrBot, das Sie bereits betreiben
 
