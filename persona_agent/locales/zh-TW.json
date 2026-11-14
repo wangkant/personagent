@@ -436,5 +436,8 @@
 "Edit {path} to change who {name} is; a personagent that is already running uses the change once it is restarted.": "修改 {path} 即可調整{name}的人設；已在執行的 personagent 需重新啟動後才會採用修改。",
 "Check the settings and test the model service with one small request:": "檢查設定，並以一個很小的請求測試模型服務：",
 "Start personagent with its chat platforms. It needs no display; its logs go to {log}:": "啟動 personagent 及其聊天平台。無需顯示器；日誌寫入 {log}：",
-"The key was saved but not tested.": "金鑰已儲存，但尚未測試。"
+"The key was saved but not tested.": "金鑰已儲存，但尚未測試。",
+"/help": "/help",
+"show these commands again": "再次顯示這些命令",
+"Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "記憶命令在此處同樣可用，例如「{name}，記住……」和「{name}，你記得什麼」。此處記下的內容僅保存在試用中，{memory} 不會顯示這些內容。"
 }

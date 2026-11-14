@@ -431,5 +431,8 @@
 "Edit {path} to change who {name} is; a personagent that is already running uses the change once it is restarted.": "{path} 파일을 수정하면 {name}의 인물을 바꿀 수 있습니다. 이미 실행 중인 personagent에는 다시 시작한 뒤 반영됩니다.",
 "Check the settings and test the model service with one small request:": "설정을 점검하고 작은 요청 하나로 모델 서비스를 테스트합니다:",
 "Start personagent with its chat platforms. It needs no display; its logs go to {log}:": "personagent를 채팅 플랫폼과 함께 시작합니다. 디스플레이가 필요 없으며 로그는 {log}에 기록됩니다:",
-"The key was saved but not tested.": "키는 저장되었지만 아직 테스트되지 않았습니다."
+"The key was saved but not tested.": "키는 저장되었지만 아직 테스트되지 않았습니다.",
+"/help": "/help",
+"show these commands again": "이 명령들을 다시 표시합니다",
+"Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "기억 명령도 여기에서 쓸 수 있습니다. 예: \"{name}, ... 기억해 줘\", \"{name}, 뭐 기억해?\". 여기서 기억한 내용은 체험 안에만 저장되며 {memory}에는 표시되지 않습니다."
 }

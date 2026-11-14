@@ -431,5 +431,8 @@
 "Edit {path} to change who {name} is; a personagent that is already running uses the change once it is restarted.": "Измените {path}, чтобы поменять характер персонажа {name}; уже запущенный personagent применит изменение после перезапуска.",
 "Check the settings and test the model service with one small request:": "Проверьте настройки и протестируйте сервис модели одним небольшим запросом:",
 "Start personagent with its chat platforms. It needs no display; its logs go to {log}:": "Запустите personagent вместе с его платформами чатов. Дисплей не нужен; журналы записываются в {log}:",
-"The key was saved but not tested.": "Ключ сохранён, но не проверен."
+"The key was saved but not tested.": "Ключ сохранён, но не проверен.",
+"/help": "/help",
+"show these commands again": "снова показать эти команды",
+"Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "Здесь тоже работают команды памяти, например «{name}, запомни ...» и «{name}, что ты помнишь?». Сохранённое здесь остаётся в пробном чате: {memory} это не показывает."
 }

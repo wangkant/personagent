@@ -265,7 +265,7 @@ def test_help_names_memory_among_what_eval_measures(capsys) -> None:
     check("exit 0", cli.main([]) == 0)
     out = capsys.readouterr().out
     check("eval: speaking, persona, learning and memory",
-          "measure speaking, persona, learning and memory on labelled cases" in out, out)
+          "Measure speaking, persona, learning and memory on labelled cases" in out, out)
 
 
 def test_a_slot_value_named_to_keep_is_not_translated(monkeypatch) -> None:

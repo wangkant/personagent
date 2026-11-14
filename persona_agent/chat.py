@@ -77,8 +77,12 @@ _TEXT = {
             ("/why", "why it said its last reply, from the ledger"),
             ("/learned", "what it has learned in this chat"),
             ("/reset", "start over: clear this chat and what the trial learned"),
+            ("/help", "show these commands again"),
             ("/quit", "leave"),
         ],
+        "memory_hint": ('Memory commands work here as well, such as "{name}, remember ..." and '
+                        '"{name}, what do you remember". What is kept here stays in the trial: '
+                        "{memory} does not show it."),
         "no_key": ("No model key yet. Run {init} to choose a model and "
                    "key, or {demo} to watch it work without one."),
         "bye": "Goodbye.",
@@ -189,8 +193,11 @@ _TEXT = {
             ("/why", "查看上一条回复的依据（来自学习记录）"),
             ("/learned", "查看角色在本聊天中学到的内容"),
             ("/reset", "重新开始：清空本聊天及试用中学到的内容"),
+            ("/help", "再次显示这些命令"),
             ("/quit", "退出"),
         ],
+        "memory_hint": ("记忆命令在此处同样可用，例如「{name}，记住……」和「{name}，你记得什么」。"
+                        "此处记下的内容仅保存在试用中，{memory} 不会显示这些内容。"),
         "no_key": ("尚未配置模型密钥。请运行 {init} 选择模型并填写密钥；"
                    "也可以运行 {demo}，无需密钥即可查看演示。"),
         "bye": "再见。",
@@ -1142,6 +1149,7 @@ class ChatSession:
         print()
         for cmd, desc in self.t["commands"]:
             print(f"  {cmd}{' ' * max(1, 16 - langs.width(cmd))}{desc.format(name=self.name)}")
+        print("  " + self.t["memory_hint"].format(name=self.name, memory=hint("memory", self.lang)))
         print()
 
     async def handle(self, line: str) -> bool:
@@ -1151,6 +1159,9 @@ class ChatSession:
             return True
         if line in ("/quit", "/exit", "/q"):
             return False
+        if line in ("/help", "/?"):
+            self.commands()
+            return True
         if line == "/reset":
             await self.trial.reset()
             print("  " + self.t["reset"] + "\n")

@@ -436,5 +436,8 @@
 "Edit {path} to change who {name} is; a personagent that is already running uses the change once it is restarted.": "{path} を編集すると{name}の人物像を変えられます。すでに実行中の personagent には、再起動後に反映されます。",
 "Check the settings and test the model service with one small request:": "設定を確認し、小さなリクエストを 1 回送ってモデルサービスをテストします：",
 "Start personagent with its chat platforms. It needs no display; its logs go to {log}:": "personagent をチャットプラットフォームとともに起動します。ディスプレイは不要で、ログは {log} に書き込まれます：",
-"The key was saved but not tested.": "キーは保存されましたが、まだテストされていません。"
+"The key was saved but not tested.": "キーは保存されましたが、まだテストされていません。",
+"/help": "/help",
+"show these commands again": "これらのコマンドをもう一度表示します",
+"Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "記憶コマンドもここで使えます。たとえば「{name}、〜を覚えておいて」や「{name}、何を覚えてる？」です。ここで覚えた内容は試用の中だけに保存され、{memory} には表示されません。"
 }

@@ -439,5 +439,8 @@
 "Edit {path} to change who {name} is; a personagent that is already running uses the change once it is restarted.": "Modifiez {path} pour changer qui est {name} ; un personagent déjà en cours d'exécution applique la modification après un redémarrage.",
 "Check the settings and test the model service with one small request:": "Vérifiez les réglages et testez le service du modèle avec une petite requête :",
 "Start personagent with its chat platforms. It needs no display; its logs go to {log}:": "Démarrez personagent avec ses plateformes de discussion. Aucun écran n'est nécessaire ; ses journaux vont dans {log} :",
-"The key was saved but not tested.": "La clé a été enregistrée, mais n'a pas été testée."
+"The key was saved but not tested.": "La clé a été enregistrée, mais n'a pas été testée.",
+"/help": "/help",
+"show these commands again": "affiche de nouveau ces commandes",
+"Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "Les commandes de mémoire fonctionnent aussi ici, par exemple « {name}, retiens ... » et « {name}, de quoi tu te souviens ? ». Ce qui est retenu ici reste dans l'essai : {memory} ne l'affiche pas."
 }

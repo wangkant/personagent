@@ -451,6 +451,10 @@ async def test_unknown_commands_and_a_spent_reply_are_said(
         await session.handle("/me waves")
         out = capsys.readouterr().out
         assert "unknown command /me; the commands are:" in out and "/quit" in out
+        await session.handle("/help")
+        out = capsys.readouterr().out
+        assert "unknown command" not in out and "/quit" in out, out
+        assert "what do you remember" in out and "memory` does not show it" in out, out
         model.load(demo.Beat("x", "", reply="dune"))
         await session.handle("Nova, any film tonight?")
         model.load(demo.Beat("x", "", verdict=demo._verdict("rejection", False, "banter")))
