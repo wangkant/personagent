@@ -181,7 +181,6 @@
 "In AstrBot's WebUI add the QQ (OneBot v11 / aiocqhttp) platform, and point NapCat's\n     reverse WebSocket at ws://127.0.0.1:6199/ws. Guide: https://docs.astrbot.app": "En la WebUI de AstrBot, añada la plataforma QQ (OneBot v11 / aiocqhttp) y apunte el WebSocket\n     inverso de NapCat a ws://127.0.0.1:6199/ws. Guía: https://docs.astrbot.app",
 "Say \"{name}, hi\" in one of those groups.": "Escriba «{name}, hola» en uno de esos grupos.",
 "Connect a chat platform that personagent connects itself, such as Telegram, Discord, Matrix or IRC. Without a platform name, the command lists them all:": "Conecte una plataforma de chat que personagent conecta por sí mismo, como Telegram, Discord, Matrix o IRC. Sin el nombre de una plataforma, el comando las enumera todas:",
-"Edit {path} to change who {name} is, then restart.": "Edite {path} para cambiar cómo es {name} y, a continuación, reinicie.",
 "Add your API key: run this setup again, or set LLM_API_KEY in {path}.": "Añada su clave de API: ejecute de nuevo esta configuración o defina LLM_API_KEY en {path}.",
 "Chat with the bot in this terminal now?": "¿Chatear ahora con el bot en este terminal?",
 "Setup questions skipped: {why}. Run `{cmd}` in a terminal, or pass --no-input with --provider, --key-env and --name.": "Se han omitido las preguntas de configuración: {why}. Ejecute `{cmd}` en un terminal, o utilice --no-input con --provider, --key-env y --name.",
@@ -433,5 +432,9 @@
 "{who} accepted the second try {said}": "{who} aceptó el segundo intento {said}",
 "{who} moved on from the second try {said}": "{who} cambió de tema tras el segundo intento {said}",
 "fixes": "correcciones",
-"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "«{choice}» no es una de las opciones. Introduzca un número del 0 al {n}."
+"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "«{choice}» no es una de las opciones. Introduzca un número del 0 al {n}.",
+"Edit {path} to change who {name} is; a personagent that is already running uses the change once it is restarted.": "Edite {path} para cambiar cómo es {name}; un personagent que ya esté en marcha aplicará el cambio cuando se reinicie.",
+"Check the settings and test the model service with one small request:": "Compruebe la configuración y pruebe el servicio del modelo con una pequeña solicitud:",
+"Start personagent with its chat platforms. It needs no display; its logs go to {log}:": "Inicie personagent con sus plataformas de chat. No necesita pantalla; sus registros se guardan en {log}:",
+"The key was saved but not tested.": "La clave se guardó, pero no se ha probado."
 }

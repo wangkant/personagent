@@ -107,7 +107,6 @@
 "Restart AstrBot, or reload plugins in its WebUI, so it loads the plugin.": "請重新啟動 AstrBot，或在其 WebUI 中重新載入外掛程式，使外掛程式生效。",
 "In AstrBot's WebUI add the QQ (OneBot v11 / aiocqhttp) platform, and point NapCat's\n     reverse WebSocket at ws://127.0.0.1:6199/ws. Guide: https://docs.astrbot.app": "在 AstrBot 的 WebUI 中新增 QQ（OneBot v11 / aiocqhttp）平台，再將 NapCat 的\n     反向 WebSocket 指向 ws://127.0.0.1:6199/ws。說明文件：https://docs.astrbot.app",
 "Say \"{name}, hi\" in one of those groups.": "在其中一個群組中傳送「{name}，你好」。",
-"Edit {path} to change who {name} is, then restart.": "修改 {path} 即可調整{name}的人設，修改後請重新啟動。",
 "Add your API key: run this setup again, or set LLM_API_KEY in {path}.": "請填入 API 金鑰：重新執行本設定，或在 {path} 中設定 LLM_API_KEY。",
 "Chat with the bot in this terminal now?": "是否立即在此終端機中與機器人聊天？",
 "Setup questions skipped: {why}. Run `{cmd}` in a terminal, or pass --no-input with --provider, --key-env and --name.": "已略過設定問答：{why}。請在終端機中執行 `{cmd}`，或加上 --no-input 以及 --provider、--key-env、--name 等參數。",
@@ -433,5 +432,9 @@
 "{who} moved on from {said}": "{who}未回應{said}",
 "{who} accepted the second try {said}": "{who}接受了第二次回覆{said}",
 "{who} moved on from the second try {said}": "{who}未對第二次回覆{said}表態",
-"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "「{choice}」不是可選項目。請輸入 0 至 {n} 之間的數字。"
+"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "「{choice}」不是可選項目。請輸入 0 至 {n} 之間的數字。",
+"Edit {path} to change who {name} is; a personagent that is already running uses the change once it is restarted.": "修改 {path} 即可調整{name}的人設；已在執行的 personagent 需重新啟動後才會採用修改。",
+"Check the settings and test the model service with one small request:": "檢查設定，並以一個很小的請求測試模型服務：",
+"Start personagent with its chat platforms. It needs no display; its logs go to {log}:": "啟動 personagent 及其聊天平台。無需顯示器；日誌寫入 {log}：",
+"The key was saved but not tested.": "金鑰已儲存，但尚未測試。"
 }

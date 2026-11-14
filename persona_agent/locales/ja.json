@@ -181,7 +181,6 @@
 "In AstrBot's WebUI add the QQ (OneBot v11 / aiocqhttp) platform, and point NapCat's\n     reverse WebSocket at ws://127.0.0.1:6199/ws. Guide: https://docs.astrbot.app": "AstrBot の WebUI で QQ（OneBot v11 / aiocqhttp）プラットフォームを追加し、NapCat の\n     リバース WebSocket を ws://127.0.0.1:6199/ws に向けてください。ガイド：https://docs.astrbot.app",
 "Say \"{name}, hi\" in one of those groups.": "いずれかのグループで「{name}、こんにちは」と送信してください。",
 "Connect a chat platform that personagent connects itself, such as Telegram, Discord, Matrix or IRC. Without a platform name, the command lists them all:": "personagent が直接連携できるチャットプラットフォーム（Telegram、Discord、Matrix、IRC など）と連携します。プラットフォーム名を指定しない場合、このコマンドはすべてのプラットフォームを一覧表示します：",
-"Edit {path} to change who {name} is, then restart.": "{path} を編集すると{name}の人物像を変えられます。編集後は再起動してください。",
 "Add your API key: run this setup again, or set LLM_API_KEY in {path}.": "API キーを追加：このセットアップをもう一度実行するか、{path} に LLM_API_KEY を設定してください。",
 "Chat with the bot in this terminal now?": "今このターミナルでボットとチャットしますか？",
 "Setup questions skipped: {why}. Run `{cmd}` in a terminal, or pass --no-input with --provider, --key-env and --name.": "セットアップの質問を省略しました：{why}。ターミナルで `{cmd}` を実行するか、--no-input に --provider、--key-env、--name を付けてください。",
@@ -433,5 +432,9 @@
 "{who} moved on from {said}": "{who}は{said}に反応せず",
 "{who} accepted the second try {said}": "{who}が 2 回目の返信{said}を承認",
 "{who} moved on from the second try {said}": "{who}は 2 回目の返信{said}に反応せず",
-"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "「{choice}」は選択肢にありません。0 から {n} までの数字を入力してください。"
+"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "「{choice}」は選択肢にありません。0 から {n} までの数字を入力してください。",
+"Edit {path} to change who {name} is; a personagent that is already running uses the change once it is restarted.": "{path} を編集すると{name}の人物像を変えられます。すでに実行中の personagent には、再起動後に反映されます。",
+"Check the settings and test the model service with one small request:": "設定を確認し、小さなリクエストを 1 回送ってモデルサービスをテストします：",
+"Start personagent with its chat platforms. It needs no display; its logs go to {log}:": "personagent をチャットプラットフォームとともに起動します。ディスプレイは不要で、ログは {log} に書き込まれます：",
+"The key was saved but not tested.": "キーは保存されましたが、まだテストされていません。"
 }

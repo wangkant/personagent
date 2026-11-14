@@ -332,3 +332,12 @@ def test_a_running_direct_process_is_recognised_from_the_app_records(home, monke
     check("running", doctor._direct_running(home.resolve()))
     monkeypatch.setattr(services, "_command_line", lambda pid: "")
     check("gone", not doctor._direct_running(home.resolve()))
+
+
+def test_no_input_names_doctor_and_up_and_says_the_key_is_untested(home, monkeypatch, capsys) -> None:
+    monkeypatch.setenv("SIM_KEY", "sk-test")
+    check("exit 0", sw.main(["--no-input", "--provider", "openrouter", "--key-env", "SIM_KEY"]) == 0)
+    out = capsys.readouterr().out
+    check("untested", "The key was saved but not tested." in out, out)
+    check("doctor and up are next steps", " doctor" in out and out.rstrip().count(" up") >= 1, out)
+    check("no bare restart", "then restart." not in out, out)

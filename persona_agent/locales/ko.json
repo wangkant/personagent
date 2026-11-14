@@ -181,7 +181,6 @@
 "In AstrBot's WebUI add the QQ (OneBot v11 / aiocqhttp) platform, and point NapCat's\n     reverse WebSocket at ws://127.0.0.1:6199/ws. Guide: https://docs.astrbot.app": "AstrBot WebUI에서 QQ(OneBot v11 / aiocqhttp) 플랫폼을 추가하고, NapCat의\n     리버스 WebSocket을 ws://127.0.0.1:6199/ws로 지정하십시오. 안내: https://docs.astrbot.app",
 "Say \"{name}, hi\" in one of those groups.": "그 그룹 중 하나에서 \"{name}, 안녕\"이라고 말해 보십시오.",
 "Connect a chat platform that personagent connects itself, such as Telegram, Discord, Matrix or IRC. Without a platform name, the command lists them all:": "personagent가 직접 연결하는 채팅 플랫폼(Telegram, Discord, Matrix, IRC 등)을 연결합니다. 플랫폼 이름을 지정하지 않으면 이 명령은 모든 플랫폼을 표시합니다:",
-"Edit {path} to change who {name} is, then restart.": "{path} 파일을 수정하면 {name}의 인물을 바꿀 수 있습니다. 수정한 뒤 다시 시작하십시오.",
 "Add your API key: run this setup again, or set LLM_API_KEY in {path}.": "API 키 추가: 이 설정을 다시 실행하거나 {path}에 LLM_API_KEY를 설정하십시오.",
 "Chat with the bot in this terminal now?": "지금 이 터미널에서 봇과 채팅하시겠습니까?",
 "Setup questions skipped: {why}. Run `{cmd}` in a terminal, or pass --no-input with --provider, --key-env and --name.": "설정 질문을 건너뛰었습니다: {why}. 터미널에서 `{cmd}` 명령을 실행하거나 --no-input과 --provider, --key-env, --name을 함께 쓰십시오.",
@@ -428,5 +427,9 @@
 "{who} moved on from {said}": "{who}: {said}에 반응하지 않음",
 "{who} accepted the second try {said}": "{who}: 두 번째 시도 {said} 수락",
 "{who} moved on from the second try {said}": "{who}: 두 번째 시도 {said}에 반응하지 않음",
-"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "선택할 수 없는 값입니다: \"{choice}\". 0부터 {n}까지의 숫자를 입력하십시오."
+"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "선택할 수 없는 값입니다: \"{choice}\". 0부터 {n}까지의 숫자를 입력하십시오.",
+"Edit {path} to change who {name} is; a personagent that is already running uses the change once it is restarted.": "{path} 파일을 수정하면 {name}의 인물을 바꿀 수 있습니다. 이미 실행 중인 personagent에는 다시 시작한 뒤 반영됩니다.",
+"Check the settings and test the model service with one small request:": "설정을 점검하고 작은 요청 하나로 모델 서비스를 테스트합니다:",
+"Start personagent with its chat platforms. It needs no display; its logs go to {log}:": "personagent를 채팅 플랫폼과 함께 시작합니다. 디스플레이가 필요 없으며 로그는 {log}에 기록됩니다:",
+"The key was saved but not tested.": "키는 저장되었지만 아직 테스트되지 않았습니다."
 }

@@ -107,7 +107,6 @@
 "Restart AstrBot, or reload plugins in its WebUI, so it loads the plugin.": "Starten Sie AstrBot neu oder laden Sie die Plugins in seiner WebUI neu, damit das Plugin geladen wird.",
 "In AstrBot's WebUI add the QQ (OneBot v11 / aiocqhttp) platform, and point NapCat's\n     reverse WebSocket at ws://127.0.0.1:6199/ws. Guide: https://docs.astrbot.app": "Fügen Sie in der WebUI von AstrBot die Plattform QQ (OneBot v11 / aiocqhttp) hinzu und richten Sie den\n     Reverse-WebSocket von NapCat auf ws://127.0.0.1:6199/ws aus. Anleitung: https://docs.astrbot.app",
 "Say \"{name}, hi\" in one of those groups.": "Schreiben Sie in einer dieser Gruppen „{name}, hallo“.",
-"Edit {path} to change who {name} is, then restart.": "Bearbeiten Sie {path}, um {name} zu verändern, und starten Sie anschließend neu.",
 "Add your API key: run this setup again, or set LLM_API_KEY in {path}.": "Fügen Sie Ihren API-Schlüssel hinzu: Führen Sie diese Einrichtung erneut aus oder setzen Sie LLM_API_KEY in {path}.",
 "Chat with the bot in this terminal now?": "Jetzt in diesem Terminal mit dem Bot chatten?",
 "Setup questions skipped: {why}. Run `{cmd}` in a terminal, or pass --no-input with --provider, --key-env and --name.": "Einrichtungsfragen übersprungen: {why}. Führen Sie `{cmd}` in einem Terminal aus oder verwenden Sie --no-input mit --provider, --key-env und --name.",
@@ -433,5 +432,9 @@
 "{who} moved on from {said}": "{who} hat auf {said} nicht reagiert",
 "{who} accepted the second try {said}": "{who} hat den zweiten Versuch {said} akzeptiert",
 "{who} moved on from the second try {said}": "{who} hat auf den zweiten Versuch {said} nicht reagiert",
-"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "„{choice}“ ist keine der verfügbaren Optionen. Geben Sie eine Zahl von 0 bis {n} ein."
+"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "„{choice}“ ist keine der verfügbaren Optionen. Geben Sie eine Zahl von 0 bis {n} ein.",
+"Edit {path} to change who {name} is; a personagent that is already running uses the change once it is restarted.": "Bearbeiten Sie {path}, um {name} zu verändern; ein bereits laufendes personagent übernimmt die Änderung nach einem Neustart.",
+"Check the settings and test the model service with one small request:": "Prüfen Sie die Einstellungen und testen Sie den Modelldienst mit einer kleinen Anfrage:",
+"Start personagent with its chat platforms. It needs no display; its logs go to {log}:": "Starten Sie personagent mit seinen Chatplattformen. Es braucht keinen Bildschirm; die Protokolle landen in {log}:",
+"The key was saved but not tested.": "Der Schlüssel wurde gespeichert, aber nicht getestet."
 }

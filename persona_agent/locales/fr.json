@@ -181,7 +181,6 @@
 "In AstrBot's WebUI add the QQ (OneBot v11 / aiocqhttp) platform, and point NapCat's\n     reverse WebSocket at ws://127.0.0.1:6199/ws. Guide: https://docs.astrbot.app": "Dans la WebUI d'AstrBot, ajoutez la plateforme QQ (OneBot v11 / aiocqhttp) et dirigez le WebSocket\n     inverse de NapCat vers ws://127.0.0.1:6199/ws. Guide : https://docs.astrbot.app",
 "Say \"{name}, hi\" in one of those groups.": "Dites « {name}, salut » dans l'un de ces groupes.",
 "Connect a chat platform that personagent connects itself, such as Telegram, Discord, Matrix or IRC. Without a platform name, the command lists them all:": "Connectez une plateforme de discussion que personagent connecte lui-même, telle que Telegram, Discord, Matrix ou IRC. Sans nom de plateforme, la commande les affiche toutes :",
-"Edit {path} to change who {name} is, then restart.": "Modifiez {path} pour changer qui est {name}, puis redémarrez.",
 "Add your API key: run this setup again, or set LLM_API_KEY in {path}.": "Ajoutez votre clé API : relancez cette configuration ou définissez LLM_API_KEY dans {path}.",
 "Chat with the bot in this terminal now?": "Discuter avec le bot dans ce terminal maintenant ?",
 "Setup questions skipped: {why}. Run `{cmd}` in a terminal, or pass --no-input with --provider, --key-env and --name.": "Questions de configuration ignorées : {why}. Lancez `{cmd}` dans un terminal, ou passez --no-input avec --provider, --key-env et --name.",
@@ -436,5 +435,9 @@
 "{who} accepted the second try {said}": "{who} a accepté la deuxième tentative {said}",
 "{who} moved on from the second try {said}": "{who} a changé de sujet après la deuxième tentative {said}",
 "fixes": "corrections",
-"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "« {choice} » ne fait pas partie des options. Saisissez un nombre de 0 à {n}."
+"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "« {choice} » ne fait pas partie des options. Saisissez un nombre de 0 à {n}.",
+"Edit {path} to change who {name} is; a personagent that is already running uses the change once it is restarted.": "Modifiez {path} pour changer qui est {name} ; un personagent déjà en cours d'exécution applique la modification après un redémarrage.",
+"Check the settings and test the model service with one small request:": "Vérifiez les réglages et testez le service du modèle avec une petite requête :",
+"Start personagent with its chat platforms. It needs no display; its logs go to {log}:": "Démarrez personagent avec ses plateformes de discussion. Aucun écran n'est nécessaire ; ses journaux vont dans {log} :",
+"The key was saved but not tested.": "La clé a été enregistrée, mais n'a pas été testée."
 }

@@ -181,7 +181,6 @@
 "In AstrBot's WebUI add the QQ (OneBot v11 / aiocqhttp) platform, and point NapCat's\n     reverse WebSocket at ws://127.0.0.1:6199/ws. Guide: https://docs.astrbot.app": "В WebUI AstrBot добавьте платформу QQ (OneBot v11 / aiocqhttp) и направьте обратный WebSocket\n     NapCat на ws://127.0.0.1:6199/ws. Руководство: https://docs.astrbot.app",
 "Say \"{name}, hi\" in one of those groups.": "Напишите «{name}, привет» в одной из этих групп.",
 "Connect a chat platform that personagent connects itself, such as Telegram, Discord, Matrix or IRC. Without a platform name, the command lists them all:": "Подключите чат-платформу, которую personagent подключает самостоятельно, например Telegram, Discord, Matrix или IRC. Без названия платформы команда выводит их все:",
-"Edit {path} to change who {name} is, then restart.": "Измените {path}, чтобы поменять характер персонажа {name}, затем перезапустите.",
 "Add your API key: run this setup again, or set LLM_API_KEY in {path}.": "Добавьте API-ключ: запустите эту настройку снова или задайте LLM_API_KEY в {path}.",
 "Chat with the bot in this terminal now?": "Поговорить с ботом в этом терминале сейчас?",
 "Setup questions skipped: {why}. Run `{cmd}` in a terminal, or pass --no-input with --provider, --key-env and --name.": "Вопросы настройки пропущены: {why}. Выполните `{cmd}` в терминале или используйте --no-input с --provider, --key-env и --name.",
@@ -428,5 +427,9 @@
 "{who} accepted the second try {said}": "{who} принимает вторую попытку {said}",
 "{who} moved on from the second try {said}": "{who} переходит к другой теме после второй попытки {said}",
 "fixes": "исправления",
-"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "«{choice}» не является одним из вариантов. Введите число от 0 до {n}."
+"\"{choice}\" is not one of the options. Enter a number from 0 to {n}.": "«{choice}» не является одним из вариантов. Введите число от 0 до {n}.",
+"Edit {path} to change who {name} is; a personagent that is already running uses the change once it is restarted.": "Измените {path}, чтобы поменять характер персонажа {name}; уже запущенный personagent применит изменение после перезапуска.",
+"Check the settings and test the model service with one small request:": "Проверьте настройки и протестируйте сервис модели одним небольшим запросом:",
+"Start personagent with its chat platforms. It needs no display; its logs go to {log}:": "Запустите personagent вместе с его платформами чатов. Дисплей не нужен; журналы записываются в {log}:",
+"The key was saved but not tested.": "Ключ сохранён, но не проверен."
 }
