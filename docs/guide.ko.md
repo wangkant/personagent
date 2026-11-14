@@ -312,7 +312,7 @@ QQ는 모바일 QQ의 연락처 → 봇에서 봇을 찾은 뒤 개인적으로 
 
 | 그룹 | 플랫폼 | 필요한 것 |
 |---|---|---|
-| 값 한두 개 붙여 넣기 | KOOK, Feishu / Lark, DingTalk, Slack, WeCom AI 봇, Mattermost, Misskey | 토큰, 앱 ID와 시크릿, 또는 서버 주소와 토큰. Feishu는 장기 연결, DingTalk는 Stream 모드를 쓰므로 둘 다 공개 주소가 필요 없습니다. Slack은 페이지의 링크가 Socket Mode, 범위, 이벤트가 설정된 앱을 만듭니다. `connections:write`가 있는 앱 수준 토큰을 추가하고, 앱을 설치하고, 두 토큰을 붙여 넣으십시오. WeCom AI 봇은 장기 연결로 만드십시오. |
+| 값 몇 개 붙여넣기 | KOOK, Feishu / Lark, DingTalk, Slack, WeCom AI 봇, Mattermost, Misskey | 토큰, 앱 ID와 시크릿, 또는 서버 주소와 토큰. Feishu는 장기 연결, DingTalk는 Stream 모드를 쓰므로 둘 다 공개 주소가 필요 없습니다. Slack은 페이지의 링크가 Socket Mode, 범위, 이벤트가 설정된 앱을 만듭니다. `connections:write`가 있는 앱 수준 토큰을 추가하고, 앱을 설치하고, 두 토큰을 붙여 넣으십시오. WeCom AI 봇은 장기 연결로 만드십시오. |
 | 고급 | WeCom 앱, WeChat 공식 계정, QQ(웹훅) | 표시된 콜백 포트로 전달하는 공개 주소 |
 | 고급 | OneBot v11(NapCat), Satori | 이 컴퓨터에서 실행되는 다른 소프트웨어: `ws://127.0.0.1:<port>/ws`로 지정한 NapCat, 또는 Satori 서버 |
 

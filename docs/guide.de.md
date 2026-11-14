@@ -312,7 +312,7 @@ Wenn Sie zum ersten Mal eine andere Plattform verbinden, lädt personagent [Astr
 
 | Gruppe | Plattformen | Erforderliche Angaben |
 |---|---|---|
-| Ein bis zwei Werte einfügen | KOOK, Feishu / Lark, DingTalk, Slack, WeCom-KI-Bot, Mattermost, Misskey | ein Token, eine App-ID und ein Secret oder eine Serveradresse und ein Token. Feishu nutzt die lange Verbindung und DingTalk den Stream-Modus, sodass keine der beiden Plattformen eine öffentliche Adresse benötigt. Für Slack erstellt der Link der Seite die App mit bereits festgelegtem Socket Mode, Scopes und Ereignissen. Fügen Sie ein App-Level-Token mit `connections:write` hinzu, installieren Sie die App und fügen Sie beide Tokens ein. Erstellen Sie den WeCom-KI-Bot mit der langen Verbindung. |
+| Einige Werte einfügen | KOOK, Feishu / Lark, DingTalk, Slack, WeCom-KI-Bot, Mattermost, Misskey | ein Token, eine App-ID und ein Secret oder eine Serveradresse und ein Token. Feishu nutzt die lange Verbindung und DingTalk den Stream-Modus, sodass keine der beiden Plattformen eine öffentliche Adresse benötigt. Für Slack erstellt der Link der Seite die App mit bereits festgelegtem Socket Mode, Scopes und Ereignissen. Fügen Sie ein App-Level-Token mit `connections:write` hinzu, installieren Sie die App und fügen Sie beide Tokens ein. Erstellen Sie den WeCom-KI-Bot mit der langen Verbindung. |
 | Erweitert | WeCom-App, offizielles WeChat-Konto, QQ (Webhook) | eine öffentliche Adresse, die an den angezeigten Callback-Port weiterleitet |
 | Erweitert | OneBot v11 (NapCat), Satori | zusätzliche Software auf diesem Computer: NapCat, das auf `ws://127.0.0.1:<port>/ws` zeigt, oder ein Satori-Server |
 

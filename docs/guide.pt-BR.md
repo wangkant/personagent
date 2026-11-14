@@ -312,7 +312,7 @@ Na primeira vez que você conecta outra plataforma, o personagent baixa o [AstrB
 
 | Grupo | Plataformas | O que você fornece |
 |---|---|---|
-| Colar um ou dois valores | KOOK, Feishu / Lark, DingTalk, Slack, bot de IA do WeCom, Mattermost, Misskey | um token, um ID de aplicativo e um segredo, ou um endereço de servidor e um token. O Feishu usa conexão persistente e o DingTalk usa o modo Stream; portanto, nenhum deles requer endereço público. Para o Slack, o link da página cria o aplicativo com Socket Mode, escopos e eventos já definidos. Adicione um token de nível de aplicativo com `connections:write`, instale o aplicativo e cole os dois tokens. Crie o bot de IA do WeCom com conexão persistente. |
+| Colar alguns valores | KOOK, Feishu / Lark, DingTalk, Slack, bot de IA do WeCom, Mattermost, Misskey | um token, um ID de aplicativo e um segredo, ou um endereço de servidor e um token. O Feishu usa conexão persistente e o DingTalk usa o modo Stream; portanto, nenhum deles requer endereço público. Para o Slack, o link da página cria o aplicativo com Socket Mode, escopos e eventos já definidos. Adicione um token de nível de aplicativo com `connections:write`, instale o aplicativo e cole os dois tokens. Crie o bot de IA do WeCom com conexão persistente. |
 | Avançado | Aplicativo do WeCom, Conta Oficial do WeChat, QQ (webhook) | um endereço público que encaminha para a porta de callback mostrada |
 | Avançado | OneBot v11 (NapCat), Satori | outro software em execução neste computador: NapCat apontado para `ws://127.0.0.1:<port>/ws`, ou um servidor Satori |
 

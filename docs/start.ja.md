@@ -43,7 +43,7 @@ Windows では、ソースの ZIP をダウンロードして展開し、`start.
    - **スキャンで連携**：QQ と個人の WeChat。**QR コードを取得** をクリックし、スマートフォンで確認します。
      - QQ：モバイル版 QQ でスキャンします。QQ がボットを作成するか、手持ちのボットを選べるようにし、personagent がそのキーを取得します。[QQ のボットページ](https://q.qq.com/qqbot/openclaw/login.html)で自分でボットを作った場合は、**値の貼り付けで連携** をクリックして AppID と AppSecret を入力します。
      - WeChat：WeChat でスキャンします。WeChat はこの種のボットにグループメッセージを渡さないため、ボットは 1 対 1 のチャットのみです。
-   - **1〜2 個の値を貼り付け**：Telegram（@BotFather のトークン）、Discord（ボットトークン。Message Content Intent をオンにしておきます）、KOOK、Feishu、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey、Matrix、Twitch、IRC、Zulip、VK、Stoat。どの値をプラットフォームのコンソールからコピーするかは、ページに表示されます。それ以外は既定値を使います。Twitch では、リンクからサインインを承認する操作も必要です。
+   - **いくつかの値を貼り付け**：Telegram（@BotFather のトークン）、Discord（ボットトークン。Message Content Intent をオンにしておきます）、KOOK、Feishu、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey、Matrix、Twitch、IRC、Zulip、VK、Stoat。どの値をプラットフォームのコンソールからコピーするかは、ページに表示されます。それ以外は既定値を使います。Twitch では、リンクからサインインを承認する操作も必要です。
    - **上級**：WeCom アプリ、WeChat 公式アカウント、QQ の Webhook には、コールバックポートに転送する公開アドレスが必要です。OneBot v11（NapCat）と Satori には、このコンピューターで動く別のソフトウェアが必要です。
 2. personagent は QQ、WeChat、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat に自分で接続します。ほかのプラットフォームはサードパーティのブリッジである AstrBot を経由します。そのいずれかを初めてつなぐとき、personagent は AstrBot と別の Python 3.12 ランタイムをダウンロードするので、終わるまでページを開いたままにしてください。その後 AstrBot はバックグラウンドで動き、ログインするダッシュボードはありません。
 3. personagent は保存する前に、認証情報をプラットフォームに確認します。プラットフォームに拒否された場合はページに表示され、何も保存されません。

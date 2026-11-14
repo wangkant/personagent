@@ -312,7 +312,7 @@ QQ では、モバイル版 QQ の「連絡先 → ボット」でボットを�
 
 | グループ | プラットフォーム | 必要なもの |
 |---|---|---|
-| 1〜2 個の値を貼り付け | KOOK、Feishu / Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey | トークン、アプリ ID とシークレット、またはサーバーアドレスとトークン。Feishu は長時間接続、DingTalk は Stream モードを使うので、どちらも公開アドレスは要りません。Slack では、ページのリンクが Socket Mode、スコープ、イベントを設定済みのアプリを作ります。`connections:write` 付きのアプリレベルトークンを追加し、アプリをインストールして両方のトークンを貼り付けます。WeCom AI ボットは長時間接続で作成してください。 |
+| いくつかの値を貼り付け | KOOK、Feishu / Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey | トークン、アプリ ID とシークレット、またはサーバーアドレスとトークン。Feishu は長時間接続、DingTalk は Stream モードを使うので、どちらも公開アドレスは要りません。Slack では、ページのリンクが Socket Mode、スコープ、イベントを設定済みのアプリを作ります。`connections:write` 付きのアプリレベルトークンを追加し、アプリをインストールして両方のトークンを貼り付けます。WeCom AI ボットは長時間接続で作成してください。 |
 | 上級 | WeCom アプリ、WeChat 公式アカウント、QQ（Webhook） | 表示されたコールバックポートに転送する公開アドレス |
 | 上級 | OneBot v11（NapCat）、Satori | このコンピューターで動く別のソフトウェア：`ws://127.0.0.1:<port>/ws` に向けた NapCat、または Satori サーバー |
 

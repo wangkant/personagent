@@ -18,7 +18,7 @@
 personagent は、人のようにふるまうエージェントです。独自のキャラクターを持ち、記憶し、話した相手から学び、いつ発言するかを自分で判断します。QQ、WeChat、Telegram、Discord とさらに 18 のプラットフォームのグループチャットと個人チャット、あなたのコンピューター上のウィンドウ、Claude Code や Codex などのコーディングアシスタントなど、お使いの場所のどこでも動作します。キャラクターは選ぶことも自分で書くこともでき、OpenAI 互換の任意のモデルで動作します。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「プラットフォーム連携」画面。スキャンまたは 1〜2 個の値の貼り付けで連携できるプラットフォーム、折りたたまれた上級のプラットフォーム、参加できるコーディングアシスタントが表示されている" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「プラットフォーム連携」画面。スキャンまたはいくつかの値の貼り付けで連携できるプラットフォーム、折りたたまれた上級のプラットフォーム、参加できるコーディングアシスタントが表示されている" width="960">
 </p>
 
 <p align="center"><em>「プラットフォーム連携」は、設定やキャラクターとのチャットと同じローカルページにあります。</em></p>
@@ -68,7 +68,7 @@ personagent は、人のようにふるまうエージェントです。独自�
 <tr>
 <td width="220" valign="top"><strong>すべてのプラットフォームに接続します。</strong></td>
 <td valign="top">
-22 のチャットプラットフォームを 1 つのページから、スマートフォンでのスキャンか値を 1〜2 個貼り付けるだけで連携できます。その多くはグループチャットにも個人チャットにも対応します。<br>
+22 のチャットプラットフォームを 1 つのページから、スマートフォンでのスキャンかいくつかの値を貼り付けるだけで連携できます。その多くはグループチャットにも個人チャットにも対応します。<br>
 同じエージェントが、あなたのコンピューター上のウィンドウでも、Claude Code、Codex、DeepSeek Harness の中でも応答します。<br>
 その他のプラットフォームは、AstrBot、Koishi、Matrix のブリッジ、または自分で書くコネクターを通じて追加できます。
 </td>
@@ -104,7 +104,7 @@ personagent 自体は無料です。料金は、選んだモデルサービス�
 | ページ上の表示 | プラットフォーム | 必要なもの |
 |---|---|---|
 | スキャンで連携 | QQ、個人 WeChat | スマートフォン。WeChat のボットは 1 対 1 のチャットのみ |
-| 1〜2 個の値を貼り付け | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、Feishu/Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey | プラットフォームのコンソールで取得する値。どの値かはページに表示されます |
+| いくつかの値を貼り付け | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、Feishu/Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey | プラットフォームのコンソールで取得する値。どの値かはページに表示されます |
 | 上級 | WeCom アプリ、WeChat 公式アカウント、QQ Webhook、OneBot v11 (NapCat)、Satori | 公開アドレス、またはこのコンピューター上の他のソフトウェア |
 
 連携中のプラットフォームは personagent を起動するたびに再び起動します。スキャンで連携するプラットフォームと Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat には personagent が自分で接続し、それ以外は personagent がダウンロードしてバックグラウンドで動かす [AstrBot](https://github.com/AstrBotDevs/AstrBot) を経由します。ディスプレイのないサーバーでは、personagent が自分で接続するこれらのプラットフォームを、ターミナルから `personagent connect <platform>` を使ってページと同じ手順と確認で接続でき、`personagent up` でブラウザーなしですべてを起動できます。プラットフォームごとの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#チャットに入れる)に、QQ をゼロからつなぐ手順は[中国語のデプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)にあります。

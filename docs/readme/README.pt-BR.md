@@ -18,7 +18,7 @@
 O personagent é um agente que se comporta como uma pessoa: tem personalidade própria, lembra, aprende com as pessoas com quem conversa e decide por conta própria quando falar. Ele funciona onde você precisar: em conversas em grupo e conversas privadas no QQ, no WeChat, no Telegram, no Discord e em outras dezoito plataformas, em uma janela no seu computador e dentro de assistentes de programação como o Claude Code e o Codex. Você escolhe ou escreve a personalidade dele, e ele funciona com qualquer modelo compatível com OpenAI.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="A tela Conectar plataformas da página local: as plataformas que se conectam com QR code ou colando um ou dois valores, as plataformas avançadas recolhidas e os assistentes de programação em que ele pode entrar" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="A tela Conectar plataformas da página local: as plataformas que se conectam com QR code ou colando alguns valores, as plataformas avançadas recolhidas e os assistentes de programação em que ele pode entrar" width="960">
 </p>
 
 <p align="center"><em>Conectar plataformas, na mesma página local da configuração e da conversa com o personagem.</em></p>
@@ -68,7 +68,7 @@ Uma rajada de mensagens recebe uma única resposta.
 <tr>
 <td width="220" valign="top"><strong>Ele se conecta a todas as suas plataformas.</strong></td>
 <td valign="top">
-Vinte e duas plataformas de chat se conectam por uma única página, lendo um QR code com o celular ou colando um ou dois valores. A maioria aceita tanto conversas em grupo quanto conversas privadas.<br>
+Vinte e duas plataformas de chat se conectam por uma única página, lendo um QR code com o celular ou colando alguns valores. A maioria aceita tanto conversas em grupo quanto conversas privadas.<br>
 O mesmo agente responde em uma janela no seu computador e dentro do Claude Code, do Codex e do DeepSeek Harness.<br>
 Qualquer outra plataforma pode ser adicionada por meio de uma ponte AstrBot, Koishi ou Matrix, ou de um conector que você mesmo escreva.
 </td>
@@ -104,7 +104,7 @@ Abra **Conectar plataformas** na página local:
 | Na página | Plataformas | O que é necessário |
 |---|---|---|
 | Conectar com QR code | QQ, WeChat pessoal | O seu celular. Os bots do WeChat só participam de conversas privadas |
-| Colar um ou dois valores | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, Bot de IA do WeCom, Mattermost, Misskey | Valores do console da plataforma; a página indica quais |
+| Colar alguns valores | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, Bot de IA do WeCom, Mattermost, Misskey | Valores do console da plataforma; a página indica quais |
 | Avançado | Aplicativo do WeCom, Conta Oficial do WeChat, webhook do QQ, OneBot v11 (NapCat), Satori | Um endereço público ou outro software neste computador |
 
 As plataformas conectadas são iniciadas novamente sempre que o personagent é iniciado. O personagent conecta por conta própria as plataformas com QR code, o Telegram, o Discord, o Matrix, o Twitch, o IRC, o Zulip, o VK e o Stoat; o resto passa por um [AstrBot](https://github.com/AstrBotDevs/AstrBot) que ele baixa e executa em segundo plano. Em um servidor sem monitor, `personagent connect <plataforma>` conecta qualquer uma dessas dez plataformas pelo terminal, com as mesmas etapas e verificações da página, e `personagent up` inicia tudo sem navegador. A configuração de cada plataforma está no [guia do usuário](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#coloque-em-um-chat), e o QQ do zero no [guia de implantação em chinês](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).

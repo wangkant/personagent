@@ -312,7 +312,7 @@ La première fois que vous connectez une autre plateforme, personagent télécha
 
 | Groupe | Plateformes | Ce que vous fournissez |
 |---|---|---|
-| Coller une ou deux valeurs | KOOK, Feishu / Lark, DingTalk, Slack, bot IA WeCom, Mattermost, Misskey | un jeton, un ID d'application et un secret, ou une adresse de serveur et un jeton. Feishu utilise la connexion longue et DingTalk le mode Stream, donc aucun n'a besoin d'adresse publique. Pour Slack, le lien de la page crée l'application avec Socket Mode, les portées et les événements déjà définis. Ajoutez un jeton de niveau application avec `connections:write`, installez l'application et collez les deux jetons. Créez le bot IA WeCom avec la connexion longue. |
+| Coller quelques valeurs | KOOK, Feishu / Lark, DingTalk, Slack, bot IA WeCom, Mattermost, Misskey | un jeton, un ID d'application et un secret, ou une adresse de serveur et un jeton. Feishu utilise la connexion longue et DingTalk le mode Stream, donc aucun n'a besoin d'adresse publique. Pour Slack, le lien de la page crée l'application avec Socket Mode, les portées et les événements déjà définis. Ajoutez un jeton de niveau application avec `connections:write`, installez l'application et collez les deux jetons. Créez le bot IA WeCom avec la connexion longue. |
 | Avancé | Application WeCom, compte officiel WeChat, QQ (webhook) | une adresse publique qui transfère vers le port de rappel indiqué |
 | Avancé | OneBot v11 (NapCat), Satori | un autre logiciel tournant sur cet ordinateur : NapCat pointé vers `ws://127.0.0.1:<port>/ws`, ou un serveur Satori |
 

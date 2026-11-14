@@ -43,7 +43,7 @@ personagent
    - **扫码连接**：QQ 和个人微信。点击「获取二维码」，然后在手机上确认。
      - QQ：使用手机 QQ 扫码。QQ 会新建一个机器人，或由你选用一个已有的机器人，密钥由 personagent 自动获取。如果机器人是你自行在 [QQ 官方页面](https://q.qq.com/qqbot/openclaw/login.html)创建的，请点击「改为手动填写」，并填写 AppID 和 AppSecret。
      - 微信：使用微信扫码。微信不会向此类机器人转发群消息，因此仅支持私聊。
-   - **填写一至两项**：Telegram（向 @BotFather 申请 Token）、Discord（机器人 Token，并开启 Message Content Intent）、KOOK、飞书、钉钉、Slack、企业微信智能机器人、Mattermost、Misskey、Matrix、Twitch、IRC、Zulip、VK 和 Stoat。页面会说明需要从平台后台复制哪几项，其余设置均使用默认值。Twitch 还需要通过一个链接批准登录。
+   - **填写几项**：Telegram（向 @BotFather 申请 Token）、Discord（机器人 Token，并开启 Message Content Intent）、KOOK、飞书、钉钉、Slack、企业微信智能机器人、Mattermost、Misskey、Matrix、Twitch、IRC、Zulip、VK 和 Stoat。页面会说明需要从平台后台复制哪几项，其余设置均使用默认值。Twitch 还需要通过一个链接批准登录。
    - **高级**：企业微信应用、微信公众号和 QQ（Webhook）需要一个能转发到回调端口的公网地址；OneBot v11（NapCat）和 Satori 需要在本机另外运行相应的软件。
 2. QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 直接连接。其他平台通过第三方桥接程序 AstrBot 接入。首次连接此类平台时，personagent 会下载 AstrBot 和一个独立的 Python 3.12 运行环境，下载完成前请保持页面打开。此后 AstrBot 在后台运行，无需另外登录管理后台。
 3. 保存之前，personagent 会先向平台核验凭据。平台拒绝时，页面会显示提示，且不保存任何内容。

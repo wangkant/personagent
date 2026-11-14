@@ -312,7 +312,7 @@ The first time you connect any other platform, personagent downloads [AstrBot](h
 
 | Group | Platforms | You give |
 |---|---|---|
-| Paste one or two values | KOOK, Feishu / Lark, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey | a token, an app id and secret, or a server address and token. Feishu uses long connection and DingTalk uses Stream mode, so neither needs a public address. For Slack, the link on the page creates the app with Socket Mode, scopes and events already set. Add an app-level token with `connections:write`, install the app and paste both tokens. Create the WeCom AI bot with long connection. |
+| Paste a few values | KOOK, Feishu / Lark, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey | a token, an app id and secret, or a server address and token. Feishu uses long connection and DingTalk uses Stream mode, so neither needs a public address. For Slack, the link on the page creates the app with Socket Mode, scopes and events already set. Add an app-level token with `connections:write`, install the app and paste both tokens. Create the WeCom AI bot with long connection. |
 | Advanced | WeCom app, WeChat Official Account, QQ (webhook) | a public address that forwards to the callback port shown |
 | Advanced | OneBot v11 (NapCat), Satori | other software running on this computer: NapCat pointed at `ws://127.0.0.1:<port>/ws`, or a Satori server |
 

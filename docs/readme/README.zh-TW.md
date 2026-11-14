@@ -18,7 +18,7 @@
 personagent 是一個像人一樣的 AI 代理（agent）：它擁有自己的個性與記憶，從與人的交流中學習，並自行判斷何時發言。它可在你使用的各處運作：QQ、微信、Telegram、Discord 及另外十八個平台的群組與私訊，你電腦上的視窗，以及 Claude Code、Codex 等程式設計助理。角色可選用現成的，也可自行撰寫；接上任何相容 OpenAI 的模型即可使用。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本機頁面的「連接平台」：可掃描連接或填寫一至兩項即可連接的平台、已收合的進階平台，以及可接入的程式設計助理" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本機頁面的「連接平台」：可掃描連接或填寫幾項即可連接的平台、已收合的進階平台，以及可接入的程式設計助理" width="960">
 </p>
 
 <p align="center"><em>「連接平台」、設定與角色聊天均位於同一個本機頁面中。</em></p>
@@ -68,7 +68,7 @@ personagent 是一個像人一樣的 AI 代理（agent）：它擁有自己的�
 <tr>
 <td width="220" valign="top"><strong>連接你的所有平台</strong></td>
 <td valign="top">
-二十二個聊天平台都能在同一個頁面中連接，只需以手機掃描一次或貼上一至兩項；其中多數同時支援群組與私訊。<br>
+二十二個聊天平台都能在同一個頁面中連接，只需以手機掃描一次或填寫幾項；其中多數同時支援群組與私訊。<br>
 同一個 AI 代理也會在你電腦上的視窗中回覆，並可在 Claude Code、Codex 和 DeepSeek Harness 中使用。<br>
 其他平台可透過 AstrBot、Koishi 或 Matrix 橋接接入，也可自行撰寫聯結器。
 </td>
@@ -104,7 +104,7 @@ personagent 本身免費。費用支付給你選擇的模型服務，依該服�
 | 頁面分組 | 平台 | 需要準備的項目 |
 |---|---|---|
 | 掃描連接 | QQ、個人微信 | 手機。微信機器人僅限一對一聊天 |
-| 填寫一至兩項 | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、飛書、釘釘、Slack、企業微信智慧機器人、Mattermost、Misskey | 從平台後台複製，頁面會註明需要複製的項目 |
+| 填寫幾項 | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、飛書、釘釘、Slack、企業微信智慧機器人、Mattermost、Misskey | 從平台後台複製，頁面會註明需要複製的項目 |
 | 進階 | 企業微信應用、微信公眾號、QQ（Webhook）、OneBot v11（NapCat）、Satori | 公開網址，或本機的其他軟體 |
 
 已連接的平台在此後每次啟動 personagent 時都會自動連線。掃描連接的平台，以及 Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 直接連線；其餘平台透過它在背景下載並執行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入。在沒有顯示器的伺服器上，可以在終端機中執行 `personagent connect <平台>`，連接上述十個平台中的任何一個，操作步驟和驗證方式與頁面相同；執行 `personagent up` 即可在不開啟瀏覽器的情況下全部啟動。各平台的設定方式請參閱[使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#接入聊天平台)；從頭接入 QQ 的步驟請參閱[部署教學](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-TW.md)。

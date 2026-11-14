@@ -43,7 +43,7 @@ Windows에서는 소스 ZIP을 내려받아 압축을 풀고 `start.bat`을 더�
    - **스캔하여 연결**: QQ와 개인 WeChat. **QR 코드 받기**를 클릭하고 휴대폰에서 확인하십시오.
      - QQ: 모바일 QQ로 스캔하십시오. QQ가 봇을 만들거나 이미 있는 봇을 고르게 해 주고, personagent가 그 키를 가져옵니다. [QQ 봇 페이지](https://q.qq.com/qqbot/openclaw/login.html)에서 직접 봇을 만들었다면 **직접 입력으로 전환**을 클릭하고 AppID와 AppSecret을 입력하십시오.
      - WeChat: WeChat으로 스캔하십시오. WeChat이 이런 봇에는 그룹 메시지를 넘기지 않기 때문에 봇은 일대일 채팅만 합니다.
-   - **값 한두 개 붙여넣기**: Telegram(@BotFather의 토큰), Discord(봇 토큰, Message Content Intent를 켜 두십시오), KOOK, Feishu, DingTalk, Slack, WeCom AI 봇, Mattermost, Misskey, Matrix, Twitch, IRC, Zulip, VK, Stoat. 플랫폼 콘솔에서 어떤 값을 복사할지는 페이지가 알려 줍니다. 나머지는 기본값을 씁니다. Twitch는 링크를 통해 로그인을 승인하는 절차도 필요합니다.
+   - **값 몇 개 붙여넣기**: Telegram(@BotFather의 토큰), Discord(봇 토큰, Message Content Intent를 켜 두십시오), KOOK, Feishu, DingTalk, Slack, WeCom AI 봇, Mattermost, Misskey, Matrix, Twitch, IRC, Zulip, VK, Stoat. 플랫폼 콘솔에서 어떤 값을 복사할지는 페이지가 알려 줍니다. 나머지는 기본값을 씁니다. Twitch는 링크를 통해 로그인을 승인하는 절차도 필요합니다.
    - **고급**: WeCom 앱, WeChat 공식 계정, QQ 웹훅에는 콜백 포트로 전달하는 공개 주소가 필요합니다. OneBot v11(NapCat)과 Satori에는 이 컴퓨터에서 실행되는 다른 소프트웨어가 필요합니다.
 2. personagent는 QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat에 직접 연결합니다. 다른 플랫폼은 서드파티 브리지인 AstrBot을 거칩니다. 그중 하나를 처음 연결할 때 personagent가 AstrBot과 별도의 Python 3.12 런타임을 내려받으니, 끝날 때까지 페이지를 열어 두십시오. 그 뒤 AstrBot은 백그라운드에서 실행되고, 로그인할 대시보드는 없습니다.
 3. personagent는 저장하기 전에 플랫폼에 자격 증명을 확인합니다. 플랫폼이 거부하면 페이지에 알려 주고 아무것도 저장하지 않습니다.

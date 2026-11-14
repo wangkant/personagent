@@ -16,7 +16,7 @@
 personagent 是一个像人一样的智能体（agent）：它拥有自己的性格与记忆，从与人的交流中学习，并自行判断何时发言。它可在你使用的各处运行：QQ、微信、Telegram、Discord 及另外十八个平台的群聊与私聊，本机的窗口，以及 Claude Code、Codex 等编程助手。角色可选用现成的，也可自行编写；接入任意兼容 OpenAI 接口的模型即可使用。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本地页面中的「连接平台」：可扫码连接或填写一至两项即可连接的平台、已折叠的高级平台，以及可接入的编程助手" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本地页面中的「连接平台」：可扫码连接或填写几项即可连接的平台、已折叠的高级平台，以及可接入的编程助手" width="960">
 </p>
 
 <p align="center"><em>「连接平台」与设置、聊天位于同一个本地页面中。</em></p>
@@ -66,7 +66,7 @@ personagent 是一个像人一样的智能体（agent）：它拥有自己的性
 <tr>
 <td width="220" valign="top"><strong>连接你的所有平台</strong></td>
 <td valign="top">
-二十二个聊天平台均可在同一页面中连接，用手机扫码一次或粘贴一至两项即可；其中多数同时支持群聊与私聊。<br>
+二十二个聊天平台均可在同一页面中连接，用手机扫码一次或填写几项即可；其中多数同时支持群聊与私聊。<br>
 同一个智能体也在本机窗口中与你对话，并可接入 Claude Code、Codex 和 DeepSeek Harness。<br>
 其他平台可通过 AstrBot、Koishi 或 Matrix 桥接接入，也可自行编写连接器。
 </td>
@@ -102,7 +102,7 @@ personagent 本身免费。费用支付给你选择的模型服务，按其价�
 | 页面分组 | 平台 | 需要准备 |
 |---|---|---|
 | 扫码连接 | QQ、个人微信 | 手机。微信机器人仅支持一对一聊天 |
-| 填写一至两项 | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、飞书、钉钉、Slack、企业微信智能机器人、Mattermost、Misskey | 从平台后台复制，页面会说明需要复制哪几项 |
+| 填写几项 | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、飞书、钉钉、Slack、企业微信智能机器人、Mattermost、Misskey | 从平台后台复制，页面会说明需要复制哪几项 |
 | 高级 | 企业微信应用、微信公众号、QQ（Webhook）、OneBot v11（NapCat）、Satori | 公网地址，或本机的其他软件 |
 
 已连接的平台在每次启动 personagent 时都会自动连接。扫码连接的平台，以及 Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 直接连接；其余平台通过 personagent 在后台下载并运行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入。在没有显示器的服务器上，可在终端中运行 `personagent connect <平台>` 连接上述十个平台中的任意一个，操作步骤和核验方式与页面相同；运行 `personagent up` 即可在不打开浏览器的情况下全部启动。各平台的设置方法见[使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#接入聊天平台)；从零开始接入 QQ 请参阅[部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)。
