@@ -207,10 +207,10 @@ The response looks like this:
   other bot logic from answering, even if `replies` is empty, because the
   persona may have chosen to stay quiet. When it is false, the agent took no
   part in the message: the conversation is not on the agent's allowlists,
-  the agent cannot answer at all (no `LLM_API_KEY`, or `AGENT_ENABLED=false`),
-  or the `message_id` has been received before (see "Repeated messages"
-  below). When the agent cannot answer, its log carries one ERROR line
-  naming the cause.
+  or the agent cannot answer at all (no `LLM_API_KEY`, or
+  `AGENT_ENABLED=false`). When the agent cannot answer, its log carries one
+  ERROR line naming the cause. A repeated `message_id` is the agent's own
+  (see "Repeated messages" below).
 - `handled`: true when this request's own turn delivered something, a reply
   or the answer to a memory command. It is meant for logs and statistics.
   Decide on `owned`, and send whatever `replies` holds whatever `handled`
@@ -221,9 +221,9 @@ The combinations a connector meets:
 | Response | When | What the connector does |
 |---|---|---|
 | `handled: true`, `owned: true`, replies present | A normal reply. | Send `replies` and keep other bot logic quiet. |
-| `handled: false`, `owned: true`, `replies: []` | The persona stayed quiet; the event was the bot's own echo; the message was folded into the turn of a later message (see "Messages sent close together"); a memory command whose answer comes later through the outbox; a group event with `proactive`. | Send nothing and keep other bot logic quiet. |
+| `handled: false`, `owned: true`, `replies: []` | The persona stayed quiet; the event was the bot's own echo; the message was folded into the turn of a later message (see "Messages sent close together"); a memory command whose answer comes later through the outbox; a group event with `proactive`; a repeated `message_id` (a redelivery). | Send nothing and keep other bot logic quiet. |
 | `handled: false`, `owned: true`, one reply with `"reason": "excuse"` | The model failed in a DM. | Send it, or handle it as an error. |
-| `handled: false`, `owned: false`, `replies: []` | The conversation is not on the allowlists, the agent cannot answer, or the `message_id` is a repeat. | For a `message_id` you have posted before, do nothing. Otherwise the message is yours to handle. |
+| `handled: false`, `owned: false`, `replies: []` | The conversation is not on the allowlists, or the agent cannot answer. | The message is yours to handle. |
 
 Further rules:
 
@@ -234,10 +234,9 @@ Further rules:
   `message_id`. The list is saved under the home's `runtime/` folder from
   time to time and at shutdown, so it survives a restart. A message posted
   again, such as a platform's redelivery or a retry after a timeout, gets
-  `{"handled": false, "owned": false, "replies": []}` at once, even while
-  the first request is still running, and its replies come only in the first
-  response. Do not answer it: keep a record of the `message_id`s you have
-  posted. A turn goes on when its caller gives up, so after a timeout the
+  `{"handled": false, "owned": true, "replies": []}` at once, even while
+  the first request is still running. Send nothing for it; its replies come
+  only in the first response. A turn goes on when its caller gives up, so after a timeout the
   replies are lost; allow enough time instead of retrying. A message the
   allowlists refused is not remembered and is judged again when posted again.
 - **Messages sent close together.** Messages of one conversation that arrive
@@ -406,7 +405,8 @@ for the scheduler to relay.
 The event needs everything the connector's normal events carry: the signed
 headers, every required field, the same `platform` and raw `sender_id` the
 connector sends for that person, non-empty text, and a new `message_id` each
-time. An event with a repeated `message_id` is dropped silently. The cue
+time. An event with a repeated `message_id` is not run again and gets
+`owned: true` with no replies. The cue
 counts against the same DM cooldown as the agent's own openers
 (`PROACTIVE_DM_COOLDOWN_S`), and it does not count as activity from the
 person.
