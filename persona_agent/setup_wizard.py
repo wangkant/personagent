@@ -346,9 +346,11 @@ _TEXT: dict[str, tuple[str, str]] = {
                         "如需连接，请运行 `{cmd} <平台>`，例如 "
                         "`{cmd} telegram`。如需断开连接，请加上 --remove。"),
     "direct_list_more": ("Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: "
-                         "`{cmd} astrbot`. Coding assistants: `{cmd} claude-code`, "
+                         "`{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` "
+                         "connects one you already run. Coding assistants: `{cmd} claude-code`, "
                          "`codex` or `dsh`.",
-                         "其他平台（如 Slack、KOOK 或飞书）需通过 AstrBot 接入：`{cmd} astrbot`。"
+                         "其他平台（如 Slack、KOOK 或飞书）需通过 AstrBot 接入：`{cmd} astrbot --install` "
+                         "可在此处安装 AstrBot，`{cmd} astrbot DATA_DIR` 可连接已在运行的 AstrBot。"
                          "编程助手：`{cmd} claude-code`、`codex` 或 `dsh`。"),
     "direct_unknown": ("personagent cannot connect \"{name}\". Run `{cmd}` to list the "
                        "platforms it can connect.",
@@ -564,8 +566,14 @@ _TEXT: dict[str, tuple[str, str]] = {
                       "Matrix or IRC. Without a platform name, the command lists them all:",
                       "接入 personagent 可直接连接的聊天平台，例如 Telegram、Discord、Matrix 或 IRC。"
                       "不指定平台名称时，该命令将列出全部平台："),
-    "next_persona": ("Edit {path} to change who {name} is, then restart.",
-                     "修改 {path} 即可调整{name}的人设，修改后请重新启动。"),
+    "next_persona": ("Edit {path} to change who {name} is; a personagent that is already running "
+                     "uses the change once it is restarted.",
+                     "修改 {path} 即可调整{name}的人设；已在运行的 personagent 需重新启动后才会采用修改。"),
+    "next_doctor": ("Check the settings and test the model service with one small request:",
+                    "检查设置，并用一个很小的请求测试模型服务："),
+    "next_up": ("Start personagent with its chat platforms. It needs no display; its logs go to {log}:",
+                "启动 personagent 及其聊天平台。无需显示器；日志写入 {log}："),
+    "untested": ("The key was saved but not tested.", "密钥已保存，但尚未测试。"),
     "next_key": ("Add your API key: run this setup again, or set LLM_API_KEY in {path}.",
                  "请填写 API key：重新运行本设置，或在 {path} 中设置 LLM_API_KEY。"),
     "chat_now": ("Chat with the bot in this terminal now?", "是否立即在终端中与机器人聊天？"),
@@ -1866,6 +1874,15 @@ def finish(launcher: Launcher, home: Path, *, name: str, has_key: bool,
     for line in launcher.shown("connect"):
         _say(f"     {line}")
     n += 1
+    _say(f"{n}. " + t("next_doctor"))
+    for line in launcher.shown("doctor"):
+        _say(f"     {line}")
+    n += 1
+    if not astrbot:
+        _say(f"{n}. " + t("next_up", log=home / "runtime" / "desktop"))
+        for line in launcher.shown("up"):
+            _say(f"     {line}")
+        n += 1
     _say(f"{n}. " + t("next_demo"))
     for line in launcher.shown("demo"):
         _say(f"     {line}")
@@ -2016,6 +2033,8 @@ def setup_without_questions(home: Path, args: argparse.Namespace, launcher: Laun
     name = apply_flags(home, args)
     print(t("saved", path=home))
     env_path = home / ".env"
+    if env_get(env_path, "LLM_API_KEY"):
+        print(t("untested"))
     finish(launcher, home, name=name, has_key=bool(env_get(env_path, "LLM_API_KEY")),
            astrbot=None, offer_chat=False)
     return 0
@@ -2029,7 +2048,8 @@ def init_parser(prog: str) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog=prog,
         description=langs.term("Set up personagent: the AI service, the character, and "
-                    "optionally AstrBot. Asks questions in a terminal."))
+                    "optionally AstrBot. In a terminal it opens the welcome page; --terminal asks "
+                    "the questions here instead, and --no-input uses only the flags below."))
     p.add_argument("--no-input", action="store_true",
                    help=langs.term("ask nothing; use the flags below and keep everything else"))
     p.add_argument("--terminal", action="store_true", help=langs.term("use the terminal setup wizard instead of the welcome page"))
@@ -2063,8 +2083,8 @@ def run(argv: list[str] | None, prog: str) -> int:
             set_lang(args.lang or detect_lang())
             print(t("skipped", why=t("skip_tty"), cmd=again))
             return setup_without_questions(home, args, launcher)
-        # Piped without flags nothing was configured: no "Setup complete", and a script must be able to tell.
-        apply_flags(home, args)
+        # Piped without flags: nothing is written, no "Setup complete", and a script must be able to tell.
+        set_lang(langs.terminal_lang())
         print(t("skipped", why=t("skip_tty"), cmd=again))
         return 2
     run_wizard(home, launcher, flags=args)
@@ -2367,7 +2387,9 @@ def connect_parser(prog: str) -> argparse.ArgumentParser:
     for kind in KINDS:
         spec = connections.platform(kind)
         for item in spec.fields:
-            label = f"{connections.say(spec.name, shown)}: {connections.say(item.label, shown)}"
+            # The command each value belongs to, so --appid (connect qq) is not taken for --app-id.
+            label = (f"{connections.say(spec.name, shown)} (connect {DIRECT_WORDS.get(kind, kind)}): "
+                     f"{connections.say(item.label, shown)}")
             values.add_argument(_flag(item.key), dest=f"field_{item.key}", metavar="VALUE",
                                 help=label.replace("%", "%%"))
     own = [react, p.add_argument("data_dir", nargs="?", metavar="DATA_DIR",
@@ -2387,8 +2409,10 @@ def connect_parser(prog: str) -> argparse.ArgumentParser:
                               help=langs.term("also switch on this adapter in AstrBot's own config")))
     own.append(p.add_argument("--token", default="", help=langs.term("the adapter's bot token")))
     own.append(p.add_argument("--app-token", default="", help=langs.term("Slack's app-level token")))
-    own.append(p.add_argument("--app-id", default="", help=langs.term("Lark / Feishu app id")))
-    own.append(p.add_argument("--app-secret", default="", help=langs.term("Lark / Feishu app secret")))
+    own.append(p.add_argument("--app-id", default="", help=langs.term(
+        "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)")))
+    own.append(p.add_argument("--app-secret", default="", help=langs.term(
+        "with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)")))
     own.append(p.add_argument("--url", default="",
                               help=langs.term("the address the plugin posts to, such as an https:// one "
                                    "(default http://127.0.0.1:<SERVER_PORT>)")))

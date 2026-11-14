@@ -132,6 +132,13 @@ def _judge_model() -> str:
             or os.getenv("LLM_FALLBACK_MODEL", "").strip() or _main_model())
 
 
+def _judge_setting() -> str:
+    """The setting `_judge_model` took its model from."""
+    if os.getenv("LLM_JUDGE_MODEL", "").strip():
+        return "LLM_JUDGE_MODEL"
+    return "LLM_FALLBACK_MODEL" if os.getenv("LLM_FALLBACK_MODEL", "").strip() else "LLM_MODEL"
+
+
 def _say_ok(model: str) -> tuple:
     """A few-token answer from `model` where the agent sends it."""
     base, key = _llm_endpoint(model)
@@ -168,7 +175,8 @@ def check_search_decision():
     thinking_off(payload, url, known_to_take_thinking(url, model))
     r = _post_json(url, payload, {"Authorization": f"Bearer {key}"})
     if not (r["choices"][0]["message"] or {}).get("tool_calls"):
-        return False, f"{model} did not call the search tool, so web search will not run"
+        return False, (f"{model} ({_judge_setting()}) did not call the search tool, so the character "
+                       "never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.")
     return True, f"{model} function-calling available"
 
 
@@ -430,6 +438,13 @@ def check_ledger_sizes():
     return healthy, "; ".join(parts) or "no ledgers yet"
 
 
+#: A stable key per row for scripts; the name is display text.
+IDS = {"Ledger sizes": "ledger", "DM chat": "llm.dm", "Group replies": "llm.group",
+       "Web search decision": "llm.search_decision", "Reaction judge": "llm.reaction_judge",
+       "Learning decisions": "llm.learning_decisions", "Reviewing its own replies": "llm.evolve",
+       "Vision": "vision", "Eval": "llm.eval", "Embeddings": "embeddings",
+       "Web search (Tavily)": "tavily", "OneBot bridge": "onebot"}
+
 # (name, probe, is_critical)
 CHECKS = [
     ("Ledger sizes",            check_ledger_sizes,     False),
@@ -453,7 +468,7 @@ def run_checks() -> list:
     def _one(item):
         name, fn, critical = item
         if fn is check_onebot and not os.getenv("QQ_BOT_ID", "").strip():
-            return {"name": name, "ok": None, "critical": False,
+            return {"id": IDS.get(name, name), "name": name, "ok": None, "critical": False,
                     "detail": "not required (QQ_BOT_ID is unset)", "ms": 0}
         if fn is check_onebot and (
                 os.getenv("CONNECTOR_QQ_PLATFORMS", "").strip()
@@ -468,7 +483,7 @@ def run_checks() -> list:
         except Exception as e:
             ok, detail = False, f"{type(e).__name__}: {str(e)[:90]}"
             advice = failure_sentence(e)
-        row = {"name": name, "ok": ok, "critical": critical,
+        row = {"id": IDS.get(name, name), "name": name, "ok": ok, "critical": critical,
                "detail": detail, "ms": round((time.time() - t0) * 1000)}
         if advice:
             row["advice"] = advice
@@ -482,8 +497,12 @@ def run_checks() -> list:
             first = by_name.get(r["detail"].row) or {}
             # Answered as that row was: it is the same model on the same address.
             r["ok"] = first.get("ok")
+            r["same_as"] = r["detail"].row
             r["detail"] = (f"{str(r['detail'])}: the same model as the row "
-                           f"{r['detail'].row}, so it is not asked again")
+                           f"{r['detail'].row}, so it is not asked again"
+                           if first.get("ok") is not False else
+                           f"{str(r['detail'])}: not asked, because it is the same model as "
+                           f"the row {r['detail'].row}, which failed")
     return results
 
 

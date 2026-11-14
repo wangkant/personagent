@@ -663,9 +663,10 @@ async def test_forgetting_a_chat_asks_the_service_once_then_starts_a_new_one(tmp
         done = await workspace.forget_chat()
     finally:
         workspace.close()
-    # Only this chat is forgotten; what other chats remember is kept.
+    # The page's chats are forgotten, earlier ones included; chats on the platforms are kept.
     assert done == {"ok": True, "forgotten": 3}
-    assert calls == [("POST", "/api/dashboard/memory/forget_chat", {"conv": chat})]
+    assert calls == [("POST", "/api/dashboard/memory/forget_chat",
+                      {"conv": chat, "earlier_page": True})]
     assert workspace._conversation != before and workspace._history == []
 
 

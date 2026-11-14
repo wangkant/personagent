@@ -104,7 +104,9 @@ def ledger_files(tmp_path, monkeypatch) -> dict:
 def test_learned_alone_lists(ledger_files, monkeypatch, capsys) -> None:
     monkeypatch.setenv("AGENT_LANG", "en")
     check("exit 0", ledger_admin.main([], prog="personagent learned") == 0)
-    check("listed", "No candidates are in the state proposed." in capsys.readouterr().out)
+    out = capsys.readouterr().out
+    check("listed", "Nothing is being observed right now." in out, out)
+    check("says practice does not count", "practice in `personagent chat`" in out, out)
 
 
 def test_learned_speaks_the_install_language_without_plural_marks(ledger_files, monkeypatch, capsys) -> None:
@@ -180,7 +182,7 @@ def test_memory_help_lists_its_four_commands(home, capsys) -> None:
     for name in ("list", "removed", "forget", "restore"):
         check(f"lists {name}", f"    {name} " in out, out)
     check("the top-level list names it", "memory" in cli._usage()
-          and "look at what it remembers" in cli._usage())
+          and "Look at what it remembers" in cli._usage())
 
 
 # ---- T9: the demo's ledger line
@@ -252,6 +254,7 @@ def test_piped_init_does_not_say_setup_is_complete(home, capsys) -> None:
     out = capsys.readouterr().out
     check("skipped, not complete", "skipped" in out and "Setup complete" not in out, out)
     check("names the command with the home", f"--home {home} init --terminal" in out, out)
+    check("and writes nothing", not (home / ".env").exists() and not (home / "persona.txt").exists())
 
 
 # ---- T16, T17: AstrBot from the menu; the language the menu is in
@@ -329,3 +332,25 @@ def test_a_running_direct_process_is_recognised_from_the_app_records(home, monke
     check("running", doctor._direct_running(home.resolve()))
     monkeypatch.setattr(services, "_command_line", lambda pid: "")
     check("gone", not doctor._direct_running(home.resolve()))
+
+
+def test_no_input_names_doctor_and_up_and_says_the_key_is_untested(home, monkeypatch, capsys) -> None:
+    monkeypatch.setenv("SIM_KEY", "sk-test")
+    check("exit 0", sw.main(["--no-input", "--provider", "openrouter", "--key-env", "SIM_KEY"]) == 0)
+    out = capsys.readouterr().out
+    check("untested", "The key was saved but not tested." in out, out)
+    check("doctor and up are next steps", " doctor" in out and out.rstrip().count(" up") >= 1, out)
+    check("no bare restart", "then restart." not in out, out)
+
+
+@pytest.mark.parametrize("command", ["memory", "learned", "doctor"])
+def test_a_missing_home_is_named_and_left_uncreated(tmp_path, monkeypatch, capsys, command) -> None:
+    from persona_agent import cli
+
+    missing = tmp_path / "nope"
+    monkeypatch.setenv("AGENT_HOME", str(tmp_path))  # restored after cli.main replaces it
+    monkeypatch.setenv("AGENT_LANG", "en")
+    check("refused", cli.main(["--home", str(missing), command]) == 2)
+    err = capsys.readouterr().err
+    check("names the folder and init", f"no personagent home at {missing}" in err and " init`" in err, err)
+    check("creates nothing", not missing.exists())

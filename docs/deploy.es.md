@@ -227,9 +227,9 @@ Los errores de `/v1/events` se enumeran a continuación. El complemento de AstrB
 |---|---|---|---|
 | 403 | `unauthenticated` | authentication required | no hay `CONNECTOR_TOKEN` y el llamante no está en este equipo |
 | 403 | `non_local_request` | no credential is configured; only local requests accepted | no hay `CONNECTOR_TOKEN` y la solicitud llegó a través de un navegador, un proxy u otro nombre de host |
-| 403 | `invalid_envelope` | invalid, stale, or replayed request envelope | token, cabeceras o firma ausentes o incorrectos, relojes con una diferencia de más de 5 min, un nonce reutilizado o un mecanismo antirrepetición lleno (`connector replay guard full` en el registro del agente) |
+| 403 | `invalid_envelope` | invalid request envelope: … | token, cabeceras o firma ausentes o incorrectos, relojes con una diferencia de más de 5 min, un nonce reutilizado o un mecanismo antirrepetición lleno (`connector replay guard full` en el registro del agente) |
 | 403 | `stale_event` | stale or invalid sent_at | `sent_at` difiere de la hora actual en más de `CONNECTOR_MAX_EVENT_AGE_S` (24 h), incluidas las marcas de tiempo futuras o en milisegundos |
-| 400 | `invalid_schema` | invalid event schema | falta un campo obligatorio: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at` y `conversation_id` para los grupos |
+| 400 | `invalid_schema` | invalid event schema: … | falta un campo obligatorio: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at` y `conversation_id` para los grupos |
 | 400 | `client_disconnected` | client disconnected | el llamante cerró la conexión durante el envío |
 | 408 | `body_timeout` | request body not received in time | el cuerpo tardó más de 30 s en llegar |
 | 413 | `body_too_large` | request body too large | supera `SERVER_MAX_BODY_BYTES` (8 MB), normalmente por una imagen incrustada |

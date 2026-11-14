@@ -1,7 +1,8 @@
 """`personagent doctor`: check the setup, then probe every external service.
 
-The probes are shared with /health/details (health.py); the flags are in USAGE.
+The probes are shared with /health/details (health.py).
 """
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -16,20 +17,23 @@ from persona_agent.health import run_checks, all_critical_ok
 from persona_agent.paths import ROOT
 from persona_agent.preflight import check_config
 
-USAGE = """\
-usage: {prog} [--json | --fix]
-
-Checks the configuration and ledgers (free, local), then probes every external
-service the agent depends on and prints an OK/FAIL table. Exits non-zero if a
-service marked critical is down. Each service probe sends one tiny request
-with your credentials and spends a small amount of credit.
-
-When the last answer is a day old, it also asks pypi.org whether a newer
-personagent is out (UPDATE_CHECK_ENABLED=false skips that).
-
-  --json    same checks, one JSON object on stdout instead of the table
-  --fix     rename retired settings in .env to their new names (saves .env.bak)
-"""
+def _parser(prog: str) -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog=prog,
+        description=langs.term(
+            "Checks the configuration and ledgers (free, local), then probes every external service "
+            "the agent depends on and prints an OK/FAIL table. Exits non-zero if a service marked "
+            "critical is down. Each service probe sends one tiny request with your credentials and "
+            "spends a small amount of credit."),
+        epilog=langs.term(
+            "When the last answer is a day old, it also asks pypi.org whether a newer personagent "
+            "is out (UPDATE_CHECK_ENABLED=false skips that)."))
+    way = p.add_mutually_exclusive_group()
+    way.add_argument("--json", action="store_true",
+                     help=langs.term("same checks, one JSON object on stdout instead of the table"))
+    way.add_argument("--fix", action="store_true",
+                     help=langs.term("rename retired settings in .env to their new names (saves .env.bak)"))
+    return p
 
 
 def fix_command() -> str:
@@ -63,15 +67,11 @@ def _pad(text: str, width: int) -> str:
 
 
 def main(argv: list[str] | None = None, prog: str | None = None) -> int:
-    prog = prog or "personagent doctor"
-    argv = sys.argv[1:] if argv is None else list(argv)
-    if argv == ["--fix"]:
+    args = _parser(prog or "personagent doctor").parse_args(sys.argv[1:] if argv is None else argv)
+    if args.fix:
         return _fix()
-    if argv and argv != ["--json"]:
-        print(langs.term(USAGE).format(prog=prog))
-        return 0 if {"-h", "--help"} & set(argv) else 2
     retired = preflight.retired_settings()
-    if argv == ["--json"]:
+    if args.json:
         findings = check_config()
         results = run_checks()
         ok = all_critical_ok(results) and not retired
@@ -111,12 +111,20 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
               f"run `{fix_command()}` to rename them."))
         print("-" * 64)
     results = run_checks()
+    first_with: dict[str, str] = {}
     for r in results:
-        mark = "  -  " if r["ok"] is None else ("  OK " if r["ok"] else " FAIL")
+        # A row not asked because its model already failed above is not a failure of its own.
+        mark = ("  -  " if r["ok"] is None or (r.get("same_as") and r["ok"] is False)
+                else "  OK " if r["ok"] else " FAIL")
         tag = langs.term(" [critical]") if r["critical"] else ""
-        print(f"[{mark}] {_pad(langs.term(r['name']), 34)}{_pad(tag, 11)} {r['ms']:5.0f}ms  {langs.term(r.get('advice') or r['detail'])}")
+        advice = r.get("advice") or ""
+        text = (langs.term(f"The same problem as the row {first_with[advice]}.")
+                if advice in first_with else langs.term(advice or r["detail"]))
+        if advice:
+            first_with.setdefault(advice, r["name"])
+        print(f"[{mark}] {_pad(langs.term(r['name']), 34)}{_pad(tag, 11)} {r['ms']:5.0f}ms  {text}")
     mark, detail = direct_row(direct_platforms(home.find_home()))
-    print(f"[{mark}] {_pad(langs.term('directly connected platforms'), 34)}{_pad('', 11)} {'':7}  {detail}")
+    print(f"[{mark}] {_pad(langs.term('Directly connected platforms'), 34)}{_pad('', 11)} {'':7}  {detail}")
     print("-" * 64)
     print("  " + langs.term(model_use_line(model_use())))
     print("=" * 64)
@@ -127,6 +135,10 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
         print(langs.term("RESULT: services OK, but retired settings must be renamed."))
     else:
         print(langs.term("RESULT: all critical services OK."))
+    urgent, first = first_fix(findings, results)
+    if first:
+        print(langs.term(f"Fix first: {first}" if urgent else f"Not critical, but failing: {first}",
+                         keep=(first,)))
     off = activity_off()
     if off:
         print(langs.term(off))
@@ -135,6 +147,23 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     if notice:
         print(langs.term(notice))
     return 0 if services_ok and not retired else 1
+
+
+def first_fix(findings, results) -> tuple[bool, str]:
+    """(urgent, the first thing to fix) in the terminal's language: a configuration
+    error or a critical row that did not pass is urgent; else a row that failed."""
+    def said(r) -> str:
+        return f"{langs.term(r['name'])}: {langs.term(r.get('advice') or r['detail'])}"
+    for finding in findings:
+        if finding.level == "ERROR":
+            return True, f"{finding.key}: {langs.term(finding.detail)}"
+    for r in results:
+        if r["critical"] and r["ok"] is not True and not r.get("same_as"):
+            return True, said(r)
+    for r in results:
+        if r["ok"] is False and not r.get("same_as"):
+            return False, said(r)
+    return False, ""
 
 
 def model_use() -> dict:

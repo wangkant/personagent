@@ -227,9 +227,9 @@ Fehler von `/v1/events` stehen unten. Das AstrBot-Plugin protokolliert die Meldu
 |---|---|---|---|
 | 403 | `unauthenticated` | authentication required | kein `CONNECTOR_TOKEN`, und der Aufrufer ist nicht auf diesem Rechner |
 | 403 | `non_local_request` | no credential is configured; only local requests accepted | kein `CONNECTOR_TOKEN`, und die Anfrage kam über einen Browser, einen Proxy oder einen anderen Hostnamen |
-| 403 | `invalid_envelope` | invalid, stale, or replayed request envelope | fehlendes oder falsches Token, Header oder Signatur, Uhren über 5 Min. auseinander, eine wiederverwendete Nonce oder ein voller Replay-Schutz (`connector replay guard full` im Log des Agenten) |
+| 403 | `invalid_envelope` | invalid request envelope: … | fehlendes oder falsches Token, Header oder Signatur, Uhren über 5 Min. auseinander, eine wiederverwendete Nonce oder ein voller Replay-Schutz (`connector replay guard full` im Log des Agenten) |
 | 403 | `stale_event` | stale or invalid sent_at | `sent_at` weicht um mehr als `CONNECTOR_MAX_EVENT_AGE_S` (24 h) von jetzt ab, einschließlich zukünftiger oder Millisekunden-Zeitstempel |
-| 400 | `invalid_schema` | invalid event schema | ein Pflichtfeld fehlt: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at`, und `conversation_id` für Gruppen |
+| 400 | `invalid_schema` | invalid event schema: … | ein Pflichtfeld fehlt: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at`, und `conversation_id` für Gruppen |
 | 400 | `client_disconnected` | client disconnected | der Aufrufer hat die Verbindung während des Sendens getrennt |
 | 408 | `body_timeout` | request body not received in time | die Übertragung des Body dauerte länger als 30 s |
 | 413 | `body_too_large` | request body too large | über `SERVER_MAX_BODY_BYTES` (8 MB), meist ein eingebettetes Bild |

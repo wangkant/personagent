@@ -227,9 +227,9 @@ direct プロセスとここにある 3 つのコネクターは、ボットが�
 |---|---|---|---|
 | 403 | `unauthenticated` | authentication required | `CONNECTOR_TOKEN` がなく、呼び出し元がこのマシン上にありません |
 | 403 | `non_local_request` | no credential is configured; only local requests accepted | `CONNECTOR_TOKEN` がなく、リクエストがブラウザー、プロキシ、または別のホスト名を経由しています |
-| 403 | `invalid_envelope` | invalid, stale, or replayed request envelope | トークン、ヘッダー、署名の欠落や誤り、5 分を超える時計のずれ、再利用された nonce、またはリプレイ防止の満杯（エージェントのログに `connector replay guard full`） |
+| 403 | `invalid_envelope` | invalid request envelope: … | トークン、ヘッダー、署名の欠落や誤り、5 分を超える時計のずれ、再利用された nonce、またはリプレイ防止の満杯（エージェントのログに `connector replay guard full`） |
 | 403 | `stale_event` | stale or invalid sent_at | `sent_at` が現在と `CONNECTOR_MAX_EVENT_AGE_S`（24 時間）を超えて異なります。未来の時刻やミリ秒単位のタイムスタンプも該当します |
-| 400 | `invalid_schema` | invalid event schema | 必須フィールドの欠落：`platform`、`conversation_type`、`sender_id`、`message_id`、`sent_at`、グループでは `conversation_id` |
+| 400 | `invalid_schema` | invalid event schema: … | 必須フィールドの欠落：`platform`、`conversation_type`、`sender_id`、`message_id`、`sent_at`、グループでは `conversation_id` |
 | 400 | `client_disconnected` | client disconnected | 呼び出し元が送信中に切断しました |
 | 408 | `body_timeout` | request body not received in time | 本文の到着に 30 秒を超えました |
 | 413 | `body_too_large` | request body too large | `SERVER_MAX_BODY_BYTES`（8 MB）を超えています。多くの場合はインライン画像が原因です |

@@ -641,7 +641,9 @@ def test_recall_lists_the_callers_events_as_dated_lines(tmp: Path) -> None:
     a = make_agent(tmp)
     g = "g-events"
     a.memories[g] = [{"text": "the room likes jazz", "time": 1.0}]
-    base = time.time() - 5 * 86400
+    # Noon, so five hourly events stay on one date at any time of day.
+    then = datetime.fromtimestamp(time.time() - 5 * 86400, a._prompt_tz())
+    base = then.replace(hour=12, minute=0, second=0, microsecond=0).timestamp()
     store = a.episode_store
     for i, (text, who) in enumerate((("Sam and Kim planned a picnic", ["7", "9"]),
                                      ("Kim fixed the bike", ["9"]),
@@ -689,3 +691,14 @@ def test_forget_deletes_an_event_only_its_sole_participant_owns(tmp: Path) -> No
           == ["Sam and Kim shared the cake"])
     check("and the file agrees", "alone" not in a.episode_store.path.read_text(
         encoding="utf-8"))
+
+
+def test_the_same_note_twice_is_kept_once(tmp: Path) -> None:
+    a = make_agent(tmp)
+    g = "g-twice"
+    first = a._handle_memory_command(g, "Luna, remember my server is called atlas", "7", "Sam")
+    again = a._handle_memory_command(g, "Luna remember  my server is called Atlas", "7", "Sam")
+    check("both acknowledged", first in _COMMAND_REPLIES["en"]["noted"]
+          and again in _COMMAND_REPLIES["en"]["noted"], f"{first!r} {again!r}")
+    check("one note kept", [it["text"] for it in a.memories.get(g, [])]
+          == ["my server is called atlas"], repr(a.memories.get(g)))

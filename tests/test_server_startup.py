@@ -87,6 +87,11 @@ def test_the_banner_names_version_address_home_and_agent_state(monkeypatch) -> N
     assert f"home:       {server.ROOT}" in banner
     assert "on (model m-1, lang zh)" in banner
     assert "dashboard" not in banner and TOKEN not in banner, banner
+    monkeypatch.setattr(server, "CONNECTOR_TOKEN", "")
+    assert "callers:    accepted from this computer only" in server._banner("127.0.0.1", 8080)
+    monkeypatch.setattr(server, "CONNECTOR_TOKEN", "secret-token")
+    banner = server._banner("0.0.0.0", 8080)
+    assert "callers:    checked by CONNECTOR_TOKEN" in banner and "secret-token" not in banner
 
     monkeypatch.setattr(server, "agent", SimpleNamespace(enabled=False))
     banner = server._banner("::1", 9000)
@@ -213,6 +218,18 @@ async def test_proxy_markers_beyond_x_forwarded_for_are_not_local(monkeypatch) -
                        "x-original-forwarded-for"):
             r = await client.get("/health/details", headers={header: "x"})
             assert r.status_code == 403 and r.json()["code"] == "non_local_request", header
+
+
+async def test_a_refused_health_details_says_what_is_missing(monkeypatch) -> None:
+    monkeypatch.setattr(server, "agent", None)
+    monkeypatch.setattr(server, "CONNECTOR_TOKEN", "secret-token")
+    transport = httpx.ASGITransport(app=server.app, client=("127.0.0.1", 1234))
+    async with httpx.AsyncClient(transport=transport,
+                                 base_url="http://127.0.0.1:8080") as client:
+        r = await client.get("/health/details")
+    body = r.json()
+    assert r.status_code == 403 and body["code"] == "forbidden", r.text
+    assert "X-Personagent-Token" in body["error"] and "secret-token" not in r.text, r.text
 
 
 # --- the replay log ----------------------------------------------------------

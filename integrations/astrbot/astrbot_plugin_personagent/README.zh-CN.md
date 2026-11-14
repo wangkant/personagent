@@ -214,7 +214,7 @@ personagent 为每个转发的 id 加上平台前缀，写作 `<platform>:<raw i
 | 日志 | 处理方法 |
 | --- | --- |
 | `refusing unsafe personagent_url` | `personagent_url` 是发往其他主机的明文 HTTP，或没有 `connector_token` 的 HTTPS。见[personagent 可以运行在哪里](#personagent-可以运行在哪里)。 |
-| `agent refused the request (403): invalid, stale, or replayed request envelope` | `connector_token` 为空或与 personagent 的 `CONNECTOR_TOKEN` 不一致，两边时钟相差超过五分钟，或代理改动了请求体。如果 personagent 的日志显示 `connector replay guard full`，请等待其清空。 |
+| `agent refused the request (403): invalid request envelope: …` | `connector_token` 为空或与 personagent 的 `CONNECTOR_TOKEN` 不一致，两边时钟相差超过五分钟，或代理改动了请求体。如果 personagent 的日志显示 `connector replay guard full`，请等待其清空。 |
 | `agent refused the request (403): stale or invalid sent_at` | 消息比 personagent 的 `CONNECTOR_MAX_EVENT_AGE_S` 更旧。通常发生在 AstrBot 一次性投递积压消息之后。 |
 | `agent refused the request (403): authentication required` 或 `... only local requests accepted` | personagent 没有 `CONNECTOR_TOKEN`，而请求并非来自本机。在两边设置相同的 token。 |
 | `agent at capacity (429)` | personagent 已在运行 `CONNECTOR_MAX_INFLIGHT` 个回合，重试后仍拒绝该消息，因此由 AstrBot 自带的模型回答。如果经常发生，请调大 `CONNECTOR_MAX_INFLIGHT`。 |

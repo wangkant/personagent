@@ -200,12 +200,12 @@ SCRIPTS: dict[str, dict[str, list[Beat]]] = {
 
 _TEXT = {
     "en": {
-        "banner_offline": "personagent demo: scripted model, real ledger and promotion code",
+        "banner_offline": "personagent demo: short scenes played with scripted answers",
         "sub_offline": ("No API key needed, and nothing is sent anywhere. The model's answers\n"
                         "are fixed; what is done with them is decided by the real code.\n"
                         "The ledger is the record of how people reacted to its replies.\n"
                         "To use your own model instead (it costs tokens): {online}"),
-        "banner_online": "personagent demo: your model ({model}), real ledger and promotion code",
+        "banner_online": "personagent demo: the same scenes, played by your model ({model})",
         "sub_online": ("This asks your model for every reply and every judgement, so it costs\n"
                        "tokens, and the answers differ from run to run: the scenes below may\n"
                        "not play out as described. The scripted version: {offline}"),
@@ -283,11 +283,11 @@ _TEXT = {
                   "(run {init} first if there is no key yet)."),
     },
     "zh": {
-        "banner_offline": "personagent 演示：模型回答为预设脚本，学习记录与生效判定均由真实代码执行",
+        "banner_offline": "personagent 演示：以预设的回答演示几个简短场景",
         "sub_offline": ("无需 API Key，也不会向任何地址发送数据。模型的回答已预先写定，对这些回答的处理由真实代码决定。\n"
                         "学习记录用于保存成员对角色回复的反应。\n"
                         "如需改用你自己的模型（将消耗 token）：{online}"),
-        "banner_online": "personagent 演示：使用你的模型（{model}），学习记录与生效判定均由真实代码执行",
+        "banner_online": "personagent 演示：由你的模型（{model}）演示同样的场景",
         "sub_online": ("每条回复和每次判定都将请求你的模型，因此会消耗 token，\n"
                        "且每次运行的结果均不相同，以下场景未必按描述进行。\n"
                        "脚本版本：{offline}"),
@@ -807,7 +807,7 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     from persona_agent.setup_wizard import lang_option
 
     p.add_argument("--lang", type=lang_option, default=None,
-                   help=langs.term("language code: " + ", ".join(langs.CODES) + " (default: en)"))
+                   help=langs.term("language code: " + ", ".join(langs.CODES) + " (default: AGENT_LANG, else en)"))
     args = p.parse_args(argv)
     lang = args.lang or normalize_lang(os.getenv("AGENT_LANG", "en"))
     if args.online and not os.getenv("LLM_API_KEY", "").strip():

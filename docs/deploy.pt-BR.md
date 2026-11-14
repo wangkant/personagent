@@ -227,9 +227,9 @@ Os erros de `/v1/events` estão listados abaixo. O plugin do AstrBot registra a 
 |---|---|---|---|
 | 403 | `unauthenticated` | authentication required | sem `CONNECTOR_TOKEN`, e quem chama não está nesta máquina |
 | 403 | `non_local_request` | no credential is configured; only local requests accepted | sem `CONNECTOR_TOKEN`, e a requisição veio por um navegador, um proxy ou outro nome de host |
-| 403 | `invalid_envelope` | invalid, stale, or replayed request envelope | token, cabeçalhos ou assinatura ausentes ou errados, relógios com mais de 5 min de diferença, nonce reutilizado ou proteção contra repetição cheia (`connector replay guard full` no log do agente) |
+| 403 | `invalid_envelope` | invalid request envelope: … | token, cabeçalhos ou assinatura ausentes ou errados, relógios com mais de 5 min de diferença, nonce reutilizado ou proteção contra repetição cheia (`connector replay guard full` no log do agente) |
 | 403 | `stale_event` | stale or invalid sent_at | `sent_at` difere de agora em mais de `CONNECTOR_MAX_EVENT_AGE_S` (24 h), incluindo carimbos de tempo futuros ou em milissegundos |
-| 400 | `invalid_schema` | invalid event schema | falta um campo obrigatório: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at`, e `conversation_id` para grupos |
+| 400 | `invalid_schema` | invalid event schema: … | falta um campo obrigatório: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at`, e `conversation_id` para grupos |
 | 400 | `client_disconnected` | client disconnected | quem chama encerrou a conexão durante o envio |
 | 408 | `body_timeout` | request body not received in time | o corpo levou mais de 30 s para chegar |
 | 413 | `body_too_large` | request body too large | acima de `SERVER_MAX_BODY_BYTES` (8 MB), em geral uma imagem embutida |

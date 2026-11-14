@@ -64,14 +64,16 @@ def test_the_terminal_language_follows_the_env_file(tmp_path, monkeypatch) -> No
 
 #: What `personagent memory` prints and the start-up refusal for a damaged memory file.
 MEMORY_SENTENCES = (
-    "look at what it remembers, forget an item or bring one back",
+    "Look at what it remembers, forget an item or bring one back",
     "Look at what the character remembers, forget an item, or bring one back.",
     "list what the character remembers (the default)",
     "list what was removed and can still be brought back",
     "only this chat, by its key as the list shows it", "print JSON instead of a table",
     "forget one item by its id", "the item's id, or the start of it",
     "bring back a removed item by its id", "the removed item's id, or the start of it",
-    "Chat: {0}", "Id", "Kind", "About", "First noted", "Last used", "Text", "Reason", "Removed",
+    "Chat: {0}", "Chat: This page (key {0})",
+    "What is said in `personagent chat` is practice, kept apart, and does not show here.",
+    "Id", "Kind", "About", "First noted", "Last used", "Text", "Reason", "Removed",
     "Restorable until", "Always in mind", "Earlier in this chat", "Fact", "Event",
     "Replaced by a newer fact", "Merged with another fact", "No longer current",
     "Removed to make room", "Earlier version", "Could not be read", "Forgotten on the page",

@@ -214,7 +214,7 @@ personagent connect astrbot <AstrBot data dir>        # add --qq to route QQ (Na
 | Сообщение журнала | Что делать |
 | --- | --- |
 | `refusing unsafe personagent_url` | `personagent_url` — это открытый HTTP к другому хосту или HTTPS без `connector_token`. См. [Где может работать агент](#где-может-работать-агент). |
-| `agent refused the request (403): invalid, stale, or replayed request envelope` | `connector_token` пуст или не совпадает с `CONNECTOR_TOKEN` агента, часы двух сторон расходятся больше чем на пять минут, или прокси изменил тело. Если журнал агента сообщает `connector replay guard full`, подождите, пока он освободится. |
+| `agent refused the request (403): invalid request envelope: …` | `connector_token` пуст или не совпадает с `CONNECTOR_TOKEN` агента, часы двух сторон расходятся больше чем на пять минут, или прокси изменил тело. Если журнал агента сообщает `connector replay guard full`, подождите, пока он освободится. |
 | `agent refused the request (403): stale or invalid sent_at` | Сообщение старше `CONNECTOR_MAX_EVENT_AGE_S` агента. Обычно это бывает после того, как AstrBot доставит накопившееся. |
 | `agent refused the request (403): authentication required` или `... only local requests accepted` | У агента нет `CONNECTOR_TOKEN`, и запрос не локальный. Задайте одинаковый токен с обеих сторон. |
 | `agent at capacity (429)` | Агент уже выполнял `CONNECTOR_MAX_INFLIGHT` ходов и всё ещё отклонял сообщение после повторов, поэтому ответила собственная модель AstrBot. Повысьте `CONNECTOR_MAX_INFLIGHT`, если это случается часто. |

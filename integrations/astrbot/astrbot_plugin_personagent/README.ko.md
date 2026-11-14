@@ -214,7 +214,7 @@ AstrBot 로그에서 플러그인의 줄은 `personagent:`로 시작합니다.
 | 로그 메시지 | 할 일 |
 | --- | --- |
 | `refusing unsafe personagent_url` | `personagent_url`이 다른 호스트로 가는 평문 HTTP이거나 `connector_token` 없는 HTTPS입니다. [에이전트를 실행할 수 있는 곳](#에이전트를-실행할-수-있는-곳)을 참고하십시오. |
-| `agent refused the request (403): invalid, stale, or replayed request envelope` | `connector_token`이 비어 있거나 에이전트의 `CONNECTOR_TOKEN`과 다르거나, 두 시계가 5분 넘게 차이 나거나, 프록시가 본문을 바꿨습니다. 에이전트 로그에 `connector replay guard full`이 있으면 비워질 때까지 기다리십시오. |
+| `agent refused the request (403): invalid request envelope: …` | `connector_token`이 비어 있거나 에이전트의 `CONNECTOR_TOKEN`과 다르거나, 두 시계가 5분 넘게 차이 나거나, 프록시가 본문을 바꿨습니다. 에이전트 로그에 `connector replay guard full`이 있으면 비워질 때까지 기다리십시오. |
 | `agent refused the request (403): stale or invalid sent_at` | 메시지가 에이전트의 `CONNECTOR_MAX_EVENT_AGE_S`보다 오래되었습니다. 보통 AstrBot이 밀린 메시지를 전달한 뒤에 일어납니다. |
 | `agent refused the request (403): authentication required` 또는 `... only local requests accepted` | 에이전트에 `CONNECTOR_TOKEN`이 없고 요청이 로컬이 아닙니다. 양쪽에 같은 토큰을 설정하십시오. |
 | `agent at capacity (429)` | 에이전트가 이미 `CONNECTOR_MAX_INFLIGHT`개의 턴을 실행 중이고 재시도 뒤에도 메시지를 거절해 AstrBot 자체 모델이 답했습니다. 자주 일어나면 `CONNECTOR_MAX_INFLIGHT`를 올리십시오. |

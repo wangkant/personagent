@@ -283,7 +283,7 @@ class DirectMessages:
             logger.warning("[Agent] memory command delivery failed (user=%s)",
                            user_id)
             return send_result.partial
-        logger.info("[Agent] memory command (user=%s): %s", user_id, answer[:60])
+        logger.info("[Agent] memory command answered (user=%s, %d chars)", user_id, len(answer))
         return True
 
     async def _dm_turn(self, user_id: str, pkey: str, text: str,

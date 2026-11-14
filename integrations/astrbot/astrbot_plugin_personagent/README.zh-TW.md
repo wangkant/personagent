@@ -214,7 +214,7 @@ personagent 會為每個轉送的 id 加上平台前綴，寫作 `<platform>:<ra
 | 記錄 | 處理方式 |
 | --- | --- |
 | `refusing unsafe personagent_url` | `personagent_url` 是傳送至其他主機的明文 HTTP，或未設定 `connector_token` 的 HTTPS。請參閱[personagent 的執行位置](#personagent-的執行位置)。 |
-| `agent refused the request (403): invalid, stale, or replayed request envelope` | `connector_token` 為空或與 personagent 的 `CONNECTOR_TOKEN` 不一致、兩端時鐘相差超過五分鐘，或代理伺服器改動了請求本文。如果 personagent 的記錄檔顯示 `connector replay guard full`，請等待其清空。 |
+| `agent refused the request (403): invalid request envelope: …` | `connector_token` 為空或與 personagent 的 `CONNECTOR_TOKEN` 不一致、兩端時鐘相差超過五分鐘，或代理伺服器改動了請求本文。如果 personagent 的記錄檔顯示 `connector replay guard full`，請等待其清空。 |
 | `agent refused the request (403): stale or invalid sent_at` | 訊息早於 personagent 的 `CONNECTOR_MAX_EVENT_AGE_S`。通常發生在 AstrBot 一次傳遞大量積壓訊息之後。 |
 | `agent refused the request (403): authentication required` 或 `... only local requests accepted` | personagent 未設定 `CONNECTOR_TOKEN`，而請求並非來自本機。請在兩端設定相同的權杖。 |
 | `agent at capacity (429)` | personagent 已在處理 `CONNECTOR_MAX_INFLIGHT` 個回合，重試後仍拒絕此訊息，因此改由 AstrBot 內建的模型回答。如果經常發生，請調高 `CONNECTOR_MAX_INFLIGHT`。 |

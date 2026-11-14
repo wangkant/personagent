@@ -28,6 +28,7 @@ REASONS = {"replaced": "Replaced by a newer fact", "merged": "Merged with anothe
            "rolled_up": "Removed to make room", "rewritten": "Earlier version",
            "unreadable": "Could not be read"}
 CORE_ID = "core"
+PRACTICE_APART = "What is said in `personagent chat` is practice, kept apart, and does not show here."
 TEXT_WIDTH = 60
 
 
@@ -252,6 +253,16 @@ def _memory_rows(chat: dict) -> list[list[str]]:
     return rows
 
 
+def _chat_line(conv: str) -> str:
+    """The heading of one chat; the page's own chat as the page names it, key kept for --chat."""
+    from .access import PAGE_PLATFORM
+    from .channels import platform_of
+
+    if platform_of(conv) == PAGE_PLATFORM:
+        return langs.term(f"Chat: This page (key {conv})", keep=(conv,))
+    return langs.term(f"Chat: {conv}", keep=(conv,))
+
+
 def _reason(row: dict) -> str:
     if row.get("why") == "forgotten_page":
         return langs.term("Forgotten with this command" if row.get("by") == "terminal"
@@ -270,11 +281,12 @@ def cmd_list(args, backend) -> int:
                  f"Run `{_memory_command()}` to see the chats and their keys.")
             return 0
         _say("Nothing is remembered.")
+        _say(PRACTICE_APART)
         return 0
     for i, chat in enumerate(listing["chats"]):
         if i:
             print()
-        print(langs.term(f"Chat: {chat['conv']}", keep=(chat["conv"],)))
+        print(_chat_line(chat["conv"]))
         _table(_memory_rows(chat), ["Id", "Kind", "About", "First noted", "Last used", "Text"])
     return 0
 
@@ -294,7 +306,7 @@ def cmd_removed(args, backend) -> int:
     for i, (conv, rows) in enumerate(by_chat.items()):
         if i:
             print()
-        print(langs.term(f"Chat: {conv}", keep=(conv,)))
+        print(_chat_line(conv))
         _table([[r["tid"], langs.term(KINDS.get(r["kind"], r["kind"])), _reason(r),
                  _minute(r.get("at")), _minute(r.get("until")), _short(r.get("text"))]
                 for r in rows],
@@ -398,7 +410,8 @@ def memory_problem():
 
 
 def _parser(prog: str | None) -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog=prog, description=langs.term(__doc__.splitlines()[0]))
+    p = argparse.ArgumentParser(prog=prog, description=langs.term(__doc__.splitlines()[0]),
+                                epilog=langs.term(PRACTICE_APART))
     sub = p.add_subparsers(dest="cmd")
     for name, helptext in (("list", "list what the character remembers (the default)"),
                            ("removed", "list what was removed and can still be brought back")):

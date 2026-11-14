@@ -369,7 +369,7 @@ The plugin's lines in AstrBot's log start with `personagent:`.
 | Log message | What to do |
 | --- | --- |
 | `refusing unsafe personagent_url` | `personagent_url` is plain HTTP to another host, or HTTPS without `connector_token`. See [Where the agent can run](#where-the-agent-can-run). |
-| `agent refused the request (403): invalid, stale, or replayed request envelope` | `connector_token` is empty or does not match the agent's `CONNECTOR_TOKEN`, the two clocks differ by more than five minutes, or a proxy changed the body. If the agent's log says `connector replay guard full`, wait for it to drain. |
+| `agent refused the request (403): invalid request envelope: …` | `connector_token` is empty or does not match the agent's `CONNECTOR_TOKEN`, the two clocks differ by more than five minutes, or a proxy changed the body. If the agent's log says `connector replay guard full`, wait for it to drain. |
 | `agent refused the request (403): stale or invalid sent_at` | The message is older than the agent's `CONNECTOR_MAX_EVENT_AGE_S`. This usually happens after AstrBot delivers a backlog. |
 | `agent refused the request (403): authentication required` or `... only local requests accepted` | The agent has no `CONNECTOR_TOKEN` and the request is not local. Set the same token on both sides. |
 | `agent at capacity (429)` | The agent was already running `CONNECTOR_MAX_INFLIGHT` turns and still turned the message away after retries, so AstrBot's own model answered it. Raise `CONNECTOR_MAX_INFLIGHT` if this happens often. |

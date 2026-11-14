@@ -227,9 +227,9 @@ personagent connect astrbot <AstrBot data dir>    # asks nothing
 |---|---|---|---|
 | 403 | `unauthenticated` | authentication required | нет `CONNECTOR_TOKEN`, и вызывающая сторона находится не на этом компьютере |
 | 403 | `non_local_request` | no credential is configured; only local requests accepted | нет `CONNECTOR_TOKEN`, и запрос пришёл через браузер, прокси или другое имя хоста |
-| 403 | `invalid_envelope` | invalid, stale, or replayed request envelope | отсутствующие или неверные токен, заголовки или подпись, расхождение часов больше 5 мин, повторный nonce или заполненная защита от повторов (`connector replay guard full` в журнале агента) |
+| 403 | `invalid_envelope` | invalid request envelope: … | отсутствующие или неверные токен, заголовки или подпись, расхождение часов больше 5 мин, повторный nonce или заполненная защита от повторов (`connector replay guard full` в журнале агента) |
 | 403 | `stale_event` | stale or invalid sent_at | `sent_at` отличается от текущего времени больше чем на `CONNECTOR_MAX_EVENT_AGE_S` (24 ч), включая будущие или миллисекундные метки |
-| 400 | `invalid_schema` | invalid event schema | отсутствует обязательное поле: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at` и `conversation_id` для групп |
+| 400 | `invalid_schema` | invalid event schema: … | отсутствует обязательное поле: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at` и `conversation_id` для групп |
 | 400 | `client_disconnected` | client disconnected | вызывающая сторона отключилась во время отправки |
 | 408 | `body_timeout` | request body not received in time | передача тела заняла больше 30 с |
 | 413 | `body_too_large` | request body too large | больше `SERVER_MAX_BODY_BYTES` (8 МБ), обычно встроенное изображение |

@@ -214,7 +214,7 @@ Les lignes du plugin dans le journal d'AstrBot commencent par `personagent:`.
 | Message du journal | Que faire |
 | --- | --- |
 | `refusing unsafe personagent_url` | `personagent_url` est du HTTP en clair vers un autre hôte, ou du HTTPS sans `connector_token`. Voir [Où l'agent peut s'exécuter](#où-lagent-peut-sexécuter). |
-| `agent refused the request (403): invalid, stale, or replayed request envelope` | `connector_token` est vide ou ne correspond pas au `CONNECTOR_TOKEN` de l'agent, les deux horloges diffèrent de plus de cinq minutes, ou un proxy a modifié le corps. Si le journal de l'agent indique `connector replay guard full`, attendez qu'il se vide. |
+| `agent refused the request (403): invalid request envelope: …` | `connector_token` est vide ou ne correspond pas au `CONNECTOR_TOKEN` de l'agent, les deux horloges diffèrent de plus de cinq minutes, ou un proxy a modifié le corps. Si le journal de l'agent indique `connector replay guard full`, attendez qu'il se vide. |
 | `agent refused the request (403): stale or invalid sent_at` | Le message est plus ancien que le `CONNECTOR_MAX_EVENT_AGE_S` de l'agent. Cela arrive généralement après qu'AstrBot a livré un arriéré. |
 | `agent refused the request (403): authentication required` ou `... only local requests accepted` | L'agent n'a pas de `CONNECTOR_TOKEN` et la requête n'est pas locale. Définissez le même jeton des deux côtés. |
 | `agent at capacity (429)` | L'agent exécutait déjà `CONNECTOR_MAX_INFLIGHT` tours et a encore refusé le message après les nouveaux essais, donc le modèle propre d'AstrBot a répondu. Augmentez `CONNECTOR_MAX_INFLIGHT` si cela arrive souvent. |

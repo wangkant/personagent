@@ -214,7 +214,7 @@ As linhas do plugin no log do AstrBot começam com `personagent:`.
 | Mensagem de log | O que fazer |
 | --- | --- |
 | `refusing unsafe personagent_url` | `personagent_url` é HTTP sem criptografia para outro host, ou HTTPS sem `connector_token`. Veja [Onde o agente pode ser executado](#onde-o-agente-pode-ser-executado). |
-| `agent refused the request (403): invalid, stale, or replayed request envelope` | `connector_token` está vazio ou não corresponde ao `CONNECTOR_TOKEN` do agente, os dois relógios diferem em mais de cinco minutos, ou um proxy alterou o corpo. Se o log do agente disser `connector replay guard full`, aguarde até que ela seja esvaziada. |
+| `agent refused the request (403): invalid request envelope: …` | `connector_token` está vazio ou não corresponde ao `CONNECTOR_TOKEN` do agente, os dois relógios diferem em mais de cinco minutos, ou um proxy alterou o corpo. Se o log do agente disser `connector replay guard full`, aguarde até que ela seja esvaziada. |
 | `agent refused the request (403): stale or invalid sent_at` | A mensagem é mais antiga que `CONNECTOR_MAX_EVENT_AGE_S` do agente. Isso costuma acontecer depois que o AstrBot entrega um acúmulo. |
 | `agent refused the request (403): authentication required` ou `... only local requests accepted` | O agente não tem `CONNECTOR_TOKEN` e a solicitação não é local. Defina o mesmo token nos dois lados. |
 | `agent at capacity (429)` | O agente já executava `CONNECTOR_MAX_INFLIGHT` turnos e ainda recusou a mensagem depois das tentativas, então o modelo do próprio AstrBot respondeu. Aumente `CONNECTOR_MAX_INFLIGHT` se isso acontecer com frequência. |
