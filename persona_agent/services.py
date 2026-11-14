@@ -565,7 +565,12 @@ def _memory_problem(home: Path) -> str:
 
 
 def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
-    argparse.ArgumentParser(prog=prog, description=langs.term("Start personagent and its connected platforms together")).parse_args(argv)
+    argparse.ArgumentParser(
+        prog=prog, description=langs.term("Start personagent and its connected platforms together"),
+        epilog=langs.term("It listens on 127.0.0.1 at SERVER_PORT in .env (8080 by default; when that port "
+                          "is taken, a free one is picked and saved there). Each process writes its log to "
+                          "runtime/desktop/ in the home. Press Ctrl+C, or end this process, to stop "
+                          "everything.")).parse_args(argv)
     home = homes.find_home()
     for stream in (sys.stdout, sys.stderr):
         # Under nohup or a service manager the lines must not wait in a buffer.

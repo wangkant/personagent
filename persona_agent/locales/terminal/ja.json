@@ -413,5 +413,6 @@
 "Serve the character over MCP (run by coding assistants, not by hand)": "MCP でキャラクターを提供します（コーディングアシスタントが実行するもので、手動では実行しません）",
 "React when a coding agent finishes a turn (run by coding assistants, not by hand)": "コーディングアシスタントのターン終了時に反応します（コーディングアシスタントが実行するもので、手動では実行しません）",
 "one of the commands below": "以下のコマンドのいずれか",
-"Run `personagent` to open local setup and chat. On a machine without a display, use `personagent up` (the service and its platforms) or `personagent run` (the service alone). Messages follow AGENT_LANG, else the system language.": "`personagent` を実行するとローカルの設定とチャットが開きます。ディスプレイのないマシンでは `personagent up`（サービスとそのプラットフォーム）または `personagent run`（サービスのみ）を使用してください。表示言語は AGENT_LANG に従い、未設定の場合はシステムの言語に従います。"
+"Run `personagent` to open local setup and chat. On a machine without a display, use `personagent up` (the service and its platforms) or `personagent run` (the service alone). Messages follow AGENT_LANG, else the system language.": "`personagent` を実行するとローカルの設定とチャットが開きます。ディスプレイのないマシンでは `personagent up`（サービスとそのプラットフォーム）または `personagent run`（サービスのみ）を使用してください。表示言語は AGENT_LANG に従い、未設定の場合はシステムの言語に従います。",
+"It listens on 127.0.0.1 at SERVER_PORT in .env (8080 by default; when that port is taken, a free one is picked and saved there). Each process writes its log to runtime/desktop/ in the home. Press Ctrl+C, or end this process, to stop everything.": "127.0.0.1 の、.env の SERVER_PORT で指定したポートで待ち受けます（既定は 8080。使用中の場合は空いているポートを選び、.env に保存します）。各プロセスのログはホームの runtime/desktop/ に書き込まれます。Ctrl+C を押すか、このプロセスを終了するとすべて停止します。"
 }

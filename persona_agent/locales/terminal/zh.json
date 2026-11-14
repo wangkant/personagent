@@ -413,5 +413,6 @@
 "Serve the character over MCP (run by coding assistants, not by hand)": "通过 MCP 提供角色（由编程助手运行，无需手动执行）",
 "React when a coding agent finishes a turn (run by coding assistants, not by hand)": "在编程助手结束一轮时作出反应（由编程助手运行，无需手动执行）",
 "one of the commands below": "下列命令之一",
-"Run `personagent` to open local setup and chat. On a machine without a display, use `personagent up` (the service and its platforms) or `personagent run` (the service alone). Messages follow AGENT_LANG, else the system language.": "运行 `personagent` 可打开本地设置与聊天。在没有显示器的机器上，请使用 `personagent up`（启动服务及其平台）或 `personagent run`（仅启动服务）。提示语言取 AGENT_LANG，未设置时取系统语言。"
+"Run `personagent` to open local setup and chat. On a machine without a display, use `personagent up` (the service and its platforms) or `personagent run` (the service alone). Messages follow AGENT_LANG, else the system language.": "运行 `personagent` 可打开本地设置与聊天。在没有显示器的机器上，请使用 `personagent up`（启动服务及其平台）或 `personagent run`（仅启动服务）。提示语言取 AGENT_LANG，未设置时取系统语言。",
+"It listens on 127.0.0.1 at SERVER_PORT in .env (8080 by default; when that port is taken, a free one is picked and saved there). Each process writes its log to runtime/desktop/ in the home. Press Ctrl+C, or end this process, to stop everything.": "服务监听 127.0.0.1 上 .env 中 SERVER_PORT 指定的端口（默认 8080；该端口被占用时，会另选一个空闲端口并写回 .env）。每个进程的日志写入主目录下的 runtime/desktop/。按 Ctrl+C 或结束本进程即可全部停止。"
 }
