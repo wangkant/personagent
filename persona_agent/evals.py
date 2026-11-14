@@ -1886,7 +1886,10 @@ def parse_args(argv=None, prog: str | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog=prog, description=langs.term("Measure speaking, persona, learning and memory on "
                                "labelled cases, through the real agent."))
-    p.add_argument("--suite", choices=(*SUITES, "all"), default="all")
+    p.add_argument("--suite", choices=(*SUITES, "all"), default="all",
+                   help=langs.term("which cases to run (default: all). speak, persona and learning "
+                                   "call the model once or more per case and spend credit; memory "
+                                   "asks no model; persona and learning also need BENCH_JUDGE_MODEL"))
     from persona_agent.setup_wizard import lang_option
 
     p.add_argument("--lang", type=lang_option, default=None,

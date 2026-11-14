@@ -104,7 +104,9 @@ def ledger_files(tmp_path, monkeypatch) -> dict:
 def test_learned_alone_lists(ledger_files, monkeypatch, capsys) -> None:
     monkeypatch.setenv("AGENT_LANG", "en")
     check("exit 0", ledger_admin.main([], prog="personagent learned") == 0)
-    check("listed", "No candidates are in the state proposed." in capsys.readouterr().out)
+    out = capsys.readouterr().out
+    check("listed", "Nothing is being observed right now." in out, out)
+    check("says practice does not count", "practice in `personagent chat`" in out, out)
 
 
 def test_learned_speaks_the_install_language_without_plural_marks(ledger_files, monkeypatch, capsys) -> None:

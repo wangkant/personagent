@@ -8,6 +8,7 @@ set aside. These commands only show that record, or step in.
     personagent learned                       # the same as `list`
     personagent learned list                  # what the character is observing
     personagent learned list --state promoted # what is in use now
+    personagent learned list --all            # everything, in any state
     personagent learned show <id>             # with its evidence and the character's record
     personagent learned promote <id>          # put an observing item in use now
     personagent learned reject <id>           # set an observing item aside
@@ -84,7 +85,7 @@ def _resolve_id(ledger: candidates.CandidateLedger, wanted: str) -> str | None:
         return hits[0]
     if not hits:
         _say(f"No candidate matches {wanted!r}.")
-        _say(f"Run `{_command('list --state=')}` to see every candidate and its id.")
+        _say(f"Run `{_command('list --all')}` to see every candidate and its id.")
     else:
         _say(f"{wanted!r} matches more than one candidate: {', '.join(h[:12] for h in hits[:6])}")
     return None
@@ -243,15 +244,29 @@ def _settled(cand: dict, *, objection: bool = True) -> list[str]:
     return [line for line in out if line]
 
 
+#: The empty list in the words the page uses for each state.
+NONE_IN = {candidates.STATE_PROPOSED: "Nothing is being observed right now.",
+           candidates.STATE_PROMOTED: "Nothing learned is in use yet.",
+           candidates.STATE_REJECTED: "Nothing has been set aside.",
+           candidates.STATE_ROLLED_BACK: "Nothing has been taken out of use.",
+           candidates.STATE_SUPERSEDED: "Nothing has been replaced by another."}
+
+
 def cmd_list(args, ledger, log, policy) -> int:
+    state = "" if args.all else args.state
     rows = [c for c in ledger.all()
-            if (not args.state or c.get("state") == args.state)
+            if (not state or c.get("state") == state)
             and (not args.type or c.get("type") == args.type)]
     rows.sort(key=lambda c: str(c.get("created_at") or ""))
     if args.limit > 0:
         rows = rows[-args.limit:]
     if not rows:
-        _say(f"No candidates are in the state {args.state}." if args.state else "There are no candidates.")
+        _say(NONE_IN.get(state, "Nothing has been learned yet."))
+        if ledger.all():
+            _say(f"Run `{_command('list --all')}` to see everything it learned.")
+        else:
+            _say("It learns from reactions in real chats; practice in `personagent chat` is kept "
+                 "apart and does not show here.")
         return 0
     states = [_state(c.get("state")) for c in rows]
     wide = max(langs.width(s) for s in [langs.term("state"), *states]) + 1
@@ -518,20 +533,27 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     sub = p.add_subparsers(dest="cmd")
 
     lst = sub.add_parser("list", help=langs.term("list candidates (default: observing)"))
-    lst.add_argument("--state", default=candidates.STATE_PROPOSED,
-                     choices=("",) + candidates.STATES)
-    lst.add_argument("--type", default="", choices=("",) + candidates.TYPES)
-    lst.add_argument("--limit", type=int, default=20)
+    lst.add_argument("--state", default=candidates.STATE_PROPOSED, choices=candidates.STATES,
+                     help=langs.term("proposed (observing, the default), promoted (in use), rejected "
+                                     "(set aside), rolled_back (taken out of use) or superseded "
+                                     "(replaced by another)"))
+    lst.add_argument("--all", action="store_true", help=langs.term("list every item, in any state"))
+    lst.add_argument("--type", default="", choices=candidates.TYPES,
+                     help=langs.term("preference_pair (a better wording for a reply) or "
+                                     "positive_example (a reply worth keeping); default: both"))
+    lst.add_argument("--limit", type=int, default=20,
+                     help=langs.term("show at most this many, the newest (default 20; 0: no limit)"))
+    id_help = langs.term("the id that `list` shows, or any unique start of it")
 
     show = sub.add_parser("show", help=langs.term("one candidate with its evidence"))
-    show.add_argument("candidate_id")
+    show.add_argument("candidate_id", help=id_help)
 
     for name, helptext in (("promote", "put an observing item in use now"),
                            ("reject", "set an observing item aside"),
                            ("rollback", "stop using an item in use"),
                            ("restore", "bring back an item the character or the time limit set aside")):
         sp = sub.add_parser(name, help=langs.term(helptext))
-        sp.add_argument("candidate_id")
+        sp.add_argument("candidate_id", help=id_help)
         sp.add_argument("--reason", default="")
 
     sup = sub.add_parser("supersede", help=langs.term("replace one candidate with another"))
@@ -539,10 +561,14 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     sup.add_argument("new_id")
     sup.add_argument("--reason", default="")
 
-    sub.add_parser("rebuild", help=langs.term("re-derive the retrieval views from the log"))
+    sub.add_parser("rebuild", help=langs.term("rewrite the files the running agent reads from the "
+                                              "learning record, after it was changed by hand"))
 
-    lin = sub.add_parser("lineage", help=langs.term("persona revisions that share one learning scope"))
-    lin.add_argument("action", nargs="?", default="show", choices=("show", "adopt"))
+    lin = sub.add_parser("lineage", help=langs.term("the character versions (PERSONA_VERSION) whose "
+                                                    "learning is shared"))
+    lin.add_argument("action", nargs="?", default="show", choices=("show", "adopt"),
+                     help=langs.term("show the versions (the default), or adopt an earlier character's "
+                                     "hash into the current one"))
     lin.add_argument("persona_hash", nargs="?", default="",
                      help=langs.term("with adopt: a pre-lineage hash to fold into the current character"))
     lin.add_argument("--version", default=os.getenv("PERSONA_VERSION", "").strip(),

@@ -1065,7 +1065,7 @@ async def test_learned_reads_states_in_words_with_columns_aligned(
         tmp: Path, monkeypatch, capsys) -> None:
     a, model = make_agent(tmp)
     await taught(a, model)
-    _, out = learned(a, monkeypatch, capsys, "list", "--state=")
+    _, out = learned(a, monkeypatch, capsys, "list", "--all")
     head, row = [ln for ln in out.splitlines() if ln.startswith(("id ", cand(a, RETRY)["candidate_id"][:12]))]
     check("each heading over its values", head.index("state") == row.index("in use")
           and head.index("type") == row.index("preference_pair"), out)
@@ -1078,9 +1078,9 @@ async def test_learned_reads_states_in_words_with_columns_aligned(
     _, out = learned(a, monkeypatch, capsys, "restore", cid[:12])
     check("ru", "Текущее состояние: используется." in out, out)
     monkeypatch.setenv("AGENT_LANG", "es")
-    _, out = learned(a, monkeypatch, capsys, "list", "--state=")
+    _, out = learned(a, monkeypatch, capsys, "list", "--all")
     check("es: a count of one reads right", "para ver la evidencia de un candidato." in out, out)
     monkeypatch.setenv("AGENT_LANG", "en")
     code, out = learned(a, monkeypatch, capsys, "show", "zzz")
     check("an unknown id says where to look", code == 1 and "No candidate matches 'zzz'." in out
-          and "learned list --state=` to see every candidate and its id." in out, out)
+          and "learned list --all` to see every candidate and its id." in out, out)

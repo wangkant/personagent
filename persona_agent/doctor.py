@@ -1,7 +1,8 @@
 """`personagent doctor`: check the setup, then probe every external service.
 
-The probes are shared with /health/details (health.py); the flags are in USAGE.
+The probes are shared with /health/details (health.py).
 """
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -16,20 +17,23 @@ from persona_agent.health import run_checks, all_critical_ok
 from persona_agent.paths import ROOT
 from persona_agent.preflight import check_config
 
-USAGE = """\
-usage: {prog} [--json | --fix]
-
-Checks the configuration and ledgers (free, local), then probes every external
-service the agent depends on and prints an OK/FAIL table. Exits non-zero if a
-service marked critical is down. Each service probe sends one tiny request
-with your credentials and spends a small amount of credit.
-
-When the last answer is a day old, it also asks pypi.org whether a newer
-personagent is out (UPDATE_CHECK_ENABLED=false skips that).
-
-  --json    same checks, one JSON object on stdout instead of the table
-  --fix     rename retired settings in .env to their new names (saves .env.bak)
-"""
+def _parser(prog: str) -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog=prog,
+        description=langs.term(
+            "Checks the configuration and ledgers (free, local), then probes every external service "
+            "the agent depends on and prints an OK/FAIL table. Exits non-zero if a service marked "
+            "critical is down. Each service probe sends one tiny request with your credentials and "
+            "spends a small amount of credit."),
+        epilog=langs.term(
+            "When the last answer is a day old, it also asks pypi.org whether a newer personagent "
+            "is out (UPDATE_CHECK_ENABLED=false skips that)."))
+    way = p.add_mutually_exclusive_group()
+    way.add_argument("--json", action="store_true",
+                     help=langs.term("same checks, one JSON object on stdout instead of the table"))
+    way.add_argument("--fix", action="store_true",
+                     help=langs.term("rename retired settings in .env to their new names (saves .env.bak)"))
+    return p
 
 
 def fix_command() -> str:
@@ -63,15 +67,11 @@ def _pad(text: str, width: int) -> str:
 
 
 def main(argv: list[str] | None = None, prog: str | None = None) -> int:
-    prog = prog or "personagent doctor"
-    argv = sys.argv[1:] if argv is None else list(argv)
-    if argv == ["--fix"]:
+    args = _parser(prog or "personagent doctor").parse_args(sys.argv[1:] if argv is None else argv)
+    if args.fix:
         return _fix()
-    if argv and argv != ["--json"]:
-        print(langs.term(USAGE).format(prog=prog))
-        return 0 if {"-h", "--help"} & set(argv) else 2
     retired = preflight.retired_settings()
-    if argv == ["--json"]:
+    if args.json:
         findings = check_config()
         results = run_checks()
         ok = all_critical_ok(results) and not retired

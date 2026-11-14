@@ -204,3 +204,10 @@ def test_a_restore_past_its_time_is_refused(home, capsys) -> None:
           and tid not in capsys.readouterr().out)
     check("refused by its whole id", run("restore", tid) == 1
           and "This item can no longer be restored." in capsys.readouterr().out)
+
+
+def test_the_page_chat_is_named_as_the_page_names_it(monkeypatch) -> None:
+    monkeypatch.setenv("AGENT_LANG", "en")
+    check("the page's chat", memory_admin._chat_line("private:browser:abc")
+          == "Chat: This page (key private:browser:abc)")
+    check("another chat by its key", memory_admin._chat_line("group:telegram:9") == "Chat: group:telegram:9")
