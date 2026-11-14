@@ -716,7 +716,10 @@ async def health_details(request: Request):
     else:
         authorized = _is_loopback_host(client_host)
     if not authorized:
-        return _error(403, "forbidden", "forbidden")
+        return _error(403, "forbidden",
+                      "send the X-Personagent-Token header with CONNECTOR_TOKEN from .env"
+                      if CONNECTOR_TOKEN else
+                      "only this computer may ask while CONNECTOR_TOKEN in .env is blank")
     refused = _refuse_non_local(request, CONNECTOR_TOKEN)
     if refused is not None:
         return refused
