@@ -797,6 +797,16 @@ O guia de implantação tem [a lista de verificação completa](deploy.pt-BR.md#
 
 **Uma configuração não tem efeito.** Reinicie o processo que a lê, verifique a grafia e salve `.env` como UTF-8 sem BOM. As variáveis de ambiente do shell têm prioridade sobre `.env`. Os booleanos são `true` ou `false`. `PERSONA_TZ_OFFSET_HOURS` define o fuso horário do personagem: o período noturno e as datas do que ele lembra o seguem. Quando está vazio (padrão), o personagent usa UTC+8 com `AGENT_LANG=zh` ou `zh-TW` e, nos outros casos, o fuso horário desta máquina. Informe um número para escolher outro deslocamento.
 
+## Remover o personagent
+
+1. Se o personagem estiver conectado a um assistente de programação, remova-o primeiro em **Conectar plataformas** → **Assistentes de programação**, ou com `personagent connect claude-code --remove` (o mesmo vale para `codex` e `dsh`).
+2. No Windows, na visão Aplicativo, clique em **Remover o ícone** em **Ícone na área de trabalho e no menu Iniciar** e desative **Iniciar o personagent após entrar no Windows**.
+3. Clique em **Sair** na página.
+4. Desinstale o pacote com `python -m pip uninstall personagent`, ou com `uv tool uninstall personagent` se você o instalou com uv. Uma cópia extraída do ZIP do código-fonte é removida ao excluir a pasta dela.
+5. Exclua a pasta inicial: por padrão, a pasta `personagent` na sua pasta de usuário, ou a que você indicou com `--home`. Ela guarda a chave, a memória, os logins das plataformas e `backups/`.
+6. Exclua os backups que você salvou na Área de Trabalho ou em Documentos.
+7. Revogue a chave de API na página de chaves do serviço de modelo e remova o bot dos grupos em cada plataforma.
+
 ## Atualização a partir da 0.x
 
 A 1.0 renomeou a maioria das configurações, e o personagent não inicia enquanto um nome antigo estiver definido. Ele lista cada um como `OLD -> NEW`, e `personagent doctor --fix` os renomeia em `.env`. [Upgrading from 0.4](../CHANGELOG.md#upgrading-from-04) no registro de alterações lista todas as etapas. A memória e o que ele aprendeu são mantidos.

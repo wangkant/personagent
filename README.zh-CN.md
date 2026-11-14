@@ -129,7 +129,7 @@ personagent connect dsh
 
 ## 更新与卸载
 
-PyPI 上发布新版本时，页面会显示提示及相应的更新命令。如使用 pip 安装，更新命令为 `python -m pip install -U personagent`。对于大多数安装方式，页面「应用」视图中的「更新并重新打开」可代为执行更新。设置、角色、已学到的内容和已连接的平台均会保留。如需卸载，请按照[卸载步骤](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英文）操作。
+PyPI 上发布新版本时，页面会显示提示及相应的更新命令。如使用 pip 安装，更新命令为 `python -m pip install -U personagent`。对于大多数安装方式，页面「应用」视图中的「更新并重新打开」可代为执行更新。设置、角色、已学到的内容和已连接的平台均会保留。如需卸载，请按照使用手册中的[卸载 personagent](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#卸载-personagent)操作。
 
 ## 隐私
 

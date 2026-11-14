@@ -131,7 +131,7 @@ personagent connect dsh
 
 ## 업데이트와 제거
 
-PyPI에 새 버전이 올라오면 페이지에 알림과 업데이트 명령이 표시됩니다. pip라면 `python -m pip install -U personagent`입니다. 대부분의 설치 방식에서는 페이지의 앱 보기에 있는 **업데이트 후 다시 열기**가 이 명령을 대신 실행합니다. 설정, 캐릭터, 배운 것, 연결된 플랫폼이 모두 남습니다. 제거하려면 [제거 절차](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)(영어)를 따르십시오.
+PyPI에 새 버전이 올라오면 페이지에 알림과 업데이트 명령이 표시됩니다. pip라면 `python -m pip install -U personagent`입니다. 대부분의 설치 방식에서는 페이지의 앱 보기에 있는 **업데이트 후 다시 열기**가 이 명령을 대신 실행합니다. 설정, 캐릭터, 배운 것, 연결된 플랫폼이 모두 남습니다. 제거하려면 가이드의 [personagent 제거하기](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#personagent-제거하기)를 따르십시오.
 
 ## 개인정보
 

@@ -797,6 +797,16 @@ The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet)
 
 **A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`. Booleans are `true` or `false`. `PERSONA_TZ_OFFSET_HOURS` sets the character's time zone: the night window and the dates of what it remembers follow it. When it is blank (the default), personagent uses UTC+8 with `AGENT_LANG=zh` or `zh-TW` and this machine's time zone otherwise. Set a number to choose another offset.
 
+## Removing personagent
+
+1. If the character is connected to a coding assistant, remove it first under **Connect apps** → **Coding assistants**, or with `personagent connect claude-code --remove` (likewise `codex` and `dsh`).
+2. On Windows, in the App view, click **Remove icon** under **Desktop and Start menu icon**, and turn off **Start personagent after signing in to Windows**.
+3. Click **Quit** in the page.
+4. Uninstall the package with `python -m pip uninstall personagent`, or `uv tool uninstall personagent` if you installed it with uv. A copy unpacked from the source ZIP is removed by deleting its folder.
+5. Delete the home folder: by default the `personagent` folder in your user folder, or the one you gave with `--home`. It holds the key, the memory, the platform logins and `backups/`.
+6. Delete any backups you saved to the Desktop or Documents.
+7. Revoke the API key on the model service's key page, and remove the bot from its groups on each platform.
+
 ## Upgrading from 0.x
 
 1.0 renamed most settings, and personagent will not start while an old name is still set. It lists each one as `OLD -> NEW`, and `personagent doctor --fix` renames them in `.env`. The changelog's [Upgrading from 0.4](../CHANGELOG.md#upgrading-from-04) lists every step. Memory and what it learned carry over.

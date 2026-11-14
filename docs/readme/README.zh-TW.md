@@ -131,7 +131,7 @@ personagent connect dsh
 
 ## 更新與解除安裝
 
-PyPI 上有新版本時，頁面會顯示提示和對應的更新指令。以 pip 安裝時，指令為 `python -m pip install -U personagent`。對於大多數安裝方式，頁面「應用程式」檢視中的「更新並重新開啟」可代為執行。設定、角色、學到的內容和已連接的平台都會保留。如需解除安裝，請依照[解除安裝步驟](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英文）操作。
+PyPI 上有新版本時，頁面會顯示提示和對應的更新指令。以 pip 安裝時，指令為 `python -m pip install -U personagent`。對於大多數安裝方式，頁面「應用程式」檢視中的「更新並重新開啟」可代為執行。設定、角色、學到的內容和已連接的平台都會保留。如需解除安裝，請依照使用手冊中的[解除安裝 personagent](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#解除安裝-personagent)操作。
 
 ## 隱私
 

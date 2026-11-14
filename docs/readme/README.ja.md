@@ -131,7 +131,7 @@ personagent connect dsh
 
 ## アップデートとアンインストール
 
-PyPI に新しいバージョンが出ると、ページに通知とアップデートコマンドが表示されます。pip の場合は `python -m pip install -U personagent` です。ほとんどのインストールでは、ページのアプリビューにある **更新して再起動** がこのコマンドを代わりに実行します。設定、キャラクター、学習内容、連携中のプラットフォームはそのまま引き継がれます。削除するには、[アンインストール手順](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英語）に従ってください。
+PyPI に新しいバージョンが出ると、ページに通知とアップデートコマンドが表示されます。pip の場合は `python -m pip install -U personagent` です。ほとんどのインストールでは、ページのアプリビューにある **更新して再起動** がこのコマンドを代わりに実行します。設定、キャラクター、学習内容、連携中のプラットフォームはそのまま引き継がれます。削除するには、ガイドの[personagent を削除する](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#personagent-を削除する)に従ってください。
 
 ## プライバシー
 

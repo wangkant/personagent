@@ -797,6 +797,16 @@ Der Bereitstellungsleitfaden enthält [die vollständige Checkliste](deploy.de.m
 
 **Eine Einstellung wirkt nicht.** Starten Sie den Prozess neu, der sie liest, prüfen Sie die Schreibweise und speichern Sie `.env` als UTF-8 ohne BOM. Umgebungsvariablen der Shell haben Vorrang vor `.env`. Boolesche Werte sind `true` oder `false`. `PERSONA_TZ_OFFSET_HOURS` legt die Zeitzone der Figur fest: Die Nachtphase und die Daten dessen, was sie sich merkt, richten sich danach. Wenn es leer ist (Standard), nutzt personagent UTC+8 bei `AGENT_LANG=zh` oder `zh-TW` und sonst die Zeitzone dieses Rechners. Geben Sie eine Zahl an, um einen anderen Versatz festzulegen.
 
+## personagent entfernen
+
+1. Ist die Figur mit einem Programmierassistenten verbunden, entfernen Sie sie zuerst unter **Plattformen verbinden** → **Programmierassistenten** oder mit `personagent connect claude-code --remove` (ebenso `codex` und `dsh`).
+2. Klicken Sie unter Windows in der Ansicht App unter **Symbol auf dem Desktop und im Startmenü** auf **Symbol entfernen** und schalten Sie **personagent nach der Anmeldung bei Windows starten** aus.
+3. Klicken Sie auf der Seite auf **Beenden**.
+4. Deinstallieren Sie das Paket mit `python -m pip uninstall personagent` oder, falls Sie es mit uv installiert haben, mit `uv tool uninstall personagent`. Eine aus dem Quellcode-ZIP entpackte Kopie entfernen Sie, indem Sie ihren Ordner löschen.
+5. Löschen Sie den Home-Ordner: standardmäßig den Ordner `personagent` in Ihrem Benutzerordner oder den mit `--home` angegebenen. Er enthält den Schlüssel, das Gedächtnis, die Plattform-Anmeldungen und `backups/`.
+6. Löschen Sie Sicherungen, die Sie auf dem Desktop oder unter Dokumente gespeichert haben.
+7. Widerrufen Sie den API-Schlüssel auf der Schlüsselseite des Modelldienstes und entfernen Sie den Bot auf jeder Plattform aus seinen Gruppen.
+
 ## Upgrade von 0.x
 
 1.0 hat die meisten Einstellungen umbenannt, und personagent startet nicht, solange ein alter Name gesetzt ist. Es listet jeden Namen als `OLD -> NEW` auf, und `personagent doctor --fix` benennt sie in `.env` um. [Upgrading from 0.4](../CHANGELOG.md#upgrading-from-04) im Änderungsprotokoll listet alle Schritte. Das Gedächtnis und was die Figur gelernt hat bleiben erhalten.

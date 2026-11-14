@@ -129,7 +129,7 @@ personagent connect dsh
 
 ## Update and uninstall
 
-When a newer version is on PyPI, the page shows a notice with the update command. With pip that is `python -m pip install -U personagent`. On most installations, **Update and reopen** in the page's App view runs it for you. Settings, character, what it learned and connected apps carry over. To remove it, follow the [uninstall steps](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it).
+When a newer version is on PyPI, the page shows a notice with the update command. With pip that is `python -m pip install -U personagent`. On most installations, **Update and reopen** in the page's App view runs it for you. Settings, character, what it learned and connected apps carry over. To remove it, follow [Removing personagent](https://github.com/wangkant/personagent/blob/main/docs/guide.md#removing-personagent) in the guide.
 
 ## Privacy
 

@@ -797,6 +797,16 @@ personagent가 저장하는 모든 것은 사용자 컴퓨터의 홈 폴더에 �
 
 **설정이 적용되지 않습니다.** 그것을 읽는 프로세스를 재시작하고, 철자를 확인하고, `.env`를 BOM 없는 UTF-8로 저장하십시오. 셸 환경 변수는 `.env`보다 우선합니다. 불리언은 `true`나 `false`입니다. `PERSONA_TZ_OFFSET_HOURS`는 캐릭터의 시간대를 정합니다. 야간 시간대와 기억하는 내용의 날짜가 이를 따릅니다. 비어 있으면(기본값) personagent는 `AGENT_LANG=zh` 또는 `zh-TW`일 때 UTC+8, 그 외에는 이 컴퓨터의 시간대를 씁니다. 다른 오프셋을 고르려면 숫자를 설정하십시오.
 
+## personagent 제거하기
+
+1. 캐릭터를 코딩 어시스턴트에 연결했다면 먼저 **플랫폼 연결** → **코딩 어시스턴트**에서 제거하거나 `personagent connect claude-code --remove`를 실행하십시오(`codex`와 `dsh`도 마찬가지입니다).
+2. Windows에서는 앱 보기의 **바탕 화면 및 시작 메뉴 아이콘**에서 **아이콘 제거**를 클릭하고, **Windows 로그인 후 personagent 시작**을 끄십시오.
+3. 페이지에서 **종료**를 클릭하십시오.
+4. `python -m pip uninstall personagent`로 패키지를 제거하십시오. uv로 설치했다면 `uv tool uninstall personagent`입니다. 소스 ZIP에서 압축을 푼 사본은 그 폴더를 삭제하면 됩니다.
+5. 홈 폴더를 삭제하십시오. 기본값은 사용자 폴더 안의 `personagent` 폴더이며, `--home`으로 지정했다면 그 폴더입니다. 키, 기억, 플랫폼 로그인 정보, `backups/`가 들어 있습니다.
+6. 바탕 화면이나 문서 폴더에 저장한 백업을 삭제하십시오.
+7. 모델 서비스의 키 페이지에서 API 키를 폐기하고, 각 플랫폼에서 봇을 그룹에서 내보내십시오.
+
 ## 0.x에서 업그레이드
 
 1.0에서 대부분의 설정 이름이 바뀌었고, 이전 이름이 남아 있으면 personagent가 시작되지 않습니다. 각각을 `OLD -> NEW`로 나열하고 `personagent doctor --fix`가 `.env`에서 이름을 바꿉니다. 변경 기록의 [Upgrading from 0.4](../CHANGELOG.md#upgrading-from-04)에 모든 단계가 있습니다. 기억과 배운 것은 이어집니다.

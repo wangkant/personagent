@@ -797,6 +797,16 @@ Le guide de déploiement contient [la liste de contrôle complète](deploy.fr.md
 
 **Un réglage n'a aucun effet.** Redémarrez le processus qui le lit, vérifiez l'orthographe et enregistrez `.env` en UTF-8 sans BOM. Les variables d'environnement du shell ont priorité sur `.env`. Les booléens sont `true` ou `false`. `PERSONA_TZ_OFFSET_HOURS` règle le fuseau horaire du personnage : la plage nocturne et les dates de ce dont il se souvient le suivent. Quand il est vide (par défaut), personagent utilise UTC+8 avec `AGENT_LANG=zh` ou `zh-TW` et sinon le fuseau horaire de cette machine. Indiquez un nombre pour choisir un autre décalage.
 
+## Désinstaller personagent
+
+1. Si le personnage est connecté à un assistant de programmation, retirez-le d'abord sous **Connecter des plateformes** → **Assistants de programmation**, ou avec `personagent connect claude-code --remove` (de même pour `codex` et `dsh`).
+2. Sous Windows, dans la vue Application, cliquez sur **Supprimer l'icône** sous **Icône du Bureau et du menu Démarrer**, et désactivez **Démarrer personagent à l'ouverture de session Windows**.
+3. Cliquez sur **Quitter** dans la page.
+4. Désinstallez le paquet avec `python -m pip uninstall personagent`, ou `uv tool uninstall personagent` si vous l'avez installé avec uv. Une copie décompressée depuis le ZIP des sources se supprime en effaçant son dossier.
+5. Supprimez le dossier personnel : par défaut le dossier `personagent` de votre dossier utilisateur, ou celui indiqué avec `--home`. Il contient la clé, la mémoire, les connexions aux plateformes et `backups/`.
+6. Supprimez les sauvegardes enregistrées sur le Bureau ou dans Documents.
+7. Révoquez la clé d'API sur la page des clés du service de modèles, et retirez le bot de ses groupes sur chaque plateforme.
+
 ## Mettre à niveau depuis 0.x
 
 La 1.0 a renommé la plupart des réglages, et personagent ne démarre pas tant qu'un ancien nom reste défini. Il liste chacun sous la forme `OLD -> NEW`, et `personagent doctor --fix` les renomme dans `.env`. [Upgrading from 0.4](../CHANGELOG.md#upgrading-from-04) dans le journal des modifications liste toutes les étapes. La mémoire et ce qu'il a appris sont conservés.

@@ -797,6 +797,16 @@ La guía de despliegue incluye [la lista completa](deploy.es.md#si-el-bot-deja-d
 
 **Un ajuste no surte efecto.** Reinicie el proceso que lo lee, compruebe la ortografía y guarde `.env` como UTF-8 sin BOM. Las variables de entorno del shell tienen prioridad sobre `.env`. Los valores booleanos son `true` o `false`. `PERSONA_TZ_OFFSET_HOURS` define la zona horaria del personaje: la franja nocturna y las fechas de lo que recuerda se rigen por ella. Cuando está vacío (valor predeterminado), personagent utiliza UTC+8 con `AGENT_LANG=zh` o `zh-TW`, y la zona horaria de este equipo en los demás casos. Indique un número para elegir otro desfase.
 
+## Desinstalar personagent
+
+1. Si el personaje está conectado a un asistente de programación, quítelo primero en **Conectar plataformas** → **Asistentes de programación**, o con `personagent connect claude-code --remove` (lo mismo con `codex` y `dsh`).
+2. En Windows, en la vista Aplicación, seleccione **Quitar el icono** en **Icono en el escritorio y en el menú Inicio** y desactive **Iniciar personagent al iniciar sesión en Windows**.
+3. Seleccione **Salir** en la página.
+4. Desinstale el paquete con `python -m pip uninstall personagent`, o con `uv tool uninstall personagent` si lo instaló con uv. Una copia descomprimida del ZIP del código fuente se elimina borrando su carpeta.
+5. Elimine la carpeta de inicio: de forma predeterminada, la carpeta `personagent` de su carpeta de usuario, o la que indicó con `--home`. Contiene la clave, la memoria, los inicios de sesión de las plataformas y `backups/`.
+6. Elimine las copias de seguridad que haya guardado en el Escritorio o en Documentos.
+7. Revoque la clave de API en la página de claves del servicio de modelos y retire el bot de sus grupos en cada plataforma.
+
 ## Actualizar desde 0.x
 
 La versión 1.0 cambió el nombre de la mayoría de los ajustes, y personagent no se inicia mientras siga definido un nombre antiguo. Enumera cada uno como `OLD -> NEW`, y `personagent doctor --fix` les cambia el nombre en `.env`. [Upgrading from 0.4](../CHANGELOG.md#upgrading-from-04), en el registro de cambios, enumera todos los pasos. La memoria y lo aprendido se conservan.
