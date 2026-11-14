@@ -410,5 +410,7 @@
 "Run `{0}` to see every candidate and its id.": "Exécutez `{0}` pour voir tous les candidats et leurs identifiants.",
 "Run `{0}` to see the ids.": "Exécutez `{0}` pour voir les identifiants.",
 "No chat with the key {0} holds anything remembered. Run `{1}` to see the chats and their keys.": "La conversation de clé {0} ne contient aucun souvenir. Exécutez `{1}` pour voir les conversations et leurs clés.",
-"Nothing removed in the chat {0} can be brought back.": "Dans la conversation {0}, aucun élément retiré ne peut être rétabli."
+"Nothing removed in the chat {0} can be brought back.": "Dans la conversation {0}, aucun élément retiré ne peut être rétabli.",
+"Port {0} was taken, so SERVER_PORT in .env is now {1}.": "Le port {0} était occupé ; SERVER_PORT dans .env vaut désormais {1}.",
+"Listening on {0}. Logs are in {1}.": "En écoute sur {0}. Les journaux se trouvent dans {1}."
 }

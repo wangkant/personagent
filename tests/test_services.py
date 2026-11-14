@@ -502,3 +502,20 @@ def test_a_running_command_stops_when_asked_and_when_the_app_closes(tmp_path):
         services.close()
         for pid in pids:
             _kill(pid)
+
+
+def test_a_second_up_on_a_running_home_refuses_and_leaves_env_alone(tmp_path, monkeypatch, capsys):
+    from persona_agent.storage import RuntimeInstanceLock
+
+    sw.write_env(tmp_path / ".env", {"LLM_API_KEY": "k", "SERVER_PORT": "18160", "AGENT_LANG": "en"})
+    before = (tmp_path / ".env").read_bytes()
+    monkeypatch.setenv("AGENT_HOME", str(tmp_path))
+    monkeypatch.setenv("UPDATE_CHECK_ENABLED", "false")
+    held = RuntimeInstanceLock(tmp_path)
+    held.acquire()
+    try:
+        assert svc.main([]) == 2
+    finally:
+        held.release()
+    assert "already running" in capsys.readouterr().err
+    assert (tmp_path / ".env").read_bytes() == before

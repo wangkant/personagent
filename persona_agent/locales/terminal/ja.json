@@ -410,5 +410,7 @@
 "Run `{0}` to see every candidate and its id.": "`{0}` を実行すると、すべての候補とその ID を確認できます。",
 "Run `{0}` to see the ids.": "`{0}` を実行すると、ID を確認できます。",
 "No chat with the key {0} holds anything remembered. Run `{1}` to see the chats and their keys.": "キーが {0} のチャットには記憶がありません。`{1}` を実行すると、チャットとそのキーを確認できます。",
-"Nothing removed in the chat {0} can be brought back.": "チャット {0} には、元に戻せる削除済みの項目はありません。"
+"Nothing removed in the chat {0} can be brought back.": "チャット {0} には、元に戻せる削除済みの項目はありません。",
+"Port {0} was taken, so SERVER_PORT in .env is now {1}.": "ポート {0} は使用中のため、.env の SERVER_PORT を {1} に変更しました。",
+"Listening on {0}. Logs are in {1}.": "{0} で待ち受けています。ログは {1} にあります。"
 }

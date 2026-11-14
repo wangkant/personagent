@@ -410,5 +410,7 @@
 "Run `{0}` to see every candidate and its id.": "執行 `{0}` 可查看所有候選項目及其編號。",
 "Run `{0}` to see the ids.": "執行 `{0}` 可查看各項編號。",
 "No chat with the key {0} holds anything remembered. Run `{1}` to see the chats and their keys.": "鍵為 {0} 的聊天中沒有任何記憶。執行 `{1}` 可查看各聊天及其鍵。",
-"Nothing removed in the chat {0} can be brought back.": "聊天 {0} 中沒有可恢復的已移除內容。"
+"Nothing removed in the chat {0} can be brought back.": "聊天 {0} 中沒有可恢復的已移除內容。",
+"Port {0} was taken, so SERVER_PORT in .env is now {1}.": "連接埠 {0} 已被占用，.env 中的 SERVER_PORT 已改為 {1}。",
+"Listening on {0}. Logs are in {1}.": "正在監聽 {0}。日誌位於 {1}。"
 }

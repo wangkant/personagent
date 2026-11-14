@@ -410,5 +410,7 @@
 "Run `{0}` to see every candidate and its id.": "Выполните `{0}`, чтобы увидеть всех кандидатов и их идентификаторы.",
 "Run `{0}` to see the ids.": "Выполните `{0}`, чтобы увидеть идентификаторы.",
 "No chat with the key {0} holds anything remembered. Run `{1}` to see the chats and their keys.": "В чате с ключом {0} нет сохранённой памяти. Выполните `{1}`, чтобы увидеть чаты и их ключи.",
-"Nothing removed in the chat {0} can be brought back.": "В чате {0} нет удалённых элементов, которые можно вернуть."
+"Nothing removed in the chat {0} can be brought back.": "В чате {0} нет удалённых элементов, которые можно вернуть.",
+"Port {0} was taken, so SERVER_PORT in .env is now {1}.": "Порт {0} был занят, поэтому SERVER_PORT в .env теперь равен {1}.",
+"Listening on {0}. Logs are in {1}.": "Прослушивается {0}. Журналы находятся в {1}."
 }
