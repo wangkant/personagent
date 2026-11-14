@@ -166,3 +166,27 @@ def test_acks_survive_a_failed_pull() -> None:
 
     asyncio.run(run())
     assert attempts[0] == attempts[1] == [{"delivery_id": "d9", "status": "sent", "sent_items": 1}]
+
+
+def test_a_refused_envelope_and_event_say_why_without_echoing_values() -> None:
+    body = sdk.canonical_body({"a": 1})
+    headers = {k.lower(): v for k, v in sdk.signed_headers(body, "tok-123").items()}
+    problem = main_module._envelope_problem
+
+    def fresh():
+        return main_module.ReplayGuard()
+    assert problem(body, {}, "tok-123", replay_guard=fresh()) == "the X-Personagent-Token header is missing"
+    assert "does not match CONNECTOR_TOKEN" in problem(body, headers, "other", replay_guard=fresh())
+    assert "X-Personagent-Signature does not match" in problem(body + b" ", headers, "tok-123",
+                                                               replay_guard=fresh())
+    late = int(headers["x-personagent-timestamp"]) + 3600
+    assert "away from the clock" in problem(body, headers, "tok-123", now=late, replay_guard=fresh())
+    guard = fresh()
+    assert problem(body, headers, "tok-123", replay_guard=guard) == ""
+    assert problem(body, headers, "tok-123", replay_guard=guard).startswith("this X-Personagent-Nonce was already used")
+    said = problem(body, headers, "other", replay_guard=fresh())
+    assert "tok-123" not in said and headers["x-personagent-signature"] not in said
+    event = {"platform": "x", "conversation_type": "private", "message_id": "1", "sent_at": 1}
+    assert main_module._event_problem(event, connector=True) == "missing required field: sender_id"
+    assert main_module._pull_problem({"kind": "outbox.pull"}) == "missing required field: connector_id"
+    assert main_module._pull_problem(None) == "the body is not JSON"

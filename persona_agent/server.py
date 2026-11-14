@@ -173,9 +173,10 @@ def _refuse_caller(request, credential: str, *,
     if not _request_peer_is_allowed(peer, credential):
         return _error(403, "unauthenticated", "authentication required")
     refused = _refuse_non_local(request, credential)
-    if refused is None and token and credential and not _ct_equal(
-            request.headers.get("x-personagent-token", ""), credential):
-        refused = _invalid_envelope()
+    supplied = request.headers.get("x-personagent-token", "")
+    if refused is None and token and credential and not _ct_equal(supplied, credential):
+        refused = _invalid_envelope("the X-Personagent-Token header is missing" if not supplied
+                                    else "X-Personagent-Token does not match CONNECTOR_TOKEN")
     return refused
 
 
@@ -400,28 +401,36 @@ class ReplayGuard:
         return True
 
 
-def _verify_envelope(
+def _envelope_problem(
     body: bytes,
     headers,
     token: str,
     *,
     now: int | None = None,
     replay_guard: ReplayGuard | None = None,
-) -> bool:
-    """Verify bearer token plus HMAC-signed timestamp/nonce/body envelope."""
+) -> str:
+    """What is wrong with the bearer token plus HMAC-signed timestamp/nonce/body
+    envelope, '' when nothing is. Names headers only, never their values."""
     if not token:
-        return True
+        return ""
     supplied_token = headers.get("x-personagent-token", "")
     timestamp_raw = headers.get("x-personagent-timestamp", "")
     nonce = headers.get("x-personagent-nonce", "")
     supplied_signature = headers.get("x-personagent-signature", "")
-    if (not _ct_equal(supplied_token, token)
-            or not timestamp_raw or not nonce or len(nonce) > 128):
-        return False
+    if not supplied_token:
+        return "the X-Personagent-Token header is missing"
+    if not _ct_equal(supplied_token, token):
+        return "X-Personagent-Token does not match CONNECTOR_TOKEN"
+    if not timestamp_raw:
+        return "the X-Personagent-Timestamp header is missing"
+    if not nonce:
+        return "the X-Personagent-Nonce header is missing"
+    if len(nonce) > 128:
+        return "X-Personagent-Nonce is longer than 128 characters"
     try:
         timestamp = int(timestamp_raw)
     except (TypeError, ValueError):
-        return False
+        return "X-Personagent-Timestamp is not a whole number of seconds"
     mac_input = (
         str(timestamp).encode("ascii") + b"."
         + nonce.encode("utf-8") + b"." + body
@@ -429,37 +438,61 @@ def _verify_envelope(
     expected = "sha256=" + hmac.new(
         token.encode("utf-8"), mac_input, hashlib.sha256).hexdigest()
     if not _ct_equal(supplied_signature, expected):
-        return False
+        return ("X-Personagent-Signature does not match: it must be sha256= and the "
+                "HMAC-SHA256 of timestamp.nonce.body keyed with CONNECTOR_TOKEN")
     guard = replay_guard or _connector_replay
-    return guard.accept(nonce, timestamp, int(time.time()) if now is None else now)
+    now = int(time.time()) if now is None else now
+    if abs(now - timestamp) > guard.ttl_seconds:
+        return (f"X-Personagent-Timestamp is more than {guard.ttl_seconds} s away from "
+                "the clock of this computer")
+    if not guard.accept(nonce, timestamp, now):
+        return "this X-Personagent-Nonce was already used, or the replay guard is full (see the log)"
+    return ""
 
 
-def _validate_event_payload(payload: dict, *, connector: bool) -> bool:
-    """Validate the stable identity fields required for deduplication."""
+def _verify_envelope(body: bytes, headers, token: str, **kwargs) -> bool:
+    """Verify bearer token plus HMAC-signed timestamp/nonce/body envelope."""
+    return not _envelope_problem(body, headers, token, **kwargs)
+
+
+def _event_problem(payload, *, connector: bool) -> str:
+    """Which stable identity field required for deduplication is missing or
+    wrong, '' when none is. Names fields only, never their values."""
     if not isinstance(payload, dict):
-        return False
+        return "the body is not a JSON object"
     if connector:
         required = (
             "platform", "conversation_type", "sender_id", "message_id",
             "sent_at",
         )
-        if any(payload.get(key) in (None, "") for key in required):
-            return False
+        missing = [key for key in required if payload.get(key) in (None, "")]
+        if missing:
+            return "missing required field: " + ", ".join(missing)
         if payload.get("conversation_type") not in CONVERSATION_TYPES:
-            return False
+            return "conversation_type must be one of: " + ", ".join(sorted(CONVERSATION_TYPES))
         if payload.get("conversation_type") == "group" and payload.get(
                 "conversation_id") in (None, ""):
-            return False
-        return isinstance(payload.get("segments", []), list)
+            return "missing required field for a group: conversation_id"
+        if not isinstance(payload.get("segments", []), list):
+            return "segments must be a list"
+        return ""
     if payload.get("post_type") != "message":
-        return True
+        return ""
     required = ("message_type", "user_id", "message_id")
-    if any(payload.get(key) in (None, "") for key in required):
-        return False
+    missing = [key for key in required if payload.get(key) in (None, "")]
+    if missing:
+        return "missing required field: " + ", ".join(missing)
     if payload.get("message_type") == "group" and payload.get(
             "group_id") in (None, ""):
-        return False
-    return isinstance(payload.get("message", []), list)
+        return "missing required field for a group: group_id"
+    if not isinstance(payload.get("message", []), list):
+        return "message must be a list"
+    return ""
+
+
+def _validate_event_payload(payload: dict, *, connector: bool) -> bool:
+    """Validate the stable identity fields required for deduplication."""
+    return not _event_problem(payload, connector=connector)
 
 
 def _event_is_fresh(
@@ -561,11 +594,21 @@ async def _read_webhook_body(request: Request) -> bytes | JSONResponse:
         return _error(400, "client_disconnected", "client disconnected")
 
 
-def _invalid_envelope() -> JSONResponse:
-    # One code for four causes (bad token, bad signature, stale timestamp,
-    # replayed nonce): _verify_envelope folds them into a bool.
-    return _error(403, "invalid_envelope",
-                  "invalid, stale, or replayed request envelope")
+def _invalid_envelope(problem: str) -> JSONResponse:
+    # One code for every cause; `error` names which.
+    return _error(403, "invalid_envelope", f"invalid request envelope: {problem}")
+
+
+def _invalid_schema(problem: str) -> JSONResponse:
+    return _error(400, "invalid_schema", f"invalid event schema: {problem}")
+
+
+def _json_or_none(body: bytes):
+    """The parsed body, None when it is not JSON (an empty body reads as {})."""
+    try:
+        return json.loads(body or b"{}")
+    except Exception:
+        return None
 
 
 async def _read_signed_body(request: Request) -> bytes | JSONResponse:
@@ -573,8 +616,9 @@ async def _read_signed_body(request: Request) -> bytes | JSONResponse:
     body = await _read_webhook_body(request)
     if isinstance(body, JSONResponse):
         return body
-    if not _verify_envelope(body, request.headers, CONNECTOR_TOKEN):
-        return _invalid_envelope()
+    problem = _envelope_problem(body, request.headers, CONNECTOR_TOKEN)
+    if problem:
+        return _invalid_envelope(problem)
     return body
 
 
@@ -820,16 +864,16 @@ async def _onebot_webhook_admitted(request: Request):
         if not _ct_equal(sig, expected):
             logger.warning("webhook rejected: bad/absent x-signature")
             return _error(403, "bad_signature", "bad signature")
-    try:
-        payload = json.loads(body or b"{}")
-    except Exception:
-        payload = {}
+    payload = _json_or_none(body)
+    if payload is None:
+        return _invalid_schema("the body is not JSON")
     # Internal markers handle_event sets; never taken from the wire.
     if isinstance(payload, dict):
         payload.pop("_connector", None)
         payload.pop("_platform", None)
-    if not _validate_event_payload(payload, connector=False):
-        return _error(400, "invalid_schema", "invalid event schema")
+    problem = _event_problem(payload, connector=False)
+    if problem:
+        return _invalid_schema(problem)
     if QQ_ONEBOT_SECRET and not _onebot_event_is_fresh(payload):
         return _error(403, "stale_event", "stale or missing event timestamp")
     if isinstance(payload, dict) and payload.get("message_id") not in (None, ""):
@@ -929,18 +973,18 @@ async def _connector_events_admitted(request: Request):
     body = await _read_signed_body(request)
     if isinstance(body, JSONResponse):
         return body
-    try:
-        event = json.loads(body or b"{}")
-    except Exception:
-        event = {}
+    event = _json_or_none(body)
+    if event is None:
+        return _invalid_schema("the body is not JSON")
     if not isinstance(event, dict):
         # JSON null, a list or a string would 500 further down.
-        event = {}
+        return _invalid_schema("the body is not a JSON object")
     if event.get("kind", EVENT_KIND) != EVENT_KIND:
         # The signature does not cover the path: refuse a signed outbox pull.
-        return _error(400, "invalid_schema", "not an event body")
-    if not _validate_event_payload(event, connector=True):
-        return _error(400, "invalid_schema", "invalid event schema")
+        return _error(400, "invalid_schema", f"not an event body: kind must be {EVENT_KIND}")
+    problem = _event_problem(event, connector=True)
+    if problem:
+        return _invalid_schema(problem)
     if not _connector_event_is_fresh(event):
         return _error(403, "stale_event", "stale or invalid sent_at")
     event["message_id"] = str(event["message_id"])
@@ -983,15 +1027,27 @@ async def _connector_outbox_admitted(request: Request):
     body = await _read_signed_body(request)
     if isinstance(body, JSONResponse):
         return body
-    try:
-        pull = parse_pull(json.loads(body or b"{}"))
-    except Exception:
-        pull = None
+    raw = _json_or_none(body)
+    pull = parse_pull(raw) if raw is not None else None
     if pull is None:
-        return _error(400, "invalid_schema", "not an outbox pull")
+        return _error(400, "invalid_schema", "not an outbox pull: " + _pull_problem(raw))
     if agent is None or not agent.connector_outbox_enabled:
         return _error(404, "outbox_disabled", "the outbox is turned off")
     return await agent.outbox.pull(**pull, disconnected=request.is_disconnected)
+
+
+def _pull_problem(raw) -> str:
+    """Why `parse_pull` refused a body, naming the field."""
+    from persona_agent.outbox import PULL_KIND
+    if raw is None:
+        return "the body is not JSON"
+    if not isinstance(raw, dict):
+        return "the body is not a JSON object"
+    if raw.get("kind") != PULL_KIND:
+        return f"kind must be {PULL_KIND}"
+    if not str(raw.get("connector_id") or "").strip():
+        return "missing required field: connector_id"
+    return "connector_id, wait_s, max_deliveries or acks is not valid"
 
 
 def _bind_problem(host: str, port: int) -> str | None:
