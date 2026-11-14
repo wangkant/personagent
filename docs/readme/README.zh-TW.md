@@ -95,7 +95,7 @@ personagent
 
 在 Windows 上，它會在獨立的視窗中開啟；在 macOS 和 Linux 上則在瀏覽器中開啟。貼上模型 API 金鑰，再點選「驗證並開始聊天」。尚未取得金鑰時，可使用預設選取的 OpenRouter 免費模型，其金鑰無須付費。`personagent demo` 無須金鑰，會播放三段預先編寫的場景。[入門指南](https://github.com/wangkant/personagent/blob/main/docs/start.zh-TW.md)逐一說明了頁面中的各個畫面。
 
-personagent 本身免費。費用支付給你選擇的模型服務，依該服務的價格計算。OpenRouter 的免費模型每天可請求 50 次，部分免費服務商會保留收到的內容；Ollama 在你自己的電腦上執行模型，不需要金鑰。
+personagent 本身免費。費用支付給你選擇的模型服務，依該服務的價格計算。一則訊息可能產生不只一次模型請求：除了回覆本身，角色有時還會判斷是否在群組中發言、評估回覆得到的反應，或整理記憶。OpenRouter 的免費模型每天可請求 50 次，部分免費服務商會保留收到的內容；Ollama 在你自己的電腦上執行模型，不需要金鑰。
 
 ## 連接你的平台
 

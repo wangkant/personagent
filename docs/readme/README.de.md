@@ -95,7 +95,7 @@ Mit [uv](https://docs.astral.sh/uv/) startet `uvx personagent` das Programm ohne
 
 Unter Windows öffnet es sich in einem eigenen Fenster, unter macOS und Linux im Browser. Fügen Sie einen API-Schlüssel für das Modell ein und klicken Sie auf **Prüfen & Chat starten**. Sie haben noch keinen Schlüssel? Die kostenlosen Modelle von OpenRouter sind vorausgewählt, und ihr Schlüssel ist kostenlos. `personagent demo` spielt drei vorgefertigte Szenen ganz ohne Schlüssel ab. Die [Einstiegsanleitung](https://github.com/wangkant/personagent/blob/main/docs/start.de.md) erläutert die Seite Ansicht für Ansicht.
 
-personagent ist kostenlos. Sie bezahlen den gewählten Modelldienst zu dessen eigenen Preisen. Die kostenlosen Modelle von OpenRouter erlauben 50 Anfragen pro Tag, und manche kostenlosen Anbieter speichern, was sie erhalten; Ollama führt ein Modell ganz ohne Schlüssel auf Ihrem eigenen Computer aus.
+personagent ist kostenlos. Sie bezahlen den gewählten Modelldienst zu dessen eigenen Preisen. Eine Nachricht kann mehr als eine Modellanfrage auslösen: Neben der Antwort entscheidet die Figur bisweilen, ob sie sich in einer Gruppe äußert, beurteilt, wie eine Antwort aufgenommen wurde, oder ordnet ihr Gedächtnis. Die kostenlosen Modelle von OpenRouter erlauben 50 Anfragen pro Tag, und manche kostenlosen Anbieter speichern, was sie erhalten; Ollama führt ein Modell ganz ohne Schlüssel auf Ihrem eigenen Computer aus.
 
 ## Ihre Plattformen verbinden
 

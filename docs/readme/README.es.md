@@ -95,7 +95,7 @@ Con [uv](https://docs.astral.sh/uv/), `uvx personagent` lo ejecuta sin un paso d
 
 En Windows se abre en una ventana propia, y en macOS y Linux, en el navegador. Pegue la clave de API de su modelo y seleccione **Verificar e iniciar el chat**. ¿Todavía no dispone de una clave? Los modelos gratuitos de OpenRouter están preseleccionados, y su clave no tiene coste. `personagent demo` reproduce tres escenas guionizadas sin ninguna clave. La [guía de primeros pasos](https://github.com/wangkant/personagent/blob/main/docs/start.es.md) recorre la página pantalla por pantalla.
 
-personagent es gratuito. Usted paga al servicio de modelos que elija, según sus propias tarifas. Los modelos gratuitos de OpenRouter admiten 50 solicitudes al día, y algunos proveedores gratuitos conservan lo que reciben; Ollama ejecuta un modelo en su propio equipo sin clave.
+personagent es gratuito. Usted paga al servicio de modelos que elija, según sus propias tarifas. Un mensaje puede generar más de una solicitud al modelo: además de la respuesta, el personaje a veces decide si intervenir en un grupo, valora cómo se recibió una respuesta u ordena su memoria. Los modelos gratuitos de OpenRouter admiten 50 solicitudes al día, y algunos proveedores gratuitos conservan lo que reciben; Ollama ejecuta un modelo en su propio equipo sin clave.
 
 ## Conectar sus plataformas
 
