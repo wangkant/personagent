@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`tools/auto_reviewer.py`**, which asked a person to approve each before/after pair into the shared feedback pool. Learning no longer waits for a person: set `EVOLVE_AUTO_ENABLED=true` and the character decides for itself. Pairs already approved into `runtime/feedback.<lang>.jsonl` are still used. `REVIEWER_MODEL` is no longer read: `doctor` warns about it, and the service starts.
 - **`tools/evolution_benchmark.py`, `tools/scenario_probe.py` and their scenarios in `data/benchmark/`**, with the `judge` extra (`anthropic`) that only they used. Use `personagent eval --suite learning` to measure learning. `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` and `BENCH_EVAL_DELAY_S` (and its pre-1.0 name `BENCH_EVAL_DELAY`) are no longer read: `doctor` warns about them, and the service starts.
 - **`data/evals/address.jsonl` no longer ships in the package.** Only the project's tests read it; it is now `tests/data/address.jsonl`.
+- **The startup re-judging of stickers tagged before 0.2.0.** A sticker's fit with the persona is judged when it is tagged; the check of how a sticker looks still runs at startup.
+- **The copy of state files from the folder layout before 0.2.0**, where `memory.json` and the like sat beside `.env`. State is read from `runtime/` only.
+- **Code nothing called**, found in a pass over the whole package: unused helpers and constants, a per-turn time zone override nothing set, the `{conv, note}` form of the dashboard's forget request, fields the local page's API returned and the page never read, and two terminal sentences in nine languages that no command prints.
 
 ## [1.4.4] — 2026-11-13
 

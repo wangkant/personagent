@@ -203,55 +203,6 @@ def test_cli_tools_follow_runtime_dir() -> None:
     )
 
 
-def test_cli_tools_migrate_legacy_state_when_run_first(tmp: Path) -> None:
-    tmp.mkdir(parents=True, exist_ok=True)
-    legacy = {
-        "stickers.json": '{"old.png":{"md5":"abc"}}',
-        "owner_profile.json": '{"total_msgs":42}',
-    }
-    for name, content in legacy.items():
-        (tmp / name).write_text(content, encoding="utf-8")
-    runtime_rel = "state/tool-first"
-    code = (
-        "from pathlib import Path\n"
-        "from tools import bootstrap_from_history as b\n"
-        "from tools import import_stickers_folder as i\n"
-        f"root=Path({str(tmp)!r})\n"
-        f"expected=(root/{runtime_rel!r}).resolve()\n"
-        "checks={\n"
-        " b.STICKERS_JSON: root/'stickers.json',\n"
-        " b.ADMIN_PROFILE: root/'owner_profile.json',\n"
-        " i.STICKERS_JSON: root/'stickers.json',\n"
-        "}\n"
-        "assert all(path.parent == expected for path in checks), checks\n"
-        "mismatches=[(str(path), path.read_text(encoding='utf-8'), "
-        "old.read_text(encoding='utf-8')) "
-        "for path, old in checks.items() "
-        "if path.read_text(encoding='utf-8') "
-        "!= old.read_text(encoding='utf-8')]\n"
-        "assert not mismatches, mismatches\n"
-    )
-    env = os.environ.copy()
-    env["AGENT_HOME"] = str(tmp)
-    env["AGENT_RUNTIME_DIR"] = runtime_rel
-    completed = subprocess.run(
-        [sys.executable, "-c", code],
-        cwd=ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=30,
-        check=False,
-    )
-    check(
-        "CLI-first startup migrates legacy state before loading it",
-        completed.returncode == 0,
-        completed.stdout + completed.stderr,
-    )
-
-
 def test_appended_rows_are_byte_exact(tmp: Path) -> None:
     """Appends must land byte-for-byte, with LF endings on every platform.
 
