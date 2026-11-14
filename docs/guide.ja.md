@@ -271,6 +271,42 @@ If you have not seen a film, say so instead of inventing an opinion.
 | `data/output_filter.<lang>.json` | 実際の返信に対する置換と拒否のルール |
 | `persona.card.json` | 任意のニックネームと、絵文字、文字セット、長さの設定。例：`{ "aliases": ["Lu"], "reply_style": { "emoji": true, "max_chars": 320 } }`。`aliases` のニックネームは、名前と同じようにキャラクターへの呼びかけになります。名前は大文字と小文字、全角文字、アクセント記号の違いを区別せずに照合されるため、`sofia` で Sofía を呼べます。メッセージの中では ñ、ã、õ、й はそれぞれ独立した文字として扱われるため、`niña` では Nina という名前のキャラクターを呼べません。キャラクター自身の名前では、このような記号を省いても構いません。そのため、`nina` で Niña を呼べます。名前がより長い語の一部になっている場合は、キャラクターを呼んだことになりません。カタカナの名前がより長いカタカナ語の中にある場合も、韓国語の名前が語の途中にある場合も同様です。`"emoji": true` の場合、キャラクターは普段どおり絵文字を使うことがあり、800 未満の `max_chars` は長さの上限としてモデルに伝えられます |
 
+これらのファイル名の `<lang>` は、簡体字中国語と繁体字中国語では `zh`、それ以外のすべての言語では `en` です。`data/` に置いたファイルは、同じ種類の同梱ファイルを丸ごと置き換えます。新しいファイルはキャラクターの再起動後に反映されます。アプリビューでは、これらのファイルを **ロアブック、会話例、禁止語フィルター** と呼びます。形式と最小限の例は次のとおりです。
+
+- ロアブック（`lorebook.<lang>.json`）：直近 10 件のメッセージに `keywords` のいずれかが現れると、その項目がプロンプトに加わります。`keywords` と `content` は必須です。`name` は省略でき、`priority`（既定値 100）で優先順位が決まります。1 回に加わるのは 5 項目までです。
+
+  ```json
+  {"entries": [
+    {"name": "gym", "keywords": ["gym", "the cave"], "content": "The group calls the gym on Fifth Street the cave.", "priority": 100}
+  ]}
+  ```
+
+  SillyTavern の World Info をエクスポートしたファイルは、そのままでは使えません。`entries` が番号をキーとするオブジェクトで、キーワードが `key` に入っているためです。`entries` をリストにし、`key` を `keywords` に書き換えてください。`content` はそのままで構いません。
+- 禁止語フィルター（`output_filter.<lang>.json`）：`pattern` はそれぞれ Python の正規表現で、大文字と小文字を区別せずに照合します。`"action": "reject"` は返信全体を破棄するので、何も送信されません。`"replace"` は一致した部分を `replacement` に置き換えて残りを送信します。
+
+  ```json
+  {"filters": [
+    {"name": "service_opener", "pattern": "^(hi|hello)\\W*how can i help", "action": "reject", "reason": "customer-service opener"},
+    {"name": "no_em_dash", "pattern": "—", "action": "replace", "replacement": ", "}
+  ]}
+  ```
+- 会話例（`examples.<lang>.jsonl`）：1 行に 1 つの JSON オブジェクトを書きます。返信の前のメッセージは `context` に `名前: 本文` の形で入れます。
+
+  ```json
+  {"scenario": "a friend shares a video", "context": ["alex: the most cursed way to make instant noodles"], "reply": "watching cooking crimes at midnight is a choice"}
+  ```
+
+**ペルソナの長さと `[style]` ブロック。** **ペルソナ** 欄には 4,000 文字まで入力できます。`persona.txt` の `[style]` ブロックは、個人チャットの 6 つのルールを変更します。グループチャットには適用されません。各行は `名前: 値` の形です。一覧にない値は既定値（以下の各項目の最初の値）のままとなり、ログに記録されます。
+
+```text
+[style]
+length: medium
+vent: ask
+[/style]
+```
+
+名前と値は、`length`（short、medium、long）、愚痴を聞いたときの `vent`（hold、ask、solve）、おすすめを求められたときの `recs`（ask_back、offer）、`good_news`（cheer、deadpan）、つなぎ言葉の `particles`（capped、free、none）、`fatigue`（stock、own）です。
+
 画像を見せるには、`VISION_MODEL`、`VISION_API_KEY`、`VISION_BASE_URL` を設定するか、**その他の機能** で画像の理解をオンにしてください。選んだモデルが画像を読めない場合は、保存時にページがその旨を伝えます。画像の理解がオフであるか失敗したためにキャラクターが見られない画像は、グループでもプライベートチャットでも、見られない画像としてキャラクターに届きます。そのため、キャラクターは画像を説明するのではなく、画像について尋ねます。音声メッセージ、動画、ファイル、転送されたメッセージは、それぞれそのものとして届き、プラットフォームが提供する場合は音声メッセージの文字起こしも含まれます。転送されたメッセージの言葉は、転送元の人の言葉として読まれます。そのため、名前で誰かを呼ぶことも、記憶コマンドを実行することもありません。ほかの人へのメンションは、その人が選んだ名前でキャラクターに届きます。この名前は送信者の言葉としては扱われないため、キャラクターを呼ぶことも、コマンドになることもありません。
 
 ## チャットに入れる

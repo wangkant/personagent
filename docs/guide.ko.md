@@ -271,6 +271,42 @@ If you have not seen a film, say so instead of inventing an opinion.
 | `data/output_filter.<lang>.json` | 실제 답장에 적용하는 치환과 거부 규칙 |
 | `persona.card.json` | 별명과 이모지, 문자 집합, 길이 선택 설정. 예: `{ "aliases": ["Lu"], "reply_style": { "emoji": true, "max_chars": 320 } }`. `aliases`의 별명은 이름과 마찬가지로 캐릭터를 부릅니다. 이름은 대소문자, 전각 문자, 악센트를 무시하고 대조하므로 `sofia`는 Sofía를 부릅니다. 메시지 안의 ñ, ã, õ, й는 별개의 문자로 취급되므로 `niña`는 Nina라는 캐릭터를 부르지 않습니다. 캐릭터 이름 쪽에서는 이러한 부호를 생략해도 되므로 `nina`는 Niña를 부릅니다. 더 긴 단어 안에 들어 있는 이름은 캐릭터를 부르지 않습니다. 더 긴 가타카나 단어 안의 가타카나 이름도, 단어 중간에 있는 한국어 이름도 캐릭터를 부르지 않습니다. `"emoji": true`이면 캐릭터는 평소처럼 이모지를 쓸 수 있으며, 800 미만의 `max_chars`는 길이 제한으로 모델에 전달됩니다 |
 
+이 파일 이름의 `<lang>`은 중국어 간체와 번체에서는 `zh`, 그 밖의 모든 언어에서는 `en`입니다. `data/`에 넣은 파일은 같은 종류의 기본 제공 파일을 통째로 대체하며, 새 파일은 캐릭터를 다시 시작한 후 적용됩니다. 앱 보기에서는 이 파일들을 **로어북, 예시 대화 및 단어 필터**라고 부릅니다. 형식과 최소 예시는 다음과 같습니다.
+
+- 로어북(`lorebook.<lang>.json`): 최근 메시지 10개에 `keywords` 중 하나가 나오면 그 항목이 프롬프트에 더해집니다. `keywords`와 `content`는 필수이고, `name`은 선택이며, `priority`(기본값 100)가 우선순위를 정합니다. 한 번에 최대 5개 항목이 더해집니다.
+
+  ```json
+  {"entries": [
+    {"name": "gym", "keywords": ["gym", "the cave"], "content": "The group calls the gym on Fifth Street the cave.", "priority": 100}
+  ]}
+  ```
+
+  SillyTavern World Info 내보내기 파일은 그대로 쓸 수 없습니다. `entries`가 번호를 키로 하는 객체이고 키워드가 `key`에 들어 있기 때문입니다. `entries`를 목록으로 바꾸고 `key`를 `keywords`로 이름을 바꾸십시오. `content`는 그대로 둡니다.
+- 단어 필터(`output_filter.<lang>.json`): 각 `pattern`은 Python 정규식이며 대소문자를 구분하지 않고 비교합니다. `"action": "reject"`는 답장 전체를 버리므로 아무것도 보내지 않고, `"replace"`는 일치한 부분을 `replacement`로 바꾼 뒤 나머지를 보냅니다.
+
+  ```json
+  {"filters": [
+    {"name": "service_opener", "pattern": "^(hi|hello)\\W*how can i help", "action": "reject", "reason": "customer-service opener"},
+    {"name": "no_em_dash", "pattern": "—", "action": "replace", "replacement": ", "}
+  ]}
+  ```
+- 예시 대화(`examples.<lang>.jsonl`): 한 줄에 JSON 객체 하나를 쓰며, 답장 앞의 메시지는 `context`에 `이름: 내용` 형식으로 넣습니다.
+
+  ```json
+  {"scenario": "a friend shares a video", "context": ["alex: the most cursed way to make instant noodles"], "reply": "watching cooking crimes at midnight is a choice"}
+  ```
+
+**페르소나 길이와 `[style]` 블록.** **페르소나** 상자에는 최대 4,000자까지 입력할 수 있습니다. `persona.txt`의 `[style]` 블록은 개인 채팅의 규칙 여섯 가지를 바꾸며, 그룹 채팅에는 적용되지 않습니다. 각 줄은 `이름: 값` 형식입니다. 목록에 없는 값은 기본값(아래 각 항목의 첫 번째 값)을 유지하며 로그에 기록됩니다.
+
+```text
+[style]
+length: medium
+vent: ask
+[/style]
+```
+
+이름과 값은 `length`(short, medium, long), 누군가 하소연할 때의 `vent`(hold, ask, solve), 추천을 요청받았을 때의 `recs`(ask_back, offer), `good_news`(cheer, deadpan), 군말에 관한 `particles`(capped, free, none), `fatigue`(stock, own)입니다.
+
 이미지를 보게 하려면 `VISION_MODEL`, `VISION_API_KEY`, `VISION_BASE_URL`을 설정하거나 **추가 기능**에서 이미지 이해를 켜십시오. 선택한 모델이 이미지를 읽을 수 없으면 저장할 때 페이지가 그 사실을 알립니다. 이미지 이해가 꺼져 있거나 실패하여 캐릭터가 볼 수 없는 이미지는 그룹에서도 개인 채팅에서도 볼 수 없는 이미지로 캐릭터에게 전달되므로, 캐릭터는 이미지를 묘사하지 않고 그 이미지에 대해 묻습니다. 음성 메시지, 동영상, 파일, 전달된 메시지는 각각 그 종류 그대로 전달되며, 플랫폼이 음성 메시지의 텍스트 변환을 제공하면 그것도 함께 전달됩니다. 전달된 메시지의 내용은 원래 발언자의 말로 읽히므로, 그 안의 이름은 누구도 부르지 않고 기억 명령도 실행하지 않습니다. 다른 사람에 대한 멘션은 그 사람이 정한 이름과 함께 캐릭터에게 전달되며, 이 이름은 보낸 사람의 말로 간주되지 않으므로 캐릭터를 부르지도 않고 명령이 되지도 않습니다.
 
 ## 채팅에 넣기

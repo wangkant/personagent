@@ -271,6 +271,42 @@ Para sustituir un archivo incluido, coloque un archivo con el mismo nombre en `d
 | `data/output_filter.<lang>.json` | Reglas de sustitución y rechazo para las respuestas en producción |
 | `persona.card.json` | Apodos opcionales y ajustes de emojis, conjunto de caracteres y longitud, como `{ "aliases": ["Lu"], "reply_style": { "emoji": true, "max_chars": 320 } }`. Un apodo en `aliases` llama al personaje igual que su nombre. Los nombres se comparan sin distinguir mayúsculas y minúsculas, caracteres de ancho completo ni acentos, de modo que `sofia` llama a Sofía. En un mensaje, ñ, ã, õ y й cuentan como letras propias, de modo que `niña` no llama a un personaje llamado Nina; en el nombre del propio personaje esa marca puede omitirse, de modo que `nina` llama a Niña. Un nombre no llama al personaje desde dentro de una palabra más larga: un nombre en katakana dentro de una palabra más larga en katakana no lo llama, ni tampoco un nombre coreano en medio de una palabra. Con `"emoji": true`, el personaje puede usar emojis como suele hacerlo, y un `max_chars` inferior a 800 se comunica al modelo como límite de longitud |
 
+En estos nombres de archivo, `<lang>` es `zh` para el chino simplificado y el tradicional, y `en` para todos los demás idiomas. Un archivo colocado en `data/` sustituye por completo al archivo incluido del mismo tipo, y un archivo nuevo surte efecto cuando el personaje se reinicia. La vista Aplicación llama a estos archivos **Trasfondo, diálogos de ejemplo y filtros de palabras**. Los formatos, con un ejemplo mínimo de cada uno:
+
+- Trasfondo (`lorebook.<lang>.json`): una entrada se añade a la instrucción cuando una de sus `keywords` aparece en los diez últimos mensajes. `keywords` y `content` son obligatorios; `name` es opcional, y `priority` (100 de forma predeterminada) decide qué entradas van primero, con un máximo de cinco por turno.
+
+  ```json
+  {"entries": [
+    {"name": "gym", "keywords": ["gym", "the cave"], "content": "The group calls the gym on Fifth Street the cave.", "priority": 100}
+  ]}
+  ```
+
+  Una exportación de World Info de SillyTavern no puede utilizarse tal cual: su `entries` es un objeto con claves numéricas y las palabras clave están en `key`. Convierta `entries` en una lista y cambie el nombre de `key` a `keywords`; `content` se mantiene igual.
+- Filtros de palabras (`output_filter.<lang>.json`): cada `pattern` es una expresión regular de Python que se compara sin distinguir mayúsculas y minúsculas. `"action": "reject"` descarta la respuesta completa, por lo que no se envía nada; `"replace"` sustituye la coincidencia por `replacement` y envía el resto.
+
+  ```json
+  {"filters": [
+    {"name": "service_opener", "pattern": "^(hi|hello)\\W*how can i help", "action": "reject", "reason": "customer-service opener"},
+    {"name": "no_em_dash", "pattern": "—", "action": "replace", "replacement": ", "}
+  ]}
+  ```
+- Diálogos de ejemplo (`examples.<lang>.jsonl`): un objeto JSON por línea, con los mensajes anteriores a la respuesta en `context`, cada uno como `nombre: texto`.
+
+  ```json
+  {"scenario": "a friend shares a video", "context": ["alex: the most cursed way to make instant noodles"], "reply": "watching cooking crimes at midnight is a choice"}
+  ```
+
+**Longitud del perfil y bloque `[style]`.** El cuadro **Perfil** admite hasta 4000 caracteres. Un bloque `[style]` en `persona.txt` modifica seis reglas de los chats privados; los chats de grupo no lo tienen en cuenta. Cada línea tiene la forma `nombre: valor`. Un valor que no figure en la lista mantiene el predeterminado, el primero de los indicados abajo, y el registro lo anota:
+
+```text
+[style]
+length: medium
+vent: ask
+[/style]
+```
+
+Los nombres y valores son `length` (short, medium, long), `vent`, para cuando alguien se desahoga (hold, ask, solve), `recs`, para cuando alguien pide una recomendación (ask_back, offer), `good_news` (cheer, deadpan), `particles`, para las muletillas (capped, free, none), y `fatigue` (stock, own).
+
 Para que pueda ver imágenes, defina `VISION_MODEL`, `VISION_API_KEY` y `VISION_BASE_URL`, o active la comprensión de imágenes en **Más funciones**. Si el modelo elegido no puede leer imágenes, la página lo indica al guardar. Una imagen que el personaje no puede ver, porque la comprensión de imágenes está desactivada o ha fallado, le llega como una imagen que no puede ver, tanto en grupos como en chats privados, de modo que pregunta por ella en lugar de describirla. Los mensajes de voz, los vídeos, los archivos y los mensajes reenviados le llegan como lo que son, con la transcripción del mensaje de voz cuando la plataforma la proporciona. Las palabras de un mensaje reenviado se leen como palabras de la persona cuyo mensaje se reenvió: no llaman a nadie por su nombre ni ejecutan ningún comando de memoria. Una mención de otra persona llega al personaje con el nombre que esa persona eligió, que nunca cuenta como palabras del remitente, por lo que no llama al personaje ni da ninguna orden.
 
 ## Llevar el personaje a un chat

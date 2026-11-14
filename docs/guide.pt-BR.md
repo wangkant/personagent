@@ -271,6 +271,42 @@ Para substituir um arquivo incluído, coloque um arquivo com o mesmo nome em `da
 | `data/output_filter.<lang>.json` | Regras de substituição e rejeição para respostas em produção |
 | `persona.card.json` | Apelidos opcionais e configurações de emoji, conjunto de caracteres e tamanho, como `{ "aliases": ["Lu"], "reply_style": { "emoji": true, "max_chars": 320 } }`. Um apelido em `aliases` chama o personagem da mesma forma que o nome dele. Os nomes são comparados sem considerar maiúsculas e minúsculas, letras de largura total e acentos, então `sofia` chama Sofía. Em uma mensagem, ñ, ã, õ e й contam como letras próprias, então `niña` não chama um personagem chamado Nina; no nome do próprio personagem, essa marca pode ser omitida, então `nina` chama Niña. Um nome não chama o personagem de dentro de uma palavra mais longa: um nome em katakana dentro de uma palavra mais longa em katakana não o chama, nem um nome coreano no meio de uma palavra. Com `"emoji": true`, o personagem pode usar emojis como costuma fazer, e um `max_chars` abaixo de 800 é passado ao modelo como limite de tamanho |
 
+Nesses nomes de arquivo, `<lang>` é `zh` para o chinês simplificado e o tradicional e `en` para todos os demais idiomas. Um arquivo colocado em `data/` substitui por inteiro o arquivo incluído do mesmo tipo, e um arquivo novo entra em vigor após a reinicialização do personagem. A visão Aplicativo chama esses arquivos de **Lorebook, diálogos de exemplo e filtros de palavras**. Os formatos, com um exemplo mínimo de cada um:
+
+- Lorebook (`lorebook.<lang>.json`): uma entrada é adicionada ao prompt quando uma de suas `keywords` aparece nas dez últimas mensagens. `keywords` e `content` são obrigatórios; `name` é opcional, e `priority` (padrão 100) define quais entradas vêm primeiro, com no máximo cinco por turno.
+
+  ```json
+  {"entries": [
+    {"name": "gym", "keywords": ["gym", "the cave"], "content": "The group calls the gym on Fifth Street the cave.", "priority": 100}
+  ]}
+  ```
+
+  Uma exportação de World Info do SillyTavern não pode ser usada como está: nela, `entries` é um objeto indexado por números, e as palavras-chave ficam em `key`. Transforme `entries` em uma lista e renomeie `key` para `keywords`; `content` permanece igual.
+- Filtros de palavras (`output_filter.<lang>.json`): cada `pattern` é uma expressão regular do Python, comparada sem diferenciar maiúsculas de minúsculas. `"action": "reject"` descarta a resposta inteira, de modo que nada é enviado; `"replace"` coloca `replacement` no lugar do trecho encontrado e envia o restante.
+
+  ```json
+  {"filters": [
+    {"name": "service_opener", "pattern": "^(hi|hello)\\W*how can i help", "action": "reject", "reason": "customer-service opener"},
+    {"name": "no_em_dash", "pattern": "—", "action": "replace", "replacement": ", "}
+  ]}
+  ```
+- Diálogos de exemplo (`examples.<lang>.jsonl`): um objeto JSON por linha, com as mensagens anteriores à resposta em `context`, cada uma no formato `nome: texto`.
+
+  ```json
+  {"scenario": "a friend shares a video", "context": ["alex: the most cursed way to make instant noodles"], "reply": "watching cooking crimes at midnight is a choice"}
+  ```
+
+**Tamanho da persona e o bloco `[style]`.** A caixa **Persona** aceita até 4.000 caracteres. Um bloco `[style]` no `persona.txt` altera seis regras das conversas privadas; as conversas em grupo o ignoram. Cada linha tem o formato `nome: valor`. Um valor que não esteja na lista mantém o padrão, o primeiro indicado abaixo, e o log registra isso:
+
+```text
+[style]
+length: medium
+vent: ask
+[/style]
+```
+
+Os nomes e valores são `length` (short, medium, long), `vent`, para quando alguém desabafa (hold, ask, solve), `recs`, para quando alguém pede uma recomendação (ask_back, offer), `good_news` (cheer, deadpan), `particles`, para palavras de preenchimento (capped, free, none), e `fatigue` (stock, own).
+
 Para que ele compreenda imagens, defina `VISION_MODEL`, `VISION_API_KEY` e `VISION_BASE_URL`, ou ative a compreensão de imagens em **Mais recursos**. Quando o modelo escolhido não consegue ler imagens, a página avisa ao salvar. Uma imagem que o personagem não consegue ver, porque a compreensão de imagens está desativada ou falhou, chega a ele como uma imagem que ele não consegue ver, tanto em grupos quanto em conversas privadas, de modo que ele pergunta sobre a imagem em vez de descrevê-la. Mensagens de voz, vídeos, arquivos e mensagens encaminhadas chegam a ele como o que são, com a transcrição da mensagem de voz quando a plataforma a fornece. As palavras de uma mensagem encaminhada são lidas como palavras da pessoa cuja mensagem foi encaminhada: não chamam ninguém pelo nome nem executam nenhum comando de memória. Uma menção a outra pessoa chega ao personagem com o nome que essa pessoa escolheu, que nunca conta como palavras do remetente, de modo que não chama o personagem nem dá um comando.
 
 ## Coloque em um chat

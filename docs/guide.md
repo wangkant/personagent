@@ -271,6 +271,42 @@ To override a shipped file, put a file with the same name in the home folder's `
 | `data/output_filter.<lang>.json` | Replacement and rejection rules for live replies |
 | `persona.card.json` | Optional nicknames and emoji, character-set and length settings, such as `{ "aliases": ["Lu"], "reply_style": { "emoji": true, "max_chars": 320 } }`. A nickname in `aliases` calls the character as its name does. Names are matched ignoring case, full-width letters and accents, so `sofia` calls Sofía. In a message, ñ, ã, õ and й count as letters of their own, so `niña` does not call a character named Nina; in the character's own name such a mark may be left out, so `nina` calls Niña. A name does not call the character from inside a longer word: a katakana name inside a longer katakana word does not call it, and neither does a Korean name in the middle of a word. With `"emoji": true` the character may use emoji as it usually does, and a `max_chars` below 800 is given to the model as a length limit |
 
+In these file names `<lang>` is `zh` for Simplified and Traditional Chinese and `en` for every other language. A file you place in `data/` replaces the shipped file of that kind as a whole, and a new file takes effect after the character restarts. The App view calls these files **Lorebook, example dialogues and word filters**. The formats, with a minimal example of each:
+
+- Lorebook (`lorebook.<lang>.json`): an entry is added to the prompt when one of its `keywords` appears in the last ten messages. `keywords` and `content` are required; `name` is optional, and `priority` (default 100) decides which entries come first, at most five per turn.
+
+  ```json
+  {"entries": [
+    {"name": "gym", "keywords": ["gym", "the cave"], "content": "The group calls the gym on Fifth Street the cave.", "priority": 100}
+  ]}
+  ```
+
+  A SillyTavern World Info export cannot be used as is: its `entries` is an object keyed by number, and the keywords are under `key`. Make `entries` a list and rename `key` to `keywords`; `content` stays as it is.
+- Word filters (`output_filter.<lang>.json`): each `pattern` is a Python regular expression, matched ignoring case. `"action": "reject"` drops the whole reply, so nothing is sent; `"replace"` puts `replacement` in place of the match and sends the rest.
+
+  ```json
+  {"filters": [
+    {"name": "service_opener", "pattern": "^(hi|hello)\\W*how can i help", "action": "reject", "reason": "customer-service opener"},
+    {"name": "no_em_dash", "pattern": "—", "action": "replace", "replacement": ", "}
+  ]}
+  ```
+- Example dialogues (`examples.<lang>.jsonl`): one JSON object per line, with the messages before the reply in `context`, each as `name: text`.
+
+  ```json
+  {"scenario": "a friend shares a video", "context": ["alex: the most cursed way to make instant noodles"], "reply": "watching cooking crimes at midnight is a choice"}
+  ```
+
+**Persona length and the `[style]` block.** The **Persona** box takes up to 4,000 characters. A `[style]` block in `persona.txt` changes six rules of private chats; group chats ignore it. Each line is `name: value`. A value that is not listed keeps the default, the first one below, and the log notes it:
+
+```text
+[style]
+length: medium
+vent: ask
+[/style]
+```
+
+The names and values are `length` (short, medium, long), `vent`, for when someone vents (hold, ask, solve), `recs`, for when someone asks for a recommendation (ask_back, offer), `good_news` (cheer, deadpan), `particles`, for filler words (capped, free, none), and `fatigue` (stock, own).
+
 To let it see images, set `VISION_MODEL`, `VISION_API_KEY` and `VISION_BASE_URL`, or turn on image understanding under **More features**. When the chosen model cannot read images, the page says so when you save. A picture the character cannot see, because image understanding is off or failed, reaches it as a picture it cannot see, in groups and in private chats alike, so it asks about the picture instead of describing it. Voice messages, videos, files and forwarded messages reach it as what they are, with a voice message's transcript when the platform provides one. The words of a forwarded message are read as the forwarded person's words: they call no one by name and run no memory command. A mention of another person reaches the character with the name that person chose, which never counts as the sender's words, so it neither calls the character nor gives a command.
 
 ## Put it in a chat

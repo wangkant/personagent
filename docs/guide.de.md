@@ -271,6 +271,42 @@ Um eine mitgelieferte Datei zu ersetzen, legen Sie eine Datei gleichen Namens in
 | `data/output_filter.<lang>.json` | Ersetzungs- und Ablehnungsregeln für laufende Antworten |
 | `persona.card.json` | Optionale Spitznamen sowie Einstellungen für Emoji, Zeichensatz und Länge, wie `{ "aliases": ["Lu"], "reply_style": { "emoji": true, "max_chars": 320 } }`. Ein Spitzname in `aliases` spricht die Figur ebenso an wie ihr Name. Namen werden ohne Rücksicht auf Groß- und Kleinschreibung, Buchstaben voller Breite und Akzente verglichen, sodass `sofia` Sofía anspricht. In einer Nachricht gelten ñ, ã, õ und й als eigene Buchstaben, sodass `niña` keine Figur namens Nina anspricht; im eigenen Namen der Figur darf ein solches Zeichen fehlen, sodass `nina` Niña anspricht. Innerhalb eines längeren Wortes spricht ein Name die Figur nicht an: Ein Katakana-Name in einem längeren Katakana-Wort spricht sie nicht an, ebenso wenig ein koreanischer Name in der Mitte eines Wortes. Mit `"emoji": true` darf die Figur Emoji so verwenden, wie sie es gewohnt ist, und ein `max_chars` unter 800 wird dem Modell als Längengrenze mitgeteilt |
 
+In diesen Dateinamen steht `<lang>` für `zh` bei vereinfachtem und traditionellem Chinesisch und für `en` bei allen anderen Sprachen. Eine Datei in `data/` ersetzt die mitgelieferte Datei derselben Art vollständig, und eine neue Datei wird nach einem Neustart der Figur wirksam. Die Ansicht App nennt diese Dateien **Lorebook, Beispieldialoge und Wortfilter**. Die Formate, jeweils mit einem Minimalbeispiel:
+
+- Lorebook (`lorebook.<lang>.json`): Ein Eintrag wird dem Prompt hinzugefügt, wenn eines seiner `keywords` in den letzten zehn Nachrichten vorkommt. `keywords` und `content` sind Pflicht; `name` ist optional, und `priority` (Standard 100) legt fest, welche Einträge zuerst kommen, höchstens fünf pro Runde.
+
+  ```json
+  {"entries": [
+    {"name": "gym", "keywords": ["gym", "the cave"], "content": "The group calls the gym on Fifth Street the cave.", "priority": 100}
+  ]}
+  ```
+
+  Ein World-Info-Export aus SillyTavern lässt sich nicht unverändert verwenden: Dort ist `entries` ein nach Nummern geordnetes Objekt, und die Schlüsselwörter stehen unter `key`. Machen Sie `entries` zu einer Liste und benennen Sie `key` in `keywords` um; `content` bleibt unverändert.
+- Wortfilter (`output_filter.<lang>.json`): Jedes `pattern` ist ein regulärer Ausdruck in Python-Syntax, der ohne Beachtung der Groß- und Kleinschreibung verglichen wird. `"action": "reject"` verwirft die gesamte Antwort, sodass nichts gesendet wird; `"replace"` setzt `replacement` an die Stelle des Treffers und sendet den Rest.
+
+  ```json
+  {"filters": [
+    {"name": "service_opener", "pattern": "^(hi|hello)\\W*how can i help", "action": "reject", "reason": "customer-service opener"},
+    {"name": "no_em_dash", "pattern": "—", "action": "replace", "replacement": ", "}
+  ]}
+  ```
+- Beispieldialoge (`examples.<lang>.jsonl`): ein JSON-Objekt pro Zeile; die Nachrichten vor der Antwort stehen in `context`, jeweils als `Name: Text`.
+
+  ```json
+  {"scenario": "a friend shares a video", "context": ["alex: the most cursed way to make instant noodles"], "reply": "watching cooking crimes at midnight is a choice"}
+  ```
+
+**Länge der Persona und der `[style]`-Block.** Das Feld **Persona** nimmt bis zu 4.000 Zeichen auf. Ein `[style]`-Block in `persona.txt` ändert sechs Regeln für Einzelchats; Gruppenchats beachten ihn nicht. Jede Zeile hat die Form `Name: Wert`. Ein nicht aufgeführter Wert lässt den Standardwert, jeweils den ersten unten, bestehen, und das Protokoll vermerkt dies:
+
+```text
+[style]
+length: medium
+vent: ask
+[/style]
+```
+
+Die Namen und Werte sind `length` (short, medium, long), `vent` für den Fall, dass jemand seinem Ärger Luft macht (hold, ask, solve), `recs` für die Bitte um eine Empfehlung (ask_back, offer), `good_news` (cheer, deadpan), `particles` für Füllwörter (capped, free, none) und `fatigue` (stock, own).
+
 Damit die Figur Bilder erkennt, setzen Sie `VISION_MODEL`, `VISION_API_KEY` und `VISION_BASE_URL`, oder aktivieren Sie die Bilderkennung unter **Weitere Funktionen**. Kann das gewählte Modell keine Bilder lesen, weist die Seite beim Speichern darauf hin. Ein Bild, das die Figur nicht sehen kann, weil die Bilderkennung ausgeschaltet ist oder fehlgeschlagen ist, erreicht sie in Gruppen wie in Direktnachrichten als Bild, das sie nicht sehen kann; sie fragt daher nach dem Bild, statt es zu beschreiben. Sprachnachrichten, Videos, Dateien und weitergeleitete Nachrichten erreichen sie als das, was sie sind, eine Sprachnachricht mit ihrer Abschrift, sofern die Plattform eine liefert. Der Text einer weitergeleiteten Nachricht gilt als Äußerung der Person, von der sie weitergeleitet wurde: Er spricht niemanden mit Namen an und führt keinen Gedächtnis-Befehl aus. Eine Erwähnung einer anderen Person erreicht die Figur mit dem Namen, den diese Person selbst gewählt hat. Dieser Name gilt nie als Äußerung des Absenders; er spricht die Figur daher weder an, noch erteilt er einen Befehl.
 
 ## In einen Chat bringen

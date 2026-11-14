@@ -271,6 +271,42 @@ Pour remplacer un fichier fourni, placez un fichier du même nom dans `data/` du
 | `data/output_filter.<lang>.json` | Règles de remplacement et de rejet pour les réponses en production |
 | `persona.card.json` | Surnoms et réglages facultatifs d'emoji, de jeu de caractères et de longueur, comme `{ "aliases": ["Lu"], "reply_style": { "emoji": true, "max_chars": 320 } }`. Un surnom figurant dans `aliases` interpelle le personnage comme le fait son nom. Les noms sont comparés sans tenir compte de la casse, des lettres pleine chasse ni des accents, de sorte que `sofia` interpelle Sofía. Dans un message, ñ, ã, õ et й comptent comme des lettres à part entière, de sorte que `niña` n'interpelle pas un personnage nommé Nina ; dans le nom du personnage lui-même, un tel signe peut être omis, de sorte que `nina` interpelle Niña. Un nom n'interpelle pas le personnage depuis l'intérieur d'un mot plus long : un nom en katakana inclus dans un mot plus long en katakana ne l'interpelle pas, pas plus qu'un nom coréen placé au milieu d'un mot. Avec `"emoji": true`, le personnage peut utiliser des emoji comme il le fait habituellement, et une valeur de `max_chars` inférieure à 800 est transmise au modèle comme limite de longueur |
 
+Dans ces noms de fichier, `<lang>` vaut `zh` pour le chinois simplifié et traditionnel, et `en` pour toutes les autres langues. Un fichier placé dans `data/` remplace entièrement le fichier fourni du même type, et un nouveau fichier prend effet après le redémarrage du personnage. La vue Application appelle ces fichiers **Lorebook, dialogues d'exemple et filtres de mots**. Les formats, avec un exemple minimal de chacun :
+
+- Lorebook (`lorebook.<lang>.json`) : une entrée est ajoutée au prompt lorsqu'un de ses `keywords` apparaît dans les dix derniers messages. `keywords` et `content` sont obligatoires ; `name` est facultatif, et `priority` (100 par défaut) détermine quelles entrées passent en premier, à raison de cinq au plus par tour.
+
+  ```json
+  {"entries": [
+    {"name": "gym", "keywords": ["gym", "the cave"], "content": "The group calls the gym on Fifth Street the cave.", "priority": 100}
+  ]}
+  ```
+
+  Un export World Info de SillyTavern ne peut pas être utilisé tel quel : son `entries` est un objet indexé par des numéros, et les mots-clés se trouvent sous `key`. Transformez `entries` en liste et renommez `key` en `keywords` ; `content` reste inchangé.
+- Filtres de mots (`output_filter.<lang>.json`) : chaque `pattern` est une expression régulière Python, comparée sans tenir compte de la casse. `"action": "reject"` supprime toute la réponse, si bien que rien n'est envoyé ; `"replace"` remplace la correspondance par `replacement` et envoie le reste.
+
+  ```json
+  {"filters": [
+    {"name": "service_opener", "pattern": "^(hi|hello)\\W*how can i help", "action": "reject", "reason": "customer-service opener"},
+    {"name": "no_em_dash", "pattern": "—", "action": "replace", "replacement": ", "}
+  ]}
+  ```
+- Dialogues d'exemple (`examples.<lang>.jsonl`) : un objet JSON par ligne, avec les messages qui précèdent la réponse dans `context`, chacun sous la forme `nom: texte`.
+
+  ```json
+  {"scenario": "a friend shares a video", "context": ["alex: the most cursed way to make instant noodles"], "reply": "watching cooking crimes at midnight is a choice"}
+  ```
+
+**Longueur de la fiche du personnage et bloc `[style]`.** Le champ **Fiche du personnage** accepte jusqu'à 4 000 caractères. Un bloc `[style]` dans `persona.txt` modifie six règles des discussions privées ; les discussions de groupe l'ignorent. Chaque ligne a la forme `nom: valeur`. Une valeur qui ne figure pas dans la liste laisse la valeur par défaut, la première indiquée ci-dessous, et le journal le signale :
+
+```text
+[style]
+length: medium
+vent: ask
+[/style]
+```
+
+Les noms et valeurs sont `length` (short, medium, long), `vent`, lorsque quelqu'un se confie (hold, ask, solve), `recs`, lorsque quelqu'un demande une recommandation (ask_back, offer), `good_news` (cheer, deadpan), `particles`, pour les mots de remplissage (capped, free, none), et `fatigue` (stock, own).
+
 Pour lui faire voir les images, définissez `VISION_MODEL`, `VISION_API_KEY` et `VISION_BASE_URL`, ou activez la compréhension d'images sous **Autres fonctions**. Lorsque le modèle choisi ne sait pas lire les images, la page le signale à l'enregistrement. Une image que le personnage ne peut pas voir, parce que la compréhension d'images est désactivée ou a échoué, lui parvient comme une image qu'il ne peut pas voir, dans les groupes comme dans les discussions privées ; il pose donc une question sur l'image au lieu de la décrire. Les messages vocaux, les vidéos, les fichiers et les messages transférés lui parviennent pour ce qu'ils sont, avec la transcription du message vocal lorsque la plateforme la fournit. Les mots d'un message transféré sont lus comme ceux de la personne dont le message a été transféré : ils n'interpellent personne par son nom et n'exécutent aucune commande de mémoire. La mention d'une autre personne parvient au personnage avec le nom que cette personne a choisi, qui ne compte jamais comme les mots de l'expéditeur ; elle n'interpelle donc pas le personnage et ne donne aucune commande.
 
 ## Le placer dans une discussion
