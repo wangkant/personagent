@@ -341,3 +341,16 @@ def test_no_input_names_doctor_and_up_and_says_the_key_is_untested(home, monkeyp
     check("untested", "The key was saved but not tested." in out, out)
     check("doctor and up are next steps", " doctor" in out and out.rstrip().count(" up") >= 1, out)
     check("no bare restart", "then restart." not in out, out)
+
+
+@pytest.mark.parametrize("command", ["memory", "learned", "doctor"])
+def test_a_missing_home_is_named_and_left_uncreated(tmp_path, monkeypatch, capsys, command) -> None:
+    from persona_agent import cli
+
+    missing = tmp_path / "nope"
+    monkeypatch.setenv("AGENT_HOME", str(tmp_path))  # restored after cli.main replaces it
+    monkeypatch.setenv("AGENT_LANG", "en")
+    check("refused", cli.main(["--home", str(missing), command]) == 2)
+    err = capsys.readouterr().err
+    check("names the folder and init", f"no personagent home at {missing}" in err and " init`" in err, err)
+    check("creates nothing", not missing.exists())

@@ -47,6 +47,22 @@ COMMANDS = {
 }
 
 
+#: Commands that only read an existing home: a mistyped --home must not pass for an empty one.
+READ_A_HOME = ("memory", "learned", "doctor")
+
+
+def _missing_home() -> str:
+    """Why there is no home to read, or '' when the folder exists."""
+    from persona_agent import home
+    from persona_agent.setup_wizard import command
+
+    found = home.find_home()
+    if found.is_dir():
+        return ""
+    return langs.term(f"There is no personagent home at {found}. "
+                      f"Run `{command('init', found)}` to set one up there.")
+
+
 def _run_server(argv: list[str], prog: str) -> int:
     p = argparse.ArgumentParser(prog=prog, description=langs.term(COMMANDS["run"][2]))
     p.add_argument("--host", default=None, help=langs.term("default SERVER_HOST or 127.0.0.1"))
@@ -136,6 +152,11 @@ def main(argv: list[str] | None = None) -> int:
     chosen = later_home or args.home
     if chosen:
         os.environ["AGENT_HOME"] = os.path.abspath(os.path.expanduser(chosen))
+    if args.command in READ_A_HOME and not {"-h", "--help"} & set(rest):
+        missing = _missing_home()
+        if missing:
+            print(missing, file=sys.stderr)
+            return 2
     module_name, func_name, _help = COMMANDS[args.command]
     try:
         func = getattr(importlib.import_module(module_name), func_name)

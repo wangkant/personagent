@@ -436,5 +436,6 @@
 "{0}: not asked, because it is the same model as the row {1}, which failed": "{0}: no se consultó, porque es el mismo modelo que la fila {1}, que falló",
 "{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0} ({1}) no llamó a la herramienta de búsqueda, así que el personaje nunca busca en la web. Defina LLM_JUDGE_MODEL con un modelo que admita llamadas a herramientas.",
 "Fix first: {0}": "Corrija primero: {0}",
-"Not critical, but failing: {0}": "No es crítico, pero falla: {0}"
+"Not critical, but failing: {0}": "No es crítico, pero falla: {0}",
+"There is no personagent home at {0}. Run `{1}` to set one up there.": "No hay ninguna carpeta principal de personagent en {0}. Ejecute `{1}` para crear una allí."
 }

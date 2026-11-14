@@ -436,5 +436,6 @@
 "{0}: not asked, because it is the same model as the row {1}, which failed": "{0}：未单独询问，因为它与「{1}」一行为同一模型，而该行未通过",
 "{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0}（{1}）未调用搜索工具，因此角色永远不会联网搜索。请将 LLM_JUDGE_MODEL 设为支持工具调用的模型。",
 "Fix first: {0}": "首先需要修复：{0}",
-"Not critical, but failing: {0}": "非关键项，但未通过：{0}"
+"Not critical, but failing: {0}": "非关键项，但未通过：{0}",
+"There is no personagent home at {0}. Run `{1}` to set one up there.": "{0} 处没有 personagent 主目录。运行 `{1}` 可在该处建立。"
 }
