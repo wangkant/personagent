@@ -499,9 +499,12 @@ def test_preflight_reports_the_right_deployments(monkeypatch) -> None:
     check("preflight: a minimal working config is silent",
           not levels(env={"LLM_API_KEY": "sk-x"}))
     check("preflight: settings the offline tools read are not typos",
-          not levels(env={"LLM_API_KEY": "sk-x", "ANTHROPIC_API_KEY": "y",
-                          "REVIEWER_MODEL": "r",
-                          "BENCH_JUDGE_MODEL": "b", "BENCH_EVAL_DELAY_S": "1"}))
+          not levels(env={"LLM_API_KEY": "sk-x", "BENCH_JUDGE_MODEL": "b"}))
+    check("preflight: settings of removed tools warn, never refuse",
+          levels(env={"LLM_API_KEY": "sk-x", "REVIEWER_MODEL": "r",
+                      "ANTHROPIC_API_KEY": "y", "BENCH_EVAL_DELAY_S": "1"})
+          == {("WARN", "REVIEWER_MODEL"), ("WARN", "ANTHROPIC_API_KEY"),
+              ("WARN", "BENCH_EVAL_DELAY_S")})
     check("preflight: proxy variables are not typos",
           not levels(env={"LLM_API_KEY": "sk-x", "HTTP_PROXY": "p",
                           "HTTPS_PROXY": "p", "NO_PROXY": "localhost"}))

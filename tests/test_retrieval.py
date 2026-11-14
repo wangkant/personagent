@@ -1,7 +1,7 @@
 """Tests for few-shot retrieval and its hot-reloaded datasets.
 
-examples.jsonl / feedback.jsonl are read on the reply hot path and appended to
-by the offline tools; the pools reparse whenever a file's stamp changes, and
+examples.jsonl / feedback.jsonl are read on the reply hot path; the pools
+reparse whenever a file's stamp changes, and
 the reload cases below check that what a running agent holds equals what a
 cold process would load.
 
@@ -60,28 +60,6 @@ def append_jsonl(path: Path, records: list[dict]) -> None:
     # append from the staleness check; the size change catches it either way,
     # but bump mtime so the test exercises the same signal production does.
     os.utime(path, None)
-
-
-def bank_example(a: Agent, rec: dict) -> None:
-    """Append one machine-written example the way the offline tools do: cap the
-    auto half first, then append.
-
-    The agent itself no longer writes this pool — automatic learning goes
-    through the evidence ledger and lands in a separate promoted view (see
-    tests/test_ledger.py). `tools/auto_reviewer.py` still writes here, and
-    this is its pattern: trim_pool + append. The cap and
-    the reload have to keep agreeing about the result, which is
-    what the tests below check."""
-    evolution.trim_pool(a.examples_file, max_auto=a.promote_max_examples,
-                        is_auto=lambda r: "score" in r)
-    evolution.append_jsonl(a.examples_file, [rec])
-
-
-def bank_pair(a: Agent, rec: dict) -> int:
-    """The feedback-side equivalent of bank_example (see auto_reviewer.py)."""
-    evolution.trim_pool(a.feedback_file, max_auto=a.promote_max_feedback,
-                        is_auto=lambda r: bool(r.get("src")))
-    return evolution.append_jsonl(a.feedback_file, [rec])
 
 
 def replies(agent: Agent) -> list[str]:
@@ -294,12 +272,12 @@ def test_file_without_trailing_newline_is_fully_parsed() -> None:
         check("reload: newline-less final line still parsed",
               replies(a) == [f"r{i}" for i in range(4)])
 
-        # Banking a new example must not glue itself onto that unterminated
-        # last line — which would destroy a hand-curated entry AND the new one.
-        bank_example(a, ex("r4"))
+        # An append must not glue itself onto that unterminated last line —
+        # which would destroy a hand-curated entry AND the new one.
+        evolution.append_jsonl(a.examples_file, [ex("r4")])
         os.utime(a.examples_file, None)
         a._reload_examples_if_stale()
-        check("reload: banking onto a newline-less file preserves both records",
+        check("reload: appending onto a newline-less file preserves both records",
               replies(a) == [f"r{i}" for i in range(5)] == cold_replies(tmp))
 
 
@@ -359,153 +337,20 @@ def test_feedback_pairs_reload() -> None:
               [p["reply"] for p in a._pairs_cache] == ["bad reply", "bad two"])
 
 
-# ---------------------------------------------------------------------------
-# Pool caps: bound the auto-grown half, never touch the curated head
-# ---------------------------------------------------------------------------
-
-def auto_ex(reply: str) -> dict:
-    """An auto-banked example — machine entries are the ones carrying a score."""
-    return dict(ex(reply), score=5)
-
-
-def test_examples_auto_pool_capped_curated_kept() -> None:
+def test_seed_pool_always_leads_the_retrieved_pool() -> None:
+    """The read-only data/ seed is never rewritten and always comes first."""
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         a = make_agent(tmp)
-        a.promote_max_examples = 20
-        curated = [ex(f"curated{i}") for i in range(3)]
-        write_jsonl(a.examples_file, curated + [auto_ex(f"a{i}") for i in range(20)])
-
-        # Inside the slack window (10% of the cap, min 8): no rewrite yet — a
-        # pool sitting at the cap must not rewrite the whole file per append.
-        for i in range(20, 24):
-            bank_example(a, auto_ex(f"a{i}"))
-        a._examples_mtime = 0.0
-        a._reload_examples_if_stale()
-        check("cap: slack absorbs small overshoot without a rewrite",
-              len(a._examples_cache) == 3 + 24)
-
-        # Past the slack window: trim back so the auto count settles in
-        # [cap, cap+slack] instead of growing without bound.
-        for i in range(24, 60):
-            bank_example(a, auto_ex(f"a{i}"))
-        a._examples_mtime = 0.0
-        a._reload_examples_if_stale()
-        got = replies(a)
-        autos = [r for r in got if r.startswith("a")]
-        check("cap: auto entries bounded by cap + slack", len(autos) <= 20 + 8 + 1,
-              f"kept {len(autos)}")
-        check("cap: newest auto entries survive", autos[-1] == "a59")
-        check("cap: oldest auto entries dropped", "a0" not in autos)
-        check("cap: every curated entry kept",
-              [r for r in got if r.startswith("curated")]
-              == ["curated0", "curated1", "curated2"])
-        check("cap: curated head stays at the front of the file",
-              got[:3] == ["curated0", "curated1", "curated2"])
-
-
-def test_examples_cap_disabled_keeps_everything() -> None:
-    with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        a = make_agent(tmp)
-        a.promote_max_examples = 0  # opt out -> pre-cap behaviour
-        write_jsonl(a.examples_file, [auto_ex(f"a{i}") for i in range(30)])
-        for i in range(30, 60):
-            bank_example(a, auto_ex(f"a{i}"))
-        a._examples_mtime = 0.0
-        a._reload_examples_if_stale()
-        check("cap: 0 disables the cap", len(a._examples_cache) == 60)
-
-
-def test_seed_pool_never_trimmed_and_always_retrieved() -> None:
-    """The read-only data/ seed is outside the cap entirely: never rewritten,
-    always at the front of the retrieved pool."""
-    with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        a = make_agent(tmp)
-        a.promote_max_examples = 5
         write_jsonl(a.examples_seed_file, [ex(f"seed{i}") for i in range(3)])
         seed_bytes = a.examples_seed_file.read_bytes()
-        write_jsonl(a.examples_file, [auto_ex(f"a{i}") for i in range(40)])
-        bank_example(a, auto_ex("fresh"))
-        a._examples_mtime = 0.0
+        write_jsonl(a.examples_file, [dict(ex(f"a{i}"), score=5) for i in range(40)])
         a._reload_examples_if_stale()
         got = replies(a)
         check("seed: untouched on disk",
               a.examples_seed_file.read_bytes() == seed_bytes)
-        check("seed: still leads the retrieved pool",
-              got[:3] == ["seed0", "seed1", "seed2"])
-        check("seed: rows are not counted against the cap",
-              len([r for r in got if r.startswith("a")]) <= 5 + 8 + 1)
-
-
-def test_all_curated_pool_never_trimmed() -> None:
-    """A pool with no machine entries at all must survive untouched however
-    far past the cap it is — the cap counts auto entries only."""
-    with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        a = make_agent(tmp)
-        a.promote_max_examples = 5
-        write_jsonl(a.examples_file, [ex(f"curated{i}") for i in range(40)])
-        bank_example(a, auto_ex("fresh"))
-        a._examples_mtime = 0.0
-        a._reload_examples_if_stale()
-        check("cap: all-curated pool untouched", len(a._examples_cache) == 41)
-
-
-def test_feedback_auto_pool_capped() -> None:
-    def pair(reply: str, src: str = "") -> dict:
-        p = dict(ex(reply), rating="better", better=f"good {reply}")
-        if src:
-            p["src"] = src
-        return p
-
-    with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        a = make_agent(tmp)
-        a.promote_max_feedback = 10
-        write_jsonl(a.feedback_file,
-                    [pair("hand1"), pair("hand2")]
-                    + [pair(f"m{i}", "user_reaction") for i in range(10)])
-        for i in range(10, 30):
-            bank_pair(a, pair(f"m{i}", "user_reaction"))
-        a._pairs_mtime = 0.0
-        a._reload_pairs_if_stale()
-        got = [p["reply"] for p in a._pairs_cache]
-        machine = [r for r in got if r.startswith("m")]
-        check("cap: machine pairs bounded by cap + slack", len(machine) <= 10 + 8 + 1,
-              f"kept {len(machine)}")
-        check("cap: newest machine pair survives", machine[-1] == "m29")
-        check("cap: hand-authored pairs kept",
-              [r for r in got if r.startswith("hand")] == ["hand1", "hand2"])
-
-
-def test_feedback_write_survives_a_full_pool() -> None:
-    """append_jsonl refuses past FEEDBACK_MAX_BYTES; the cap has to trim first
-    so the primary learning channel doesn't go quiet when the file fills up."""
-    with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        a = make_agent(tmp)
-        a.promote_max_feedback = 5
-        filler = "x" * 400
-        rows = [dict(ex(f"m{i}"), rating="better", better=filler,
-                     src="user_reaction") for i in range(60)]
-        write_jsonl(a.feedback_file, rows)
-        # Byte ceiling just above the current size: without the trim, nothing
-        # more can ever be written.
-        size = a.feedback_file.stat().st_size
-        real_cap, evolution.FEEDBACK_MAX_BYTES = evolution.FEEDBACK_MAX_BYTES, size + 100
-        try:
-            wrote = bank_pair(
-                a, dict(ex("brand new"), rating="better", better="fixed",
-                        src="user_reaction"))
-        finally:
-            evolution.FEEDBACK_MAX_BYTES = real_cap
-        a._pairs_mtime = 0.0
-        a._reload_pairs_if_stale()
-        check("cap: write succeeds against a full pool", wrote == 1)
-        check("cap: the new pair is in the pool",
-              "brand new" in [p["reply"] for p in a._pairs_cache])
+        check("seed: leads the retrieved pool",
+              got[:3] == ["seed0", "seed1", "seed2"] and len(got) == 43)
 
 
 def test_promoted_views_are_a_third_retrieval_source() -> None:

@@ -183,6 +183,8 @@
 "not required (QQ_BOT_ID is unset)": "不需要（QQ_BOT_ID 未设置）",
 "{0} -> {1} dims": "{0} -> {1} 维",
 "tools/prompt_lab.py, its only reader, was removed": "唯一读取该设置的 tools/prompt_lab.py 已被移除",
+"tools/auto_reviewer.py, its only reader, was removed": "唯一读取该设置的 tools/auto_reviewer.py 已被移除",
+"tools/evolution_benchmark.py, its only reader, was removed": "唯一读取该设置的 tools/evolution_benchmark.py 已被移除",
 "Ledger sizes": "学习记录大小",
 "DM chat": "私聊模型",
 "Vision": "视觉",

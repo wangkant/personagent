@@ -1,8 +1,7 @@
-"""Low-score eval -> diagnosis -> BAD/OK pair draft, plus pool dedup and trimming.
+"""Low-score eval -> diagnosis -> BAD/OK pair draft, plus pool dedup.
 
 Drafts are audited in candidates.jsonl (deduped by src_eval_ts) and consumed
-by tools/auto_reviewer.py (a human approves each pair into feedback) or by
-Agent.loop_evolve (a self-review candidate that waits for corroboration).
+by Agent.loop_evolve (a self-review candidate that waits for corroboration).
 Pure logic: no env reads, no LLM client.
 """
 from __future__ import annotations
@@ -14,7 +13,7 @@ from pathlib import Path
 from .paths import read_jsonl
 from .textproc import _fence_user_data, _truncate_framed, strip_json_fences
 
-from .storage import append_jsonl_unlocked, append_lock, atomic_write_text
+from .storage import append_jsonl_unlocked, append_lock
 
 REVIEWER_PROMPTS = {
     "en": """You are a prompt engineer for an LLM persona agent. Below is one low-scoring reply from a group-chat persona chatbot. Diagnose the "AI tell" and draft a fix.
@@ -54,8 +53,7 @@ REVIEWER_VERSION = "self-reviewer/2"
 # Size cap for the curated feedback pools.
 FEEDBACK_MAX_BYTES = 5_000_000
 
-# candidates.jsonl never rotates. Shared here by its two writers (the agent and
-# tools/auto_reviewer.py), which must agree on one cap.
+# candidates.jsonl never rotates.
 CANDIDATE_AUDIT_MAX_BYTES = 20_000_000
 
 
@@ -112,11 +110,6 @@ def load_evals(path: Path, threshold: int) -> list[dict]:
 def load_reviewed_ts(path: Path) -> set[str]:
     """src_eval_ts of every candidate ever written — the review dedup set."""
     return {r["src_eval_ts"] for r in read_jsonl((path,)) if r.get("src_eval_ts")}
-
-
-def load_pending_candidates(path: Path) -> list[dict]:
-    """Candidates not yet approved/rejected (no 'applied' verdict)."""
-    return [r for r in read_jsonl((path,)) if not r.get("applied")]
 
 
 def candidate_record(ev: dict, diag: dict, applied: str = "") -> dict:
@@ -183,7 +176,7 @@ def append_jsonl(path: Path, records: list[dict],
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
     written = 0
-    # Locked: on Windows O_APPEND is not atomic, and two writers share these files.
+    # Locked: on Windows O_APPEND is not atomic.
     with append_lock(path):
         size = path.stat().st_size if path.exists() else 0
         for rec in records:
@@ -192,51 +185,3 @@ def append_jsonl(path: Path, records: list[dict],
             size += append_jsonl_unlocked(path, rec)
             written += 1
     return written
-
-
-def trim_pool(path: Path, *, max_auto: int, slack: int | None = None,
-              is_auto=lambda r: False) -> tuple[int, int] | None:
-    """Keep the newest `max_auto` machine-written rows of a pool, so old
-    auto rows do not outvote new ones. Rows `is_auto` rejects (by default,
-    all) are never dropped. Rewrites atomically once the overshoot passes
-    `slack`; returns (before, after) auto counts, or None if nothing changed.
-    """
-    if max_auto <= 0 or not path.exists():
-        return None
-    if slack is None:
-        slack = max(8, max_auto // 10)
-    # Cheap pre-check: the auto count never exceeds the line count.
-    with path.open("rb") as fh:
-        if fh.read().count(b"\n") <= max_auto + max(0, slack):
-            return None
-    # Under the appenders' lock, or a concurrent append would be lost.
-    with append_lock(path):
-        records = read_jsonl((path,))
-        auto_at = [i for i, r in enumerate(records) if is_auto(r)]
-        if len(auto_at) <= max_auto + max(0, slack):
-            return None
-        dropped = set(auto_at[:len(auto_at) - max_auto])
-        kept = [r for i, r in enumerate(records) if i not in dropped]
-        atomic_write_text(
-            path,
-            "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in kept),
-        )
-    return len(auto_at), len(auto_at) - len(dropped)
-
-
-def mark_candidates(path: Path, verdicts: dict[str, str]) -> None:
-    """Stamp 'applied' verdicts ('approved'/'rejected'/'auto') onto candidates,
-    keyed by src_eval_ts. Atomic rewrite (tmp + replace)."""
-    if not verdicts or not path.exists():
-        return
-    # Under the appenders' lock, or a concurrent append would be lost.
-    with append_lock(path):
-        records = read_jsonl((path,))
-        for r in records:
-            ts = r.get("src_eval_ts")
-            if ts in verdicts and not r.get("applied"):
-                r["applied"] = verdicts[ts]
-        atomic_write_text(
-            path,
-            "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records),
-        )

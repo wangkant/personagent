@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **`tools/auto_reviewer.py`**, which asked a person to approve each before/after pair into the shared feedback pool. Learning no longer waits for a person: set `EVOLVE_AUTO_ENABLED=true` and the character decides for itself. Pairs already approved into `runtime/feedback.<lang>.jsonl` are still used. `REVIEWER_MODEL` is no longer read: `doctor` warns about it, and the service starts.
+- **`tools/evolution_benchmark.py`, `tools/scenario_probe.py` and their scenarios in `data/benchmark/`**, with the `judge` extra (`anthropic`) that only they used. Use `personagent eval --suite learning` to measure learning. `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` and `BENCH_EVAL_DELAY_S` (and its pre-1.0 name `BENCH_EVAL_DELAY`) are no longer read: `doctor` warns about them, and the service starts.
+- **`data/evals/address.jsonl` no longer ships in the package.** Only the project's tests read it; it is now `tests/data/address.jsonl`.
+
 ## [1.4.4] — 2026-11-13
 
 ### Changed

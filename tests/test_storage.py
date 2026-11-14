@@ -175,12 +175,9 @@ def test_cli_tools_follow_runtime_dir() -> None:
     runtime_rel = "runtime/tool-contract-test"
     code = (
         "from pathlib import Path\n"
-        "from tools import auto_reviewer as a\n"
         "from tools import bootstrap_from_history as b\n"
         "from tools import import_stickers_folder as i\n"
         f"expected=(Path({str(ROOT)!r})/{runtime_rel!r}).resolve()\n"
-        "assert a.EVAL_FILE == expected/'eval.jsonl', a.EVAL_FILE\n"
-        "assert a.CANDIDATES_FILE == expected/'candidates.jsonl', a.CANDIDATES_FILE\n"
         "assert b.STICKERS_JSON == expected/'stickers.json', b.STICKERS_JSON\n"
         "assert b.ADMIN_PROFILE == expected/'owner_profile.json', b.ADMIN_PROFILE\n"
         "assert i.STICKERS_JSON == expected/'stickers.json', i.STICKERS_JSON\n"
@@ -209,8 +206,6 @@ def test_cli_tools_follow_runtime_dir() -> None:
 def test_cli_tools_migrate_legacy_state_when_run_first(tmp: Path) -> None:
     tmp.mkdir(parents=True, exist_ok=True)
     legacy = {
-        "eval.jsonl": '{"score":2}\n',
-        "candidates.jsonl": '{"candidate":"old"}\n',
         "stickers.json": '{"old.png":{"md5":"abc"}}',
         "owner_profile.json": '{"total_msgs":42}',
     }
@@ -219,14 +214,11 @@ def test_cli_tools_migrate_legacy_state_when_run_first(tmp: Path) -> None:
     runtime_rel = "state/tool-first"
     code = (
         "from pathlib import Path\n"
-        "from tools import auto_reviewer as a\n"
         "from tools import bootstrap_from_history as b\n"
         "from tools import import_stickers_folder as i\n"
         f"root=Path({str(tmp)!r})\n"
         f"expected=(root/{runtime_rel!r}).resolve()\n"
         "checks={\n"
-        " a.EVAL_FILE: root/'eval.jsonl',\n"
-        " a.CANDIDATES_FILE: root/'candidates.jsonl',\n"
         " b.STICKERS_JSON: root/'stickers.json',\n"
         " b.ADMIN_PROFILE: root/'owner_profile.json',\n"
         " i.STICKERS_JSON: root/'stickers.json',\n"

@@ -183,6 +183,8 @@
 "not required (QQ_BOT_ID is unset)": "nicht erforderlich (QQ_BOT_ID ist nicht gesetzt)",
 "{0} -> {1} dims": "{0} -> {1} Dimensionen",
 "tools/prompt_lab.py, its only reader, was removed": "tools/prompt_lab.py, das Einzige, was es las, wurde entfernt",
+"tools/auto_reviewer.py, its only reader, was removed": "tools/auto_reviewer.py, das Einzige, was es las, wurde entfernt",
+"tools/evolution_benchmark.py, its only reader, was removed": "tools/evolution_benchmark.py, das Einzige, was es las, wurde entfernt",
 "Ledger sizes": "Größe der Lernprotokolle",
 "DM chat": "DM-Chat",
 "Vision": "Vision",

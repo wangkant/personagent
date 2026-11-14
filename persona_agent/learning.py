@@ -191,7 +191,6 @@ class Learning:
             self._rebuild_promoted_views()
         return promoted
 
-    #: Shared with tools/auto_reviewer.py, which writes the same file.
     CANDIDATE_AUDIT_MAX_BYTES = evolution.CANDIDATE_AUDIT_MAX_BYTES
 
     def _append_audit_row(self, row: dict, label: str) -> None:

@@ -183,6 +183,8 @@
 "not required (QQ_BOT_ID is unset)": "필요 없음 (QQ_BOT_ID 미설정)",
 "{0} -> {1} dims": "{0} -> {1}차원",
 "tools/prompt_lab.py, its only reader, was removed": "유일하게 읽던 tools/prompt_lab.py가 제거되었습니다",
+"tools/auto_reviewer.py, its only reader, was removed": "유일하게 읽던 tools/auto_reviewer.py가 제거되었습니다",
+"tools/evolution_benchmark.py, its only reader, was removed": "유일하게 읽던 tools/evolution_benchmark.py가 제거되었습니다",
 "Ledger sizes": "학습 기록 크기",
 "DM chat": "DM 채팅",
 "Vision": "비전",

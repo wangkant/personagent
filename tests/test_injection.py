@@ -920,12 +920,11 @@ async def test_the_self_eval_grader_reads_the_chat_as_material(
 
 
 async def test_the_self_reviewer_reads_the_chat_as_material(tmp: Path) -> None:
-    """The reviewer's pair_draft becomes a self-review candidate and is shown
-    to a human by tools/auto_reviewer.py, so it is the third judge that reads
-    chat: a line addressing the reviewer must reach it fenced, like the two
-    above. Buffered text keeps its link spans, so a cut at 200 characters
-    that lands inside one must close it before the fence goes on, both in
-    the reviewer prompt and in the eval row the reviewer reads later."""
+    """The reviewer's pair_draft becomes a self-review candidate, so it is the
+    third judge that reads chat: a line addressing the reviewer must reach it
+    fenced, like the two above. Buffered text keeps its link spans, so a cut
+    at 200 characters that lands inside one must close it before the fence
+    goes on, both in the reviewer prompt and in the eval row the reviewer reads later."""
     from persona_agent import evolution
 
     # The link span opens before character 200 and closes after it.

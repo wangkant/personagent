@@ -183,6 +183,8 @@
 "not required (QQ_BOT_ID is unset)": "не требуется (QQ_BOT_ID не задан)",
 "{0} -> {1} dims": "{0} -> размерность {1}",
 "tools/prompt_lab.py, its only reader, was removed": "удалён tools/prompt_lab.py, единственный файл, который это читал",
+"tools/auto_reviewer.py, its only reader, was removed": "удалён tools/auto_reviewer.py, единственный файл, который это читал",
+"tools/evolution_benchmark.py, its only reader, was removed": "удалён tools/evolution_benchmark.py, единственный файл, который это читал",
 "Ledger sizes": "Объём записей об обучении",
 "DM chat": "Чат в личных сообщениях",
 "Vision": "Зрение",

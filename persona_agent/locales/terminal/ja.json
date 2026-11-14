@@ -183,6 +183,8 @@
 "not required (QQ_BOT_ID is unset)": "不要（QQ_BOT_ID が未設定です）",
 "{0} -> {1} dims": "{0} -> {1} 次元",
 "tools/prompt_lab.py, its only reader, was removed": "この設定を読み込む唯一のファイルであった tools/prompt_lab.py は削除されました",
+"tools/auto_reviewer.py, its only reader, was removed": "この設定を読み込む唯一のファイルであった tools/auto_reviewer.py は削除されました",
+"tools/evolution_benchmark.py, its only reader, was removed": "この設定を読み込む唯一のファイルであった tools/evolution_benchmark.py は削除されました",
 "Ledger sizes": "学習記録のサイズ",
 "DM chat": "DM チャット",
 "Vision": "画像認識",
