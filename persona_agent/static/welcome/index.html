@@ -92,8 +92,8 @@
           </div>
         </header>
         <section id="setup-view" class="page setup-page" hidden>
-          <h1 data-t="hero">设置角色</h1>
-          <p class="lead" data-t="intro">
+          <h1 id="setup-hero" data-t="hero">设置角色</h1>
+          <p class="lead" id="setup-intro" data-t="intro">
             填写模型密钥即可开始聊天，其余设置均有默认值。
           </p>
           <div class="setup-grid">
@@ -203,7 +203,7 @@
                 <div>
                   <strong data-t="qqLater">也可以将角色接入 QQ、微信、Telegram…</strong>
                   <p data-t="qqLaterHint">
-                    如需接入其他平台，请在「连接平台」中选择，扫码或填写一至两项即可完成。
+                    如需接入其他平台，请在「连接平台」中选择，扫码或填写几项即可完成。
                   </p>
                 </div>
               </div>
@@ -420,7 +420,7 @@
         <section id="platforms-view" class="page platforms-page" hidden>
           <h1 id="platforms-title"></h1>
           <p class="lead" data-t="platformsIntro">
-            扫码或填写一至两项即可，下载、配置和启动均会自动完成。
+            扫码或填写几项即可，下载、配置和启动均会自动完成。
           </p>
           <div id="connected-card" class="card connected-card" hidden>
             <div class="connected-head">
@@ -449,7 +449,7 @@
             </div>
             <div class="tiles" data-group="scan"></div>
             <div class="group-head">
-              <h3 class="group-title" data-t="groupKey">填写一至两项</h3>
+              <h3 class="group-title" data-t="groupKey">填写几项</h3>
               <p class="group-hint" data-t="groupKeyHint">
                 从平台的开发者后台复制，页面会说明需要复制哪几项。
               </p>
@@ -497,7 +497,7 @@
                 id="panel-mode"
                 hidden
               ></button>
-              <p class="footnote" data-t="scope">
+              <p class="footnote" id="panel-scope" data-t="scope">
                 连接后，角色将回复此平台上的群聊和私聊。
               </p>
             </form>

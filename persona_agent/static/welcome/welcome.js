@@ -206,12 +206,12 @@ const translations = {
     changeLater: "名称和性格可随时更改。",
     trioLabel: "也可以选择 GPT 娘、鲸鱼娘或 Claude 娘",
     qqLater: "也可以将角色接入 QQ、微信、Telegram…",
-    qqLaterHint: "如需接入其他平台，请在「连接平台」中选择，扫码或填写一至两项即可完成。",
+    qqLaterHint: "如需接入其他平台，请在「连接平台」中选择，扫码或填写几项即可完成。",
     chatHint: "本机对话，你在此处的身份是管理员。",
     newChat: "新对话",
     newChatDone: "已开始新的对话，角色记住的内容仍然保留。",
     forgetChat: "清除本次对话的记忆",
-    forgetChatAsk: "角色将清除在本次对话中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容，随后开始新的对话。角色在本次对话中学到的内容此后不再使用，仍列在「角色学到的内容」的「已搁置」中。其他聊天中记住的内容将予以保留。此操作无法撤销。",
+    forgetChatAsk: "角色将清除在本次对话中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容，随后开始新的对话。角色在本次对话中学到的内容此后不再使用，仍列在「角色学到的内容」的「已搁置」中。本页面此前对话中记住的内容也将一并清除；在已连接平台的聊天中记住的内容将予以保留。此操作无法撤销。",
     forget_needs_activity: "清除记忆需要先开启动态数据，可在「角色与设置」的高级设置中开启。",
     forgetChatDone: "已清除本次对话的记忆，并已开始新的对话。",
     forgetChatNone: "本次对话中没有记下任何内容，已开始新的对话。",
@@ -224,11 +224,11 @@ const translations = {
     message: "输入消息",
     composerNote: "Enter 发送 · Shift + Enter 换行",
     platformsIntro:
-      "扫码或填写一至两项即可，下载、配置和启动均会自动完成。",
+      "扫码或填写几项即可，下载、配置和启动均会自动完成。",
     connectedTitle: "已连接的平台",
     groupScan: "扫码连接",
     groupScanHint: "在手机上确认即可，无需填写任何内容。",
-    groupKey: "填写一至两项",
+    groupKey: "填写几项",
     groupKeyHint: "从平台的开发者后台复制，页面会说明需要复制哪几项。",
     howScan: "扫码",
     howPaste: "填写 {n} 项",
@@ -302,7 +302,7 @@ const translations = {
     https_required: "远程模型服务须使用 HTTPS 地址。",
     invalid_character: "请检查角色名称和性格。",
     busy: "当前操作仍在进行，请等待其完成。",
-    chat_failed: "回复未能完成。请检查模型服务和网络后重试。",
+    chat_failed: "回复未能完成。请检查模型服务和网络后重试。「应用」中的「运行检查」可显示原因。",
     setup_failed:
       "连接未能完成。请检查网络后重试；已保存的模型和角色设置不受影响。",
     download_failed: "下载未能完成，请检查网络后重试。",
@@ -585,7 +585,7 @@ const translations = {
     newChat: "New chat",
     newChatDone: "A new chat has started. What the character remembers is kept.",
     forgetChat: "Forget this chat",
-    forgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. A new chat then starts. What the character learned in this chat is no longer used from then on; it remains listed under Set aside in What the character has learned. What it remembers from other chats is kept. This cannot be undone.",
+    forgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. A new chat then starts. What the character learned in this chat is no longer used from then on; it remains listed under Set aside in What the character has learned. What it remembers from earlier chats on this page is forgotten too; what it remembers from chats on connected apps is kept. This cannot be undone.",
     forget_needs_activity: "Forgetting a chat needs activity data, which is switched off. Turn it on in the advanced settings under Character & settings.",
     forgetChatDone: "The character has forgotten this chat, and a new chat has started.",
     forgetChatNone: "The character had noted nothing in this chat. A new chat has started.",
@@ -598,11 +598,11 @@ const translations = {
     message: "Write a message",
     composerNote: "Enter to send · Shift + Enter for a new line",
     platformsIntro:
-      "Scan or paste one or two values. Downloading, setup and starting happen on their own.",
+      "Scan or paste a few values. Downloading, setup and starting happen on their own.",
     connectedTitle: "Connected apps",
     groupScan: "Scan to connect",
     groupScanHint: "Confirm on your phone. No fields need to be filled in.",
-    groupKey: "Paste one or two values",
+    groupKey: "Paste a few values",
     groupKeyHint: "Copy them from the app's developer console. The page states which values are needed.",
     howScan: "Scan",
     howPaste: "Paste {n}",
@@ -682,7 +682,7 @@ const translations = {
     invalid_character: "Check the character name and personality.",
     busy: "An operation is still running. Please wait.",
     chat_failed:
-      "The reply could not be completed. Check the model service and the network, then try again.",
+      "The reply could not be completed. Check the model service and the network, then try again. The Health check under App shows the cause.",
     setup_failed:
       "The connection did not complete. Check the network and try again. Your model and character settings are kept.",
     download_failed: "The download did not complete. Check the network and try again.",
@@ -1288,6 +1288,8 @@ function buildFields(keep = false) {
     for (const input of $("panel-fields").querySelectorAll("input"))
       kept[input.name] = input.value;
   $("panel-title").textContent = pick(item.name);
+  // "Groups and direct messages" is not said of a platform that has only one of them.
+  $("panel-scope").hidden = NO_DMS.has(item.id) || !item.groups;
   mark($("panel-badge"), item.id);
   brand($("platform-panel"), item.id);
   $("panel-chips").replaceChildren(
@@ -1473,6 +1475,10 @@ function renderUpdate() {
 }
 function renderStatus() {
   for (const changed of panelHooks.state) changed(state);
+  // Once set up, the view is the settings, not the first-run invitation.
+  $("setup-hero").dataset.t = state.configured ? "settings" : "hero";
+  label($("setup-hero"), t($("setup-hero").dataset.t));
+  $("setup-intro").hidden = Boolean(state.configured);
   $("version").textContent = `v${state.version}`;
   renderGettingStarted();
   renderUpdate();
@@ -2646,6 +2652,8 @@ $("settings-form").addEventListener("submit", async (event) => {
   } catch (error) {
     $("form-error").textContent = t(error.message);
     $("form-error").hidden = false;
+    // The address and model name sit in a fold that may be closed.
+    if (["invalid_url", "model_required"].includes(error.message)) $("advanced").open = true;
   } finally {
     saving = false;
     $("save").disabled = false;
