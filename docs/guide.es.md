@@ -482,7 +482,7 @@ A quién se refiere una nota:
 
 - Una nota en primera persona, o que menciona a quien la escribe, se refiere a esa persona.
 - Una nota que menciona a otro miembro de la sala se refiere a esa persona, y aparece cuando esta está presente.
-- Cualquier otra nota pertenece a todo el grupo. Todos los miembros la ven, y al recuperarla se etiqueta como «from <name>».
+- Cualquier otra nota pertenece a todo el grupo. Todos los miembros la ven, y al recuperarla se etiqueta como «de <nombre>».
 
 Solo pueden leer una nota la persona a la que se refiere, quien la guardó y el administrador. Solo pueden olvidarla quien la guardó, la persona a la que se refiere y el administrador.
 
@@ -496,7 +496,7 @@ Cómo se mantienen actualizadas las notas, y qué más recuerda el personaje, se
 
 Ninguno de estos comandos llama al modelo. Las notas están destinadas a hechos, por lo que `Nova, remember: always reply in English` se rechaza. Las preguntas no son comandos. `Nova, remember the party?`, `Nova, remember when we...` y `Nova, what do you remember about me` son conversación corriente, al igual que una línea en chino que termina en 吗, 么, 呢 o 没. `Nova, forget it` y `Nova, forget that` significan «déjalo» y no borran nada.
 
-Los mismos comandos funcionan en los demás idiomas del menú de la página, y la respuesta se emite en el idioma del comando. El japonés y el coreano también admiten el verbo al final (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). Una nota se borra con la palabra que significa olvidar; palabras como borrar o eliminar, que en un chat se aplican a mensajes y luces, no cuentan, salvo el japonés `メモ消して`. Un ejemplo de cada uno:
+Los mismos comandos funcionan en los demás idiomas del menú de la página, y la respuesta se emite en el idioma del comando. El japonés y el coreano también admiten el verbo al final (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). Una nota se borra con la palabra que significa olvidar. Palabras como borrar o eliminar no cuentan, porque en un chat suelen referirse a borrar un mensaje o a apagar una luz; la única excepción es el japonés `メモ消して`. Un ejemplo de cada uno:
 
 | Idioma | Recordar | Olvidar | Qué recuerda | Qué ha aprendido |
 |---|---|---|---|---|

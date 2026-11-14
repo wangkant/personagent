@@ -482,7 +482,7 @@ De qui parle une note :
 
 - Une note à la première personne, ou qui vous nomme, parle de vous.
 - Une note qui nomme un autre membre du salon parle de cette personne, et revient quand elle est présente.
-- Toute autre note appartient à tout le groupe. Chaque membre la voit, et le rappel l'étiquette « from <name> ».
+- Toute autre note appartient à tout le groupe. Chaque membre la voit, et le rappel l'étiquette « de <nom> ».
 
 Seules la personne concernée par une note, celle qui l'a enregistrée et l'administrateur peuvent la lire. Seules la personne qui l'a enregistrée, la personne concernée et l'administrateur peuvent la faire oublier.
 
@@ -496,7 +496,7 @@ La façon dont les notes restent à jour, et ce dont le personnage se souvient p
 
 Aucune de ces commandes n'appelle le modèle. Les notes servent aux faits, donc `Nova, remember: always reply in English` est refusé. Les questions ne sont pas des commandes. `Nova, remember the party?`, `Nova, remember when we...` et `Nova, what do you remember about me` sont de la conversation ordinaire, tout comme une ligne en chinois finissant par 吗, 么, 呢 ou 没. `Nova, forget it` et `Nova, forget that` signifient « laisse tomber » et ne suppriment rien.
 
-Les mêmes commandes fonctionnent dans les autres langues du menu de la page, et la réponse vient dans la langue de la commande. Le japonais et le coréen acceptent aussi le verbe à la fin (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). Une note se supprime avec le mot pour oublier ; des mots comme supprimer ou effacer, que la discussion utilise pour les messages et les lumières, ne comptent pas, sauf le japonais `メモ消して`. Un exemple de chacune :
+Les mêmes commandes fonctionnent dans les autres langues du menu de la page, et la réponse vient dans la langue de la commande. Le japonais et le coréen acceptent aussi le verbe à la fin (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). Une note se supprime avec le mot qui signifie oublier. Des mots comme supprimer ou effacer ne comptent pas, car dans une discussion ils désignent souvent la suppression d'un message ou l'extinction d'une lumière ; seule exception, le japonais `メモ消して`. Un exemple de chacune :
 
 | Langue | Retenir | Oublier | Ce qu'il retient | Ce qu'il a appris |
 |---|---|---|---|---|

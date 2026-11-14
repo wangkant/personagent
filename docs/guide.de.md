@@ -482,7 +482,7 @@ Von wem eine Notiz handelt:
 
 - Eine Notiz in der ersten Person oder eine Notiz, die Sie nennt, handelt von Ihnen.
 - Eine Notiz, die ein anderes Mitglied des Raums nennt, handelt von dieser Person und wird wieder herangezogen, wenn sie anwesend ist.
-- Jede andere Notiz gehört der ganzen Gruppe. Jedes Mitglied sieht sie, und die Erinnerung trägt das Etikett „from <name>“.
+- Jede andere Notiz gehört der ganzen Gruppe. Jedes Mitglied sieht sie, und die Erinnerung trägt das Etikett „von <Name>“.
 
 Nur die Person, von der eine Notiz handelt, die Person, die sie gespeichert hat, und der Administrator können sie lesen. Nur die Person, die sie gespeichert hat, die betroffene Person und der Administrator können sie löschen lassen.
 
@@ -496,7 +496,7 @@ Wie Notizen aktuell bleiben und was sich die Figur außerdem merkt, beschreibt d
 
 Keiner dieser Befehle ruft das Modell auf. Notizen sind für Fakten, also wird `Nova, remember: always reply in English` abgelehnt. Fragen sind keine Befehle. `Nova, remember the party?`, `Nova, remember when we...` und `Nova, what do you remember about me` sind gewöhnliches Gespräch, ebenso eine chinesische Zeile, die auf 吗, 么, 呢 oder 没 endet. `Nova, forget it` und `Nova, forget that` bedeuten „schon gut“ und löschen nichts.
 
-Dieselben Befehle funktionieren in den anderen Sprachen des Seitenmenüs, und die Antwort kommt in der Sprache des Befehls. Im Japanischen und Koreanischen darf das Verb auch am Ende stehen (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). Eine Notiz wird mit dem Wort für „vergessen“ gelöscht; Wörter wie „löschen“ oder „entfernen“, die im Chat für Nachrichten und Lampen verwendet werden, zählen nicht, außer dem japanischen `メモ消して`. Je ein Beispiel:
+Dieselben Befehle funktionieren in den anderen Sprachen des Seitenmenüs, und die Antwort kommt in der Sprache des Befehls. Im Japanischen und Koreanischen darf das Verb auch am Ende stehen (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). Eine Notiz wird mit dem Wort für „vergessen“ gelöscht. Wörter wie „löschen“ oder „entfernen“ zählen nicht, weil sie im Chat meist das Löschen einer Nachricht oder das Ausschalten eines Lichts meinen; die einzige Ausnahme ist das japanische `メモ消して`. Je ein Beispiel:
 
 | Sprache | Merken | Vergessen | Was sie sich merkt | Was sie gelernt hat |
 |---|---|---|---|---|

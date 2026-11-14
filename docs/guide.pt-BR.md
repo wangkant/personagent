@@ -482,7 +482,7 @@ De quem uma nota trata:
 
 - Uma nota em primeira pessoa, ou que nomeia você, trata de você.
 - Uma nota que nomeia outro membro da sala trata dessa pessoa e volta quando ela está presente.
-- Qualquer outra nota pertence ao grupo inteiro. Todo membro a vê, e a lembrança leva o rótulo "from <name>".
+- Qualquer outra nota pertence ao grupo inteiro. Todo membro a vê, e a lembrança leva o rótulo "de <nome>".
 
 Só a pessoa de quem a nota trata, quem a salvou e o administrador podem lê-la. Só quem a salvou, a pessoa de quem ela trata e o administrador podem fazê-la ser esquecida.
 
@@ -496,7 +496,7 @@ Como as notas se mantêm atuais, e o que mais o personagem lembra, está descrit
 
 Nenhum destes comandos chama o modelo. As notas são para fatos, então `Nova, remember: always reply in English` é recusado. Perguntas não são comandos. `Nova, remember the party?`, `Nova, remember when we...` e `Nova, what do you remember about me` são conversa comum, assim como uma linha em chinês terminada em 吗, 么, 呢 ou 没. `Nova, forget it` e `Nova, forget that` significam "não importa" e não apagam nada.
 
-Os mesmos comandos funcionam nos outros idiomas do menu da página, e a resposta vem no idioma do comando. Japonês e coreano também aceitam o verbo no fim (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). Uma nota é apagada com a palavra para esquecer; palavras como apagar ou excluir, que o chat usa para mensagens e luzes, não contam, exceto o japonês `メモ消して`. Um exemplo de cada:
+Os mesmos comandos funcionam nos outros idiomas do menu da página, e a resposta vem no idioma do comando. Japonês e coreano também aceitam o verbo no fim (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). Uma nota é apagada com a palavra que significa esquecer. Palavras como apagar ou excluir não contam, porque no chat costumam se referir a apagar uma mensagem ou a apagar a luz; a única exceção é o japonês `メモ消して`. Um exemplo de cada:
 
 | Idioma | Lembrar | Esquecer | O que ele lembra | O que ele aprendeu |
 |---|---|---|---|---|
