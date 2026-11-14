@@ -548,6 +548,11 @@ class Turns:
         # str() because the catch-up sweep passes ints.
         mid = payload.get("message_id")
         if mid is not None and str(mid) in self._seen_msg_ids:
+            # A redelivery of a message already admitted is still the agent's:
+            # owned, so a connector with a bot of its own stays quiet.
+            again = current_sink.get()
+            if again is not None:
+                again.owned = True
             return False
 
         message_type = payload.get("message_type", "group")

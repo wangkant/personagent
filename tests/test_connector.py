@@ -620,6 +620,8 @@ async def test_round_trip(tmp: Path) -> None:
     result2 = await agent.handle_event(event)
     check("integration: duplicate message_id deduped",
           result2["handled"] is False and result2["replies"] == [], repr(result2))
+    check("integration: the redelivery is still the agent's, so the connector stays quiet",
+          result2["owned"] is True, repr(result2))
 
 
 async def test_the_model_sees_quotes_emoji_names_and_stickers(tmp: Path) -> None:
