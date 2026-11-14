@@ -73,7 +73,7 @@ MODES = ("judge", "followup", "called", ADMIN_MODE, "proactive")
 CALLED_MODES = ("called", ADMIN_MODE)
 LABELS = ("speak", "silent")
 BOT = "<bot-name>"
-DEFAULT_NAMES = {"en": "Nova", "zh": "小夏"}
+DEFAULT_NAMES = langs.DEFAULT_NAMES
 # A followup turn is one where the persona has just spoken.
 FOLLOWUP_LAST_SPOKE_S = 30
 OUTCOMES = ("win", "split", "loss")

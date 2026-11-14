@@ -67,7 +67,6 @@ def test_init_without_a_terminal_or_flags_exits_nonzero(monkeypatch, tmp_path: P
     capsys.readouterr()
     assert sw.main(["--no-input"]) == 0, "asking for no questions is a choice"
     assert sw.main(["--name", "Mika"]) == 0, "flags configured it"
-    assert sw.run([], "personagent init") == 0, "callers that wrap init decide for themselves"
 
 
 def test_switching_provider_does_not_carry_the_old_key(monkeypatch, tmp_path: Path, capsys) -> None:

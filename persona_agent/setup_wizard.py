@@ -20,17 +20,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from persona_agent.config_env import DEFAULT_LLM_BASE_URL
+from persona_agent.endpoints import chat_completions_url as completions_url, has_scheme
 from persona_agent import connections
 from persona_agent import home as homes
 from persona_agent import langs
 from persona_agent.prompts import render_persona_template
+from persona_agent.storage import PRIVATE_FILE_MODE
 
 LANGS = langs.CODES
 DEFAULT_NAMES = langs.DEFAULT_NAMES
 
-# Readable by its user only, as `persona_agent.storage.PRIVATE_FILE_MODE`;
-# that module needs dependencies this one must run without.
-SECRET_FILE_MODE = 0o600
+SECRET_FILE_MODE = PRIVATE_FILE_MODE
 
 
 # ---------------------------------------------------------------------------
@@ -581,9 +581,6 @@ _TEXT: dict[str, tuple[str, str]] = {
     "key_env_empty": ("--key-env {name}: that environment variable is empty, so there is no API key to save. "
                       "Nothing was changed.",
                       "--key-env {name}：该环境变量为空，没有可保存的 API key。未作任何更改。"),
-    "rerun_q": ("personagent is already set up. Run the setup questions again?",
-                "personagent 已完成设置。是否重新回答设置问题？"),
-    "kept_config": ("Keeping the current setup.", "保留现有设置。"),
     "home_diverges": ("AGENT_HOME in {env} points at {other}, so personagent reads its settings there,\n"
                       "not here. Move the files there, or remove that line.",
                       "{env} 中的 AGENT_HOME 指向 {other}，personagent 将从该位置读取设置，\n"
@@ -1058,21 +1055,8 @@ class Probe:
         return self.status == 200
 
 
-def completions_url(base_url: str) -> str:
-    """The URL the agent posts chat completions to for `base_url`."""
-    try:
-        from persona_agent.endpoints import chat_completions_url
-    except ImportError:  # the bootstrap runs without the dependencies
-        return base_url.rstrip("/") + "/chat/completions"
-    return chat_completions_url(base_url)
-
-
 def _is_loopback(url: str) -> bool:
     return (urllib.parse.urlsplit(url).hostname or "").lower() in ("localhost", "127.0.0.1", "::1")
-
-
-def has_scheme(url: str) -> bool:
-    return url.strip().lower().startswith(("http://", "https://"))
 
 
 def _post(url: str, api_key: str, payload: dict, timeout: float) -> tuple[int, str]:
@@ -2041,9 +2025,9 @@ def setup_without_questions(home: Path, args: argparse.Namespace, launcher: Laun
 # Entry points
 # ---------------------------------------------------------------------------
 
-def init_parser(prog: str, add_help: bool = True) -> argparse.ArgumentParser:
+def init_parser(prog: str) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog=prog, add_help=add_help,
+        prog=prog,
         description=langs.term("Set up personagent: the AI service, the character, and "
                     "optionally AstrBot. Asks questions in a terminal."))
     p.add_argument("--no-input", action="store_true",
@@ -2061,13 +2045,10 @@ def init_parser(prog: str, add_help: bool = True) -> argparse.ArgumentParser:
     return p
 
 
-def run(argv: list[str] | None, prog: str, *, python: str | None = None,
-        confirm_rerun: bool = False, args: argparse.Namespace | None = None,
-        strict_skip: bool = False) -> int:
-    """`init` with an interpreter of choice, and flags already parsed."""
-    args = args if args is not None else init_parser(prog).parse_args(argv)
+def run(argv: list[str] | None, prog: str) -> int:
+    args = init_parser(prog).parse_args(argv)
     home = homes.find_home()
-    launcher = Launcher(python=python or sys.executable, home=home)
+    launcher = Launcher(python=sys.executable, home=home)
     tty = langs.interactive()
     flagged = any((args.provider, args.base_url, args.model, args.key_env,
                    args.name, args.lang, args.persona))
@@ -2085,20 +2066,14 @@ def run(argv: list[str] | None, prog: str, *, python: str | None = None,
         # Piped without flags nothing was configured: no "Setup complete", and a script must be able to tell.
         apply_flags(home, args)
         print(t("skipped", why=t("skip_tty"), cmd=again))
-        return 2 if strict_skip else 0
-    env_path = home / ".env"
-    if confirm_rerun and env_get(env_path, "LLM_API_KEY"):
-        set_lang(env_get(env_path, "AGENT_LANG") or detect_lang())
-        if not ask_yn(t("rerun_q"), default_yes=False):
-            print(t("kept_config"))
-            return 0
+        return 2
     run_wizard(home, launcher, flags=args)
     return 0
 
 
 def main(argv: list[str] | None = None, prog: str = "personagent init") -> int:
     try:
-        return run(argv, prog, strict_skip=True)
+        return run(argv, prog)
     except (KeyboardInterrupt, EOFError):
         print()
         return 130

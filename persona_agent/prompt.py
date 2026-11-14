@@ -23,6 +23,7 @@ from .prompts import (
     style_guide,
 )
 from .storage import file_stamp
+from .storage import num as _stamp
 from .textproc import (
     _WEB_DESC_CLOSE,
     _WEB_DESC_OPEN,
@@ -55,13 +56,6 @@ _FULL_MESSAGE_CHARS = 1000
 
 # The owner_profile.json counts the sticker guide does arithmetic on.
 _OWNER_PROFILE_COUNTS = ("total_msgs", "msgs_with_image", "sticker_only_msgs")
-
-
-def _stamp(value) -> float:
-    try:
-        return float(value or 0.0)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _dm_gap_note(history: list[dict]) -> str:

@@ -187,8 +187,6 @@
 "Setup questions skipped: {why}. Run `{cmd}` in a terminal, or pass --no-input with --provider, --key-env and --name.": "セットアップの質問を省略しました：{why}。ターミナルで `{cmd}` を実行するか、--no-input に --provider、--key-env、--name を付けてください。",
 "The API key saved for the previous AI service was cleared, so it is not sent to the new one. Pass --key-env VAR to set a key for this service.": "前の AI サービス用に保存された API キーは、新しいサービスに送られないよう消去しました。このサービスのキーは --key-env VAR で設定してください。",
 "input is not a terminal": "入力がターミナルではありません",
-"personagent is already set up. Run the setup questions again?": "personagent はすでに設定されています。セットアップの質問をもう一度行いますか？",
-"Keeping the current setup.": "現在の設定のままにします。",
 "AGENT_HOME in {env} points at {other}, so personagent reads its settings there,\nnot here. Move the files there, or remove that line.": "{env} の AGENT_HOME が {other} を指しているため、personagent はここではなくそちらの設定を読みます。\nファイルをそちらへ移すか、その行を削除してください。",
 "AGENT_HOME is {value}, which cannot be resolved; check it before starting.": "AGENT_HOME は {value} ですが、解決できません。起動前に確認してください。",
 "openrouter/free picks one of OpenRouter's free models for each request. The key costs nothing and the limit is 50 requests a day. Some free providers keep what they receive.": "openrouter/free はリクエストごとに OpenRouter の無料モデルを 1 つ選びます。キーは無料で、上限は 1 日 50 リクエストです。無料プロバイダーの中には受け取った内容を保存するものもあります。",

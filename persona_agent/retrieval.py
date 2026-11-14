@@ -11,6 +11,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from itertools import chain
 
+from .storage import num as _num
 from . import channels, embeddings, people, ranking, timewords
 from .endpoints import embedding_endpoint
 from .textproc import (
@@ -33,13 +34,6 @@ _EVENTS_MAX = 4
 #: A reply must share this many focus tokens with an item to count as using it.
 _USE_OVERLAP = 2
 _USE_FLUSH_S = 60.0
-
-
-def _num(value) -> float:
-    try:
-        return float(value or 0.0)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _moment(t: float, tz) -> str:

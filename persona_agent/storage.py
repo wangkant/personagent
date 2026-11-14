@@ -23,6 +23,14 @@ DEFAULT_WARNING_BYTES = 50_000_000
 _T = TypeVar("_T")
 
 
+def num(value, kind=float):
+    """`value` as a number; 0 for anything that is not one."""
+    try:
+        return kind(value or 0)
+    except (TypeError, ValueError):
+        return kind(0)
+
+
 def file_stamp(path: str | Path) -> tuple[int, int]:
     """(size, mtime_ns) of ``path``; (0, 0) when it cannot be stat'ed."""
     try:

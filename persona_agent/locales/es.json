@@ -187,8 +187,6 @@
 "Setup questions skipped: {why}. Run `{cmd}` in a terminal, or pass --no-input with --provider, --key-env and --name.": "Se han omitido las preguntas de configuración: {why}. Ejecute `{cmd}` en un terminal, o utilice --no-input con --provider, --key-env y --name.",
 "The API key saved for the previous AI service was cleared, so it is not sent to the new one. Pass --key-env VAR to set a key for this service.": "La clave de API guardada para el servicio de IA anterior se ha borrado para que no se envíe al nuevo. Utilice --key-env VAR para definir una clave para este servicio.",
 "input is not a terminal": "la entrada no es un terminal",
-"personagent is already set up. Run the setup questions again?": "personagent ya está configurado. ¿Repetir las preguntas de configuración?",
-"Keeping the current setup.": "Se conserva la configuración actual.",
 "AGENT_HOME in {env} points at {other}, so personagent reads its settings there,\nnot here. Move the files there, or remove that line.": "AGENT_HOME en {env} apunta a {other}, por lo que personagent lee su configuración allí,\nno aquí. Mueva los archivos allí o elimine esa línea.",
 "AGENT_HOME is {value}, which cannot be resolved; check it before starting.": "AGENT_HOME es {value}, que no se puede resolver; compruébelo antes de iniciar.",
 "openrouter/free picks one of OpenRouter's free models for each request. The key costs nothing and the limit is 50 requests a day. Some free providers keep what they receive.": "openrouter/free elige uno de los modelos gratuitos de OpenRouter para cada solicitud. La clave no tiene coste y el límite es de 50 solicitudes al día. Algunos proveedores gratuitos conservan lo que reciben.",
