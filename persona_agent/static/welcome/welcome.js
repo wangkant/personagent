@@ -152,7 +152,10 @@ const translations = {
     characterOptions: "更改角色名称、性格或语言",
     name: "角色名称",
     character: "性格",
-    customKept: "现有人设将保留；仅在选择新的性格时才会被替换。",
+    customKept: "选择其他性格或立绘并保存后，你编写的人设将被替换。",
+    personaReplaceAsk:
+      "确定用所选性格替换你编写的人设吗？原人设将另存为 personagent 文件夹中的 persona.txt.bak。",
+    personaReplaceYes: "替换",
     custom: "保留我自己编写的人设",
     personaTitle: "人设",
     personaHint: "描述角色的身份、说话方式和关注的事物。保存后立即生效，角色已学到的内容将保留。",
@@ -171,11 +174,11 @@ const translations = {
     tavilyNew: "Tavily API Key（可选）",
     tavilyClear: "改回免费搜索",
     visionTitle: "识别图片",
-    visionHint: "收到图片和表情包时，使用支持图像的模型进行描述；未开启时仅识别图片中的文字。",
+    visionHint: "收到图片和表情包时，使用支持图像的模型进行描述；未开启时不读取图片内容（仅在经 OneBot（NapCat）接入的 QQ 上识别图片中的文字）。",
     visionModel: "图像模型",
     visionSame: "使用与聊天相同的服务和密钥",
     proactiveTitle: "偶尔主动发言",
-    proactiveHint: "群聊或私聊安静一段时间后，角色可能会主动发起话题，频率很低。",
+    proactiveHint: "群聊或私聊安静一段时间后，角色可能会主动发起话题。",
     proactivePlatforms: "仅在以下平台启用（均未勾选时适用于所有平台）：",
     shareRoomsTitle: "在群聊之间共享记忆",
     shareRoomsHint: "在一个群聊中记下的关于某人的内容，也会用于此人发言的其他群聊。私聊内容和不针对具体个人的记录不会共享。",
@@ -203,11 +206,12 @@ const translations = {
     changeLater: "名称和性格可随时更改。",
     trioLabel: "也可以选择 GPT 娘、鲸鱼娘或 Claude 娘",
     qqLater: "也可以将角色接入 QQ、微信、Telegram…",
-    qqLaterHint: "如需接入其他平台，请在「连接平台」中选择，扫码或填写一至两项即可完成。",
+    qqLaterHint: "如需接入其他平台，请在「连接平台」中选择，扫码或填写几项即可完成。",
     chatHint: "本机对话，你在此处的身份是管理员。",
     newChat: "新对话",
+    newChatDone: "已开始新的对话，角色记住的内容仍然保留。",
     forgetChat: "清除本次对话的记忆",
-    forgetChatAsk: "角色将清除在本次对话中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容，随后开始新的对话。角色在本次对话中学到的内容此后不再使用，仍列在「角色学到的内容」的「已搁置」中。其他聊天中记住的内容将予以保留。此操作无法撤销。",
+    forgetChatAsk: "角色将清除在本次对话中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容，随后开始新的对话。角色在本次对话中学到的内容此后不再使用，仍列在「角色学到的内容」的「已搁置」中。本页面此前对话中记住的内容也将一并清除；在已连接平台的聊天中记住的内容将予以保留。此操作无法撤销。",
     forget_needs_activity: "清除记忆需要先开启动态数据，可在「角色与设置」的高级设置中开启。",
     forgetChatDone: "已清除本次对话的记忆，并已开始新的对话。",
     forgetChatNone: "本次对话中没有记下任何内容，已开始新的对话。",
@@ -220,11 +224,11 @@ const translations = {
     message: "输入消息",
     composerNote: "Enter 发送 · Shift + Enter 换行",
     platformsIntro:
-      "扫码或填写一至两项即可，下载、配置和启动均会自动完成。",
+      "扫码或填写几项即可，下载、配置和启动均会自动完成。",
     connectedTitle: "已连接的平台",
     groupScan: "扫码连接",
     groupScanHint: "在手机上确认即可，无需填写任何内容。",
-    groupKey: "填写一至两项",
+    groupKey: "填写几项",
     groupKeyHint: "从平台的开发者后台复制，页面会说明需要复制哪几项。",
     howScan: "扫码",
     howPaste: "填写 {n} 项",
@@ -298,7 +302,7 @@ const translations = {
     https_required: "远程模型服务须使用 HTTPS 地址。",
     invalid_character: "请检查角色名称和性格。",
     busy: "当前操作仍在进行，请等待其完成。",
-    chat_failed: "回复未能完成。请检查模型服务和网络后重试。",
+    chat_failed: "回复未能完成。请检查模型服务和网络后重试。「应用」中的「运行检查」可显示原因。",
     setup_failed:
       "连接未能完成。请检查网络后重试；已保存的模型和角色设置不受影响。",
     download_failed: "下载未能完成，请检查网络后重试。",
@@ -519,7 +523,10 @@ const translations = {
     name: "Character name",
     character: "Personality",
     customKept:
-      "Your edited character stays as it is unless you choose a new personality.",
+      "Choosing another personality or portrait and saving replaces the character you wrote.",
+    personaReplaceAsk:
+      "Replace the character you wrote with the chosen personality? Your text is kept as persona.txt.bak in the personagent folder.",
+    personaReplaceYes: "Replace",
     custom: "Keep my own character",
     personaTitle: "Persona",
     personaHint:
@@ -539,11 +546,11 @@ const translations = {
     tavilyNew: "Tavily API key (optional)",
     tavilyClear: "Back to free search",
     visionTitle: "Understand images",
-    visionHint: "Describes images and stickers with a vision model; off, it reads only the text in them.",
+    visionHint: "Describes images and stickers with a vision model; off, images are not read (only on QQ through OneBot (NapCat) is the text in them read).",
     visionModel: "Vision model",
     visionSame: "Use the chat service and key",
     proactiveTitle: "Sometimes speak first",
-    proactiveHint: "After a group or DM has been quiet for a while, it may start a topic, rarely.",
+    proactiveHint: "After a group or DM has been quiet for a while, it may start a topic.",
     proactivePlatforms: "Only on these apps (none checked means all):",
     shareRoomsTitle: "Share memory between groups",
     shareRoomsHint: "What one group noted about someone also comes up in other groups they talk in. DMs and notes about a whole group stay where they are.",
@@ -576,8 +583,9 @@ const translations = {
       "To connect another app, choose it under Connect apps. Most need only a QR code scan or one or two values.",
     chatHint: "A chat on this computer. Here you are the admin.",
     newChat: "New chat",
+    newChatDone: "A new chat has started. What the character remembers is kept.",
     forgetChat: "Forget this chat",
-    forgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. A new chat then starts. What the character learned in this chat is no longer used from then on; it remains listed under Set aside in What the character has learned. What it remembers from other chats is kept. This cannot be undone.",
+    forgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. A new chat then starts. What the character learned in this chat is no longer used from then on; it remains listed under Set aside in What the character has learned. What it remembers from earlier chats on this page is forgotten too; what it remembers from chats on connected apps is kept. This cannot be undone.",
     forget_needs_activity: "Forgetting a chat needs activity data, which is switched off. Turn it on in the advanced settings under Character & settings.",
     forgetChatDone: "The character has forgotten this chat, and a new chat has started.",
     forgetChatNone: "The character had noted nothing in this chat. A new chat has started.",
@@ -590,11 +598,11 @@ const translations = {
     message: "Write a message",
     composerNote: "Enter to send · Shift + Enter for a new line",
     platformsIntro:
-      "Scan or paste one or two values. Downloading, setup and starting happen on their own.",
+      "Scan or paste a few values. Downloading, setup and starting happen on their own.",
     connectedTitle: "Connected apps",
     groupScan: "Scan to connect",
     groupScanHint: "Confirm on your phone. No fields need to be filled in.",
-    groupKey: "Paste one or two values",
+    groupKey: "Paste a few values",
     groupKeyHint: "Copy them from the app's developer console. The page states which values are needed.",
     howScan: "Scan",
     howPaste: "Paste {n}",
@@ -674,7 +682,7 @@ const translations = {
     invalid_character: "Check the character name and personality.",
     busy: "An operation is still running. Please wait.",
     chat_failed:
-      "The reply could not be completed. Check the model service and the network, then try again.",
+      "The reply could not be completed. Check the model service and the network, then try again. The Health check under App shows the cause.",
     setup_failed:
       "The connection did not complete. Check the network and try again. Your model and character settings are kept.",
     download_failed: "The download did not complete. Check the network and try again.",
@@ -1054,6 +1062,12 @@ function providerChanged(reset = true) {
   }
   if (provider.id === "other" || provider.id === "ollama")
     $("advanced").open = true;
+  // Ollama runs here: it takes no key and a check costs nothing.
+  const local = provider.id === "ollama";
+  if (local || !state.configured || (reset && provider.id !== state.provider))
+    $("api-key").placeholder = local ? "" : "sk-…";
+  $("test-note").hidden = local;
+  $("base-url").placeholder = provider.id === "other" ? "https://…/v1" : "";
 }
 function showView(next) {
   if (chatting && next !== "chat") {
@@ -1274,6 +1288,8 @@ function buildFields(keep = false) {
     for (const input of $("panel-fields").querySelectorAll("input"))
       kept[input.name] = input.value;
   $("panel-title").textContent = pick(item.name);
+  // "Groups and direct messages" is not said of a platform that has only one of them.
+  $("panel-scope").hidden = NO_DMS.has(item.id) || !item.groups;
   mark($("panel-badge"), item.id);
   brand($("platform-panel"), item.id);
   $("panel-chips").replaceChildren(
@@ -1459,6 +1475,10 @@ function renderUpdate() {
 }
 function renderStatus() {
   for (const changed of panelHooks.state) changed(state);
+  // Once set up, the view is the settings, not the first-run invitation.
+  $("setup-hero").dataset.t = state.configured ? "settings" : "hero";
+  label($("setup-hero"), t($("setup-hero").dataset.t));
+  $("setup-intro").hidden = Boolean(state.configured);
   $("version").textContent = `v${state.version}`;
   renderGettingStarted();
   renderUpdate();
@@ -2081,7 +2101,8 @@ function memorySection(chat) {
           (note.saidBySelf || note.saidBy) &&
             t("activitySaidBy", { name: note.saidBySelf ? pagePerson() : note.saidBy }),
           note.by && note.by !== "auto" && t("activityFrom", { who: note.by }),
-          note.conv !== chat.id && t("activityRoomNote"),
+          // A note from another private chat (an earlier chat on this page) is not a group's.
+          note.conv !== chat.id && !String(note.conv).startsWith("private:") && t("activityRoomNote"),
           note.born && t("activityFirstNoted", { date: activityDate(note.born) }),
           note.used && t("activityLastUsed", { date: activityDate(note.used) }),
         ],
@@ -2598,6 +2619,13 @@ $("persona-save").addEventListener("click", async () => {
 $("settings-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (saving) return;
+  // A personality or portrait chosen over a character the person wrote replaces their text.
+  if (
+    state.character === "custom" &&
+    $("character").value !== "custom" &&
+    !(await ask(t("personaReplaceAsk"), t("personaReplaceYes")))
+  )
+    return;
   saving = true;
   $("form-error").hidden = true;
   $("save").disabled = true;
@@ -2624,6 +2652,8 @@ $("settings-form").addEventListener("submit", async (event) => {
   } catch (error) {
     $("form-error").textContent = t(error.message);
     $("form-error").hidden = false;
+    // The address and model name sit in a fold that may be closed.
+    if (["invalid_url", "model_required"].includes(error.message)) $("advanced").open = true;
   } finally {
     saving = false;
     $("save").disabled = false;
@@ -2658,11 +2688,22 @@ for (const button of document.querySelectorAll("[data-prompt]"))
   );
 // The commands the character takes in a chat, in the language it reads them
 // in: its name first, then the words docs/guide.md lists.
+// Per character language: remember, forget, what do you remember, what have you learned.
+const MEMORY_COMMANDS = {
+  en: ["{n}, remember ", "{n}, forget ", "{n}, what do you remember", "{n}, what have you learned"],
+  zh: ["{n} 记住 ", "{n} 忘掉 ", "{n} 你都记得什么", "{n} 学到了什么"],
+  "zh-TW": ["{n} 記住 ", "{n} 忘掉 ", "{n} 你都記得什麼", "{n} 你學到了什麼"],
+  ja: ["{n}、覚えて：", "{n}、忘れて、", "{n}、何覚えてる？", "{n}、何を学んだ？"],
+  ko: ["{n} 기억해: ", "{n} 잊어 줘: ", "{n} 뭐 기억해?", "{n} 너 뭐 배웠어?"],
+  es: ["{n}, recuerda que ", "{n}, olvídate de ", "{n}, ¿qué recuerdas?", "{n}, ¿qué has aprendido?"],
+  fr: ["{n}, retiens que ", "{n}, oublie ", "{n}, tu te souviens de quoi ?", "{n}, qu'est-ce que tu as appris ?"],
+  de: ["{n}, merk dir, dass ", "{n}, vergiss ", "{n}, was hast du dir gemerkt?", "{n}, was hast du gelernt?"],
+  "pt-BR": ["{n}, anota aí que ", "{n}, esquece ", "{n}, o que você lembra?", "{n}, o que você aprendeu?"],
+  ru: ["{n}, запомни, что ", "{n}, забудь про ", "{n}, что ты помнишь?", "{n}, чему ты научилась?"],
+};
 function memoryCommands() {
   const name = state.name || defaultName();
-  return ["zh", "zh-TW"].includes(state.lang)
-    ? [`${name}，记住 `, `${name} 忘掉 `, `${name} 你都记得什么`, `${name} 学到了什么`]
-    : [`${name}, remember `, `${name}, forget `, `${name}, what do you remember`, `${name}, what have you learned`];
+  return (MEMORY_COMMANDS[state.lang] || MEMORY_COMMANDS.en).map((line) => line.replace("{n}", name));
 }
 $("commands-show").addEventListener("click", () => {
   const open = $("chat-commands").hidden;
@@ -2705,6 +2746,7 @@ $("reset-chat").addEventListener("click", async () => {
     await api("chat/reset", {});
     showHistory(await api("chat/history"));
     learnedChanged();
+    toast(t("newChatDone"));
   } catch (error) {
     toast(t(error.message));
   }

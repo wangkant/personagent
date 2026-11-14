@@ -8,6 +8,7 @@ at-most-once delivery and acks are handled here; everything about the
 platform stays in the connector.
 
 Only depends on httpx, so it can be copied next to a connector as one file.
+A complete example is in integrations/sdk/README.md.
 """
 from __future__ import annotations
 
@@ -74,6 +75,25 @@ def signed_headers(body: bytes, token: str, *, now: Optional[float] = None) -> d
     return headers
 
 
+#: The likely fix for a refused pull, by the agent's error code.
+_HINTS = {
+    "invalid_envelope": ": check that the token equals the agent's "
+                        "CONNECTOR_TOKEN and that both clocks are right",
+    "non_local_request": ": the agent has no CONNECTOR_TOKEN, so it accepts "
+                         "only local programs calling 127.0.0.1",
+    "unauthenticated": ": the agent has no CONNECTOR_TOKEN, so it accepts "
+                       "only programs on its own machine",
+}
+
+
+def error_code(response: httpx.Response) -> str:
+    """The agent's stable error ``code`` from a refused request, or ""."""
+    try:
+        return str(response.json().get("code") or "")
+    except Exception:
+        return ""
+
+
 def endpoint_url(base_url: str, path: str) -> str:
     """One endpoint under the agent's base URL."""
     return base_url.rstrip("/") + path
@@ -118,7 +138,8 @@ class Connector:
 
         Adds ``connector_id`` when the event has none. Raises httpx errors and
         ``httpx.HTTPStatusError`` for a non-2xx answer, whose body carries the
-        agent's ``code`` and ``error``."""
+        agent's ``code`` and ``error``; ``error_code(exc.response)`` reads the
+        code."""
         event = dict(event)
         event.setdefault("connector_id", self.connector_id)
         response = await self._post(self.events_url, event, self.timeout_s)
@@ -174,7 +195,10 @@ class Connector:
                     logger.info("agent has no outbox (turned off, or an older "
                                 "version); retrying in 10 minutes")
                 else:
-                    logger.warning("outbox pull refused (%s)", exc.response.status_code)
+                    code = error_code(exc.response)
+                    logger.warning("outbox pull refused (%s, code %s)%s",
+                                   exc.response.status_code, code or "none",
+                                   _HINTS.get(code, ""))
                 backoff = min(backoff * 2, 60.0)
                 await self._sleep(pause, stop)
                 continue

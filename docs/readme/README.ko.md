@@ -15,10 +15,10 @@
 
 *이 문서는 영어 README를 번역한 것입니다. 기준이 되는 영어 README가 더 최신일 수 있습니다.*
 
-personagent는 사람처럼 행동하는 에이전트입니다. 고유한 캐릭터를 지니고, 기억하며, 대화 상대에게서 배우고, 언제 말할지 스스로 판단합니다. QQ, WeChat, Telegram, Discord와 그 밖의 18개 플랫폼의 그룹 채팅과 개인 채팅, 사용자의 컴퓨터에 있는 창, Claude Code, Codex 같은 코딩 어시스턴트 등 사용하는 모든 곳에서 작동합니다. 캐릭터는 직접 고르거나 쓸 수 있으며, OpenAI 호환 모델이라면 어떤 모델로든 실행됩니다.
+personagent는 사용자의 컴퓨터에서 실행되며, 저장하는 모든 내용을 그 컴퓨터에 둡니다. QQ, WeChat, Telegram, Discord와 그 밖의 18개 플랫폼의 그룹 채팅과 개인 채팅, 사용자의 컴퓨터에 있는 창, Claude Code, Codex 같은 코딩 어시스턴트 등 사용하는 모든 곳에서 작동합니다. 캐릭터는 직접 고르거나 쓸 수 있으며, OpenAI 호환 모델이라면 어떤 모델로든 실행됩니다.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="로컬 페이지의 플랫폼 연결 화면. 스캔하거나 값 한두 개를 붙여넣어 연결하는 플랫폼, 접힌 고급 플랫폼, 참여할 수 있는 코딩 어시스턴트가 표시되어 있습니다" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="로컬 페이지의 플랫폼 연결 화면. 스캔하거나 값 몇 개를 붙여넣어 연결하는 플랫폼, 접힌 고급 플랫폼, 참여할 수 있는 코딩 어시스턴트가 표시되어 있습니다" width="960">
 </p>
 
 <p align="center"><em>플랫폼 연결 화면은 설정, 캐릭터 채팅과 같은 로컬 페이지에 있습니다.</em></p>
@@ -68,7 +68,7 @@ personagent는 사람처럼 행동하는 에이전트입니다. 고유한 캐릭
 <tr>
 <td width="220" valign="top"><strong>모든 플랫폼에 연결됩니다.</strong></td>
 <td valign="top">
-채팅 플랫폼 22개를 한 페이지에서 휴대폰 스캔 한 번이나 값 한두 개를 붙여 넣어 연결합니다. 대부분은 그룹 채팅과 개인 채팅을 모두 지원합니다.<br>
+채팅 플랫폼 22개를 한 페이지에서 휴대폰 스캔 한 번이나 값 몇 개를 붙여 넣어 연결합니다. 대부분은 그룹 채팅과 개인 채팅을 모두 지원합니다.<br>
 같은 에이전트가 사용자의 컴퓨터에 있는 창에서도, Claude Code, Codex, DeepSeek Harness 안에서도 답합니다.<br>
 그 밖의 플랫폼은 AstrBot, Koishi, Matrix 브리지 또는 직접 작성한 커넥터를 통해 추가할 수 있습니다.
 </td>
@@ -82,7 +82,7 @@ OpenAI 호환 모델이라면 무엇이든 사용할 수 있습니다. OpenRoute
 </tr>
 </table>
 
-채팅에서 부탁하면 기억하거나 잊기도 합니다. `노바 기억해: 민수는 채식주의자야`, `노바 잊어: 채식`([기억 명령](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#기억-명령)). 무엇을 얼마 동안 보관하는지는 가이드의 [기억](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#기억) 절에 나와 있습니다.
+채팅에서 부탁하면 기억하거나 잊기도 합니다(노바는 기본 캐릭터의 이름입니다). `노바 기억해: 민수는 채식주의자야`, `노바 잊어: 채식`([기억 명령](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#기억-명령)). 무엇을 얼마 동안 보관하는지는 가이드의 [기억](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#기억) 절에 나와 있습니다.
 
 ## 시작하기
 
@@ -95,7 +95,7 @@ personagent
 
 Windows에서는 전용 창에서 열리고, macOS와 Linux에서는 브라우저에서 열립니다. 모델 API 키를 붙여 넣고 **확인 후 채팅 시작**을 누르십시오. 아직 키가 없습니까? OpenRouter의 무료 모델이 미리 선택되어 있고, 그 키는 무료입니다. `personagent demo`는 키 없이 대본이 있는 장면 세 개를 보여 줍니다. [시작 가이드](https://github.com/wangkant/personagent/blob/main/docs/start.ko.md)가 페이지를 화면별로 안내합니다.
 
-personagent는 무료입니다. 비용은 선택한 모델 서비스에, 그 서비스의 요금대로 냅니다. OpenRouter의 무료 모델은 하루 50회까지 요청할 수 있고, 일부 무료 제공자는 받은 내용을 보관합니다. Ollama는 키 없이 사용자의 컴퓨터에서 모델을 실행합니다.
+personagent는 무료입니다. 비용은 선택한 모델 서비스에, 그 서비스의 요금대로 냅니다. 메시지 하나가 모델 요청 여러 번으로 이어질 수 있습니다. 답장 외에도 캐릭터는 때때로 그룹에서 말할지 판단하거나, 답장이 어떻게 받아들여졌는지 판단하거나, 기억을 정리합니다. OpenRouter의 무료 모델은 하루 50회까지 요청할 수 있고, 일부 무료 제공자는 받은 내용을 보관합니다. Ollama는 키 없이 사용자의 컴퓨터에서 모델을 실행합니다.
 
 ## 플랫폼 연결하기
 
@@ -104,7 +104,7 @@ personagent는 무료입니다. 비용은 선택한 모델 서비스에, 그 서
 | 페이지 표시 | 플랫폼 | 필요한 것 |
 |---|---|---|
 | 스캔하여 연결 | QQ, 개인 WeChat | 휴대폰. WeChat 봇은 1:1 대화만 가능 |
-| 값 한두 개 붙여넣기 | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, WeCom AI 봇, Mattermost, Misskey | 앱 콘솔에서 얻는 값. 어떤 값인지 페이지에 표시 |
+| 값 몇 개 붙여넣기 | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, WeCom AI 봇, Mattermost, Misskey | 앱 콘솔에서 얻는 값. 어떤 값인지 페이지에 표시 |
 | 고급 | WeCom 앱, WeChat 공식 계정, QQ 웹훅, OneBot v11 (NapCat), Satori | 공개 주소, 또는 이 컴퓨터의 다른 소프트웨어 |
 
 연결된 플랫폼은 personagent가 시작될 때마다 함께 다시 시작됩니다. 스캔하여 연결하는 플랫폼과 Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat는 personagent가 직접 연결하고, 나머지는 personagent가 내려받아 백그라운드에서 실행하는 [AstrBot](https://github.com/AstrBotDevs/AstrBot)을 거칩니다. 디스플레이가 없는 서버에서는 personagent가 직접 연결하는 이 플랫폼들을 터미널에서 `personagent connect <platform>`으로 페이지와 같은 단계와 확인을 거쳐 연결할 수 있고, `personagent up`으로 브라우저 없이 모든 것을 시작합니다. 플랫폼별 설정 방법은 [사용자 가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#채팅에-넣기)에, QQ를 처음부터 연결하는 방법은 [중국어 배포 가이드](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)에 있습니다.
@@ -131,7 +131,7 @@ personagent connect dsh
 
 ## 업데이트와 제거
 
-PyPI에 새 버전이 올라오면 페이지에 알림과 업데이트 명령이 표시됩니다. pip라면 `python -m pip install -U personagent`입니다. 대부분의 설치 방식에서는 페이지의 앱 보기에 있는 **업데이트 후 다시 열기**가 이 명령을 대신 실행합니다. 설정, 캐릭터, 배운 것, 연결된 플랫폼이 모두 남습니다. 제거하려면 [제거 절차](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)(영어)를 따르십시오.
+PyPI에 새 버전이 올라오면 페이지에 알림과 업데이트 명령이 표시됩니다. pip라면 `python -m pip install -U personagent`입니다. 대부분의 설치 방식에서는 페이지의 앱 보기에 있는 **업데이트 후 다시 열기**가 이 명령을 대신 실행합니다. 설정, 캐릭터, 배운 것, 연결된 플랫폼이 모두 남습니다. 제거하려면 가이드의 [personagent 제거하기](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#personagent-제거하기)를 따르십시오.
 
 ## 개인정보
 

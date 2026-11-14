@@ -22,7 +22,7 @@ from . import langs
 from . import home as homes
 from .astrbot_install import AstrBotInstallation, hide_dashboard
 from .setup_wizard import _read_json, env_get, write_env
-from .storage import atomic_write_text
+from .storage import ALREADY_RUNNING, LockUnavailable, RuntimeInstanceLock, atomic_write_text
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 # How much of a failed command's log its error carries.
@@ -295,6 +295,8 @@ class Services:
         self._lock = threading.RLock()
         self._shutdown = False
         self.astrbot_log_offset = 0
+        #: (wanted, chosen) when the agent's port was taken and another was saved.
+        self.port_moved: Optional[tuple[int, int]] = None
 
     def running(self, name: str) -> bool:
         process = self.processes.get(name)
@@ -378,7 +380,9 @@ class Services:
                 except OSError:
                     sock.bind(("127.0.0.1", 0))
                 port = sock.getsockname()[1]
-            write_env(self.home / ".env", {"SERVER_PORT": str(port)})
+            if port != wanted:
+                self.port_moved = (wanted, port)
+                write_env(self.home / ".env", {"SERVER_PORT": str(port)})
             env = os.environ.copy()
             env["AGENT_HOME"] = str(self.home)
             env["PYTHONUTF8"] = "1"
@@ -563,6 +567,10 @@ def _memory_problem(home: Path) -> str:
 def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
     argparse.ArgumentParser(prog=prog, description=langs.term("Start personagent and its connected platforms together")).parse_args(argv)
     home = homes.find_home()
+    for stream in (sys.stdout, sys.stderr):
+        # Under nohup or a service manager the lines must not wait in a buffer.
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(line_buffering=True)
     if not env_get(home / ".env", "LLM_API_KEY"):
         from .setup_wizard import command
         print(langs.term(f"Finish the setup first: {command('start', home)}"))
@@ -577,6 +585,14 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
     stopped = stop_leftovers(home)
     if stopped:
         print(langs.term(f"Stopped what an earlier personagent left running: {', '.join(stopped)}."))
+    probe = RuntimeInstanceLock(home)
+    try:
+        probe.acquire()
+    except LockUnavailable:
+        # Before any setting is touched: the running one keeps its port.
+        print(langs.term(ALREADY_RUNNING.format(home=home)), file=sys.stderr)
+        return 2
+    probe.release()
     services = Services(home)
     try:
         if not env_get(home / ".env", "CONNECTOR_TOKEN"):
@@ -595,6 +611,10 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
         services.start_direct()
         names = started + (["direct"] if services.running("direct") else [])
         print(langs.term(f"personagent is running ({', '.join(names)}). Press Ctrl+C to stop."))
+        if services.port_moved:
+            wanted, port = services.port_moved
+            print(langs.term(f"Port {wanted} was taken, so SERVER_PORT in .env is now {port}."))
+        print(langs.term(f"Listening on {services.agent_url}. Logs are in {home / 'runtime' / 'desktop'}."))
         notice = updates.line(updates.notice(home), sub="up")
         if notice:
             print(langs.term(notice))

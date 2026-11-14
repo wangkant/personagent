@@ -15,10 +15,10 @@
 
 *Dies ist eine Übersetzung der englischen README, die maßgeblich ist und aktueller sein kann.*
 
-personagent ist ein Agent, der sich wie ein Mensch verhält: Er hat eine eigene Persönlichkeit, merkt sich Dinge, lernt von den Menschen, mit denen er spricht, und entscheidet selbst, wann er sich äußert. Er läuft überall dort, wo Sie ihn brauchen: in Gruppenchats und Einzelchats auf QQ, WeChat, Telegram, Discord und achtzehn weiteren Plattformen, in einem Fenster auf Ihrem Rechner und in Programmierassistenten wie Claude Code und Codex. Seine Persönlichkeit wählen Sie aus oder schreiben sie selbst, und er läuft mit einem beliebigen OpenAI-kompatiblen Modell.
+personagent läuft auf Ihrem eigenen Computer und bewahrt alles, was es speichert, dort auf. Er läuft überall dort, wo Sie ihn brauchen: in Gruppenchats und Einzelchats auf QQ, WeChat, Telegram, Discord und achtzehn weiteren Plattformen, in einem Fenster auf Ihrem Rechner und in Programmierassistenten wie Claude Code und Codex. Seine Persönlichkeit wählen Sie aus oder schreiben sie selbst, und er läuft mit einem beliebigen OpenAI-kompatiblen Modell.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Die Ansicht Plattformen verbinden der lokalen Seite: die Plattformen, die per Scan oder mit ein bis zwei eingefügten Werten verbunden werden, die eingeklappten erweiterten Plattformen und die Programmierassistenten, denen die Figur beitreten kann" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Die Ansicht Plattformen verbinden der lokalen Seite: die Plattformen, die per Scan oder mit einigen eingefügten Werten verbunden werden, die eingeklappten erweiterten Plattformen und die Programmierassistenten, denen die Figur beitreten kann" width="960">
 </p>
 
 <p align="center"><em>Plattformen verbinden, auf derselben lokalen Seite wie Einrichtung und Chat mit der Figur.</em></p>
@@ -68,7 +68,7 @@ Auf eine Flut von Nachrichten kommt eine einzige Antwort.
 <tr>
 <td width="220" valign="top"><strong>Er verbindet sich mit all Ihren Plattformen.</strong></td>
 <td valign="top">
-Zweiundzwanzig Chat-Plattformen werden von einer einzigen Seite aus verbunden, per Scan mit dem Smartphone oder mit ein bis zwei eingefügten Werten. Die meisten unterstützen Gruppenchats ebenso wie Einzelchats.<br>
+Zweiundzwanzig Chat-Plattformen werden von einer einzigen Seite aus verbunden, per Scan mit dem Smartphone oder mit einigen eingefügten Werten. Die meisten unterstützen Gruppenchats ebenso wie Einzelchats.<br>
 Derselbe Agent antwortet in einem Fenster auf Ihrem Rechner sowie in Claude Code, Codex und DeepSeek Harness.<br>
 Jede weitere Plattform lässt sich über eine AstrBot-, Koishi- oder Matrix-Brücke oder einen selbst geschriebenen Konnektor anbinden.
 </td>
@@ -82,7 +82,7 @@ Ein Befehl öffnet ihn, auf Englisch, Chinesisch oder in acht weiteren Sprachen,
 </tr>
 </table>
 
-Auf Wunsch im Chat merkt er sich Dinge oder vergisst sie wieder: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([Gedächtnis-Befehle](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis-befehle)). Was er speichert und wie lange, steht im Abschnitt [Gedächtnis](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis) des Handbuchs.
+Auf Wunsch im Chat merkt er sich Dinge oder vergisst sie wieder (Nova ist der Name der Standardfigur): `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([Gedächtnis-Befehle](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis-befehle)). Was er speichert und wie lange, steht im Abschnitt [Gedächtnis](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis) des Handbuchs.
 
 ## Erste Schritte
 
@@ -95,7 +95,7 @@ Mit [uv](https://docs.astral.sh/uv/) startet `uvx personagent` das Programm ohne
 
 Unter Windows öffnet es sich in einem eigenen Fenster, unter macOS und Linux im Browser. Fügen Sie einen API-Schlüssel für das Modell ein und klicken Sie auf **Prüfen & Chat starten**. Sie haben noch keinen Schlüssel? Die kostenlosen Modelle von OpenRouter sind vorausgewählt, und ihr Schlüssel ist kostenlos. `personagent demo` spielt drei vorgefertigte Szenen ganz ohne Schlüssel ab. Die [Einstiegsanleitung](https://github.com/wangkant/personagent/blob/main/docs/start.de.md) erläutert die Seite Ansicht für Ansicht.
 
-personagent ist kostenlos. Sie bezahlen den gewählten Modelldienst zu dessen eigenen Preisen. Die kostenlosen Modelle von OpenRouter erlauben 50 Anfragen pro Tag, und manche kostenlosen Anbieter speichern, was sie erhalten; Ollama führt ein Modell ganz ohne Schlüssel auf Ihrem eigenen Computer aus.
+personagent ist kostenlos. Sie bezahlen den gewählten Modelldienst zu dessen eigenen Preisen. Eine Nachricht kann mehr als eine Modellanfrage auslösen: Neben der Antwort entscheidet die Figur bisweilen, ob sie sich in einer Gruppe äußert, beurteilt, wie eine Antwort aufgenommen wurde, oder ordnet ihr Gedächtnis. Die kostenlosen Modelle von OpenRouter erlauben 50 Anfragen pro Tag, und manche kostenlosen Anbieter speichern, was sie erhalten; Ollama führt ein Modell ganz ohne Schlüssel auf Ihrem eigenen Computer aus.
 
 ## Ihre Plattformen verbinden
 
@@ -104,7 +104,7 @@ personagent ist kostenlos. Sie bezahlen den gewählten Modelldienst zu dessen ei
 | Auf der Seite | Plattformen | Voraussetzung |
 |---|---|---|
 | Per Scan verbinden | QQ, persönliches WeChat | Ihr Smartphone. WeChat-Bots erhalten nur Einzelchats |
-| Ein bis zwei Werte einfügen | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, WeCom-KI-Bot, Mattermost, Misskey | Werte aus der Konsole der Plattform; die Seite gibt an, welche |
+| Einige Werte einfügen | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, WeCom-KI-Bot, Mattermost, Misskey | Werte aus der Konsole der Plattform; die Seite gibt an, welche |
 | Erweitert | WeCom-App, Offizielles WeChat-Konto, QQ-Webhook, OneBot v11 (NapCat), Satori | Eine öffentliche Adresse oder zusätzliche Software auf diesem Computer |
 
 Verbundene Plattformen werden bei jedem Start von personagent automatisch mitgestartet. Die Plattformen mit Scan-Verbindung sowie Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK und Stoat verbindet personagent selbst; die übrigen laufen über ein [AstrBot](https://github.com/AstrBotDevs/AstrBot), das personagent herunterlädt und im Hintergrund betreibt. Auf einem Server ohne Bildschirm verbindet `personagent connect <platform>` jede dieser zehn Plattformen im Terminal, mit denselben Schritten und Prüfungen wie die Seite, und `personagent up` startet alles ohne Browser. Die Einrichtung für jede Plattform steht im [Benutzerhandbuch](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#in-einen-chat-bringen), und die vollständige Einrichtung von QQ in der [chinesischen Deployment-Anleitung](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
@@ -131,7 +131,7 @@ personagent connect dsh
 
 ## Aktualisieren und deinstallieren
 
-Wenn auf PyPI eine neuere Version verfügbar ist, zeigt die Seite einen Hinweis mit dem Update-Befehl. Mit pip ist das `python -m pip install -U personagent`. Bei den meisten Installationen führt **Aktualisieren und neu öffnen** in der Ansicht **App** der Seite diesen Befehl für Sie aus. Einstellungen, Figur, Gelerntes und verbundene Apps bleiben erhalten. Um personagent zu entfernen, folgen Sie den [Schritten zur Deinstallation](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it) (auf Englisch).
+Wenn auf PyPI eine neuere Version verfügbar ist, zeigt die Seite einen Hinweis mit dem Update-Befehl. Mit pip ist das `python -m pip install -U personagent`. Bei den meisten Installationen führt **Aktualisieren und neu öffnen** in der Ansicht **App** der Seite diesen Befehl für Sie aus. Einstellungen, Figur, Gelerntes und verbundene Apps bleiben erhalten. Um personagent zu entfernen, folgen Sie [personagent entfernen](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#personagent-entfernen) im Benutzerhandbuch.
 
 ## Datenschutz
 

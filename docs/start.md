@@ -23,7 +23,7 @@ To run it from a clone, give it a venv of its own: `python -m venv .venv`, then 
 
 ## Add a key and chat
 
-Choose a model service, paste its API key and click **Verify & start chatting**. OpenRouter's free models and the warm listener character are selected to begin with. The key is free and the limit is 50 requests a day. **Advanced settings** holds the model name and API address, and **Choose a name or personality** holds the character's name and personality.
+Choose a model service, paste its API key and click **Verify & start chatting**. OpenRouter's free models and the warm listener character are selected to begin with. The key is free and the limit is 50 requests a day; the one small request sent to verify it costs something only on a paid service. **Advanced settings** holds the model name and API address, and **Choose a name, personality or language** holds the character's name, personality and the language it talks in. The menu at the top right of the page changes only the language the page itself is shown in.
 
 The key stays on your computer; click **Show** to check it. Chat messages go to the model service you choose, at that service's usual rates.
 
@@ -43,7 +43,7 @@ Two more views need no app. **Practice** plays a scripted demo and runs a practi
    - **Scan to connect**: QQ and personal WeChat. Click **Get a QR code** and confirm on your phone.
      - QQ: scan with mobile QQ. QQ creates a bot or lets you pick one you already have, and personagent fetches its keys. If you made the bot yourself on [QQ's bot page](https://q.qq.com/qqbot/openclaw/login.html), click **Paste values instead** and enter its AppID and AppSecret.
      - WeChat: scan with WeChat. The bot chats one to one only, because WeChat does not pass group messages to these bots.
-   - **Paste one or two values**: Telegram (a token from @BotFather), Discord (a bot token, with Message Content Intent turned on), KOOK, Feishu, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey, Matrix, Twitch, IRC, Zulip, VK and Stoat. The page tells you which values to copy from the app's console. Everything else uses defaults. Twitch also asks you to approve a sign-in through a link.
+   - **Paste a few values**: Telegram (a token from @BotFather), Discord (a bot token, with Message Content Intent turned on), KOOK, Feishu, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey, Matrix, Twitch, IRC, Zulip, VK and Stoat. The page tells you which values to copy from the app's console. Everything else uses defaults. Twitch also asks you to approve a sign-in through a link.
    - **Advanced**: WeCom apps, WeChat Official Accounts and QQ webhooks need a public address that forwards to their callback port. OneBot v11 (NapCat) and Satori need other software running on this computer.
 2. personagent connects QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat itself. The other apps go through AstrBot, a third-party bridge. The first time you connect one of them, personagent downloads AstrBot with a separate Python 3.12 runtime, so keep the page open until it finishes. AstrBot then runs in the background, with no dashboard to sign in to.
 3. personagent checks the credentials with the app before saving them. If the app refuses them, the page tells you and nothing is saved.

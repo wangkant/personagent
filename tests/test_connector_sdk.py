@@ -116,6 +116,39 @@ def test_the_outbox_loop_delivers_once_and_acks() -> None:
                for req in seen if req["path"] == "/v1/outbox")
 
 
+def test_a_refused_pull_logs_the_code_and_keeps_retrying(caplog) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(403, json={"error": "invalid, stale, or replayed request envelope",
+                                         "code": "invalid_envelope"})
+
+    async def run() -> None:
+        conn = sdk.Connector("http://127.0.0.1:8080", "t", connector_id="c1",
+                             client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+        conn._sleep = staticmethod(lambda *_: asyncio.sleep(0))
+        stop = asyncio.Event()
+
+        async def stopper() -> None:
+            while len(calls) < 2:
+                await asyncio.sleep(0.01)
+            stop.set()
+
+        async def deliver(_d: dict) -> tuple[str, int]:
+            return "sent", 0
+
+        await asyncio.wait_for(asyncio.gather(conn.run_outbox(deliver, stop=stop), stopper()),
+                               timeout=10)
+
+    with caplog.at_level("WARNING", logger="personagent_connector"):
+        asyncio.run(run())
+    assert len(calls) >= 2
+    assert "403, code invalid_envelope" in caplog.text
+    assert "CONNECTOR_TOKEN" in caplog.text
+    assert sdk.error_code(httpx.Response(404, json={"detail": "Not Found"})) == ""
+
+
 def test_acks_survive_a_failed_pull() -> None:
     attempts: list[list] = []
 

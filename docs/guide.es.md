@@ -271,6 +271,42 @@ Para sustituir un archivo incluido, coloque un archivo con el mismo nombre en `d
 | `data/output_filter.<lang>.json` | Reglas de sustitución y rechazo para las respuestas en producción |
 | `persona.card.json` | Apodos opcionales y ajustes de emojis, conjunto de caracteres y longitud, como `{ "aliases": ["Lu"], "reply_style": { "emoji": true, "max_chars": 320 } }`. Un apodo en `aliases` llama al personaje igual que su nombre. Los nombres se comparan sin distinguir mayúsculas y minúsculas, caracteres de ancho completo ni acentos, de modo que `sofia` llama a Sofía. En un mensaje, ñ, ã, õ y й cuentan como letras propias, de modo que `niña` no llama a un personaje llamado Nina; en el nombre del propio personaje esa marca puede omitirse, de modo que `nina` llama a Niña. Un nombre no llama al personaje desde dentro de una palabra más larga: un nombre en katakana dentro de una palabra más larga en katakana no lo llama, ni tampoco un nombre coreano en medio de una palabra. Con `"emoji": true`, el personaje puede usar emojis como suele hacerlo, y un `max_chars` inferior a 800 se comunica al modelo como límite de longitud |
 
+En estos nombres de archivo, `<lang>` es `zh` para el chino simplificado y el tradicional, y `en` para todos los demás idiomas. Un archivo colocado en `data/` sustituye por completo al archivo incluido del mismo tipo, y un archivo nuevo surte efecto cuando el personaje se reinicia. La vista Aplicación llama a estos archivos **Trasfondo, diálogos de ejemplo y filtros de palabras**. Los formatos, con un ejemplo mínimo de cada uno:
+
+- Trasfondo (`lorebook.<lang>.json`): una entrada se añade a la instrucción cuando una de sus `keywords` aparece en los diez últimos mensajes. `keywords` y `content` son obligatorios; `name` es opcional, y `priority` (100 de forma predeterminada) decide qué entradas van primero, con un máximo de cinco por turno.
+
+  ```json
+  {"entries": [
+    {"name": "gym", "keywords": ["gym", "the cave"], "content": "The group calls the gym on Fifth Street the cave.", "priority": 100}
+  ]}
+  ```
+
+  Una exportación de World Info de SillyTavern no puede utilizarse tal cual: su `entries` es un objeto con claves numéricas y las palabras clave están en `key`. Convierta `entries` en una lista y cambie el nombre de `key` a `keywords`; `content` se mantiene igual.
+- Filtros de palabras (`output_filter.<lang>.json`): cada `pattern` es una expresión regular de Python que se compara sin distinguir mayúsculas y minúsculas. `"action": "reject"` descarta la respuesta completa, por lo que no se envía nada; `"replace"` sustituye la coincidencia por `replacement` y envía el resto.
+
+  ```json
+  {"filters": [
+    {"name": "service_opener", "pattern": "^(hi|hello)\\W*how can i help", "action": "reject", "reason": "customer-service opener"},
+    {"name": "no_em_dash", "pattern": "—", "action": "replace", "replacement": ", "}
+  ]}
+  ```
+- Diálogos de ejemplo (`examples.<lang>.jsonl`): un objeto JSON por línea, con los mensajes anteriores a la respuesta en `context`, cada uno como `nombre: texto`.
+
+  ```json
+  {"scenario": "a friend shares a video", "context": ["alex: the most cursed way to make instant noodles"], "reply": "watching cooking crimes at midnight is a choice"}
+  ```
+
+**Longitud del perfil y bloque `[style]`.** El cuadro **Perfil** admite hasta 4000 caracteres. Un bloque `[style]` en `persona.txt` modifica seis reglas de los chats privados; los chats de grupo no lo tienen en cuenta. Cada línea tiene la forma `nombre: valor`. Un valor que no figure en la lista mantiene el predeterminado, el primero de los indicados abajo, y el registro lo anota:
+
+```text
+[style]
+length: medium
+vent: ask
+[/style]
+```
+
+Los nombres y valores son `length` (short, medium, long), `vent`, para cuando alguien se desahoga (hold, ask, solve), `recs`, para cuando alguien pide una recomendación (ask_back, offer), `good_news` (cheer, deadpan), `particles`, para las muletillas (capped, free, none), y `fatigue` (stock, own).
+
 Para que pueda ver imágenes, defina `VISION_MODEL`, `VISION_API_KEY` y `VISION_BASE_URL`, o active la comprensión de imágenes en **Más funciones**. Si el modelo elegido no puede leer imágenes, la página lo indica al guardar. Una imagen que el personaje no puede ver, porque la comprensión de imágenes está desactivada o ha fallado, le llega como una imagen que no puede ver, tanto en grupos como en chats privados, de modo que pregunta por ella en lugar de describirla. Los mensajes de voz, los vídeos, los archivos y los mensajes reenviados le llegan como lo que son, con la transcripción del mensaje de voz cuando la plataforma la proporciona. Las palabras de un mensaje reenviado se leen como palabras de la persona cuyo mensaje se reenvió: no llaman a nadie por su nombre ni ejecutan ningún comando de memoria. Una mención de otra persona llega al personaje con el nombre que esa persona eligió, que nunca cuenta como palabras del remitente, por lo que no llama al personaje ni da ninguna orden.
 
 ## Llevar el personaje a un chat
@@ -312,7 +348,7 @@ La primera vez que conecte cualquier otra plataforma, personagent descargará [A
 
 | Grupo | Plataformas | Datos necesarios |
 |---|---|---|
-| Pegar uno o dos valores | KOOK, Feishu / Lark, DingTalk, Slack, bot de IA de WeCom, Mattermost, Misskey | un token, un ID de aplicación y un secreto, o una dirección de servidor y un token. Feishu utiliza una conexión persistente y DingTalk el modo Stream, por lo que ninguno requiere una dirección pública. En Slack, el enlace de la página crea la aplicación con Socket Mode, los ámbitos y los eventos ya definidos. Añada un token de nivel de aplicación con `connections:write`, instale la aplicación y pegue ambos tokens. Cree el bot de IA de WeCom con conexión persistente. |
+| Pegar algunos valores | KOOK, Feishu / Lark, DingTalk, Slack, bot de IA de WeCom, Mattermost, Misskey | un token, un ID de aplicación y un secreto, o una dirección de servidor y un token. Feishu utiliza una conexión persistente y DingTalk el modo Stream, por lo que ninguno requiere una dirección pública. En Slack, el enlace de la página crea la aplicación con Socket Mode, los ámbitos y los eventos ya definidos. Añada un token de nivel de aplicación con `connections:write`, instale la aplicación y pegue ambos tokens. Cree el bot de IA de WeCom con conexión persistente. |
 | Avanzado | App de WeCom, cuenta oficial de WeChat, QQ (webhook) | una dirección pública que reenvíe al puerto de callback indicado |
 | Avanzado | OneBot v11 (NapCat), Satori | otro software en ejecución en este equipo: NapCat apuntando a `ws://127.0.0.1:<port>/ws`, o un servidor Satori |
 
@@ -446,7 +482,7 @@ A quién se refiere una nota:
 
 - Una nota en primera persona, o que menciona a quien la escribe, se refiere a esa persona.
 - Una nota que menciona a otro miembro de la sala se refiere a esa persona, y aparece cuando esta está presente.
-- Cualquier otra nota pertenece a todo el grupo. Todos los miembros la ven, y al recuperarla se etiqueta como «from <name>».
+- Cualquier otra nota pertenece a todo el grupo. Todos los miembros la ven, y al recuperarla se etiqueta como «de <nombre>».
 
 Solo pueden leer una nota la persona a la que se refiere, quien la guardó y el administrador. Solo pueden olvidarla quien la guardó, la persona a la que se refiere y el administrador.
 
@@ -460,7 +496,7 @@ Cómo se mantienen actualizadas las notas, y qué más recuerda el personaje, se
 
 Ninguno de estos comandos llama al modelo. Las notas están destinadas a hechos, por lo que `Nova, remember: always reply in English` se rechaza. Las preguntas no son comandos. `Nova, remember the party?`, `Nova, remember when we...` y `Nova, what do you remember about me` son conversación corriente, al igual que una línea en chino que termina en 吗, 么, 呢 o 没. `Nova, forget it` y `Nova, forget that` significan «déjalo» y no borran nada.
 
-Los mismos comandos funcionan en los demás idiomas del menú de la página, y la respuesta se emite en el idioma del comando. El japonés y el coreano también admiten el verbo al final (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). Una nota se borra con la palabra que significa olvidar; palabras como borrar o eliminar, que en un chat se aplican a mensajes y luces, no cuentan, salvo el japonés `メモ消して`. Un ejemplo de cada uno:
+Los mismos comandos funcionan en los demás idiomas del menú de la página, y la respuesta se emite en el idioma del comando. El japonés y el coreano también admiten el verbo al final (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). Una nota se borra con la palabra que significa olvidar. Palabras como borrar o eliminar no cuentan, porque en un chat suelen referirse a borrar un mensaje o a apagar una luz; la única excepción es el japonés `メモ消して`. Un ejemplo de cada uno:
 
 | Idioma | Recordar | Olvidar | Qué recuerda | Qué ha aprendido |
 |---|---|---|---|---|
@@ -557,7 +593,7 @@ Cada chat tiene su propia memoria, que se guarda en `runtime/` de la carpeta de 
 
 ### Qué conserva
 
-- **Mensajes recientes**, cada uno con la hora en que se envió. Las últimas 60 líneas de un grupo y los últimos 60 turnos de un chat privado se escriben en `runtime/recent.json` durante 72 horas, de modo que un reinicio no hace perder la conversación. Con `MEMORY_KEEP_RECENT=false`, solo se conservan mientras el personaje está en ejecución. Una respuesta lee como máximo los últimos 60 mensajes, o los últimos 30 cuando se dirigen al personaje, y se informa al modelo de las pausas de 30 minutos o más.
+- **Mensajes recientes**, cada uno con la hora en que se envió. Las últimas 60 líneas de un grupo y los últimos 60 turnos de un chat privado se escriben en `runtime/recent.json` durante 72 horas, de modo que un reinicio no hace perder la conversación. Con `MEMORY_KEEP_RECENT=false`, solo se conservan mientras el personaje está en ejecución. Una respuesta lee como máximo los últimos 60 mensajes, o los últimos 30 cuando se dirigen al personaje, y se informa al modelo de las pausas de 30 minutos o más. Los mensajes recientes no figuran en **Recuerda**, dentro de Actividad.
 - **El resumen de la conversación anterior.** Cuando los mensajes más antiguos salen de la ventana reciente, el personaje redacta un breve resumen continuo del chat: preguntas pendientes, planes y quién se encarga de qué. La página lo muestra como **Anteriormente en este chat**.
 - **Hechos** sobre las personas y sobre el grupo. Proceden de los comandos de memoria, de las notas que el personaje escribe mientras responde, de las correcciones que enseñan un hecho y de la consolidación (véase más abajo). Cada hecho registra a quién se refiere, cuándo se anotó por primera vez y cuándo se basó en él una respuesta por última vez. Un hecho pertenece a una persona solo cuando lo contienen los mensajes de esa misma persona. Lo que un miembro dice sobre otro se guarda como dicho por ese miembro: permanece en el chat en el que se dijo y nunca modifica, finaliza ni se fusiona con los hechos que aportaron las propias palabras de esa persona. Un hecho sobre el grupo que nombra a alguien necesita un mensaje de esa persona; de lo contrario, se guarda como dicho por el miembro cuyas palabras lo contienen. Lo mismo se aplica a las notas que el personaje escribe mientras responde.
 - **Acontecimientos**: qué ocurrió y entre quiénes, cada uno con su fecha y las personas que participaron. La fecha y las personas se toman de los mensajes almacenados, nunca del modelo, por lo que un mensaje no puede antedatar un acontecimiento. Cuando un acontecimiento es un plan para un día determinado, el personaje puede preguntar por él una vez en un chat privado después de ese día, si tiene permiso para hablar primero allí ([Hablar primero](#hablar-primero)). Las fechas, y el día de un plan, se toman en la zona horaria del personaje (`PERSONA_TZ_OFFSET_HOURS`; consulte [Solución de problemas](#solución-de-problemas)).
@@ -586,10 +622,11 @@ Cuando un mensaje se refiere a un momento, como ayer, la semana pasada o el mes 
 - Lo que elimina el propio personaje (sustituido, fusionado, que ya no está vigente, eliminado para dejar espacio, o una versión anterior) puede restaurarse durante 30 días.
 - Un elemento olvidado en la página o con `personagent memory forget` puede restaurarse durante 24 horas.
 - Un olvido solicitado en el chat es definitivo. También elimina lo que abarca de los elementos eliminados que todavía podrían haberse restaurado.
-- **Olvidar este chat** también es definitivo. Olvida los hechos, los acontecimientos, el resumen, la nota principal y los mensajes recientes del chat, así como los elementos eliminados que todavía podrían haberse restaurado. Se conserva lo que el personaje recuerda de otros chats, incluidas las notas sobre usted tomadas en otros lugares. En el chat propio de la página, lo que el personaje aprendió en ese chat también deja de utilizarse, y esos elementos siguen apareciendo en **Apartados**, en **Lo que ha aprendido el personaje**.
-- Después de un olvido solicitado en el chat o de **Olvidar este chat**, las copias diarias de los archivos de memoria (`.bak`) se vuelven a escribir a partir de los archivos actuales, y la copia conservada desde el primer inicio de esta versión (`memory.json.pre-v2`) pierde lo olvidado, de modo que ninguna copia en disco lo conserva. Un elemento olvidado en la página o en el terminal permanece entre los elementos eliminados durante 24 horas y, por tanto, también en las copias de ese día.
+- **Olvidar este chat** también es definitivo. Olvida los hechos, los acontecimientos, el resumen, la nota principal y los mensajes recientes del chat, así como los elementos eliminados que todavía podrían haberse restaurado. Se conserva lo que el personaje recuerda de otros chats, incluidas las notas sobre usted tomadas en otros lugares. En el chat propio de la página, lo que el personaje aprendió en ese chat también deja de utilizarse, y esos elementos siguen apareciendo en **Apartados**, en **Lo que ha aprendido el personaje**. Olvidar el chat propio de la página también olvida lo que recordaban los chats anteriores de la página, los que dejó atrás **Nuevo chat**.
+- **Nuevo chat** en la página vuelve a empezar la conversación de la página. Lo que el personaje recordaba del chat anterior se conserva y sigue recordándose, y ese chat permanece en Actividad como un chat aparte; lo que aprendió en él deja de utilizarse.
+- Después de un olvido solicitado en el chat o de **Olvidar este chat**, las copias diarias de los archivos de memoria (`.bak`) se vuelven a escribir a partir de los archivos actuales, y la copia conservada desde el primer inicio de esta versión (`memory.json.pre-v2`) pierde lo olvidado, de modo que ninguna copia en `runtime/` lo conserva; una copia de seguridad anterior sí lo conserva. Un elemento olvidado en la página o en el terminal permanece entre los elementos eliminados durante 24 horas y, por tanto, también en las copias de ese día.
 - Cuando se olvida algo mientras se está ejecutando una consolidación de ese chat, la respuesta de la consolidación se descarta y los mensajes se vuelven a leer más tarde, de modo que el elemento olvidado no regresa.
-- **Borrar la memoria**, en la vista **Aplicación**, elimina toda la memoria.
+- **Borrar la memoria**, en la vista **Aplicación**, elimina toda la memoria, tras guardar en `backups/` una copia de seguridad que la conserva hasta que usted elimine ese archivo.
 
 ### Consultarla y modificarla
 
@@ -698,7 +735,7 @@ El aprendizaje funciona junto a ese flujo, nunca dentro de él, y guarda su esta
 
 Todo lo que personagent guarda permanece en su equipo, en la carpeta de inicio: `.env` con sus claves, `persona.txt`, `persona.card.json`, `runtime/`, y `platforms/` con las credenciales de las plataformas. En un clon, ninguno de estos archivos se confirma en Git. Pueden contener credenciales y conversaciones reales, por lo que debe hacer copias de seguridad y mantenerlos en privado. Los mensajes recientes de cada chat se conservan en `runtime/recent.json` durante 72 horas, salvo con `MEMORY_KEEP_RECENT=false`, y lo que el personaje elimina de la memoria sigue pudiendo restaurarse en `runtime/memory_trash.jsonl` durante un máximo de 30 días. La página local nunca guarda la clave en el almacenamiento del navegador.
 
-La vista [Actividad](#actividad) forma parte de la página local, que solo escucha en 127.0.0.1. La API del servicio en la que se basa solo responde a solicitudes que incluyan el token de `runtime/dashboard.token`, un archivo que solo puede leer su usuario. `CONNECTOR_TOKEN` no da acceso a ella. La vista nunca muestra claves de API ni tokens. `DASHBOARD_ENABLED=false` la desactiva.
+La vista [Actividad](#actividad) forma parte de la página local, que solo escucha en 127.0.0.1. La API del servicio en la que se basa solo responde a solicitudes que incluyan el token de `runtime/dashboard.token`, un archivo que se crea con permiso de lectura solo para su propia cuenta; en Windows, que otras personas puedan leerlo depende de los permisos de la carpeta de inicio. `CONNECTOR_TOKEN` no da acceso a ella. La vista nunca muestra claves de API ni tokens. `DASHBOARD_ENABLED=false` la desactiva.
 
 Como máximo una vez al día, la página local, `personagent up` y `personagent doctor` consultan a pypi.org el número de la versión más reciente. La solicitud incluye la versión de personagent y nada más. `UPDATE_CHECK_ENABLED=false` la desactiva.
 
@@ -713,6 +750,30 @@ El proveedor de modelos ve las conversaciones:
 - Con `EMBEDDING_MODEL` definido, el mensaje que se responde, las memorias y los ejemplos de recuperación se envían al endpoint de embeddings (`EMBEDDING_BASE_URL`, o `LLM_BASE_URL` si está vacío).
 
 Antes de conectarlo con personas reales, infórmeles de que es un bot y obtenga su consentimiento para tratar sus mensajes. Lea el [aviso legal](DISCLAIMER.es.md).
+
+### Archivos de la carpeta de inicio
+
+Lo que contiene cada archivo y carpeta de la carpeta de inicio:
+
+| Archivo o carpeta | Contiene | Texto de chats o secretos |
+|---|---|---|
+| `.env` | Los ajustes, con la clave del modelo y las demás claves en texto sin cifrar | Secretos |
+| `persona.txt`, `persona.card.json` | El perfil y su ficha opcional | No |
+| `platforms/` | `direct.json`, con las credenciales de las plataformas que personagent conecta por sí mismo, y el AstrBot gestionado con sus ajustes | Secretos |
+| `runtime/memory.json`, `core_memory.json`, `episodes.json` | Hechos, nota principal, acontecimientos y resúmenes de cada chat | Contenido de chats |
+| `runtime/recent.json` | Mensajes recientes de cada chat, durante 72 horas | Texto de chats |
+| `runtime/memory_trash.jsonl` | Elementos de memoria eliminados, durante un máximo de 30 días | Contenido de chats |
+| `runtime/pending_reactions.json` | Respuestas enviadas en los últimos 15 minutos que esperan una reacción, con algunos mensajes anteriores a cada una | Texto de chats |
+| `runtime/candidate_ledger.<lang>.jsonl` y los demás registros de aprendizaje | Lo que ha aprendido el personaje, con las respuestas y reacciones en que se basa | Texto de chats |
+| `runtime/desktop/browser-chat.json` | El chat propio de la página, sus últimos 50 mensajes | Texto de chats |
+| `runtime/desktop/*.log` | Registros del personaje, de las plataformas y de AstrBot | Pueden contener partes de mensajes |
+| `runtime/desktop/welcome.json` | La dirección de la página local con su token de acceso | Secreto |
+| `runtime/dashboard.token` | El token de la API de Actividad | Secreto |
+| `stickers/` | Stickers recopilados de los chats | Imágenes de chats |
+| `data/` | Sus propios archivos de trasfondo, ejemplos y filtros | Solo lo que usted coloque |
+| `backups/` | Copias de seguridad en zip | Ambos |
+
+Una copia de seguridad es un zip sin cifrar que contiene la clave, la memoria, lo que ha aprendido el personaje y los inicios de sesión de las plataformas. **Borrar la memoria** y **Restablecer todo**, en la vista Aplicación, guardan primero una copia en `backups/`, de modo que lo borrado permanece en ese archivo hasta que usted lo elimine. Las copias guardadas en el Escritorio o en Documentos también permanecen allí.
 
 ## Solución de problemas
 
@@ -735,6 +796,16 @@ La guía de despliegue incluye [la lista completa](deploy.es.md#si-el-bot-deja-d
 **No se inicia.** `personagent run` se detiene con una frase que indica el motivo. Los motivos habituales son un puerto ya en uso, otro personagent en ejecución desde la misma carpeta de inicio, una dirección de red definida sin `CONNECTOR_TOKEN`, un ajuste retirado en la versión 1.0 que sigue definido, o un archivo de memoria dañado, en cuyo caso la frase indica la copia fechada que debe ponerse en su lugar. Los ajustes retirados se enumeran uno por línea como `OLD -> NEW`, y `personagent doctor --fix` les cambia el nombre, al igual que **Cambiar el nombre de los ajustes** en la vista **Aplicación**. Si falla el personaje iniciado desde la página, la vista **Aplicación** indica qué componente ha fallado y muestra su última línea de registro. La página y `personagent up` eligen un puerto libre cuando el 8080 está ocupado.
 
 **Un ajuste no surte efecto.** Reinicie el proceso que lo lee, compruebe la ortografía y guarde `.env` como UTF-8 sin BOM. Las variables de entorno del shell tienen prioridad sobre `.env`. Los valores booleanos son `true` o `false`. `PERSONA_TZ_OFFSET_HOURS` define la zona horaria del personaje: la franja nocturna y las fechas de lo que recuerda se rigen por ella. Cuando está vacío (valor predeterminado), personagent utiliza UTC+8 con `AGENT_LANG=zh` o `zh-TW`, y la zona horaria de este equipo en los demás casos. Indique un número para elegir otro desfase.
+
+## Desinstalar personagent
+
+1. Si el personaje está conectado a un asistente de programación, quítelo primero en **Conectar plataformas** → **Asistentes de programación**, o con `personagent connect claude-code --remove` (lo mismo con `codex` y `dsh`).
+2. En Windows, en la vista Aplicación, seleccione **Quitar el icono** en **Icono en el escritorio y en el menú Inicio** y desactive **Iniciar personagent al iniciar sesión en Windows**.
+3. Seleccione **Salir** en la página.
+4. Desinstale el paquete con `python -m pip uninstall personagent`, o con `uv tool uninstall personagent` si lo instaló con uv. Una copia descomprimida del ZIP del código fuente se elimina borrando su carpeta.
+5. Elimine la carpeta de inicio: de forma predeterminada, la carpeta `personagent` de su carpeta de usuario, o la que indicó con `--home`. Contiene la clave, la memoria, los inicios de sesión de las plataformas y `backups/`.
+6. Elimine las copias de seguridad que haya guardado en el Escritorio o en Documentos.
+7. Revoque la clave de API en la página de claves del servicio de modelos y retire el bot de sus grupos en cada plataforma.
 
 ## Actualizar desde 0.x
 

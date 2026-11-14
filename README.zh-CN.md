@@ -13,10 +13,10 @@
 
 <p align="center"><a href="https://github.com/wangkant/personagent/blob/main/README.md">English</a> · <strong>简体中文</strong> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.zh-TW.md">繁體中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ja.md">日本語</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ko.md">한국어</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.es.md">Español</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.fr.md">Français</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.de.md">Deutsch</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.pt-BR.md">Português</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ru.md">Русский</a></p>
 
-personagent 是一个像人一样的智能体（agent）：它拥有自己的性格与记忆，从与人的交流中学习，并自行判断何时发言。它可在你使用的各处运行：QQ、微信、Telegram、Discord 及另外十八个平台的群聊与私聊，本机的窗口，以及 Claude Code、Codex 等编程助手。角色可选用现成的，也可自行编写；接入任意兼容 OpenAI 接口的模型即可使用。
+personagent 在你自己的电脑上运行，保存的所有内容都留在本机。它可在你使用的各处运行：QQ、微信、Telegram、Discord 及另外十八个平台的群聊与私聊，本机的窗口，以及 Claude Code、Codex 等编程助手。角色可选用现成的，也可自行编写；接入任意兼容 OpenAI 接口的模型即可使用。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本地页面中的「连接平台」：可扫码连接或填写一至两项即可连接的平台、已折叠的高级平台，以及可接入的编程助手" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本地页面中的「连接平台」：可扫码连接或填写几项即可连接的平台、已折叠的高级平台，以及可接入的编程助手" width="960">
 </p>
 
 <p align="center"><em>「连接平台」与设置、聊天位于同一个本地页面中。</em></p>
@@ -66,7 +66,7 @@ personagent 是一个像人一样的智能体（agent）：它拥有自己的性
 <tr>
 <td width="220" valign="top"><strong>连接你的所有平台</strong></td>
 <td valign="top">
-二十二个聊天平台均可在同一页面中连接，用手机扫码一次或粘贴一至两项即可；其中多数同时支持群聊与私聊。<br>
+二十二个聊天平台均可在同一页面中连接，用手机扫码一次或填写几项即可；其中多数同时支持群聊与私聊。<br>
 同一个智能体也在本机窗口中与你对话，并可接入 Claude Code、Codex 和 DeepSeek Harness。<br>
 其他平台可通过 AstrBot、Koishi 或 Matrix 桥接接入，也可自行编写连接器。
 </td>
@@ -80,7 +80,7 @@ personagent 是一个像人一样的智能体（agent）：它拥有自己的性
 </tr>
 </table>
 
-也可以在聊天中让它记住或忘记指定内容：`小夏，记住 阿杰不吃辣`、`小夏 忘掉 不吃辣`（[记忆命令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#教导角色)）。保存哪些内容、保存多久，见使用手册的[记忆](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#记忆)一节。
+也可以在聊天中让它记住或忘记指定内容（小夏是默认角色的名字）：`小夏，记住 阿杰不吃辣`、`小夏 忘掉 不吃辣`（[记忆命令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#教导角色)）。保存哪些内容、保存多久，见使用手册的[记忆](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#记忆)一节。
 
 ## 快速开始
 
@@ -93,7 +93,7 @@ personagent
 
 在 Windows 上，personagent 会在独立窗口中打开；在 macOS 和 Linux 上则在浏览器中打开。填写模型 API Key 后，点击「验证并开始聊天」。如尚无 Key，可使用默认选中的 OpenRouter 免费模型，其 Key 不收费。`personagent demo` 无需 Key，会播放三段预先编写的场景。[简明入门](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)逐屏介绍了页面的各个部分。
 
-personagent 本身免费。费用支付给你选择的模型服务，按其价格计算。OpenRouter 的免费模型每天限 50 次请求，部分免费服务商会保留收到的内容；Ollama 在你自己的电脑上运行模型，无需 Key。
+personagent 本身免费。费用支付给你选择的模型服务，按其价格计算。一条消息可能产生不止一次模型请求：除回复本身外，角色有时还会判断是否在群里发言、评估回复得到的反应，或整理记忆。OpenRouter 的免费模型每天限 50 次请求，部分免费服务商会保留收到的内容；Ollama 在你自己的电脑上运行模型，无需 Key。
 
 ## 连接你的平台
 
@@ -102,7 +102,7 @@ personagent 本身免费。费用支付给你选择的模型服务，按其价�
 | 页面分组 | 平台 | 需要准备 |
 |---|---|---|
 | 扫码连接 | QQ、个人微信 | 手机。微信机器人仅支持一对一聊天 |
-| 填写一至两项 | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、飞书、钉钉、Slack、企业微信智能机器人、Mattermost、Misskey | 从平台后台复制，页面会说明需要复制哪几项 |
+| 填写几项 | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、飞书、钉钉、Slack、企业微信智能机器人、Mattermost、Misskey | 从平台后台复制，页面会说明需要复制哪几项 |
 | 高级 | 企业微信应用、微信公众号、QQ（Webhook）、OneBot v11（NapCat）、Satori | 公网地址，或本机的其他软件 |
 
 已连接的平台在每次启动 personagent 时都会自动连接。扫码连接的平台，以及 Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 直接连接；其余平台通过 personagent 在后台下载并运行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入。在没有显示器的服务器上，可在终端中运行 `personagent connect <平台>` 连接上述十个平台中的任意一个，操作步骤和核验方式与页面相同；运行 `personagent up` 即可在不打开浏览器的情况下全部启动。各平台的设置方法见[使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#接入聊天平台)；从零开始接入 QQ 请参阅[部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)。
@@ -129,7 +129,7 @@ personagent connect dsh
 
 ## 更新与卸载
 
-PyPI 上发布新版本时，页面会显示提示及相应的更新命令。如使用 pip 安装，更新命令为 `python -m pip install -U personagent`。对于大多数安装方式，页面「应用」视图中的「更新并重新打开」可代为执行更新。设置、角色、已学到的内容和已连接的平台均会保留。如需卸载，请按照[卸载步骤](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英文）操作。
+PyPI 上发布新版本时，页面会显示提示及相应的更新命令。如使用 pip 安装，更新命令为 `python -m pip install -U personagent`。对于大多数安装方式，页面「应用」视图中的「更新并重新打开」可代为执行更新。设置、角色、已学到的内容和已连接的平台均会保留。如需卸载，请按照使用手册中的[卸载 personagent](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#卸载-personagent)操作。
 
 ## 隐私
 

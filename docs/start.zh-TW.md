@@ -23,7 +23,7 @@ personagent
 
 ## 填入金鑰，開始聊天
 
-選擇模型服務，填入 API 金鑰，再點選「驗證並開始聊天」。預設選取的是 OpenRouter 的免費模型和「溫和的傾聽者」這個角色。此金鑰不需付費，每天限 50 次請求。模型名稱和服務位址位於「進階設定」中，角色的名稱和個性位於「變更角色名稱或個性」中。
+選擇模型服務，填入 API 金鑰，再點選「驗證並開始聊天」。預設選取的是 OpenRouter 的免費模型和「溫和的傾聽者」這個角色。此金鑰不需付費，每天限 50 次請求；頁面提示驗證時會傳送一次很小的請求，這只在付費服務上產生少量費用。模型名稱和服務位址位於「進階設定」中，角色的名稱、個性和交談所用的語言位於「變更角色名稱、個性或語言」中。頁面右上角的語言選單只切換頁面本身的顯示語言。
 
 金鑰只儲存在本機，點選「顯示」即可核對。聊天訊息會傳送至你選擇的模型服務，並依該服務的一般價格計費。
 
@@ -43,7 +43,7 @@ personagent
    - **掃描連接**：QQ 和個人微信。點選「取得 QR 碼」，然後在手機上確認。
      - QQ：使用手機 QQ 掃描。QQ 會新建一個機器人，或讓你選擇既有的機器人，金鑰由 personagent 自動取回。如果機器人是你自行在 [QQ 官方頁面](https://q.qq.com/qqbot/openclaw/login.html)建立的，請點選「改為手動填寫」，填入 AppID 和 AppSecret。
      - 微信：使用微信掃描。微信不會將群組訊息轉送給這類機器人，因此它僅限私訊。
-   - **填寫一至兩項**：Telegram（向 @BotFather 申請 Token）、Discord（機器人 Token，並開啟 Message Content Intent）、KOOK、飛書、釘釘、Slack、企業微信智慧機器人、Mattermost、Misskey、Matrix、Twitch、IRC、Zulip、VK 和 Stoat。頁面會註明需要從平台後台複製哪幾項，其餘設定均使用預設值。Twitch 另需透過一個連結核准登入。
+   - **填寫幾項**：Telegram（向 @BotFather 申請 Token）、Discord（機器人 Token，並開啟 Message Content Intent）、KOOK、飛書、釘釘、Slack、企業微信智慧機器人、Mattermost、Misskey、Matrix、Twitch、IRC、Zulip、VK 和 Stoat。頁面會註明需要從平台後台複製哪幾項，其餘設定均使用預設值。Twitch 另需透過一個連結核准登入。
    - **進階**：企業微信應用、微信公眾號和 QQ（Webhook）需要一個可轉送至回呼連接埠的公開網址；OneBot v11（NapCat）和 Satori 需要在本機另外執行相應的軟體。
 2. QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 直接連線。其他平台透過第三方橋接程式 AstrBot 接入。首次連接這類平台時，personagent 會下載 AstrBot 和一個獨立的 Python 3.12 執行環境，下載完成前請保持頁面開啟。之後 AstrBot 會在背景執行，不需要另外登入管理後台。
 3. 儲存之前，personagent 會先向平台驗證憑證。平台拒絕時，頁面會顯示提示，且不會儲存任何內容。

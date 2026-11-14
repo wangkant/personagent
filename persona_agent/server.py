@@ -37,7 +37,7 @@ from persona_agent.outbox import parse_pull
 from persona_agent.paths import ROOT, runtime_dir
 from persona_agent.settings import AgentSettings
 from persona_agent.storage import (
-    LockUnavailable, RuntimeInstanceLock, atomic_write_text)
+    ALREADY_RUNNING, LockUnavailable, RuntimeInstanceLock, atomic_write_text)
 from persona_agent import dashboard
 
 
@@ -661,9 +661,7 @@ dashboard.install(app)
 
 #: Where this process listens: SERVER_HOST / SERVER_PORT unless main() was given others.
 _LISTEN: dict = {"host": SERVER_HOST, "port": SERVER_PORT}
-_ALREADY_RUNNING = (
-    "another personagent is already running from {home}; stop that one first, "
-    "or give this one its own folder with --home DIR (or AGENT_HOME)")
+_ALREADY_RUNNING = ALREADY_RUNNING
 
 
 def _url_host(host: str) -> str:

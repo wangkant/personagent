@@ -57,7 +57,7 @@ SPEC = Spec(
         "remember_what": ("lembrar o quê? você não falou nada", "fala aí, anotar o quê",
                           "anotar o quê kkk"),
         "not_instructions": ("eu guardo fatos, não instruções",),
-        "noted": ("anotado", "beleza, guardei", "tá anotado", "fechou", "ok"),
+        "noted": ("anotado", "beleza, guardei", "tá anotado"),
         "forget_what": ("esquecer o quê? fala direito", "qual delas? explica melhor"),
         "nothing_to_forget": ("hm, nunca anotei isso", "não lembro disso não",
                               "não achei nada pra esquecer"),

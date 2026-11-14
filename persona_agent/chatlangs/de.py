@@ -70,7 +70,7 @@ SPEC = Spec(
         "remember_what": ("was soll ich mir merken? du hast nix gesagt",
                           "na sag schon", "merken, was denn"),
         "not_instructions": ("ich merk mir Fakten, keine Anweisungen",),
-        "noted": ("notiert", "okay, gemerkt", "hab ich mir gemerkt", "jo", "ok"),
+        "noted": ("notiert", "okay, gemerkt", "hab ich mir gemerkt"),
         "forget_what": ("was soll ich vergessen? sag genauer",
                         "welches denn? sag mehr"),
         "nothing_to_forget": ("äh, hab ich mir nie gemerkt", "davon weiß ich nix",

@@ -189,10 +189,12 @@ PA.strings({
     // Disabling a focused button drops its focus; done() gives it back.
     if (document.activeElement === node) node.dataset.focused = "1";
     node.disabled = true;
+    node.dataset.working = "1";
     node.textContent = PA.t(key);
   };
   const done = (node) => {
     node.disabled = false;
+    delete node.dataset.working;
     relabel(node);
     if (node.dataset.focused && !node.hidden && focusLost()) node.focus();
     delete node.dataset.focused;
@@ -481,10 +483,17 @@ PA.strings({
     groupRetry.hidden = code === "practice_needs_key";
     groupError.hidden = false;
   }
+  let groupReady = false;
+  // Nothing to send while the box holds only white space, as in the chat view.
+  function syncSend() {
+    send.disabled = !groupReady || sending || !input.value.trim();
+  }
+  input.addEventListener("input", syncSend);
   function setReady(ready) {
+    groupReady = ready;
     input.disabled = !ready;
     asPick.disabled = !ready;
-    send.disabled = !ready || sending;
+    syncSend();
     learnedButton.disabled = !ready;
     resetButton.disabled = !ready;
   }
@@ -771,7 +780,8 @@ PA.strings({
   // ---- language and showing -------------------------------------------------
   function renderText() {
     for (const node of root.querySelectorAll("[data-key]")) {
-      if (!node.dataset.key || (node.disabled && node.tagName === "BUTTON")) continue;
+      // A button showing its "...ing" label keeps it; one merely not yet usable follows the language.
+      if (!node.dataset.key || node.dataset.working) continue;
       node.textContent = PA.t(node.dataset.key);
     }
     memberOptions();

@@ -13,10 +13,10 @@
 
 <p align="center"><strong>English</strong> · <a href="https://github.com/wangkant/personagent/blob/main/README.zh-CN.md">简体中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.zh-TW.md">繁體中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ja.md">日本語</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ko.md">한국어</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.es.md">Español</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.fr.md">Français</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.de.md">Deutsch</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.pt-BR.md">Português</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ru.md">Русский</a></p>
 
-personagent is an agent that behaves like a person: it has a character of its own, remembers, learns from the people it talks to, and judges for itself when to speak. It works wherever you do: in group chats and private chats on QQ, WeChat, Telegram, Discord and eighteen more platforms, in a window on your computer, and inside coding assistants such as Claude Code and Codex. You pick or write its character, and it runs on any OpenAI-compatible model.
+personagent runs on your own computer and keeps everything it stores there. It works wherever you do: in group chats and private chats on QQ, WeChat, Telegram, Discord and eighteen more platforms, in a window on your computer, and inside coding assistants such as Claude Code and Codex. You pick or write its character, and it runs on any OpenAI-compatible model.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="The Connect apps view of the local page: the platforms that connect by scanning a code or by pasting one or two values, the advanced platforms collapsed, and the coding assistants it can join" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="The Connect apps view of the local page: the platforms that connect by scanning a code or by pasting a few values, the advanced platforms collapsed, and the coding assistants it can join" width="960">
 </p>
 
 <p align="center"><em>Connect apps, in the same local page as setup and the character chat.</em></p>
@@ -66,7 +66,7 @@ A burst of messages gets one reply.
 <tr>
 <td width="220" valign="top"><strong>It connects to all your platforms.</strong></td>
 <td valign="top">
-Twenty-two chat platforms connect from one page, by a phone scan or one or two pasted values. Most take both group chats and private chats.<br>
+Twenty-two chat platforms connect from one page, by a phone scan or a few pasted values. Most take both group chats and private chats.<br>
 The same agent answers in a window on your computer and inside Claude Code, Codex and DeepSeek Harness.<br>
 Any other platform can be added through an AstrBot, Koishi or Matrix bridge, or a connector you write.
 </td>
@@ -80,7 +80,7 @@ One command opens it, in English, Chinese or eight more languages, and one paste
 </tr>
 </table>
 
-It also remembers and forgets when asked in chat: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([memory commands](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory-commands)). What it keeps, and for how long, is in the [memory](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory) section of the guide.
+It also remembers and forgets when asked in chat (Nova is the default character's name): `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([memory commands](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory-commands)). What it keeps, and for how long, is in the [memory](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory) section of the guide.
 
 ## Start here
 
@@ -93,7 +93,7 @@ With [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separ
 
 It opens in a window of its own on Windows, and in your browser on macOS and Linux. Paste a model API key and click **Verify & start chatting**. No key yet? OpenRouter's free models are preselected, and their key costs nothing. `personagent demo` plays three scripted scenes with no key at all. The [getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md) walks through the page screen by screen.
 
-personagent is free. You pay the model service you choose, at its own rates. OpenRouter's free models allow 50 requests a day, and some free providers keep what they receive; Ollama runs a model on your own computer with no key.
+personagent is free. You pay the model service you choose, at its own rates. One message can lead to more than one model request: besides the reply, the character at times decides whether to speak in a group, judges how a reply was received, or tidies its memory. OpenRouter's free models allow 50 requests a day, and some free providers keep what they receive; Ollama runs a model on your own computer with no key.
 
 ## Connect your platforms
 
@@ -102,7 +102,7 @@ Open **Connect apps** in the local page:
 | On the page | Apps | What you need |
 |---|---|---|
 | Scan to connect | QQ, personal WeChat | Your phone. WeChat bots get one-to-one chats only |
-| Paste one or two values | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey | Values from the app's console; the page says which |
+| Paste a few values | Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat, KOOK, Feishu/Lark, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey | Values from the app's console; the page says which |
 | Advanced | WeCom app, WeChat Official Account, QQ webhook, OneBot v11 (NapCat), Satori | A public address, or other software on this computer |
 
 Connected apps start again each time personagent starts. The scan-to-connect apps, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat are connected by personagent itself; the rest go through an [AstrBot](https://github.com/AstrBotDevs/AstrBot) it downloads and runs in the background. On a server without a display, `personagent connect <platform>` connects any of those ten from the terminal, with the same steps and checks as the page, and `personagent up` starts everything without a browser. Setup for each app is in the [user guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#put-it-in-a-chat), and QQ from zero in the [Chinese deployment guide](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
@@ -129,7 +129,7 @@ personagent connect dsh
 
 ## Update and uninstall
 
-When a newer version is on PyPI, the page shows a notice with the update command. With pip that is `python -m pip install -U personagent`. On most installations, **Update and reopen** in the page's App view runs it for you. Settings, character, what it learned and connected apps carry over. To remove it, follow the [uninstall steps](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it).
+When a newer version is on PyPI, the page shows a notice with the update command. With pip that is `python -m pip install -U personagent`. On most installations, **Update and reopen** in the page's App view runs it for you. Settings, character, what it learned and connected apps carry over. To remove it, follow [Removing personagent](https://github.com/wangkant/personagent/blob/main/docs/guide.md#removing-personagent) in the guide.
 
 ## Privacy
 

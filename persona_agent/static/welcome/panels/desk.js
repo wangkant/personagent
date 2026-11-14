@@ -74,13 +74,13 @@ PA.strings({
     desk_forget_hint: "删除角色记下的关于每个人的信息、学到的说法及其修改记录、演练数据和本页的聊天记录。设置、人设、已连接的平台和表情包将保留。",
     desk_forget: "清除记忆",
     desk_forgetting: "正在清除…",
-    desk_forget_ask: "确定清除角色的记忆吗？将删除角色记下的关于每个人的信息、学到的说法及其修改记录、演练数据和本页的聊天记录。设置、人设、已连接的平台和表情包将保留。清除前会自动备份，可从备份恢复。",
+    desk_forget_ask: "确定清除角色的记忆吗？将删除角色记下的关于每个人的信息、学到的说法及其修改记录、演练数据和本页的聊天记录。设置、人设、已连接的平台和表情包将保留。清除前会自动备份，可从备份恢复；被清除的内容仍保存在该备份中，直至你删除该备份文件。",
     desk_forgot: "已清除记忆。备份已保存至：{path}",
     desk_reset_title: "全部重置",
     desk_reset_hint: "将 personagent 恢复到首次打开时的状态：删除设置和 API 密钥、人设、记忆和学到的内容，并断开所有平台。表情包、背景设定文件夹和已下载的平台组件将保留。",
     desk_reset: "全部重置",
     desk_resetting: "正在重置…",
-    desk_reset_ask: "确定全部重置吗？将删除设置和 API 密钥、人设、记忆和学到的内容、演练数据和本页的聊天记录，并断开所有平台。表情包、背景设定文件夹和已下载的平台组件将保留。重置前会自动备份，可从备份恢复。",
+    desk_reset_ask: "确定全部重置吗？将删除设置和 API 密钥、人设、记忆和学到的内容、演练数据和本页的聊天记录，并断开所有平台。表情包、背景设定文件夹和已下载的平台组件将保留。重置前会自动备份，可从备份恢复；被删除的内容（包括 API 密钥）仍保存在该备份中，直至你删除该备份文件。",
     desk_reset_done: "已全部重置。备份已保存至：{path}",
     desk_reset_failed: "操作中途失败。backups 文件夹中有操作前的备份，从该备份恢复即可还原。",
     desk_reload_failed: "操作已完成，但页面未能更新。请刷新页面。",
@@ -161,13 +161,13 @@ PA.strings({
     desk_forget_hint: "Deletes the character's notes about people, the replies it has learned and their change history, the Practice data and this page's chat. Settings, persona, connected platforms and stickers are kept.",
     desk_forget: "Clear memory",
     desk_forgetting: "Clearing…",
-    desk_forget_ask: "Clear the character's memory? This deletes its notes about people, the replies it has learned and their change history, the Practice data and this page's chat. Settings, persona, connected platforms and stickers are kept. A backup is saved first and can be restored.",
+    desk_forget_ask: "Clear the character's memory? This deletes its notes about people, the replies it has learned and their change history, the Practice data and this page's chat. Settings, persona, connected platforms and stickers are kept. A backup is saved first and can be restored; what is cleared stays in that backup until you delete the backup file.",
     desk_forgot: "Memory cleared. A backup was saved to {path}",
     desk_reset_title: "Reset all",
     desk_reset_hint: "Returns personagent to its first-run state: deletes the settings and API keys, the persona, memory and learned content, and disconnects every platform. Stickers, the lorebook folder and the downloaded platform component are kept.",
     desk_reset: "Reset all",
     desk_resetting: "Resetting…",
-    desk_reset_ask: "Reset all? This deletes the settings and API keys, the persona, memory and learned content, the Practice data and this page's chat, and disconnects every platform. Stickers, the lorebook folder and the downloaded platform component are kept. A backup is saved first and can be restored.",
+    desk_reset_ask: "Reset all? This deletes the settings and API keys, the persona, memory and learned content, the Practice data and this page's chat, and disconnects every platform. Stickers, the lorebook folder and the downloaded platform component are kept. A backup is saved first and can be restored; what is deleted, the API keys included, stays in that backup until you delete the backup file.",
     desk_reset_done: "Reset complete. A backup was saved to {path}",
     desk_reset_failed: "The operation failed partway. The backups folder holds a backup made before it; restore that backup to return to the previous state.",
     desk_reload_failed: "The action is complete, but the page could not be updated. Reload the page.",
@@ -307,6 +307,13 @@ PA.strings({
   const targetLabel = el("label");
   targetLabel.htmlFor = "desk-target";
   const target = el("select");
+  target.addEventListener("change", () => {
+    try {
+      localStorage.setItem("personagent-backup-target", target.value);
+    } catch {
+      /* storage is off: the choice lasts for this visit */
+    }
+  });
   target.id = "desk-target";
   const backupResult = el("p", "desk-result");
   backupResult.id = "desk-backup-result";
@@ -424,7 +431,14 @@ PA.strings({
 
   function renderOverview() {
     homePath.textContent = overview ? overview.home : "";
-    const chosen = target.value;
+    // The home's own backups folder first: a backup holds the key, and a desktop is often synced.
+    let kept = "";
+    try {
+      kept = localStorage.getItem("personagent-backup-target") || "";
+    } catch {
+      /* storage is off: the default below */
+    }
+    const chosen = target.value || kept || "backups";
     target.replaceChildren();
     for (const item of overview ? overview.targets : []) {
       const option = el("option", "", t(`desk_target_${item.id}`));

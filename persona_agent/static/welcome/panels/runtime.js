@@ -202,8 +202,8 @@ PA.strings({
       make("span", "", PA.t("runtime_verNow", { version: info.version }) + " "),
       make("strong", info.update ? "runtime-new" : "", info.update
         ? PA.t("runtime_verNew", { version: info.update.version })
-        // A check that never reached the server says nothing about being up to date.
-        : PA.t(info.checkFailed ? "runtime_verUnknown" : "runtime_verLatest")),
+        // Neither a check that never reached the server nor one not yet made says "up to date".
+        : info.checkFailed ? PA.t("runtime_verUnknown") : info.checked ? PA.t("runtime_verLatest") : ""),
     );
     card.append(line, make("p", "field-note", when));
     if (info.update && info.updateBlocked) {

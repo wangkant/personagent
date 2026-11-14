@@ -271,6 +271,42 @@ Pour remplacer un fichier fourni, placez un fichier du même nom dans `data/` du
 | `data/output_filter.<lang>.json` | Règles de remplacement et de rejet pour les réponses en production |
 | `persona.card.json` | Surnoms et réglages facultatifs d'emoji, de jeu de caractères et de longueur, comme `{ "aliases": ["Lu"], "reply_style": { "emoji": true, "max_chars": 320 } }`. Un surnom figurant dans `aliases` interpelle le personnage comme le fait son nom. Les noms sont comparés sans tenir compte de la casse, des lettres pleine chasse ni des accents, de sorte que `sofia` interpelle Sofía. Dans un message, ñ, ã, õ et й comptent comme des lettres à part entière, de sorte que `niña` n'interpelle pas un personnage nommé Nina ; dans le nom du personnage lui-même, un tel signe peut être omis, de sorte que `nina` interpelle Niña. Un nom n'interpelle pas le personnage depuis l'intérieur d'un mot plus long : un nom en katakana inclus dans un mot plus long en katakana ne l'interpelle pas, pas plus qu'un nom coréen placé au milieu d'un mot. Avec `"emoji": true`, le personnage peut utiliser des emoji comme il le fait habituellement, et une valeur de `max_chars` inférieure à 800 est transmise au modèle comme limite de longueur |
 
+Dans ces noms de fichier, `<lang>` vaut `zh` pour le chinois simplifié et traditionnel, et `en` pour toutes les autres langues. Un fichier placé dans `data/` remplace entièrement le fichier fourni du même type, et un nouveau fichier prend effet après le redémarrage du personnage. La vue Application appelle ces fichiers **Lorebook, dialogues d'exemple et filtres de mots**. Les formats, avec un exemple minimal de chacun :
+
+- Lorebook (`lorebook.<lang>.json`) : une entrée est ajoutée au prompt lorsqu'un de ses `keywords` apparaît dans les dix derniers messages. `keywords` et `content` sont obligatoires ; `name` est facultatif, et `priority` (100 par défaut) détermine quelles entrées passent en premier, à raison de cinq au plus par tour.
+
+  ```json
+  {"entries": [
+    {"name": "gym", "keywords": ["gym", "the cave"], "content": "The group calls the gym on Fifth Street the cave.", "priority": 100}
+  ]}
+  ```
+
+  Un export World Info de SillyTavern ne peut pas être utilisé tel quel : son `entries` est un objet indexé par des numéros, et les mots-clés se trouvent sous `key`. Transformez `entries` en liste et renommez `key` en `keywords` ; `content` reste inchangé.
+- Filtres de mots (`output_filter.<lang>.json`) : chaque `pattern` est une expression régulière Python, comparée sans tenir compte de la casse. `"action": "reject"` supprime toute la réponse, si bien que rien n'est envoyé ; `"replace"` remplace la correspondance par `replacement` et envoie le reste.
+
+  ```json
+  {"filters": [
+    {"name": "service_opener", "pattern": "^(hi|hello)\\W*how can i help", "action": "reject", "reason": "customer-service opener"},
+    {"name": "no_em_dash", "pattern": "—", "action": "replace", "replacement": ", "}
+  ]}
+  ```
+- Dialogues d'exemple (`examples.<lang>.jsonl`) : un objet JSON par ligne, avec les messages qui précèdent la réponse dans `context`, chacun sous la forme `nom: texte`.
+
+  ```json
+  {"scenario": "a friend shares a video", "context": ["alex: the most cursed way to make instant noodles"], "reply": "watching cooking crimes at midnight is a choice"}
+  ```
+
+**Longueur de la fiche du personnage et bloc `[style]`.** Le champ **Fiche du personnage** accepte jusqu'à 4 000 caractères. Un bloc `[style]` dans `persona.txt` modifie six règles des discussions privées ; les discussions de groupe l'ignorent. Chaque ligne a la forme `nom: valeur`. Une valeur qui ne figure pas dans la liste laisse la valeur par défaut, la première indiquée ci-dessous, et le journal le signale :
+
+```text
+[style]
+length: medium
+vent: ask
+[/style]
+```
+
+Les noms et valeurs sont `length` (short, medium, long), `vent`, lorsque quelqu'un se confie (hold, ask, solve), `recs`, lorsque quelqu'un demande une recommandation (ask_back, offer), `good_news` (cheer, deadpan), `particles`, pour les mots de remplissage (capped, free, none), et `fatigue` (stock, own).
+
 Pour lui faire voir les images, définissez `VISION_MODEL`, `VISION_API_KEY` et `VISION_BASE_URL`, ou activez la compréhension d'images sous **Autres fonctions**. Lorsque le modèle choisi ne sait pas lire les images, la page le signale à l'enregistrement. Une image que le personnage ne peut pas voir, parce que la compréhension d'images est désactivée ou a échoué, lui parvient comme une image qu'il ne peut pas voir, dans les groupes comme dans les discussions privées ; il pose donc une question sur l'image au lieu de la décrire. Les messages vocaux, les vidéos, les fichiers et les messages transférés lui parviennent pour ce qu'ils sont, avec la transcription du message vocal lorsque la plateforme la fournit. Les mots d'un message transféré sont lus comme ceux de la personne dont le message a été transféré : ils n'interpellent personne par son nom et n'exécutent aucune commande de mémoire. La mention d'une autre personne parvient au personnage avec le nom que cette personne a choisi, qui ne compte jamais comme les mots de l'expéditeur ; elle n'interpelle donc pas le personnage et ne donne aucune commande.
 
 ## Le placer dans une discussion
@@ -312,7 +348,7 @@ La première fois que vous connectez une autre plateforme, personagent télécha
 
 | Groupe | Plateformes | Ce que vous fournissez |
 |---|---|---|
-| Coller une ou deux valeurs | KOOK, Feishu / Lark, DingTalk, Slack, bot IA WeCom, Mattermost, Misskey | un jeton, un ID d'application et un secret, ou une adresse de serveur et un jeton. Feishu utilise la connexion longue et DingTalk le mode Stream, donc aucun n'a besoin d'adresse publique. Pour Slack, le lien de la page crée l'application avec Socket Mode, les portées et les événements déjà définis. Ajoutez un jeton de niveau application avec `connections:write`, installez l'application et collez les deux jetons. Créez le bot IA WeCom avec la connexion longue. |
+| Coller quelques valeurs | KOOK, Feishu / Lark, DingTalk, Slack, bot IA WeCom, Mattermost, Misskey | un jeton, un ID d'application et un secret, ou une adresse de serveur et un jeton. Feishu utilise la connexion longue et DingTalk le mode Stream, donc aucun n'a besoin d'adresse publique. Pour Slack, le lien de la page crée l'application avec Socket Mode, les portées et les événements déjà définis. Ajoutez un jeton de niveau application avec `connections:write`, installez l'application et collez les deux jetons. Créez le bot IA WeCom avec la connexion longue. |
 | Avancé | Application WeCom, compte officiel WeChat, QQ (webhook) | une adresse publique qui transfère vers le port de rappel indiqué |
 | Avancé | OneBot v11 (NapCat), Satori | un autre logiciel tournant sur cet ordinateur : NapCat pointé vers `ws://127.0.0.1:<port>/ws`, ou un serveur Satori |
 
@@ -446,7 +482,7 @@ De qui parle une note :
 
 - Une note à la première personne, ou qui vous nomme, parle de vous.
 - Une note qui nomme un autre membre du salon parle de cette personne, et revient quand elle est présente.
-- Toute autre note appartient à tout le groupe. Chaque membre la voit, et le rappel l'étiquette « from <name> ».
+- Toute autre note appartient à tout le groupe. Chaque membre la voit, et le rappel l'étiquette « de <nom> ».
 
 Seules la personne concernée par une note, celle qui l'a enregistrée et l'administrateur peuvent la lire. Seules la personne qui l'a enregistrée, la personne concernée et l'administrateur peuvent la faire oublier.
 
@@ -460,7 +496,7 @@ La façon dont les notes restent à jour, et ce dont le personnage se souvient p
 
 Aucune de ces commandes n'appelle le modèle. Les notes servent aux faits, donc `Nova, remember: always reply in English` est refusé. Les questions ne sont pas des commandes. `Nova, remember the party?`, `Nova, remember when we...` et `Nova, what do you remember about me` sont de la conversation ordinaire, tout comme une ligne en chinois finissant par 吗, 么, 呢 ou 没. `Nova, forget it` et `Nova, forget that` signifient « laisse tomber » et ne suppriment rien.
 
-Les mêmes commandes fonctionnent dans les autres langues du menu de la page, et la réponse vient dans la langue de la commande. Le japonais et le coréen acceptent aussi le verbe à la fin (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). Une note se supprime avec le mot pour oublier ; des mots comme supprimer ou effacer, que la discussion utilise pour les messages et les lumières, ne comptent pas, sauf le japonais `メモ消して`. Un exemple de chacune :
+Les mêmes commandes fonctionnent dans les autres langues du menu de la page, et la réponse vient dans la langue de la commande. Le japonais et le coréen acceptent aussi le verbe à la fin (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). Une note se supprime avec le mot qui signifie oublier. Des mots comme supprimer ou effacer ne comptent pas, car dans une discussion ils désignent souvent la suppression d'un message ou l'extinction d'une lumière ; seule exception, le japonais `メモ消して`. Un exemple de chacune :
 
 | Langue | Retenir | Oublier | Ce qu'il retient | Ce qu'il a appris |
 |---|---|---|---|---|
@@ -557,7 +593,7 @@ Chaque discussion a sa propre mémoire, conservée dans `runtime/` du dossier pe
 
 ### Ce qu'il conserve
 
-- **Les messages récents**, chacun avec l'heure de son envoi. Les 60 dernières lignes d'un groupe et les 60 derniers tours d'une discussion privée sont écrits dans `runtime/recent.json` pendant 72 heures, de sorte qu'un redémarrage ne fait pas perdre la conversation. Avec `MEMORY_KEEP_RECENT=false`, ils ne sont conservés que pendant l'exécution du personnage. Une réponse lit au plus les 60 derniers messages, ou les 30 derniers lorsque le personnage est appelé, et le modèle est informé des pauses de 30 minutes ou plus.
+- **Les messages récents**, chacun avec l'heure de son envoi. Les 60 dernières lignes d'un groupe et les 60 derniers tours d'une discussion privée sont écrits dans `runtime/recent.json` pendant 72 heures, de sorte qu'un redémarrage ne fait pas perdre la conversation. Avec `MEMORY_KEEP_RECENT=false`, ils ne sont conservés que pendant l'exécution du personnage. Une réponse lit au plus les 60 derniers messages, ou les 30 derniers lorsque le personnage est appelé, et le modèle est informé des pauses de 30 minutes ou plus. Les messages récents ne figurent pas sous **Mémoire** dans Activité.
 - **Le résumé de la conversation antérieure.** Lorsque des messages plus anciens sortent de la fenêtre récente, le personnage rédige un court résumé suivi de la discussion : les questions ouvertes, les projets et qui fait quoi. La page l'affiche sous **Plus tôt dans cette discussion**.
 - **Les faits** concernant les personnes et le groupe. Ils proviennent des commandes de mémoire, des notes que le personnage écrit en répondant, des corrections qui enseignent un fait et de la consolidation (voir ci-dessous). Chaque fait indique de qui il parle, quand il a été noté pour la première fois et quand une réponse s'en est servie pour la dernière fois. Un fait n'appartient à une personne que lorsque ses propres messages le portent. Ce qu'un membre dit d'un autre est conservé comme propos de ce membre : il reste dans la discussion où il a été dit, et il ne modifie, ne clôt ni ne fusionne jamais les faits issus des propres mots de la personne concernée. Un fait sur le groupe qui nomme quelqu'un nécessite un message de cette personne ; sinon, il est conservé comme propos du membre dont les mots le portent. Il en va de même pour les notes que le personnage écrit en répondant.
 - **Les événements** : ce qui s'est passé et entre qui, chacun avec sa date et les personnes qui y ont pris part. La date et les personnes sont tirées des messages conservés, jamais du modèle, de sorte qu'un message ne peut pas antidater un événement. Lorsqu'un événement est un projet prévu pour un jour donné, le personnage peut en prendre des nouvelles une fois, dans une discussion privée, après ce jour, s'il est autorisé à y parler en premier ([Parler en premier](#parler-en-premier)). Les dates, et le jour d'un projet, sont établis dans le fuseau horaire du personnage (`PERSONA_TZ_OFFSET_HOURS` ; voir [Dépannage](#dépannage)).
@@ -586,10 +622,11 @@ Lorsqu'un message fait référence à un moment, comme hier, la semaine dernièr
 - Ce que le personnage supprime lui-même (remplacé, fusionné, plus d'actualité, supprimé pour faire de la place, ou une version antérieure) peut être restauré pendant 30 jours.
 - Un élément oublié sur la page ou avec `personagent memory forget` peut être restauré pendant 24 heures.
 - Un oubli demandé dans la discussion est définitif. Il retire aussi ce qu'il couvre des éléments supprimés qui auraient encore pu être restaurés.
-- **Oublier cette discussion** est également définitif. Cette action oublie les faits, les événements, le résumé, la note principale et les messages récents de la discussion, ainsi que les éléments supprimés qui auraient encore pu être restaurés. Ce dont le personnage se souvient des autres discussions, y compris les notes vous concernant prises ailleurs, est conservé. Pour la discussion propre à la page, ce que le personnage a appris dans cette discussion n'est plus utilisé non plus, et ces éléments restent listés sous **Écartés** dans **Apprentissages du personnage**.
-- Après un oubli demandé dans la discussion ou **Oublier cette discussion**, les copies quotidiennes des fichiers de mémoire (`.bak`) sont réécrites à partir des fichiers actuels, et la copie conservée depuis le premier démarrage de cette version (`memory.json.pre-v2`) perd ce qui a été oublié, de sorte qu'aucune copie sur le disque ne le conserve. Un élément oublié sur la page ou dans le terminal reste parmi les éléments supprimés pendant 24 heures, et donc aussi dans les copies de ce jour.
+- **Oublier cette discussion** est également définitif. Cette action oublie les faits, les événements, le résumé, la note principale et les messages récents de la discussion, ainsi que les éléments supprimés qui auraient encore pu être restaurés. Ce dont le personnage se souvient des autres discussions, y compris les notes vous concernant prises ailleurs, est conservé. Pour la discussion propre à la page, ce que le personnage a appris dans cette discussion n'est plus utilisé non plus, et ces éléments restent listés sous **Écartés** dans **Apprentissages du personnage**. Oublier la discussion propre à la page oublie aussi ce que retenaient les discussions précédentes de la page, celles qu'a laissées **Nouvelle discussion**.
+- **Nouvelle discussion** sur la page fait repartir la conversation de la page de zéro. Ce que le personnage retenait de la discussion précédente est conservé et peut toujours être rappelé, et cette discussion reste dans Activité comme une discussion distincte ; ce qu'il y a appris n'est plus utilisé.
+- Après un oubli demandé dans la discussion ou **Oublier cette discussion**, les copies quotidiennes des fichiers de mémoire (`.bak`) sont réécrites à partir des fichiers actuels, et la copie conservée depuis le premier démarrage de cette version (`memory.json.pre-v2`) perd ce qui a été oublié, de sorte qu'aucune copie dans `runtime/` ne le conserve ; une sauvegarde faite auparavant le conserve toutefois. Un élément oublié sur la page ou dans le terminal reste parmi les éléments supprimés pendant 24 heures, et donc aussi dans les copies de ce jour.
 - Lorsque quelque chose est oublié pendant qu'une consolidation de cette discussion est en cours, la réponse de la consolidation est abandonnée et les messages sont relus plus tard, de sorte que l'élément oublié ne revient pas.
-- **Effacer la mémoire**, dans la vue **Application**, supprime toute la mémoire.
+- **Effacer la mémoire**, dans la vue **Application**, supprime toute la mémoire, après avoir enregistré dans `backups/` une sauvegarde qui la conserve jusqu'à ce que vous supprimiez ce fichier.
 
 ### La consulter et la modifier
 
@@ -698,7 +735,7 @@ L'apprentissage s'exécute à côté de ce chemin, jamais à l'intérieur, et ga
 
 Tout ce que personagent stocke reste sur votre machine, dans le dossier personnel : `.env` avec vos clés, `persona.txt`, `persona.card.json`, `runtime/`, et `platforms/` avec les identifiants des plateformes. Dans un clone, aucun de ces fichiers n'est versionné dans Git. Ils peuvent contenir des identifiants et de vraies conversations, alors sauvegardez-les et gardez-les privés. Les messages récents de chaque discussion sont conservés dans `runtime/recent.json` pendant 72 heures, sauf si `MEMORY_KEEP_RECENT=false`, et ce que le personnage retire de la mémoire reste restaurable dans `runtime/memory_trash.jsonl` pendant 30 jours au plus. La page locale ne met jamais la clé dans le stockage du navigateur.
 
-La vue [Activité](#activité) fait partie de la page locale, qui n'écoute que sur 127.0.0.1. L'API du service derrière elle ne répond qu'aux requêtes portant le jeton de `runtime/dashboard.token`, un fichier que seul votre utilisateur peut lire. `CONNECTOR_TOKEN` ne l'ouvre pas. La vue n'affiche jamais de clés d'API ni de jetons. `DASHBOARD_ENABLED=false` la désactive.
+La vue [Activité](#activité) fait partie de la page locale, qui n'écoute que sur 127.0.0.1. L'API du service derrière elle ne répond qu'aux requêtes portant le jeton de `runtime/dashboard.token`, un fichier créé lisible par votre seul compte ; sous Windows, la possibilité pour d'autres de le lire dépend des autorisations du dossier personnel. `CONNECTOR_TOKEN` ne l'ouvre pas. La vue n'affiche jamais de clés d'API ni de jetons. `DASHBOARD_ENABLED=false` la désactive.
 
 Au plus une fois par jour, la page locale, `personagent up` et `personagent doctor` demandent à pypi.org le numéro de version le plus récent. La requête ne contient que la version de personagent. `UPDATE_CHECK_ENABLED=false` l'arrête.
 
@@ -713,6 +750,30 @@ Le fournisseur de modèles voit les conversations :
 - Avec `EMBEDDING_MODEL` défini, le message auquel il répond, les souvenirs et les exemples de recherche vont à l'endpoint d'embeddings (`EMBEDDING_BASE_URL`, ou `LLM_BASE_URL` s'il est vide).
 
 Avant de le connecter à de vraies personnes, dites-leur que c'est un bot et obtenez leur consentement au traitement de leurs messages. Lisez l'[avertissement](DISCLAIMER.fr.md).
+
+### Fichiers du dossier personnel
+
+Ce que contient chaque fichier et dossier du dossier personnel :
+
+| Fichier ou dossier | Contenu | Texte des discussions ou secrets |
+|---|---|---|
+| `.env` | Les réglages, avec la clé du modèle et les autres clés en clair | Secrets |
+| `persona.txt`, `persona.card.json` | La fiche du personnage et sa carte facultative | Non |
+| `platforms/` | `direct.json`, avec les identifiants des plateformes que personagent connecte lui-même, et l'AstrBot géré avec ses réglages | Secrets |
+| `runtime/memory.json`, `core_memory.json`, `episodes.json` | Faits, note principale, événements et résumés de chaque discussion | Contenu des discussions |
+| `runtime/recent.json` | Messages récents de chaque discussion, pendant 72 heures | Texte des discussions |
+| `runtime/memory_trash.jsonl` | Éléments de mémoire supprimés, pendant 30 jours au plus | Contenu des discussions |
+| `runtime/pending_reactions.json` | Réponses envoyées au cours des 15 dernières minutes qui attendent une réaction, avec quelques messages qui précèdent chacune | Texte des discussions |
+| `runtime/candidate_ledger.<lang>.jsonl` et les autres registres d'apprentissage | Ce que le personnage a appris, avec les réponses et les réactions sur lesquelles cela repose | Texte des discussions |
+| `runtime/desktop/browser-chat.json` | La discussion propre à la page, ses 50 derniers messages | Texte des discussions |
+| `runtime/desktop/*.log` | Journaux du personnage, des plateformes et d'AstrBot | Peuvent contenir des extraits de messages |
+| `runtime/desktop/welcome.json` | L'adresse de la page locale avec son jeton d'accès | Secret |
+| `runtime/dashboard.token` | Le jeton de l'API d'Activité | Secret |
+| `stickers/` | Stickers collectés dans les discussions | Images des discussions |
+| `data/` | Vos propres fichiers lorebook, d'exemples et de filtres | Uniquement ce que vous y placez |
+| `backups/` | Sauvegardes zip | Les deux |
+
+Une sauvegarde est un zip non chiffré qui contient la clé, la mémoire, ce que le personnage a appris et les connexions aux plateformes. **Effacer la mémoire** et **Tout réinitialiser**, dans la vue Application, en enregistrent d'abord une dans `backups/` : ce qu'ils effacent reste donc dans ce fichier tant que vous ne le supprimez pas. Les sauvegardes enregistrées sur le Bureau ou dans Documents y restent également.
 
 ## Dépannage
 
@@ -735,6 +796,16 @@ Le guide de déploiement contient [la liste de contrôle complète](deploy.fr.md
 **Il ne démarre pas.** `personagent run` s'arrête avec une phrase qui dit pourquoi. Les raisons habituelles sont un port déjà utilisé, un autre personagent lancé depuis le même dossier personnel, une adresse réseau définie sans `CONNECTOR_TOKEN`, un réglage retiré en 1.0 encore défini, ou un fichier de mémoire endommagé, auquel cas la phrase nomme la copie datée à mettre à sa place. Les réglages retirés sont listés un par ligne sous la forme `OLD -> NEW`, et `personagent doctor --fix` les renomme, tout comme **Renommer les réglages** dans la vue **Application**. Lorsque le personnage démarré depuis la page échoue, la vue **Application** nomme l'élément défaillant et affiche la dernière ligne de son journal. La page et `personagent up` choisissent un port libre quand 8080 est pris.
 
 **Un réglage n'a aucun effet.** Redémarrez le processus qui le lit, vérifiez l'orthographe et enregistrez `.env` en UTF-8 sans BOM. Les variables d'environnement du shell ont priorité sur `.env`. Les booléens sont `true` ou `false`. `PERSONA_TZ_OFFSET_HOURS` règle le fuseau horaire du personnage : la plage nocturne et les dates de ce dont il se souvient le suivent. Quand il est vide (par défaut), personagent utilise UTC+8 avec `AGENT_LANG=zh` ou `zh-TW` et sinon le fuseau horaire de cette machine. Indiquez un nombre pour choisir un autre décalage.
+
+## Désinstaller personagent
+
+1. Si le personnage est connecté à un assistant de programmation, retirez-le d'abord sous **Connecter des plateformes** → **Assistants de programmation**, ou avec `personagent connect claude-code --remove` (de même pour `codex` et `dsh`).
+2. Sous Windows, dans la vue Application, cliquez sur **Supprimer l'icône** sous **Icône du Bureau et du menu Démarrer**, et désactivez **Démarrer personagent à l'ouverture de session Windows**.
+3. Cliquez sur **Quitter** dans la page.
+4. Désinstallez le paquet avec `python -m pip uninstall personagent`, ou `uv tool uninstall personagent` si vous l'avez installé avec uv. Une copie décompressée depuis le ZIP des sources se supprime en effaçant son dossier.
+5. Supprimez le dossier personnel : par défaut le dossier `personagent` de votre dossier utilisateur, ou celui indiqué avec `--home`. Il contient la clé, la mémoire, les connexions aux plateformes et `backups/`.
+6. Supprimez les sauvegardes enregistrées sur le Bureau ou dans Documents.
+7. Révoquez la clé d'API sur la page des clés du service de modèles, et retirez le bot de ses groupes sur chaque plateforme.
 
 ## Mettre à niveau depuis 0.x
 

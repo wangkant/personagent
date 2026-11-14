@@ -15,10 +15,10 @@
 
 *これは英語版 README の翻訳です。基準となるのは英語版で、こちらより新しい場合があります。*
 
-personagent は、人のようにふるまうエージェントです。独自のキャラクターを持ち、記憶し、話した相手から学び、いつ発言するかを自分で判断します。QQ、WeChat、Telegram、Discord とさらに 18 のプラットフォームのグループチャットと個人チャット、あなたのコンピューター上のウィンドウ、Claude Code や Codex などのコーディングアシスタントなど、お使いの場所のどこでも動作します。キャラクターは選ぶことも自分で書くこともでき、OpenAI 互換の任意のモデルで動作します。
+personagent はあなた自身のコンピューターで動き、保存する内容はすべてそのコンピューターに残ります。QQ、WeChat、Telegram、Discord とさらに 18 のプラットフォームのグループチャットと個人チャット、あなたのコンピューター上のウィンドウ、Claude Code や Codex などのコーディングアシスタントなど、お使いの場所のどこでも動作します。キャラクターは選ぶことも自分で書くこともでき、OpenAI 互換の任意のモデルで動作します。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「プラットフォーム連携」画面。スキャンまたは 1〜2 個の値の貼り付けで連携できるプラットフォーム、折りたたまれた上級のプラットフォーム、参加できるコーディングアシスタントが表示されている" width="960">
+  <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「プラットフォーム連携」画面。スキャンまたはいくつかの値の貼り付けで連携できるプラットフォーム、折りたたまれた上級のプラットフォーム、参加できるコーディングアシスタントが表示されている" width="960">
 </p>
 
 <p align="center"><em>「プラットフォーム連携」は、設定やキャラクターとのチャットと同じローカルページにあります。</em></p>
@@ -52,9 +52,9 @@ personagent は、人のようにふるまうエージェントです。独自�
 <tr>
 <td width="220" valign="top"><strong>確かな訂正から学びます。</strong></td>
 <td valign="top">
-訂正で教わったこと（たとえば、グループでジムを何と呼んでいるか）は、そのチャットでのその後のすべての返信に反映されます。<br>
+訂正で教わったこと（たとえば、グループでトレーニングジムを何と呼んでいるか）は、そのチャットでのその後のすべての返信に反映されます。<br>
 荒らしや通りすがりの人が学習し直させることはできません。<br>
-リアクションでは決まらない変更はキャラクター自身が判断し、その理由を記録します。誰かが承認する必要はありません。<br>
+反応だけでは決められない変更はキャラクター自身が判断し、その理由を記録します。誰かが承認する必要はありません。<br>
 すべての変更は記録され、どれでも元に戻せます。
 </td>
 </tr>
@@ -68,7 +68,7 @@ personagent は、人のようにふるまうエージェントです。独自�
 <tr>
 <td width="220" valign="top"><strong>すべてのプラットフォームに接続します。</strong></td>
 <td valign="top">
-22 のチャットプラットフォームを 1 つのページから、スマートフォンでのスキャンか値を 1〜2 個貼り付けるだけで連携できます。その多くはグループチャットにも個人チャットにも対応します。<br>
+22 のチャットプラットフォームを 1 つのページから、スマートフォンでのスキャンかいくつかの値を貼り付けるだけで連携できます。その多くはグループチャットにも個人チャットにも対応します。<br>
 同じエージェントが、あなたのコンピューター上のウィンドウでも、Claude Code、Codex、DeepSeek Harness の中でも応答します。<br>
 その他のプラットフォームは、AstrBot、Koishi、Matrix のブリッジ、または自分で書くコネクターを通じて追加できます。
 </td>
@@ -82,7 +82,7 @@ OpenAI 互換の任意のモデルを使えます。OpenRouter の無料モデ�
 </tr>
 </table>
 
-チャットで頼めば、覚えることも忘れることもできます：`ノヴァ、覚えて：ケイはベジタリアン`、`ノヴァ、忘れて、ベジタリアンのこと`（[記憶コマンド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶コマンド)）。何をどのくらいの期間保持するかは、ガイドの[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶)の節に記載しています。
+チャットで頼めば、覚えることも忘れることもできます（ノヴァは既定のキャラクターの名前です）：`ノヴァ、覚えて：ケイはベジタリアン`、`ノヴァ、忘れて、ベジタリアンのこと`（[記憶コマンド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶コマンド)）。何をどのくらいの期間保持するかは、ガイドの[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶)の節に記載しています。
 
 ## はじめに
 
@@ -95,7 +95,7 @@ personagent
 
 Windows では専用のウィンドウで開き、macOS と Linux ではブラウザーで開きます。モデルの API キーを貼り付けて **確認してチャットを開始** をクリックします。まだキーがない場合も、最初から OpenRouter の無料モデルが選ばれていて、そのキーは無料で取得できます。`personagent demo` はキーなしで、台本のある 3 つの場面を再生します。[はじめに](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)では、ページを画面ごとに説明しています。
 
-personagent 自体は無料です。料金は、選んだモデルサービスに、そのサービスの料金で支払います。OpenRouter の無料モデルは 1 日 50 リクエストまで使え、無料のプロバイダーの中には受け取った内容を保持するところもあります。Ollama ならキーなしで自分のコンピューター上でモデルを動かせます。
+personagent 自体は無料です。料金は、選んだモデルサービスに、そのサービスの料金で支払います。1 件のメッセージで複数回のモデルリクエストが発生することがあります。返信のほかに、グループで発言するかどうかの判断、返信がどう受け止められたかの判断、記憶の整理を行うことがあるためです。OpenRouter の無料モデルは 1 日 50 リクエストまで使え、無料のプロバイダーの中には受け取った内容を保持するところもあります。Ollama ならキーなしで自分のコンピューター上でモデルを動かせます。
 
 ## プラットフォームを連携する
 
@@ -104,7 +104,7 @@ personagent 自体は無料です。料金は、選んだモデルサービス�
 | ページ上の表示 | プラットフォーム | 必要なもの |
 |---|---|---|
 | スキャンで連携 | QQ、個人 WeChat | スマートフォン。WeChat のボットは 1 対 1 のチャットのみ |
-| 1〜2 個の値を貼り付け | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、Feishu/Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey | プラットフォームのコンソールで取得する値。どの値かはページに表示されます |
+| いくつかの値を貼り付け | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、Feishu/Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey | プラットフォームのコンソールで取得する値。どの値かはページに表示されます |
 | 上級 | WeCom アプリ、WeChat 公式アカウント、QQ Webhook、OneBot v11 (NapCat)、Satori | 公開アドレス、またはこのコンピューター上の他のソフトウェア |
 
 連携中のプラットフォームは personagent を起動するたびに再び起動します。スキャンで連携するプラットフォームと Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat には personagent が自分で接続し、それ以外は personagent がダウンロードしてバックグラウンドで動かす [AstrBot](https://github.com/AstrBotDevs/AstrBot) を経由します。ディスプレイのないサーバーでは、personagent が自分で接続するこれらのプラットフォームを、ターミナルから `personagent connect <platform>` を使ってページと同じ手順と確認で接続でき、`personagent up` でブラウザーなしですべてを起動できます。プラットフォームごとの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#チャットに入れる)に、QQ をゼロからつなぐ手順は[中国語のデプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)にあります。
@@ -131,7 +131,7 @@ personagent connect dsh
 
 ## アップデートとアンインストール
 
-PyPI に新しいバージョンが出ると、ページに通知とアップデートコマンドが表示されます。pip の場合は `python -m pip install -U personagent` です。ほとんどのインストールでは、ページのアプリビューにある **更新して再起動** がこのコマンドを代わりに実行します。設定、キャラクター、学習内容、連携中のプラットフォームはそのまま引き継がれます。削除するには、[アンインストール手順](https://github.com/wangkant/personagent/blob/main/docs/setup-for-agents.md#undoing-it)（英語）に従ってください。
+PyPI に新しいバージョンが出ると、ページに通知とアップデートコマンドが表示されます。pip の場合は `python -m pip install -U personagent` です。ほとんどのインストールでは、ページのアプリビューにある **更新して再起動** がこのコマンドを代わりに実行します。設定、キャラクター、学習内容、連携中のプラットフォームはそのまま引き継がれます。削除するには、ガイドの[personagent を削除する](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#personagent-を削除する)に従ってください。
 
 ## プライバシー
 

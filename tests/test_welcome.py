@@ -96,6 +96,30 @@ def test_custom_persona_and_unrelated_settings_survive_editing(client, workspace
     assert response.status_code == 200
     assert persona.read_text(encoding="utf-8") == "My own character"
     assert workspace.config()["ADMIN_IDS"] == "qq:7"
+    assert not (workspace.home / "persona.txt.bak").exists()
+
+
+def test_a_chosen_personality_keeps_a_copy_of_the_persona_someone_wrote(client, workspace):
+    sw.write_env(workspace.env, {"LLM_API_KEY": "old-key", "LLM_BASE_URL": "https://api.deepseek.com",
+                                 "PERSONA_NAME": "Mira"})
+    persona = workspace.home / "persona.txt"
+    persona.write_text("My own character", encoding="utf-8")
+    kept = workspace.home / "persona.txt.bak"
+    # An emptied name box keeps the name rather than making a new character.
+    response = client.post("/api/config", headers=HEADERS, json={"character": "dry-wit", "name": ""})
+    assert response.status_code == 200 and workspace.config()["PERSONA_NAME"] == "Mira"
+    assert kept.read_text(encoding="utf-8") == "My own character"
+    assert persona.read_text(encoding="utf-8") != "My own character"
+    # A shipped persona is not worth a copy: the one someone wrote stays in the .bak.
+    client.post("/api/config", headers=HEADERS, json={"character": "bookworm", "name": "Mira"})
+    assert kept.read_text(encoding="utf-8") == "My own character"
+
+
+@pytest.mark.parametrize("key", ["密钥 sk-abc", "sk-abc def"])
+def test_a_key_pasted_with_other_words_is_turned_down_as_a_key(client, workspace, key):
+    response = client.post("/api/config", headers=HEADERS, json={"apiKey": key})
+    assert response.status_code == 400 and response.json()["error"] == "key_rejected"
+    assert not workspace.config().get("LLM_API_KEY")
 
 
 def test_the_persona_is_shown_as_the_agent_reads_it_and_edits_become_its_own(client, workspace, monkeypatch):
@@ -731,7 +755,8 @@ def test_a_refused_direct_platform_shows_as_failed_even_after_the_runner_exits(w
     direct_base.Status(workspace.home).set("telegram", "refused", "token_rejected")
     monkeypatch.setattr(workspace.services, "running", lambda name: False)
     assert workspace.summary()["platformStatus"] == {"telegram": "failed", "discord": "paused"}
-    assert [p["id"] for p in welcome.conn.catalog() if not p["groups"]] == ["weixin_oc"]
+    assert [p["id"] for p in welcome.conn.catalog() if not p["groups"]] == [
+        "weixin_oc", "wecom", "weixin_official_account"]
 
 
 def test_moving_a_platform_off_astrbot_restarts_it_and_disconnecting_clears_both(workspace, monkeypatch):
@@ -1006,7 +1031,8 @@ def test_memory_forget_restore_and_forget_chat_go_to_the_service(client, workspa
     before = workspace._page_key()
     own = client.post("/api/activity/forget_chat", headers=HEADERS, json={"chat": before}).json()
     assert own == {"ok": True, "forgotten": 4} and workspace._page_key() != before
-    assert writes[-1] == ("/api/dashboard/memory/forget_chat", {"conv": before})
+    # With the chats "New chat" left behind, which are still recalled here.
+    assert writes[-1] == ("/api/dashboard/memory/forget_chat", {"conv": before, "earlier_page": True})
 
 
 def _table(js, code, name):

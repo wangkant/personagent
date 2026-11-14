@@ -95,21 +95,70 @@ PLATFORMS: tuple[Platform, ...] = (
              (_plain("appid", "AppID", "AppID"), _token("secret", "AppSecret", "AppSecret")),
              guide="https://q.qq.com/qqbot/openclaw/login.html",
              note=("Scan with mobile QQ and confirm: it creates a bot, or uses one you made, and "
-                   "personagent gets its keys by itself.",
-                   "请使用手机 QQ 扫码并确认：将新建一个机器人或选用你已有的机器人，personagent 会自动获取其密钥。")),
+                   "personagent gets its keys by itself. Then find the bot in mobile QQ to chat with it "
+                   "privately or add it to a group; until the bot is certified, QQ lets it join only "
+                   "groups you own.",
+                   "请使用手机 QQ 扫码并确认：将新建一个机器人或选用你已有的机器人，personagent 会自动获取其密钥。"
+                   "随后在手机 QQ 中找到该机器人，即可与其私聊或将其添加到群中；机器人通过认证之前，QQ 只允许"
+                   "它加入你担任群主的群。"),
+             # Shown only when pasting values instead of scanning.
+             steps=(
+                 ("On QQ's bot page, sign in with your QQ account and create a bot, or open one you "
+                  "made.",
+                  "在 QQ 机器人页面使用你的 QQ 账号登录，新建一个机器人，或打开你已有的机器人。"),
+                 ("Copy the bot's AppID and AppSecret, paste them here and select Connect.",
+                  "复制该机器人的 AppID 和 AppSecret，粘贴到此处，然后点击「连接」。"),
+                 ("In mobile QQ, find the bot and add it to a group. Until the bot is certified, QQ "
+                  "lets it join only groups you own.",
+                  "在手机 QQ 中找到该机器人并将其添加到群中。机器人通过认证之前，QQ 只允许它加入你担任"
+                  "群主的群。"),
+             )),
     Platform("telegram", ("Telegram", "Telegram"), KEY,
              (_token("telegram_token", "Bot token", "机器人 Token"),),
              {"start_message": "", "telegram_command_register": False,
               "telegram_command_auto_refresh": False},
              guide="https://t.me/BotFather",
              note=("Create a bot with @BotFather and paste its token.",
-                   "请通过 @BotFather 创建机器人，并粘贴其提供的 Token。")),
+                   "请通过 @BotFather 创建机器人，并粘贴其提供的 Token。"),
+             steps=(
+                 ("In Telegram, open a chat with @BotFather, send /newbot and choose a name and a "
+                  "username for the bot.",
+                  "在 Telegram 中打开与 @BotFather 的对话，发送 /newbot，并为机器人设定名称和用户名。"),
+                 ("Copy the token that BotFather sends, paste it into the bot token field here and "
+                  "select Connect.",
+                  "复制 BotFather 发来的 Token，粘贴到此处的「机器人 Token」一栏，然后点击「连接」。"),
+                 ("By default, a bot in a group sees only commands, replies to its messages and "
+                  "messages that mention it. For the character to follow the conversation, send "
+                  "/setprivacy to @BotFather, choose the bot and select Disable.",
+                  "默认情况下，群中的机器人只能看到命令、对其消息的回复以及提及它的消息。如需让角色跟上群聊"
+                  "内容，请向 @BotFather 发送 /setprivacy，选择该机器人，然后选择 Disable。"),
+                 ("Add the bot to your group by its username. If you changed the privacy setting after "
+                  "adding it, remove the bot from the group and add it again.",
+                  "按用户名将机器人添加到你的群中。如果在添加之后才更改隐私设置，请将机器人移出该群后重新"
+                  "添加。"),
+             )),
     Platform("discord", ("Discord", "Discord"), KEY,
              (_token("discord_token", "Bot token", "机器人 Token"),),
              {"discord_command_register": False},
              guide="https://discord.com/developers/applications",
              note=("Bot page: copy the token and turn on Message Content Intent.",
-                   "请在 Bot 页面复制 Token，并开启 Message Content Intent。")),
+                   "请在 Bot 页面复制 Token，并开启 Message Content Intent。"),
+             steps=(
+                 ("In the Discord Developer Portal, create a new application and open its Bot page.",
+                  "在 Discord 开发者门户（Developer Portal）中新建一个应用，并打开其 Bot 页面。"),
+                 ("On the Bot page, reset and copy the token, and turn on Message Content Intent under "
+                  "Privileged Gateway Intents.",
+                  "在 Bot 页面重置并复制 Token，并在 Privileged Gateway Intents 中开启 Message Content "
+                  "Intent（消息内容权限）。"),
+                 ("Paste the token into the bot token field here and select Connect.",
+                  "将 Token 粘贴到此处的「机器人 Token」一栏，然后点击「连接」。"),
+                 ("On the OAuth2 page, open URL Generator, tick the bot scope and the View Channels and "
+                  "Send Messages permissions, then open the generated link and add the bot to your "
+                  "server. This requires the Manage Server permission on that server.",
+                  "在 OAuth2 页面打开 URL Generator，勾选 bot 范围以及 View Channels 和 Send Messages "
+                  "权限，然后打开生成的链接，将机器人添加到你的服务器。此操作须在该服务器上拥有「管理服务器」"
+                  "权限。"),
+             )),
     Platform("kook", ("KOOK", "KOOK"), KEY,
              (_token("kook_bot_token", "Bot token", "机器人 Token"),),
              guide="https://developer.kookapp.cn/app/index",
@@ -472,27 +521,52 @@ PLATFORMS: tuple[Platform, ...] = (
               _token("encoding_aes_key", "EncodingAESKey", "EncodingAESKey"), _port(6195)),
              _OWN_PORT,
              note=("Needs a public address that forwards to the callback port.",
-                   "需要一个可转发至回调端口的公网地址。")),
+                   "需要一个可转发至回调端口的公网地址。"),
+             # A self-built app receives only what members send to it one to one.
+             groups=False),
     Platform("weixin_official_account", ("WeChat Official Account", "微信公众号"), ADVANCED,
              (_plain("appid", "AppID", "AppID"), _token("secret", "AppSecret", "AppSecret"),
               _token("token", "Token", "Token"),
               _token("encoding_aes_key", "EncodingAESKey", "EncodingAESKey"), _port(6194)),
              _OWN_PORT,
              note=("Needs a public address that forwards to the callback port.",
-                   "需要一个可转发至回调端口的公网地址。")),
+                   "需要一个可转发至回调端口的公网地址。"),
+             # An Official Account has followers who message it, and no group chats.
+             groups=False),
     Platform("qq_official_webhook", ("QQ (webhook)", "QQ（Webhook）"), ADVANCED,
              (_plain("appid", "AppID", "AppID"), _token("secret", "AppSecret", "AppSecret"),
               _port(6196)),
              _OWN_PORT,
-             note=("Needs a public address that forwards to the callback port.",
-                   "需要一个可转发至回调端口的公网地址。")),
+             note=("Most people should use the QQ card above, which connects by scan and needs no "
+                   "public address. Use this one only for a bot that must receive its messages by "
+                   "webhook; it needs a public address that forwards to the callback port.",
+                   "一般情况下请使用上方的 QQ 扫码连接，无需公网地址。仅当机器人必须通过 Webhook 接收消息时"
+                   "才使用此项；此方式需要一个可转发至回调端口的公网地址。")),
     Platform("aiocqhttp", ("OneBot v11 (NapCat)", "OneBot v11（NapCat）"), ADVANCED,
              (Field("ws_reverse_port", ("Reverse WebSocket port", "反向 WebSocket 端口"),
                     secret=False, required=False, kind="port", default="6199"),
               Field("ws_reverse_token", ("Access token", "访问令牌"), required=False)),
              {"ws_reverse_host": "127.0.0.1"},
-             note=("Point NapCat on this computer at ws://127.0.0.1:<port>/ws.",
-                   "请将本机的 NapCat 连接至 ws://127.0.0.1:<端口>/ws。")),
+             guide="https://napneko.github.io/",
+             note=("NapCat is not an official QQ client: the QQ account signed in to it may be "
+                   "restricted or banned. Use a secondary account, never your main one.",
+                   "NapCat 不是腾讯官方客户端，在其中登录的 QQ 账号有被限制甚至封禁的风险。请使用小号，"
+                   "切勿使用你本人的主号。"),
+             steps=(
+                 ("Install NapCat by following its documentation and sign in with the secondary QQ "
+                  "account.",
+                  "按 NapCat 文档安装 NapCat，并使用 QQ 小号登录。"),
+                 ("Keep the port at 6199 unless another program uses it, and select Connect.",
+                  "端口保持 6199，除非已被其他程序占用，然后点击「连接」。"),
+                 ("In NapCat's web interface, open Network configuration, add a WebSocket client, "
+                  "enable it, set its URL to ws://127.0.0.1:6199/ws (with your port if you changed it) "
+                  "and save.",
+                  "在 NapCat 的网页中依次点击「网络配置」→「新建」→「WebSockets 客户端」，勾选「启用」，"
+                  "URL 填写 ws://127.0.0.1:6199/ws（如修改了端口，请相应替换），然后保存。"),
+                 ("If you entered an access token here, enter the same token in that WebSocket client; "
+                  "otherwise leave both empty.",
+                  "如在此处填写了访问令牌，请在该 WebSockets 客户端中填写相同的令牌；否则两处均留空。"),
+             )),
     Platform("satori", ("Satori", "Satori"), ADVANCED,
              (_plain("satori_api_base_url", "API address", "API 地址", kind="url",
                      default="http://localhost:5140/satori/v1"),

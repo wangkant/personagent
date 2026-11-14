@@ -57,7 +57,7 @@ SPEC = Spec(
         "remember_what": ("¿recordar qué? no dijiste nada", "venga, suéltalo",
                           "¿qué apunto?"),
         "not_instructions": ("puedo recordar datos, no instrucciones",),
-        "noted": ("apuntado", "vale, anotado", "listo, me lo quedo", "ok"),
+        "noted": ("apuntado", "vale, anotado", "listo, me lo quedo"),
         "forget_what": ("¿olvidar qué? dime cuál", "¿cuál? explícate un poco"),
         "nothing_to_forget": ("eh, eso nunca lo apunté", "no me suena de nada",
                               "no hay nada así que olvidar"),

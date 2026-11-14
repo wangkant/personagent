@@ -271,6 +271,42 @@ To override a shipped file, put a file with the same name in the home folder's `
 | `data/output_filter.<lang>.json` | Replacement and rejection rules for live replies |
 | `persona.card.json` | Optional nicknames and emoji, character-set and length settings, such as `{ "aliases": ["Lu"], "reply_style": { "emoji": true, "max_chars": 320 } }`. A nickname in `aliases` calls the character as its name does. Names are matched ignoring case, full-width letters and accents, so `sofia` calls Sofía. In a message, ñ, ã, õ and й count as letters of their own, so `niña` does not call a character named Nina; in the character's own name such a mark may be left out, so `nina` calls Niña. A name does not call the character from inside a longer word: a katakana name inside a longer katakana word does not call it, and neither does a Korean name in the middle of a word. With `"emoji": true` the character may use emoji as it usually does, and a `max_chars` below 800 is given to the model as a length limit |
 
+In these file names `<lang>` is `zh` for Simplified and Traditional Chinese and `en` for every other language. A file you place in `data/` replaces the shipped file of that kind as a whole, and a new file takes effect after the character restarts. The App view calls these files **Lorebook, example dialogues and word filters**. The formats, with a minimal example of each:
+
+- Lorebook (`lorebook.<lang>.json`): an entry is added to the prompt when one of its `keywords` appears in the last ten messages. `keywords` and `content` are required; `name` is optional, and `priority` (default 100) decides which entries come first, at most five per turn.
+
+  ```json
+  {"entries": [
+    {"name": "gym", "keywords": ["gym", "the cave"], "content": "The group calls the gym on Fifth Street the cave.", "priority": 100}
+  ]}
+  ```
+
+  A SillyTavern World Info export cannot be used as is: its `entries` is an object keyed by number, and the keywords are under `key`. Make `entries` a list and rename `key` to `keywords`; `content` stays as it is.
+- Word filters (`output_filter.<lang>.json`): each `pattern` is a Python regular expression, matched ignoring case. `"action": "reject"` drops the whole reply, so nothing is sent; `"replace"` puts `replacement` in place of the match and sends the rest.
+
+  ```json
+  {"filters": [
+    {"name": "service_opener", "pattern": "^(hi|hello)\\W*how can i help", "action": "reject", "reason": "customer-service opener"},
+    {"name": "no_em_dash", "pattern": "—", "action": "replace", "replacement": ", "}
+  ]}
+  ```
+- Example dialogues (`examples.<lang>.jsonl`): one JSON object per line, with the messages before the reply in `context`, each as `name: text`.
+
+  ```json
+  {"scenario": "a friend shares a video", "context": ["alex: the most cursed way to make instant noodles"], "reply": "watching cooking crimes at midnight is a choice"}
+  ```
+
+**Persona length and the `[style]` block.** The **Persona** box takes up to 4,000 characters. A `[style]` block in `persona.txt` changes six rules of private chats; group chats ignore it. Each line is `name: value`. A value that is not listed keeps the default, the first one below, and the log notes it:
+
+```text
+[style]
+length: medium
+vent: ask
+[/style]
+```
+
+The names and values are `length` (short, medium, long), `vent`, for when someone vents (hold, ask, solve), `recs`, for when someone asks for a recommendation (ask_back, offer), `good_news` (cheer, deadpan), `particles`, for filler words (capped, free, none), and `fatigue` (stock, own).
+
 To let it see images, set `VISION_MODEL`, `VISION_API_KEY` and `VISION_BASE_URL`, or turn on image understanding under **More features**. When the chosen model cannot read images, the page says so when you save. A picture the character cannot see, because image understanding is off or failed, reaches it as a picture it cannot see, in groups and in private chats alike, so it asks about the picture instead of describing it. Voice messages, videos, files and forwarded messages reach it as what they are, with a voice message's transcript when the platform provides one. The words of a forwarded message are read as the forwarded person's words: they call no one by name and run no memory command. A mention of another person reaches the character with the name that person chose, which never counts as the sender's words, so it neither calls the character nor gives a command.
 
 ## Put it in a chat
@@ -312,7 +348,7 @@ The first time you connect any other platform, personagent downloads [AstrBot](h
 
 | Group | Platforms | You give |
 |---|---|---|
-| Paste one or two values | KOOK, Feishu / Lark, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey | a token, an app id and secret, or a server address and token. Feishu uses long connection and DingTalk uses Stream mode, so neither needs a public address. For Slack, the link on the page creates the app with Socket Mode, scopes and events already set. Add an app-level token with `connections:write`, install the app and paste both tokens. Create the WeCom AI bot with long connection. |
+| Paste a few values | KOOK, Feishu / Lark, DingTalk, Slack, WeCom AI bot, Mattermost, Misskey | a token, an app id and secret, or a server address and token. Feishu uses long connection and DingTalk uses Stream mode, so neither needs a public address. For Slack, the link on the page creates the app with Socket Mode, scopes and events already set. Add an app-level token with `connections:write`, install the app and paste both tokens. Create the WeCom AI bot with long connection. |
 | Advanced | WeCom app, WeChat Official Account, QQ (webhook) | a public address that forwards to the callback port shown |
 | Advanced | OneBot v11 (NapCat), Satori | other software running on this computer: NapCat pointed at `ws://127.0.0.1:<port>/ws`, or a Satori server |
 
@@ -460,7 +496,7 @@ How notes are kept current, and what else the character remembers, is described 
 
 None of these commands call the model. Notes are for facts, so `Nova, remember: always reply in English` is turned down. Questions are not commands. `Nova, remember the party?`, `Nova, remember when we...` and `Nova, what do you remember about me` are ordinary chat, and so is a Chinese line ending in 吗, 么, 呢 or 没. `Nova, forget it` and `Nova, forget that` mean "never mind" and delete nothing.
 
-The same commands work in the other languages of the page's menu, and the reply comes in the language of the command. Japanese and Korean also take the verb last (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). A note is deleted with the word for forgetting; words like delete or erase, which chat uses for messages and lights, don't count, except Japanese `メモ消して`. One example of each:
+The same commands work in the other languages of the page's menu, and the reply comes in the language of the command. Japanese and Korean also take the verb last (`ノヴァ、ケイはベジタリアンって覚えといて`, `노바 지수는 매운 걸 못 먹는다고 기억해 둬`). A note is deleted with the word for forgetting. Words such as delete or erase do not count, because in a chat they usually mean deleting a message or switching off a light; the one exception is Japanese `メモ消して`. One example of each:
 
 | Language | Remember | Forget | What do you remember | What have you learned |
 |---|---|---|---|---|
@@ -557,7 +593,7 @@ Each chat has its own memory, kept in `runtime/` in the home folder. The charact
 
 ### What it keeps
 
-- **Recent messages**, each with the time it was sent. The last 60 lines of a group and the last 60 turns of a private chat are written to `runtime/recent.json` for 72 hours, so a restart does not lose the conversation. With `MEMORY_KEEP_RECENT=false` they are kept only while the character runs. A reply reads at most the last 60 messages, or the last 30 when the character is called, and the model is told about pauses of 30 minutes or more.
+- **Recent messages**, each with the time it was sent. The last 60 lines of a group and the last 60 turns of a private chat are written to `runtime/recent.json` for 72 hours, so a restart does not lose the conversation. With `MEMORY_KEEP_RECENT=false` they are kept only while the character runs. A reply reads at most the last 60 messages, or the last 30 when the character is called, and the model is told about pauses of 30 minutes or more. Recent messages are not listed under **Remembers** in Activity.
 - **The summary of earlier conversation.** When older messages leave the recent window, the character writes a short running summary of the chat: open questions, plans and who is doing what. The page shows it as **Earlier in this chat**.
 - **Facts** about people and about the group. They come from the memory commands, from notes the character writes while replying, from corrections that teach a fact, and from consolidation (below). Each fact records whom it is about, when it was first noted and when a reply last drew on it. A fact is a person's own only when that person's own messages carry it. What one member says about another is kept as said by that member: it stays in the chat where it was said, and it never changes, ends or merges into the facts that the person's own words gave. A fact about the group that names someone needs a message from that person; otherwise it is kept as said by the member whose words carry it. The same holds for notes the character writes while replying.
 - **Events**: what happened and between whom, each with its date and the people who took part. The date and the people are taken from the stored messages, never from the model, so a message cannot back-date an event. When an event is a plan for a given day, the character may ask after it once in a private chat after that day, if it is allowed to speak first there ([Speaking first](#speaking-first)). Dates, and the day of a plan, are taken in the character's time zone (`PERSONA_TZ_OFFSET_HOURS`; see [Troubleshooting](#troubleshooting)).
@@ -586,10 +622,11 @@ When a message refers to a time, such as yesterday, last week or last month, in 
 - What the character removes itself (replaced, merged, no longer current, removed to make room, or an earlier version) can be restored for 30 days.
 - An item forgotten on the page or with `personagent memory forget` can be restored for 24 hours.
 - A forget asked for in chat is final. It also removes what it covers from the removed items that could still have been restored.
-- **Forget this chat** is final too. It forgets the chat's facts, events, summary, core note and recent messages, and the removed items that could still have been restored. What the character remembers from other chats, notes about you made elsewhere included, is kept. For the page's own chat, what the character learned in that chat is also no longer used, and those items stay listed under **Set aside** in **What the character has learned**.
-- After a forget asked for in chat or **Forget this chat**, the daily copies of the memory files (`.bak`) are written again from the current files, and the copy kept from the first start of this version (`memory.json.pre-v2`) loses what was forgotten, so no copy on disk keeps it. An item forgotten on the page or in the terminal stays among the removed items for 24 hours, and so also in that day's copies.
+- **Forget this chat** is final too. It forgets the chat's facts, events, summary, core note and recent messages, and the removed items that could still have been restored. What the character remembers from other chats, notes about you made elsewhere included, is kept. For the page's own chat, what the character learned in that chat is also no longer used, and those items stay listed under **Set aside** in **What the character has learned**. Forgetting the page's own chat also forgets what the earlier chats on the page remembered, those that **New chat** left behind.
+- **New chat** on the page starts the page's conversation over. What the character remembered from the earlier chat is kept and still recalled, and that chat stays in Activity as a chat of its own; what it learned there is no longer used.
+- After a forget asked for in chat or **Forget this chat**, the daily copies of the memory files (`.bak`) are written again from the current files, and the copy kept from the first start of this version (`memory.json.pre-v2`) loses what was forgotten, so no copy in `runtime/` keeps it; a backup made earlier still does. An item forgotten on the page or in the terminal stays among the removed items for 24 hours, and so also in that day's copies.
 - When something is forgotten while a consolidation of that chat is running, the consolidation's answer is discarded and the messages are read again later, so the forgotten item does not return.
-- **Clear memory** in the App view deletes all memory.
+- **Clear memory** in the App view deletes all memory, after saving a backup to `backups/` that keeps it until you delete that file.
 
 ### See and change it
 
@@ -698,7 +735,7 @@ Learning runs beside that path, never inside it, and keeps its state in plain fi
 
 Everything personagent stores stays on your machine, in the home folder: `.env` with your keys, `persona.txt`, `persona.card.json`, `runtime/`, and `platforms/` with the platform credentials. In a clone, none of these files is committed to Git. They can hold credentials and real conversations, so back them up and keep them private. The recent messages of each chat are kept in `runtime/recent.json` for 72 hours unless `MEMORY_KEEP_RECENT=false`, and what the character removes from memory stays restorable in `runtime/memory_trash.jsonl` for up to 30 days. The local page never puts the key in browser storage.
 
-The [Activity](#activity) view is part of the local page, which listens on 127.0.0.1 only. The service's API behind it answers only requests that carry the token from `runtime/dashboard.token`, a file only your user can read. `CONNECTOR_TOKEN` does not open it. The view never shows API keys or tokens. `DASHBOARD_ENABLED=false` turns it off.
+The [Activity](#activity) view is part of the local page, which listens on 127.0.0.1 only. The service's API behind it answers only requests that carry the token from `runtime/dashboard.token`, a file created readable only by your own account; on Windows, who else can read it depends on the permissions of the home folder. `CONNECTOR_TOKEN` does not open it. The view never shows API keys or tokens. `DASHBOARD_ENABLED=false` turns it off.
 
 At most once a day, the local page, `personagent up` and `personagent doctor` ask pypi.org for the newest version number. The request carries personagent's own version and nothing else. `UPDATE_CHECK_ENABLED=false` stops it.
 
@@ -713,6 +750,30 @@ The model provider sees conversations:
 - With `EMBEDDING_MODEL` set, the message being answered, the memories and the retrieval examples go to the embedding endpoint (`EMBEDDING_BASE_URL`, or `LLM_BASE_URL` when that is blank).
 
 Before you connect it to real people, tell them it is a bot and get their consent to have their messages processed. Read the [disclaimer](DISCLAIMER.md).
+
+### Files in the home
+
+What each file and folder in the home holds:
+
+| File or folder | Holds | Chat text or secrets |
+|---|---|---|
+| `.env` | Settings, with the model key and any other keys in plain text | Secrets |
+| `persona.txt`, `persona.card.json` | The persona and its optional card | No |
+| `platforms/` | `direct.json` with the credentials of the platforms personagent connects itself, and the managed AstrBot with its settings | Secrets |
+| `runtime/memory.json`, `core_memory.json`, `episodes.json` | Facts, the core note, events and summaries of each chat | Chat content |
+| `runtime/recent.json` | Recent messages of each chat, for 72 hours | Chat text |
+| `runtime/memory_trash.jsonl` | Removed memory items, for up to 30 days | Chat content |
+| `runtime/pending_reactions.json` | Replies sent in the last 15 minutes that await a reaction, with a few messages before each | Chat text |
+| `runtime/candidate_ledger.<lang>.jsonl` and the other learning records | What the character learned, with the replies and reactions behind it | Chat text |
+| `runtime/desktop/browser-chat.json` | The page's own chat, its last 50 messages | Chat text |
+| `runtime/desktop/*.log` | Logs of the character, the platforms and AstrBot | May contain parts of messages |
+| `runtime/desktop/welcome.json` | The local page's address with its access token | Secret |
+| `runtime/dashboard.token` | The token for the Activity API | Secret |
+| `stickers/` | Stickers collected from chats | Pictures from chats |
+| `data/` | Your own lorebook, example and filter files | Only what you put there |
+| `backups/` | Backup zips | Both |
+
+A backup is an unencrypted zip that holds the key, the memory, what the character learned and the platform logins. **Clear memory** and **Reset all** in the App view first save one to `backups/`, so what they clear stays in that file until you delete it. Backups saved to the Desktop or Documents stay there as well.
 
 ## Troubleshooting
 
@@ -735,6 +796,16 @@ The deployment guide has [the full checklist](deploy.md#when-the-bot-goes-quiet)
 **It will not start.** `personagent run` stops with one sentence that says why. The usual reasons are a port already in use, another personagent running from the same home folder, a network address set without `CONNECTOR_TOKEN`, a setting retired in 1.0 that is still set, or a damaged memory file, for which the sentence names the dated copy to put in its place. Retired settings are listed one per line as `OLD -> NEW`, and `personagent doctor --fix` renames them, as does **Rename settings** in the App view. When the character started from the page fails, the App view names the part that failed and shows its last log line. The page and `personagent up` pick a free port when 8080 is taken.
 
 **A setting has no effect.** Restart the process that reads it, check the spelling, and save `.env` as UTF-8 without a BOM. Shell environment variables override `.env`. Booleans are `true` or `false`. `PERSONA_TZ_OFFSET_HOURS` sets the character's time zone: the night window and the dates of what it remembers follow it. When it is blank (the default), personagent uses UTC+8 with `AGENT_LANG=zh` or `zh-TW` and this machine's time zone otherwise. Set a number to choose another offset.
+
+## Removing personagent
+
+1. If the character is connected to a coding assistant, remove it first under **Connect apps** → **Coding assistants**, or with `personagent connect claude-code --remove` (likewise `codex` and `dsh`).
+2. On Windows, in the App view, click **Remove icon** under **Desktop and Start menu icon**, and turn off **Start personagent after signing in to Windows**.
+3. Click **Quit** in the page.
+4. Uninstall the package with `python -m pip uninstall personagent`, or `uv tool uninstall personagent` if you installed it with uv. A copy unpacked from the source ZIP is removed by deleting its folder.
+5. Delete the home folder: by default the `personagent` folder in your user folder, or the one you gave with `--home`. It holds the key, the memory, the platform logins and `backups/`.
+6. Delete any backups you saved to the Desktop or Documents.
+7. Revoke the API key on the model service's key page, and remove the bot from its groups on each platform.
 
 ## Upgrading from 0.x
 
