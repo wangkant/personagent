@@ -509,8 +509,8 @@ add any proxy or tunnel, even on one host.
   and the first start of this version keeps the old memory file as
   `memory.json.pre-v2`. After **Forget this chat** or a forget asked for in
   chat, the `.bak` copies are written again from the current files and
-  `memory.json.pre-v2` loses what was forgotten, so no copy on disk keeps
-  it. Back up `runtime/`, because it holds
+  `memory.json.pre-v2` loses what was forgotten, so no copy in `runtime/`
+  keeps it; a backup made earlier still does. Back up `runtime/`, because it holds
   everything the bot has learned and remembers.
 
 ## When the bot goes quiet

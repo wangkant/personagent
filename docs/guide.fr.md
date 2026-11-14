@@ -624,9 +624,9 @@ Lorsqu'un message fait référence à un moment, comme hier, la semaine dernièr
 - Un oubli demandé dans la discussion est définitif. Il retire aussi ce qu'il couvre des éléments supprimés qui auraient encore pu être restaurés.
 - **Oublier cette discussion** est également définitif. Cette action oublie les faits, les événements, le résumé, la note principale et les messages récents de la discussion, ainsi que les éléments supprimés qui auraient encore pu être restaurés. Ce dont le personnage se souvient des autres discussions, y compris les notes vous concernant prises ailleurs, est conservé. Pour la discussion propre à la page, ce que le personnage a appris dans cette discussion n'est plus utilisé non plus, et ces éléments restent listés sous **Écartés** dans **Apprentissages du personnage**. Oublier la discussion propre à la page oublie aussi ce que retenaient les discussions précédentes de la page, celles qu'a laissées **Nouvelle discussion**.
 - **Nouvelle discussion** sur la page fait repartir la conversation de la page de zéro. Ce que le personnage retenait de la discussion précédente est conservé et peut toujours être rappelé, et cette discussion reste dans Activité comme une discussion distincte ; ce qu'il y a appris n'est plus utilisé.
-- Après un oubli demandé dans la discussion ou **Oublier cette discussion**, les copies quotidiennes des fichiers de mémoire (`.bak`) sont réécrites à partir des fichiers actuels, et la copie conservée depuis le premier démarrage de cette version (`memory.json.pre-v2`) perd ce qui a été oublié, de sorte qu'aucune copie sur le disque ne le conserve. Un élément oublié sur la page ou dans le terminal reste parmi les éléments supprimés pendant 24 heures, et donc aussi dans les copies de ce jour.
+- Après un oubli demandé dans la discussion ou **Oublier cette discussion**, les copies quotidiennes des fichiers de mémoire (`.bak`) sont réécrites à partir des fichiers actuels, et la copie conservée depuis le premier démarrage de cette version (`memory.json.pre-v2`) perd ce qui a été oublié, de sorte qu'aucune copie dans `runtime/` ne le conserve ; une sauvegarde faite auparavant le conserve toutefois. Un élément oublié sur la page ou dans le terminal reste parmi les éléments supprimés pendant 24 heures, et donc aussi dans les copies de ce jour.
 - Lorsque quelque chose est oublié pendant qu'une consolidation de cette discussion est en cours, la réponse de la consolidation est abandonnée et les messages sont relus plus tard, de sorte que l'élément oublié ne revient pas.
-- **Effacer la mémoire**, dans la vue **Application**, supprime toute la mémoire.
+- **Effacer la mémoire**, dans la vue **Application**, supprime toute la mémoire, après avoir enregistré dans `backups/` une sauvegarde qui la conserve jusqu'à ce que vous supprimiez ce fichier.
 
 ### La consulter et la modifier
 
@@ -735,7 +735,7 @@ L'apprentissage s'exécute à côté de ce chemin, jamais à l'intérieur, et ga
 
 Tout ce que personagent stocke reste sur votre machine, dans le dossier personnel : `.env` avec vos clés, `persona.txt`, `persona.card.json`, `runtime/`, et `platforms/` avec les identifiants des plateformes. Dans un clone, aucun de ces fichiers n'est versionné dans Git. Ils peuvent contenir des identifiants et de vraies conversations, alors sauvegardez-les et gardez-les privés. Les messages récents de chaque discussion sont conservés dans `runtime/recent.json` pendant 72 heures, sauf si `MEMORY_KEEP_RECENT=false`, et ce que le personnage retire de la mémoire reste restaurable dans `runtime/memory_trash.jsonl` pendant 30 jours au plus. La page locale ne met jamais la clé dans le stockage du navigateur.
 
-La vue [Activité](#activité) fait partie de la page locale, qui n'écoute que sur 127.0.0.1. L'API du service derrière elle ne répond qu'aux requêtes portant le jeton de `runtime/dashboard.token`, un fichier que seul votre utilisateur peut lire. `CONNECTOR_TOKEN` ne l'ouvre pas. La vue n'affiche jamais de clés d'API ni de jetons. `DASHBOARD_ENABLED=false` la désactive.
+La vue [Activité](#activité) fait partie de la page locale, qui n'écoute que sur 127.0.0.1. L'API du service derrière elle ne répond qu'aux requêtes portant le jeton de `runtime/dashboard.token`, un fichier créé lisible par votre seul compte ; sous Windows, la possibilité pour d'autres de le lire dépend des autorisations du dossier personnel. `CONNECTOR_TOKEN` ne l'ouvre pas. La vue n'affiche jamais de clés d'API ni de jetons. `DASHBOARD_ENABLED=false` la désactive.
 
 Au plus une fois par jour, la page locale, `personagent up` et `personagent doctor` demandent à pypi.org le numéro de version le plus récent. La requête ne contient que la version de personagent. `UPDATE_CHECK_ENABLED=false` l'arrête.
 
@@ -750,6 +750,30 @@ Le fournisseur de modèles voit les conversations :
 - Avec `EMBEDDING_MODEL` défini, le message auquel il répond, les souvenirs et les exemples de recherche vont à l'endpoint d'embeddings (`EMBEDDING_BASE_URL`, ou `LLM_BASE_URL` s'il est vide).
 
 Avant de le connecter à de vraies personnes, dites-leur que c'est un bot et obtenez leur consentement au traitement de leurs messages. Lisez l'[avertissement](DISCLAIMER.fr.md).
+
+### Fichiers du dossier personnel
+
+Ce que contient chaque fichier et dossier du dossier personnel :
+
+| Fichier ou dossier | Contenu | Texte des discussions ou secrets |
+|---|---|---|
+| `.env` | Les réglages, avec la clé du modèle et les autres clés en clair | Secrets |
+| `persona.txt`, `persona.card.json` | La fiche du personnage et sa carte facultative | Non |
+| `platforms/` | `direct.json`, avec les identifiants des plateformes que personagent connecte lui-même, et l'AstrBot géré avec ses réglages | Secrets |
+| `runtime/memory.json`, `core_memory.json`, `episodes.json` | Faits, note principale, événements et résumés de chaque discussion | Contenu des discussions |
+| `runtime/recent.json` | Messages récents de chaque discussion, pendant 72 heures | Texte des discussions |
+| `runtime/memory_trash.jsonl` | Éléments de mémoire supprimés, pendant 30 jours au plus | Contenu des discussions |
+| `runtime/pending_reactions.json` | Réponses envoyées au cours des 15 dernières minutes qui attendent une réaction, avec quelques messages qui précèdent chacune | Texte des discussions |
+| `runtime/candidate_ledger.<lang>.jsonl` et les autres registres d'apprentissage | Ce que le personnage a appris, avec les réponses et les réactions sur lesquelles cela repose | Texte des discussions |
+| `runtime/desktop/browser-chat.json` | La discussion propre à la page, ses 50 derniers messages | Texte des discussions |
+| `runtime/desktop/*.log` | Journaux du personnage, des plateformes et d'AstrBot | Peuvent contenir des extraits de messages |
+| `runtime/desktop/welcome.json` | L'adresse de la page locale avec son jeton d'accès | Secret |
+| `runtime/dashboard.token` | Le jeton de l'API d'Activité | Secret |
+| `stickers/` | Stickers collectés dans les discussions | Images des discussions |
+| `data/` | Vos propres fichiers lorebook, d'exemples et de filtres | Uniquement ce que vous y placez |
+| `backups/` | Sauvegardes zip | Les deux |
+
+Une sauvegarde est un zip non chiffré qui contient la clé, la mémoire, ce que le personnage a appris et les connexions aux plateformes. **Effacer la mémoire** et **Tout réinitialiser**, dans la vue Application, en enregistrent d'abord une dans `backups/` : ce qu'ils effacent reste donc dans ce fichier tant que vous ne le supprimez pas. Les sauvegardes enregistrées sur le Bureau ou dans Documents y restent également.
 
 ## Dépannage
 

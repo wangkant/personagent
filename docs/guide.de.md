@@ -624,9 +624,9 @@ Bezieht sich eine Nachricht auf eine Zeit, etwa gestern, letzte Woche oder letzt
 - Ein im Chat verlangtes Vergessen ist endgültig. Es entfernt das Betroffene außerdem aus den entfernten Einträgen, die sich noch hätten wiederherstellen lassen.
 - **Diesen Chat vergessen** ist ebenfalls endgültig. Es vergisst die Fakten, Ereignisse, die Zusammenfassung, die Hauptnotiz und die letzten Nachrichten des Chats sowie die entfernten Einträge, die sich noch hätten wiederherstellen lassen. Was sich die Figur aus anderen Chats merkt, einschließlich anderswo entstandener Notizen über Sie, bleibt erhalten. Beim eigenen Chat der Seite wird auch das, was die Figur in diesem Chat gelernt hat, nicht mehr verwendet; diese Einträge bleiben unter **Zurückgestellt** in **Was die Figur gelernt hat** aufgeführt. Wird der eigene Chat der Seite vergessen, vergisst die Figur auch, was die früheren Chats der Seite enthielten, die **Neuer Chat** hinterlassen hat.
 - **Neuer Chat** auf der Seite beginnt das Gespräch der Seite von vorn. Was sich die Figur aus dem früheren Chat gemerkt hat, bleibt erhalten und wird weiterhin abgerufen, und dieser Chat bleibt in Aktivität als eigener Chat bestehen; was sie dort gelernt hat, wird nicht mehr verwendet.
-- Nach einem im Chat verlangten Vergessen oder nach **Diesen Chat vergessen** werden die täglichen Kopien der Gedächtnisdateien (`.bak`) aus den aktuellen Dateien neu geschrieben, und die beim ersten Start dieser Version angelegte Kopie (`memory.json.pre-v2`) verliert das Vergessene, sodass keine Kopie auf dem Datenträger es behält. Ein Eintrag, der auf der Seite oder im Terminal vergessen wurde, bleibt 24 Stunden lang unter den entfernten Einträgen und daher auch in den Kopien dieses Tages.
+- Nach einem im Chat verlangten Vergessen oder nach **Diesen Chat vergessen** werden die täglichen Kopien der Gedächtnisdateien (`.bak`) aus den aktuellen Dateien neu geschrieben, und die beim ersten Start dieser Version angelegte Kopie (`memory.json.pre-v2`) verliert das Vergessene, sodass keine Kopie in `runtime/` es behält; eine früher erstellte Sicherung enthält es jedoch weiterhin. Ein Eintrag, der auf der Seite oder im Terminal vergessen wurde, bleibt 24 Stunden lang unter den entfernten Einträgen und daher auch in den Kopien dieses Tages.
 - Wird etwas vergessen, während eine Konsolidierung dieses Chats läuft, wird die Antwort der Konsolidierung verworfen, und die Nachrichten werden später erneut gelesen, sodass der vergessene Eintrag nicht zurückkehrt.
-- **Gedächtnis löschen** in der Ansicht **App** löscht das gesamte Gedächtnis.
+- **Gedächtnis löschen** in der Ansicht **App** löscht das gesamte Gedächtnis, nachdem es eine Sicherung in `backups/` gespeichert hat, die das Gelöschte enthält, bis Sie diese Datei löschen.
 
 ### Ansehen und ändern
 
@@ -735,7 +735,7 @@ Das Lernen läuft neben diesem Pfad, nie darin, und hält seinen Zustand in einf
 
 Alles, was personagent speichert, bleibt auf Ihrem Rechner im Home-Ordner: `.env` mit Ihren Schlüsseln, `persona.txt`, `persona.card.json`, `runtime/` und `platforms/` mit den Zugangsdaten der Plattformen. In einem Klon ist keine dieser Dateien in Git versioniert. Sie können Zugangsdaten und echte Gespräche enthalten; sichern Sie sie daher und halten Sie sie privat. Die letzten Nachrichten jedes Chats werden 72 Stunden lang in `runtime/recent.json` aufbewahrt, sofern nicht `MEMORY_KEEP_RECENT=false` gesetzt ist, und was die Figur aus dem Gedächtnis entfernt, bleibt bis zu 30 Tage lang in `runtime/memory_trash.jsonl` wiederherstellbar. Die lokale Seite legt den Schlüssel nie im Browser-Speicher ab.
 
-Die Ansicht [Aktivität](#aktivität) gehört zur lokalen Seite, die nur auf 127.0.0.1 lauscht. Die API des Dienstes dahinter antwortet nur auf Anfragen mit dem Token aus `runtime/dashboard.token`, einer Datei, die nur Ihr Benutzerkonto lesen kann. `CONNECTOR_TOKEN` öffnet sie nicht. Die Ansicht zeigt nie API-Schlüssel oder Tokens. `DASHBOARD_ENABLED=false` deaktiviert sie.
+Die Ansicht [Aktivität](#aktivität) gehört zur lokalen Seite, die nur auf 127.0.0.1 lauscht. Die API des Dienstes dahinter antwortet nur auf Anfragen mit dem Token aus `runtime/dashboard.token`, einer Datei, die so angelegt wird, dass nur Ihr eigenes Konto sie lesen kann; unter Windows hängt es von den Berechtigungen des Home-Ordners ab, ob andere sie lesen können. `CONNECTOR_TOKEN` öffnet sie nicht. Die Ansicht zeigt nie API-Schlüssel oder Tokens. `DASHBOARD_ENABLED=false` deaktiviert sie.
 
 Höchstens einmal täglich fragen die lokale Seite, `personagent up` und `personagent doctor` pypi.org nach der neuesten Versionsnummer. Die Anfrage enthält nur die Version von personagent. `UPDATE_CHECK_ENABLED=false` deaktiviert sie.
 
@@ -750,6 +750,30 @@ Der Modellanbieter sieht die Gespräche:
 - Mit gesetztem `EMBEDDING_MODEL` werden die Nachricht, auf die er antwortet, Erinnerungen und Suchbeispiele an den Embeddings-Endpunkt gesendet (`EMBEDDING_BASE_URL` oder `LLM_BASE_URL`, wenn leer).
 
 Bevor Sie ihn mit echten Menschen verbinden, teilen Sie ihnen mit, dass es sich um einen Bot handelt, und holen Sie ihre Einwilligung zur Verarbeitung ihrer Nachrichten ein. Lesen Sie den [Haftungsausschluss](DISCLAIMER.de.md).
+
+### Dateien im Home-Ordner
+
+Was die einzelnen Dateien und Ordner im Home-Ordner enthalten:
+
+| Datei oder Ordner | Inhalt | Chattext oder Geheimnisse |
+|---|---|---|
+| `.env` | Einstellungen, mit dem Modellschlüssel und weiteren Schlüsseln im Klartext | Geheimnisse |
+| `persona.txt`, `persona.card.json` | Die Persona und ihre optionale Karte | Nein |
+| `platforms/` | `direct.json` mit den Zugangsdaten der Plattformen, die personagent selbst verbindet, sowie das verwaltete AstrBot mit seinen Einstellungen | Geheimnisse |
+| `runtime/memory.json`, `core_memory.json`, `episodes.json` | Fakten, Hauptnotiz, Ereignisse und Zusammenfassungen jedes Chats | Chatinhalte |
+| `runtime/recent.json` | Die letzten Nachrichten jedes Chats, 72 Stunden lang | Chattext |
+| `runtime/memory_trash.jsonl` | Entfernte Gedächtniseinträge, höchstens 30 Tage lang | Chatinhalte |
+| `runtime/pending_reactions.json` | In den letzten 15 Minuten gesendete Antworten, die auf eine Reaktion warten, mit einigen Nachrichten davor | Chattext |
+| `runtime/candidate_ledger.<lang>.jsonl` und die übrigen Lernaufzeichnungen | Was die Figur gelernt hat, mit den zugrunde liegenden Antworten und Reaktionen | Chattext |
+| `runtime/desktop/browser-chat.json` | Der eigene Chat der Seite, seine letzten 50 Nachrichten | Chattext |
+| `runtime/desktop/*.log` | Protokolle der Figur, der Plattformen und von AstrBot | Können Teile von Nachrichten enthalten |
+| `runtime/desktop/welcome.json` | Die Adresse der lokalen Seite mit ihrem Zugriffstoken | Geheimnis |
+| `runtime/dashboard.token` | Das Token für die Aktivitäts-API | Geheimnis |
+| `stickers/` | Aus Chats gesammelte Sticker | Bilder aus Chats |
+| `data/` | Eigene Lorebook-, Beispiel- und Filterdateien | Nur was Sie dort ablegen |
+| `backups/` | Sicherungen als ZIP | Beides |
+
+Eine Sicherung ist ein unverschlüsseltes ZIP, das den Schlüssel, das Gedächtnis, das Gelernte und die Plattform-Anmeldungen enthält. **Gedächtnis löschen** und **Alles zurücksetzen** in der Ansicht App speichern zuvor eine Sicherung in `backups/`; das Gelöschte bleibt daher in dieser Datei, bis Sie sie löschen. Auf dem Desktop oder unter Dokumente gespeicherte Sicherungen bleiben ebenfalls dort.
 
 ## Fehlerbehebung
 

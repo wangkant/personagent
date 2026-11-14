@@ -624,9 +624,9 @@ When a message refers to a time, such as yesterday, last week or last month, in 
 - A forget asked for in chat is final. It also removes what it covers from the removed items that could still have been restored.
 - **Forget this chat** is final too. It forgets the chat's facts, events, summary, core note and recent messages, and the removed items that could still have been restored. What the character remembers from other chats, notes about you made elsewhere included, is kept. For the page's own chat, what the character learned in that chat is also no longer used, and those items stay listed under **Set aside** in **What the character has learned**. Forgetting the page's own chat also forgets what the earlier chats on the page remembered, those that **New chat** left behind.
 - **New chat** on the page starts the page's conversation over. What the character remembered from the earlier chat is kept and still recalled, and that chat stays in Activity as a chat of its own; what it learned there is no longer used.
-- After a forget asked for in chat or **Forget this chat**, the daily copies of the memory files (`.bak`) are written again from the current files, and the copy kept from the first start of this version (`memory.json.pre-v2`) loses what was forgotten, so no copy on disk keeps it. An item forgotten on the page or in the terminal stays among the removed items for 24 hours, and so also in that day's copies.
+- After a forget asked for in chat or **Forget this chat**, the daily copies of the memory files (`.bak`) are written again from the current files, and the copy kept from the first start of this version (`memory.json.pre-v2`) loses what was forgotten, so no copy in `runtime/` keeps it; a backup made earlier still does. An item forgotten on the page or in the terminal stays among the removed items for 24 hours, and so also in that day's copies.
 - When something is forgotten while a consolidation of that chat is running, the consolidation's answer is discarded and the messages are read again later, so the forgotten item does not return.
-- **Clear memory** in the App view deletes all memory.
+- **Clear memory** in the App view deletes all memory, after saving a backup to `backups/` that keeps it until you delete that file.
 
 ### See and change it
 
@@ -735,7 +735,7 @@ Learning runs beside that path, never inside it, and keeps its state in plain fi
 
 Everything personagent stores stays on your machine, in the home folder: `.env` with your keys, `persona.txt`, `persona.card.json`, `runtime/`, and `platforms/` with the platform credentials. In a clone, none of these files is committed to Git. They can hold credentials and real conversations, so back them up and keep them private. The recent messages of each chat are kept in `runtime/recent.json` for 72 hours unless `MEMORY_KEEP_RECENT=false`, and what the character removes from memory stays restorable in `runtime/memory_trash.jsonl` for up to 30 days. The local page never puts the key in browser storage.
 
-The [Activity](#activity) view is part of the local page, which listens on 127.0.0.1 only. The service's API behind it answers only requests that carry the token from `runtime/dashboard.token`, a file only your user can read. `CONNECTOR_TOKEN` does not open it. The view never shows API keys or tokens. `DASHBOARD_ENABLED=false` turns it off.
+The [Activity](#activity) view is part of the local page, which listens on 127.0.0.1 only. The service's API behind it answers only requests that carry the token from `runtime/dashboard.token`, a file created readable only by your own account; on Windows, who else can read it depends on the permissions of the home folder. `CONNECTOR_TOKEN` does not open it. The view never shows API keys or tokens. `DASHBOARD_ENABLED=false` turns it off.
 
 At most once a day, the local page, `personagent up` and `personagent doctor` ask pypi.org for the newest version number. The request carries personagent's own version and nothing else. `UPDATE_CHECK_ENABLED=false` stops it.
 
@@ -750,6 +750,30 @@ The model provider sees conversations:
 - With `EMBEDDING_MODEL` set, the message being answered, the memories and the retrieval examples go to the embedding endpoint (`EMBEDDING_BASE_URL`, or `LLM_BASE_URL` when that is blank).
 
 Before you connect it to real people, tell them it is a bot and get their consent to have their messages processed. Read the [disclaimer](DISCLAIMER.md).
+
+### Files in the home
+
+What each file and folder in the home holds:
+
+| File or folder | Holds | Chat text or secrets |
+|---|---|---|
+| `.env` | Settings, with the model key and any other keys in plain text | Secrets |
+| `persona.txt`, `persona.card.json` | The persona and its optional card | No |
+| `platforms/` | `direct.json` with the credentials of the platforms personagent connects itself, and the managed AstrBot with its settings | Secrets |
+| `runtime/memory.json`, `core_memory.json`, `episodes.json` | Facts, the core note, events and summaries of each chat | Chat content |
+| `runtime/recent.json` | Recent messages of each chat, for 72 hours | Chat text |
+| `runtime/memory_trash.jsonl` | Removed memory items, for up to 30 days | Chat content |
+| `runtime/pending_reactions.json` | Replies sent in the last 15 minutes that await a reaction, with a few messages before each | Chat text |
+| `runtime/candidate_ledger.<lang>.jsonl` and the other learning records | What the character learned, with the replies and reactions behind it | Chat text |
+| `runtime/desktop/browser-chat.json` | The page's own chat, its last 50 messages | Chat text |
+| `runtime/desktop/*.log` | Logs of the character, the platforms and AstrBot | May contain parts of messages |
+| `runtime/desktop/welcome.json` | The local page's address with its access token | Secret |
+| `runtime/dashboard.token` | The token for the Activity API | Secret |
+| `stickers/` | Stickers collected from chats | Pictures from chats |
+| `data/` | Your own lorebook, example and filter files | Only what you put there |
+| `backups/` | Backup zips | Both |
+
+A backup is an unencrypted zip that holds the key, the memory, what the character learned and the platform logins. **Clear memory** and **Reset all** in the App view first save one to `backups/`, so what they clear stays in that file until you delete it. Backups saved to the Desktop or Documents stay there as well.
 
 ## Troubleshooting
 

@@ -624,9 +624,9 @@ Cuando un mensaje se refiere a un momento, como ayer, la semana pasada o el mes 
 - Un olvido solicitado en el chat es definitivo. También elimina lo que abarca de los elementos eliminados que todavía podrían haberse restaurado.
 - **Olvidar este chat** también es definitivo. Olvida los hechos, los acontecimientos, el resumen, la nota principal y los mensajes recientes del chat, así como los elementos eliminados que todavía podrían haberse restaurado. Se conserva lo que el personaje recuerda de otros chats, incluidas las notas sobre usted tomadas en otros lugares. En el chat propio de la página, lo que el personaje aprendió en ese chat también deja de utilizarse, y esos elementos siguen apareciendo en **Apartados**, en **Lo que ha aprendido el personaje**. Olvidar el chat propio de la página también olvida lo que recordaban los chats anteriores de la página, los que dejó atrás **Nuevo chat**.
 - **Nuevo chat** en la página vuelve a empezar la conversación de la página. Lo que el personaje recordaba del chat anterior se conserva y sigue recordándose, y ese chat permanece en Actividad como un chat aparte; lo que aprendió en él deja de utilizarse.
-- Después de un olvido solicitado en el chat o de **Olvidar este chat**, las copias diarias de los archivos de memoria (`.bak`) se vuelven a escribir a partir de los archivos actuales, y la copia conservada desde el primer inicio de esta versión (`memory.json.pre-v2`) pierde lo olvidado, de modo que ninguna copia en disco lo conserva. Un elemento olvidado en la página o en el terminal permanece entre los elementos eliminados durante 24 horas y, por tanto, también en las copias de ese día.
+- Después de un olvido solicitado en el chat o de **Olvidar este chat**, las copias diarias de los archivos de memoria (`.bak`) se vuelven a escribir a partir de los archivos actuales, y la copia conservada desde el primer inicio de esta versión (`memory.json.pre-v2`) pierde lo olvidado, de modo que ninguna copia en `runtime/` lo conserva; una copia de seguridad anterior sí lo conserva. Un elemento olvidado en la página o en el terminal permanece entre los elementos eliminados durante 24 horas y, por tanto, también en las copias de ese día.
 - Cuando se olvida algo mientras se está ejecutando una consolidación de ese chat, la respuesta de la consolidación se descarta y los mensajes se vuelven a leer más tarde, de modo que el elemento olvidado no regresa.
-- **Borrar la memoria**, en la vista **Aplicación**, elimina toda la memoria.
+- **Borrar la memoria**, en la vista **Aplicación**, elimina toda la memoria, tras guardar en `backups/` una copia de seguridad que la conserva hasta que usted elimine ese archivo.
 
 ### Consultarla y modificarla
 
@@ -735,7 +735,7 @@ El aprendizaje funciona junto a ese flujo, nunca dentro de él, y guarda su esta
 
 Todo lo que personagent guarda permanece en su equipo, en la carpeta de inicio: `.env` con sus claves, `persona.txt`, `persona.card.json`, `runtime/`, y `platforms/` con las credenciales de las plataformas. En un clon, ninguno de estos archivos se confirma en Git. Pueden contener credenciales y conversaciones reales, por lo que debe hacer copias de seguridad y mantenerlos en privado. Los mensajes recientes de cada chat se conservan en `runtime/recent.json` durante 72 horas, salvo con `MEMORY_KEEP_RECENT=false`, y lo que el personaje elimina de la memoria sigue pudiendo restaurarse en `runtime/memory_trash.jsonl` durante un máximo de 30 días. La página local nunca guarda la clave en el almacenamiento del navegador.
 
-La vista [Actividad](#actividad) forma parte de la página local, que solo escucha en 127.0.0.1. La API del servicio en la que se basa solo responde a solicitudes que incluyan el token de `runtime/dashboard.token`, un archivo que solo puede leer su usuario. `CONNECTOR_TOKEN` no da acceso a ella. La vista nunca muestra claves de API ni tokens. `DASHBOARD_ENABLED=false` la desactiva.
+La vista [Actividad](#actividad) forma parte de la página local, que solo escucha en 127.0.0.1. La API del servicio en la que se basa solo responde a solicitudes que incluyan el token de `runtime/dashboard.token`, un archivo que se crea con permiso de lectura solo para su propia cuenta; en Windows, que otras personas puedan leerlo depende de los permisos de la carpeta de inicio. `CONNECTOR_TOKEN` no da acceso a ella. La vista nunca muestra claves de API ni tokens. `DASHBOARD_ENABLED=false` la desactiva.
 
 Como máximo una vez al día, la página local, `personagent up` y `personagent doctor` consultan a pypi.org el número de la versión más reciente. La solicitud incluye la versión de personagent y nada más. `UPDATE_CHECK_ENABLED=false` la desactiva.
 
@@ -750,6 +750,30 @@ El proveedor de modelos ve las conversaciones:
 - Con `EMBEDDING_MODEL` definido, el mensaje que se responde, las memorias y los ejemplos de recuperación se envían al endpoint de embeddings (`EMBEDDING_BASE_URL`, o `LLM_BASE_URL` si está vacío).
 
 Antes de conectarlo con personas reales, infórmeles de que es un bot y obtenga su consentimiento para tratar sus mensajes. Lea el [aviso legal](DISCLAIMER.es.md).
+
+### Archivos de la carpeta de inicio
+
+Lo que contiene cada archivo y carpeta de la carpeta de inicio:
+
+| Archivo o carpeta | Contiene | Texto de chats o secretos |
+|---|---|---|
+| `.env` | Los ajustes, con la clave del modelo y las demás claves en texto sin cifrar | Secretos |
+| `persona.txt`, `persona.card.json` | El perfil y su ficha opcional | No |
+| `platforms/` | `direct.json`, con las credenciales de las plataformas que personagent conecta por sí mismo, y el AstrBot gestionado con sus ajustes | Secretos |
+| `runtime/memory.json`, `core_memory.json`, `episodes.json` | Hechos, nota principal, acontecimientos y resúmenes de cada chat | Contenido de chats |
+| `runtime/recent.json` | Mensajes recientes de cada chat, durante 72 horas | Texto de chats |
+| `runtime/memory_trash.jsonl` | Elementos de memoria eliminados, durante un máximo de 30 días | Contenido de chats |
+| `runtime/pending_reactions.json` | Respuestas enviadas en los últimos 15 minutos que esperan una reacción, con algunos mensajes anteriores a cada una | Texto de chats |
+| `runtime/candidate_ledger.<lang>.jsonl` y los demás registros de aprendizaje | Lo que ha aprendido el personaje, con las respuestas y reacciones en que se basa | Texto de chats |
+| `runtime/desktop/browser-chat.json` | El chat propio de la página, sus últimos 50 mensajes | Texto de chats |
+| `runtime/desktop/*.log` | Registros del personaje, de las plataformas y de AstrBot | Pueden contener partes de mensajes |
+| `runtime/desktop/welcome.json` | La dirección de la página local con su token de acceso | Secreto |
+| `runtime/dashboard.token` | El token de la API de Actividad | Secreto |
+| `stickers/` | Stickers recopilados de los chats | Imágenes de chats |
+| `data/` | Sus propios archivos de trasfondo, ejemplos y filtros | Solo lo que usted coloque |
+| `backups/` | Copias de seguridad en zip | Ambos |
+
+Una copia de seguridad es un zip sin cifrar que contiene la clave, la memoria, lo que ha aprendido el personaje y los inicios de sesión de las plataformas. **Borrar la memoria** y **Restablecer todo**, en la vista Aplicación, guardan primero una copia en `backups/`, de modo que lo borrado permanece en ese archivo hasta que usted lo elimine. Las copias guardadas en el Escritorio o en Documentos también permanecen allí.
 
 ## Solución de problemas
 

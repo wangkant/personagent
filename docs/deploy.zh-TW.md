@@ -361,7 +361,7 @@ AstrBot 位於 Docker 中或另一台主機上時，請參閱[使用手冊](guid
 - **`tools/` 中的腳本**各不相同，部分免費，部分會呼叫模型。[tools.zh-TW.md](tools.zh-TW.md) 的表格逐一註明。
 - **`personagent eval`** 對每個測試案例都會呼叫模型，`memory` 測試集除外：它以預設的回答離線執行。人設和學習兩組測試案例還需要第二個模型擔任裁判（`BENCH_JUDGE_MODEL`）。
 - **記憶。** 帶命名空間（非 QQ）的對話超過 256 個時，閒置最久的對話會從記憶體中移除，並失去待處理的反應。移除前會先整理其尚未整理的訊息；除非設定 `MEMORY_KEEP_RECENT=false`，其近期訊息會在 `runtime/recent.json` 中保留 72 小時。事實、事件、核心筆記和學習紀錄會保留。正在處理請求的對話不會被清除。長期記憶在啟動時從磁碟載入，不受此上限限制。
-- **磁碟。** `runtime/` 中的證據記錄檔和候選項目記錄檔只會追加，從不截斷。任一檔案超過 50 MB 時，`personagent doctor` 會加以標示（`LEDGER_EVIDENCE_WARN_BYTES`、`LEDGER_CANDIDATES_WARN_BYTES`）。記憶檔案始終較小：`recent.json` 只保存最近 72 小時內活躍的聊天，`memory_trash.jsonl` 中被移除的內容最多保留 30 天。每天第一次修改之前，`memory.json`、`core_memory.json` 和 `episodes.json` 會複製為同名的 `.bak` 檔案；本版本首次啟動時，會將舊的記憶檔案保留為 `memory.json.pre-v2`。使用「清除此聊天的記憶」或在聊天中要求忘記之後，`.bak` 副本會依目前的檔案重新寫入，`memory.json.pre-v2` 也會刪去被忘記的內容，因此磁碟上不會留下任何副本。請備份 `runtime/`，因為機器人學到和記住的所有內容都在其中。
+- **磁碟。** `runtime/` 中的證據記錄檔和候選項目記錄檔只會追加，從不截斷。任一檔案超過 50 MB 時，`personagent doctor` 會加以標示（`LEDGER_EVIDENCE_WARN_BYTES`、`LEDGER_CANDIDATES_WARN_BYTES`）。記憶檔案始終較小：`recent.json` 只保存最近 72 小時內活躍的聊天，`memory_trash.jsonl` 中被移除的內容最多保留 30 天。每天第一次修改之前，`memory.json`、`core_memory.json` 和 `episodes.json` 會複製為同名的 `.bak` 檔案；本版本首次啟動時，會將舊的記憶檔案保留為 `memory.json.pre-v2`。使用「清除此聊天的記憶」或在聊天中要求忘記之後，`.bak` 副本會依目前的檔案重新寫入，`memory.json.pre-v2` 也會刪去被忘記的內容，因此 `runtime/` 中不會留下任何副本；但先前製作的備份仍保有這些內容。請備份 `runtime/`，因為機器人學到和記住的所有內容都在其中。
 
 ### 完整排查清單
 
