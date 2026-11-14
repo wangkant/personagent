@@ -732,7 +732,9 @@ def _banner(host: str, port: int) -> str:
     return "\n".join([f"personagent {__version__}",
                       f"  listening:  http://{_url_host(host)}:{port}",
                       f"  home:       {ROOT}",
-                      f"  agent:      {state}"])
+                      f"  agent:      {state}",
+                      "  callers:    " + ("checked by CONNECTOR_TOKEN" if CONNECTOR_TOKEN else
+                                          "accepted from this computer only (CONNECTOR_TOKEN is blank)")])
 
 
 # /health/details caches its probes for 60 s: each spends tokens and a

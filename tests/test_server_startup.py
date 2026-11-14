@@ -87,6 +87,11 @@ def test_the_banner_names_version_address_home_and_agent_state(monkeypatch) -> N
     assert f"home:       {server.ROOT}" in banner
     assert "on (model m-1, lang zh)" in banner
     assert "dashboard" not in banner and TOKEN not in banner, banner
+    monkeypatch.setattr(server, "CONNECTOR_TOKEN", "")
+    assert "callers:    accepted from this computer only" in server._banner("127.0.0.1", 8080)
+    monkeypatch.setattr(server, "CONNECTOR_TOKEN", "secret-token")
+    banner = server._banner("0.0.0.0", 8080)
+    assert "callers:    checked by CONNECTOR_TOKEN" in banner and "secret-token" not in banner
 
     monkeypatch.setattr(server, "agent", SimpleNamespace(enabled=False))
     banner = server._banner("::1", 9000)
