@@ -164,7 +164,7 @@
     "tavilyNew": "Tavily API 金鑰（選填）",
     "tavilyClear": "改回免費搜尋",
     "visionTitle": "辨識圖片",
-    "visionHint": "收到圖片與貼圖時，使用支援影像的模型加以描述；未開啟時僅辨識圖片中的文字。",
+    "visionHint": "收到圖片與貼圖時，使用支援影像的模型加以描述；未開啟時不讀取圖片內容（僅在經 OneBot（NapCat）接入的 QQ 上辨識圖片中的文字）。",
     "visionModel": "影像模型",
     "visionSame": "使用與聊天相同的服務和金鑰",
     "proactiveTitle": "偶爾主動發言",

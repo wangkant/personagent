@@ -164,7 +164,7 @@
     "tavilyNew": "Tavily-API-Schlüssel (optional)",
     "tavilyClear": "Kostenlose Suche verwenden",
     "visionTitle": "Bilderkennung",
-    "visionHint": "Beschreibt Bilder und Sticker mithilfe eines Bildmodells; ist die Funktion deaktiviert, wird nur der enthaltene Text gelesen.",
+    "visionHint": "Beschreibt Bilder und Sticker mithilfe eines Bildmodells; ist die Funktion deaktiviert, werden Bilder nicht gelesen (nur bei QQ über OneBot (NapCat) wird der enthaltene Text gelesen).",
     "visionModel": "Bildmodell",
     "visionSame": "Chatdienst und Schlüssel verwenden",
     "proactiveTitle": "Gelegentlich selbst beginnen",

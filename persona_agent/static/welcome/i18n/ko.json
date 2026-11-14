@@ -164,7 +164,7 @@
     "tavilyNew": "Tavily API 키(선택)",
     "tavilyClear": "무료 검색으로 전환",
     "visionTitle": "이미지 인식",
-    "visionHint": "비전 모델로 이미지와 스티커를 설명합니다. 끄면 이미지 속 텍스트만 읽습니다.",
+    "visionHint": "비전 모델로 이미지와 스티커를 설명합니다. 끄면 이미지 내용을 읽지 않습니다(OneBot(NapCat)으로 연결한 QQ에서만 이미지 속 텍스트를 읽습니다).",
     "visionModel": "비전 모델",
     "visionSame": "채팅과 같은 서비스 및 키 사용",
     "proactiveTitle": "가끔 먼저 발언",

@@ -164,7 +164,7 @@
     "tavilyNew": "Chave de API do Tavily (opcional)",
     "tavilyClear": "Voltar à pesquisa gratuita",
     "visionTitle": "Compreensão de imagens",
-    "visionHint": "Descreve imagens e figurinhas com um modelo de visão; se desativado, apenas o texto contido nelas é lido.",
+    "visionHint": "Descreve imagens e figurinhas com um modelo de visão; se desativado, as imagens não são lidas (apenas no QQ via OneBot (NapCat) o texto contido nelas é lido).",
     "visionModel": "Modelo de visão",
     "visionSame": "Usar o serviço e a chave da conversa",
     "proactiveTitle": "Iniciar conversas ocasionalmente",

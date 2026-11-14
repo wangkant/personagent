@@ -164,7 +164,7 @@
     "tavilyNew": "Tavily API キー（任意）",
     "tavilyClear": "無料の検索に戻す",
     "visionTitle": "画像の認識",
-    "visionHint": "画像やスタンプをビジョンモデルで説明します。無効の場合は、画像内の文字のみを読み取ります。",
+    "visionHint": "画像やスタンプをビジョンモデルで説明します。無効の場合、画像の内容は読み取りません（OneBot（NapCat）経由の QQ に限り、画像内の文字を読み取ります）。",
     "visionModel": "ビジョンモデル",
     "visionSame": "チャットと同じサービスとキーを使用",
     "proactiveTitle": "ときどき自分から発言する",

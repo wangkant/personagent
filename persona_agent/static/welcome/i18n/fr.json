@@ -164,7 +164,7 @@
     "tavilyNew": "Clé API Tavily (facultative)",
     "tavilyClear": "Revenir à la recherche gratuite",
     "visionTitle": "Compréhension des images",
-    "visionHint": "Décrit les images et les autocollants à l'aide d'un modèle de vision ; s'il est désactivé, seul le texte qu'ils contiennent est lu.",
+    "visionHint": "Décrit les images et les autocollants à l'aide d'un modèle de vision ; s'il est désactivé, les images ne sont pas lues (seul le texte qu'elles contiennent l'est, sur QQ via OneBot (NapCat)).",
     "visionModel": "Modèle de vision",
     "visionSame": "Utiliser le service et la clé de la discussion",
     "proactiveTitle": "Prendre parfois la parole en premier",
