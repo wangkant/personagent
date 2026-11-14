@@ -15,7 +15,7 @@
 
 *これは英語版 README の翻訳です。基準となるのは英語版で、こちらより新しい場合があります。*
 
-personagent は、人のようにふるまうエージェントです。独自のキャラクターを持ち、記憶し、話した相手から学び、いつ発言するかを自分で判断します。QQ、WeChat、Telegram、Discord とさらに 18 のプラットフォームのグループチャットと個人チャット、あなたのコンピューター上のウィンドウ、Claude Code や Codex などのコーディングアシスタントなど、お使いの場所のどこでも動作します。キャラクターは選ぶことも自分で書くこともでき、OpenAI 互換の任意のモデルで動作します。
+personagent はあなた自身のコンピューターで動き、保存する内容はすべてそのコンピューターに残ります。QQ、WeChat、Telegram、Discord とさらに 18 のプラットフォームのグループチャットと個人チャット、あなたのコンピューター上のウィンドウ、Claude Code や Codex などのコーディングアシスタントなど、お使いの場所のどこでも動作します。キャラクターは選ぶことも自分で書くこともでき、OpenAI 互換の任意のモデルで動作します。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「プラットフォーム連携」画面。スキャンまたはいくつかの値の貼り付けで連携できるプラットフォーム、折りたたまれた上級のプラットフォーム、参加できるコーディングアシスタントが表示されている" width="960">
@@ -82,7 +82,7 @@ OpenAI 互換の任意のモデルを使えます。OpenRouter の無料モデ�
 </tr>
 </table>
 
-チャットで頼めば、覚えることも忘れることもできます：`ノヴァ、覚えて：ケイはベジタリアン`、`ノヴァ、忘れて、ベジタリアンのこと`（[記憶コマンド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶コマンド)）。何をどのくらいの期間保持するかは、ガイドの[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶)の節に記載しています。
+チャットで頼めば、覚えることも忘れることもできます（ノヴァは既定のキャラクターの名前です）：`ノヴァ、覚えて：ケイはベジタリアン`、`ノヴァ、忘れて、ベジタリアンのこと`（[記憶コマンド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶コマンド)）。何をどのくらいの期間保持するかは、ガイドの[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶)の節に記載しています。
 
 ## はじめに
 

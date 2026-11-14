@@ -15,7 +15,7 @@
 
 *Esta é uma tradução do README em inglês, que é a versão de referência e pode estar mais atualizada.*
 
-O personagent é um agente que se comporta como uma pessoa: tem personalidade própria, lembra, aprende com as pessoas com quem conversa e decide por conta própria quando falar. Ele funciona onde você precisar: em conversas em grupo e conversas privadas no QQ, no WeChat, no Telegram, no Discord e em outras dezoito plataformas, em uma janela no seu computador e dentro de assistentes de programação como o Claude Code e o Codex. Você escolhe ou escreve a personalidade dele, e ele funciona com qualquer modelo compatível com OpenAI.
+O personagent roda no seu próprio computador e guarda ali tudo o que armazena. Ele funciona onde você precisar: em conversas em grupo e conversas privadas no QQ, no WeChat, no Telegram, no Discord e em outras dezoito plataformas, em uma janela no seu computador e dentro de assistentes de programação como o Claude Code e o Codex. Você escolhe ou escreve a personalidade dele, e ele funciona com qualquer modelo compatível com OpenAI.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="A tela Conectar plataformas da página local: as plataformas que se conectam com QR code ou colando alguns valores, as plataformas avançadas recolhidas e os assistentes de programação em que ele pode entrar" width="960">
@@ -82,7 +82,7 @@ Um comando o abre, em inglês, chinês ou mais oito idiomas, e basta colar uma c
 </tr>
 </table>
 
-Ele também lembra e esquece o que lhe for solicitado no chat: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([comandos de memória](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#comandos-de-memória)). O que ele guarda, e por quanto tempo, está na seção [memória](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#memória) do guia.
+Ele também lembra e esquece o que lhe for solicitado no chat (Nova é o nome do personagem padrão): `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([comandos de memória](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#comandos-de-memória)). O que ele guarda, e por quanto tempo, está na seção [memória](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#memória) do guia.
 
 ## Comece aqui
 

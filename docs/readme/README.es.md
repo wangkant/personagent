@@ -15,7 +15,7 @@
 
 *Esta es una traducción del README en inglés, que es la versión de referencia y puede estar más actualizada.*
 
-personagent es un agente que se comporta como una persona: tiene un carácter propio, recuerda, aprende de las personas con las que habla y decide por sí mismo cuándo intervenir. Funciona allí donde usted lo necesite: en chats de grupo y chats privados de QQ, WeChat, Telegram, Discord y otras dieciocho plataformas, en una ventana de su equipo y dentro de asistentes de programación como Claude Code y Codex. Usted elige o redacta su carácter, y funciona con cualquier modelo compatible con OpenAI.
+personagent se ejecuta en su propio equipo y guarda allí todo lo que almacena. Funciona allí donde usted lo necesite: en chats de grupo y chats privados de QQ, WeChat, Telegram, Discord y otras dieciocho plataformas, en una ventana de su equipo y dentro de asistentes de programación como Claude Code y Codex. Usted elige o redacta su carácter, y funciona con cualquier modelo compatible con OpenAI.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="La vista Conectar plataformas de la página local: las plataformas que se conectan escaneando un código o pegando algunos valores, las plataformas avanzadas contraídas y los asistentes de programación a los que puede unirse" width="960">
@@ -82,7 +82,7 @@ Un solo comando lo abre, en inglés, en chino o en otros ocho idiomas, y basta c
 </tr>
 </table>
 
-También recuerda y olvida lo que se le pide en el chat: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([comandos de memoria](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md#comandos-de-memoria)). Qué conserva y durante cuánto tiempo se explica en la sección [memoria](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md#memoria) de la guía.
+También recuerda y olvida lo que se le pide en el chat (Nova es el nombre del personaje predeterminado): `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([comandos de memoria](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md#comandos-de-memoria)). Qué conserva y durante cuánto tiempo se explica en la sección [memoria](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md#memoria) de la guía.
 
 ## Primeros pasos
 

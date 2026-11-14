@@ -15,7 +15,7 @@
 
 *Ceci est une traduction du README anglais, qui fait référence et peut être plus récent.*
 
-personagent est un agent qui se comporte comme une personne : il a un caractère qui lui est propre, se souvient, apprend des personnes avec qui il parle et juge par lui-même quand prendre la parole. Il fonctionne partout où vous en avez besoin : dans les discussions de groupe et les discussions privées sur QQ, WeChat, Telegram, Discord et dix-huit autres plateformes, dans une fenêtre sur votre ordinateur et au sein d'assistants de programmation tels que Claude Code et Codex. Vous choisissez ou rédigez son caractère, et il fonctionne avec n'importe quel modèle compatible OpenAI.
+personagent fonctionne sur votre propre ordinateur et y conserve tout ce qu'il enregistre. Il fonctionne partout où vous en avez besoin : dans les discussions de groupe et les discussions privées sur QQ, WeChat, Telegram, Discord et dix-huit autres plateformes, dans une fenêtre sur votre ordinateur et au sein d'assistants de programmation tels que Claude Code et Codex. Vous choisissez ou rédigez son caractère, et il fonctionne avec n'importe quel modèle compatible OpenAI.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="La vue Connecter des plateformes de la page locale : les plateformes qui se connectent en scannant un code ou en collant quelques valeurs, les plateformes avancées repliées et les assistants de programmation que le personnage peut rejoindre" width="960">
@@ -82,7 +82,7 @@ Une seule commande l'ouvre, en anglais, en chinois ou dans huit autres langues, 
 </tr>
 </table>
 
-Il retient et oublie aussi ce qu'on lui demande dans la discussion : `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([commandes de mémoire](https://github.com/wangkant/personagent/blob/main/docs/guide.fr.md#commandes-de-mémoire)). Ce qu'il conserve, et pour combien de temps, est décrit dans la section [mémoire](https://github.com/wangkant/personagent/blob/main/docs/guide.fr.md#mémoire) du guide.
+Il retient et oublie aussi ce qu'on lui demande dans la discussion (Nova est le nom du personnage par défaut) : `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([commandes de mémoire](https://github.com/wangkant/personagent/blob/main/docs/guide.fr.md#commandes-de-mémoire)). Ce qu'il conserve, et pour combien de temps, est décrit dans la section [mémoire](https://github.com/wangkant/personagent/blob/main/docs/guide.fr.md#mémoire) du guide.
 
 ## Pour commencer
 

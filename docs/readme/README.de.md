@@ -15,7 +15,7 @@
 
 *Dies ist eine Übersetzung der englischen README, die maßgeblich ist und aktueller sein kann.*
 
-personagent ist ein Agent, der sich wie ein Mensch verhält: Er hat eine eigene Persönlichkeit, merkt sich Dinge, lernt von den Menschen, mit denen er spricht, und entscheidet selbst, wann er sich äußert. Er läuft überall dort, wo Sie ihn brauchen: in Gruppenchats und Einzelchats auf QQ, WeChat, Telegram, Discord und achtzehn weiteren Plattformen, in einem Fenster auf Ihrem Rechner und in Programmierassistenten wie Claude Code und Codex. Seine Persönlichkeit wählen Sie aus oder schreiben sie selbst, und er läuft mit einem beliebigen OpenAI-kompatiblen Modell.
+personagent läuft auf Ihrem eigenen Computer und bewahrt alles, was es speichert, dort auf. Er läuft überall dort, wo Sie ihn brauchen: in Gruppenchats und Einzelchats auf QQ, WeChat, Telegram, Discord und achtzehn weiteren Plattformen, in einem Fenster auf Ihrem Rechner und in Programmierassistenten wie Claude Code und Codex. Seine Persönlichkeit wählen Sie aus oder schreiben sie selbst, und er läuft mit einem beliebigen OpenAI-kompatiblen Modell.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="Die Ansicht Plattformen verbinden der lokalen Seite: die Plattformen, die per Scan oder mit einigen eingefügten Werten verbunden werden, die eingeklappten erweiterten Plattformen und die Programmierassistenten, denen die Figur beitreten kann" width="960">
@@ -82,7 +82,7 @@ Ein Befehl öffnet ihn, auf Englisch, Chinesisch oder in acht weiteren Sprachen,
 </tr>
 </table>
 
-Auf Wunsch im Chat merkt er sich Dinge oder vergisst sie wieder: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([Gedächtnis-Befehle](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis-befehle)). Was er speichert und wie lange, steht im Abschnitt [Gedächtnis](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis) des Handbuchs.
+Auf Wunsch im Chat merkt er sich Dinge oder vergisst sie wieder (Nova ist der Name der Standardfigur): `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([Gedächtnis-Befehle](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis-befehle)). Was er speichert und wie lange, steht im Abschnitt [Gedächtnis](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#gedächtnis) des Handbuchs.
 
 ## Erste Schritte
 

@@ -13,7 +13,7 @@
 
 <p align="center"><strong>English</strong> · <a href="https://github.com/wangkant/personagent/blob/main/README.zh-CN.md">简体中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.zh-TW.md">繁體中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ja.md">日本語</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ko.md">한국어</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.es.md">Español</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.fr.md">Français</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.de.md">Deutsch</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.pt-BR.md">Português</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ru.md">Русский</a></p>
 
-personagent is an agent that behaves like a person: it has a character of its own, remembers, learns from the people it talks to, and judges for itself when to speak. It works wherever you do: in group chats and private chats on QQ, WeChat, Telegram, Discord and eighteen more platforms, in a window on your computer, and inside coding assistants such as Claude Code and Codex. You pick or write its character, and it runs on any OpenAI-compatible model.
+personagent runs on your own computer and keeps everything it stores there. It works wherever you do: in group chats and private chats on QQ, WeChat, Telegram, Discord and eighteen more platforms, in a window on your computer, and inside coding assistants such as Claude Code and Codex. You pick or write its character, and it runs on any OpenAI-compatible model.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="The Connect apps view of the local page: the platforms that connect by scanning a code or by pasting a few values, the advanced platforms collapsed, and the coding assistants it can join" width="960">
@@ -80,7 +80,7 @@ One command opens it, in English, Chinese or eight more languages, and one paste
 </tr>
 </table>
 
-It also remembers and forgets when asked in chat: `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([memory commands](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory-commands)). What it keeps, and for how long, is in the [memory](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory) section of the guide.
+It also remembers and forgets when asked in chat (Nova is the default character's name): `Nova, remember Sam is vegetarian`, `Nova, forget vegetarian` ([memory commands](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory-commands)). What it keeps, and for how long, is in the [memory](https://github.com/wangkant/personagent/blob/main/docs/guide.md#memory) section of the guide.
 
 ## Start here
 

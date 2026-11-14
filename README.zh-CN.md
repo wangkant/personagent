@@ -13,7 +13,7 @@
 
 <p align="center"><a href="https://github.com/wangkant/personagent/blob/main/README.md">English</a> · <strong>简体中文</strong> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.zh-TW.md">繁體中文</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ja.md">日本語</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ko.md">한국어</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.es.md">Español</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.fr.md">Français</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.de.md">Deutsch</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.pt-BR.md">Português</a> · <a href="https://github.com/wangkant/personagent/blob/main/docs/readme/README.ru.md">Русский</a></p>
 
-personagent 是一个像人一样的智能体（agent）：它拥有自己的性格与记忆，从与人的交流中学习，并自行判断何时发言。它可在你使用的各处运行：QQ、微信、Telegram、Discord 及另外十八个平台的群聊与私聊，本机的窗口，以及 Claude Code、Codex 等编程助手。角色可选用现成的，也可自行编写；接入任意兼容 OpenAI 接口的模型即可使用。
+personagent 在你自己的电脑上运行，保存的所有内容都留在本机。它可在你使用的各处运行：QQ、微信、Telegram、Discord 及另外十八个平台的群聊与私聊，本机的窗口，以及 Claude Code、Codex 等编程助手。角色可选用现成的，也可自行编写；接入任意兼容 OpenAI 接口的模型即可使用。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本地页面中的「连接平台」：可扫码连接或填写几项即可连接的平台、已折叠的高级平台，以及可接入的编程助手" width="960">
@@ -80,7 +80,7 @@ personagent 是一个像人一样的智能体（agent）：它拥有自己的性
 </tr>
 </table>
 
-也可以在聊天中让它记住或忘记指定内容：`小夏，记住 阿杰不吃辣`、`小夏 忘掉 不吃辣`（[记忆命令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#教导角色)）。保存哪些内容、保存多久，见使用手册的[记忆](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#记忆)一节。
+也可以在聊天中让它记住或忘记指定内容（小夏是默认角色的名字）：`小夏，记住 阿杰不吃辣`、`小夏 忘掉 不吃辣`（[记忆命令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#教导角色)）。保存哪些内容、保存多久，见使用手册的[记忆](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#记忆)一节。
 
 ## 快速开始
 

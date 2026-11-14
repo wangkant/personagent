@@ -15,7 +15,7 @@
 
 *本頁譯自英文版與簡體中文版，以英文版為準，英文版可能較新。*
 
-personagent 是一個像人一樣的 AI 代理（agent）：它擁有自己的個性與記憶，從與人的交流中學習，並自行判斷何時發言。它可在你使用的各處運作：QQ、微信、Telegram、Discord 及另外十八個平台的群組與私訊，你電腦上的視窗，以及 Claude Code、Codex 等程式設計助理。角色可選用現成的，也可自行撰寫；接上任何相容 OpenAI 的模型即可使用。
+personagent 在你自己的電腦上執行，儲存的所有內容都留在本機。它可在你使用的各處運作：QQ、微信、Telegram、Discord 及另外十八個平台的群組與私訊，你電腦上的視窗，以及 Claude Code、Codex 等程式設計助理。角色可選用現成的，也可自行撰寫；接上任何相容 OpenAI 的模型即可使用。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.zh-CN.jpg" alt="本機頁面的「連接平台」：可掃描連接或填寫幾項即可連接的平台、已收合的進階平台，以及可接入的程式設計助理" width="960">
@@ -82,7 +82,7 @@ personagent 是一個像人一樣的 AI 代理（agent）：它擁有自己的�
 </tr>
 </table>
 
-也可以在聊天中要求它記住或忘記指定的內容：`小夏，記住 阿傑不吃辣`、`小夏 忘掉 不吃辣`（[記憶指令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#教導角色)）。會保存哪些內容、保存多久，請參閱使用手冊的[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#記憶)一節。
+也可以在聊天中要求它記住或忘記指定的內容（小夏是預設角色的名字）：`小夏，記住 阿傑不吃辣`、`小夏 忘掉 不吃辣`（[記憶指令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#教導角色)）。會保存哪些內容、保存多久，請參閱使用手冊的[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#記憶)一節。
 
 ## 從這裡開始
 
