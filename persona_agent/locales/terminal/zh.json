@@ -61,7 +61,6 @@
 "No window opened, so the page is in your browser.": "窗口未能打开，页面已在浏览器中打开。",
 "personagent could not start. The details are in {0}.": "personagent 未能启动。详情请查看 {0}。",
 "personagent is starting. Try again in a moment.": "personagent 正在启动，请稍后再试。",
-"Set up personagent: the AI service, the character, and optionally AstrBot. Asks questions in a terminal.": "设置 personagent：AI 服务、角色，以及可选的 AstrBot。将在终端中逐项询问。",
 "ask nothing; use the flags below and keep everything else": "不进行任何询问：使用以下参数，其余设置一律保持不变",
 "use the terminal setup wizard instead of the welcome page": "使用终端设置向导，而不是欢迎页",
 "an AI service preset": "AI 服务预设",
@@ -414,5 +413,6 @@
 "React when a coding agent finishes a turn (run by coding assistants, not by hand)": "在编程助手结束一轮时作出反应（由编程助手运行，无需手动执行）",
 "one of the commands below": "下列命令之一",
 "Run `personagent` to open local setup and chat. On a machine without a display, use `personagent up` (the service and its platforms) or `personagent run` (the service alone). Messages follow AGENT_LANG, else the system language.": "运行 `personagent` 可打开本地设置与聊天。在没有显示器的机器上，请使用 `personagent up`（启动服务及其平台）或 `personagent run`（仅启动服务）。提示语言取 AGENT_LANG，未设置时取系统语言。",
-"It listens on 127.0.0.1 at SERVER_PORT in .env (8080 by default; when that port is taken, a free one is picked and saved there). Each process writes its log to runtime/desktop/ in the home. Press Ctrl+C, or end this process, to stop everything.": "服务监听 127.0.0.1 上 .env 中 SERVER_PORT 指定的端口（默认 8080；该端口被占用时，会另选一个空闲端口并写回 .env）。每个进程的日志写入主目录下的 runtime/desktop/。按 Ctrl+C 或结束本进程即可全部停止。"
+"It listens on 127.0.0.1 at SERVER_PORT in .env (8080 by default; when that port is taken, a free one is picked and saved there). Each process writes its log to runtime/desktop/ in the home. Press Ctrl+C, or end this process, to stop everything.": "服务监听 127.0.0.1 上 .env 中 SERVER_PORT 指定的端口（默认 8080；该端口被占用时，会另选一个空闲端口并写回 .env）。每个进程的日志写入主目录下的 runtime/desktop/。按 Ctrl+C 或结束本进程即可全部停止。",
+"Set up personagent: the AI service, the character, and optionally AstrBot. In a terminal it opens the welcome page; --terminal asks the questions here instead, and --no-input uses only the flags below.": "设置 personagent：AI 服务、角色，以及可选的 AstrBot。在终端中运行时打开欢迎页；使用 --terminal 则改为在终端中逐项询问，使用 --no-input 则只采用下列参数。"
 }

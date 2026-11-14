@@ -252,6 +252,7 @@ def test_piped_init_does_not_say_setup_is_complete(home, capsys) -> None:
     out = capsys.readouterr().out
     check("skipped, not complete", "skipped" in out and "Setup complete" not in out, out)
     check("names the command with the home", f"--home {home} init --terminal" in out, out)
+    check("and writes nothing", not (home / ".env").exists() and not (home / "persona.txt").exists())
 
 
 # ---- T16, T17: AstrBot from the menu; the language the menu is in

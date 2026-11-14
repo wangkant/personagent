@@ -61,7 +61,6 @@
 "No window opened, so the page is in your browser.": "창을 열지 못해 브라우저에서 페이지를 열었습니다.",
 "personagent could not start. The details are in {0}.": "personagent를 시작하지 못했습니다. 자세한 내용은 {0}에 있습니다.",
 "personagent is starting. Try again in a moment.": "personagent가 시작되는 중입니다. 잠시 후 다시 시도하십시오.",
-"Set up personagent: the AI service, the character, and optionally AstrBot. Asks questions in a terminal.": "personagent를 설정합니다. AI 서비스, 캐릭터, 그리고 필요하면 AstrBot. 터미널에서 질문합니다.",
 "ask nothing; use the flags below and keep everything else": "아무것도 묻지 않습니다. 아래 플래그를 쓰고 나머지는 그대로 둡니다",
 "use the terminal setup wizard instead of the welcome page": "환영 페이지 대신 터미널 설정 마법사를 사용합니다",
 "an AI service preset": "AI 서비스 프리셋",
@@ -414,5 +413,6 @@
 "React when a coding agent finishes a turn (run by coding assistants, not by hand)": "코딩 어시스턴트가 턴을 마칠 때 반응합니다 (코딩 어시스턴트가 실행하며 직접 실행하지 않습니다)",
 "one of the commands below": "아래 명령 중 하나",
 "Run `personagent` to open local setup and chat. On a machine without a display, use `personagent up` (the service and its platforms) or `personagent run` (the service alone). Messages follow AGENT_LANG, else the system language.": "`personagent`를 실행하면 로컬 설정과 채팅이 열립니다. 디스플레이가 없는 컴퓨터에서는 `personagent up`(서비스와 플랫폼) 또는 `personagent run`(서비스만)을 사용하십시오. 메시지 언어는 AGENT_LANG을 따르며, 설정되지 않은 경우 시스템 언어를 따릅니다.",
-"It listens on 127.0.0.1 at SERVER_PORT in .env (8080 by default; when that port is taken, a free one is picked and saved there). Each process writes its log to runtime/desktop/ in the home. Press Ctrl+C, or end this process, to stop everything.": ".env의 SERVER_PORT에 지정된 127.0.0.1 포트에서 수신 대기합니다(기본값 8080, 해당 포트가 사용 중이면 빈 포트를 골라 .env에 저장합니다). 각 프로세스의 로그는 홈의 runtime/desktop/에 기록됩니다. Ctrl+C를 누르거나 이 프로세스를 종료하면 모두 중지됩니다."
+"It listens on 127.0.0.1 at SERVER_PORT in .env (8080 by default; when that port is taken, a free one is picked and saved there). Each process writes its log to runtime/desktop/ in the home. Press Ctrl+C, or end this process, to stop everything.": ".env의 SERVER_PORT에 지정된 127.0.0.1 포트에서 수신 대기합니다(기본값 8080, 해당 포트가 사용 중이면 빈 포트를 골라 .env에 저장합니다). 각 프로세스의 로그는 홈의 runtime/desktop/에 기록됩니다. Ctrl+C를 누르거나 이 프로세스를 종료하면 모두 중지됩니다.",
+"Set up personagent: the AI service, the character, and optionally AstrBot. In a terminal it opens the welcome page; --terminal asks the questions here instead, and --no-input uses only the flags below.": "personagent를 설정합니다. AI 서비스, 캐릭터, 그리고 필요하면 AstrBot. 터미널에서 실행하면 시작 페이지를 엽니다. --terminal을 지정하면 대신 이 터미널에서 질문하고, --no-input을 지정하면 아래 옵션만 사용합니다."
 }

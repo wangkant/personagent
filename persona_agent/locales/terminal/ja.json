@@ -61,7 +61,6 @@
 "No window opened, so the page is in your browser.": "ウィンドウを開けなかったため、ページをブラウザーで開きました。",
 "personagent could not start. The details are in {0}.": "personagent を起動できませんでした。詳細は {0} にあります。",
 "personagent is starting. Try again in a moment.": "personagent を起動しています。しばらくしてから再度お試しください。",
-"Set up personagent: the AI service, the character, and optionally AstrBot. Asks questions in a terminal.": "personagent を設定します：AI サービス、キャラクター、必要に応じて AstrBot。ターミナルで質問します。",
 "ask nothing; use the flags below and keep everything else": "何も尋ねません。下のフラグを使い、ほかはそのままにします",
 "use the terminal setup wizard instead of the welcome page": "ウェルカムページの代わりにターミナルのセットアップウィザードを使います",
 "an AI service preset": "AI サービスのプリセット",
@@ -414,5 +413,6 @@
 "React when a coding agent finishes a turn (run by coding assistants, not by hand)": "コーディングアシスタントのターン終了時に反応します（コーディングアシスタントが実行するもので、手動では実行しません）",
 "one of the commands below": "以下のコマンドのいずれか",
 "Run `personagent` to open local setup and chat. On a machine without a display, use `personagent up` (the service and its platforms) or `personagent run` (the service alone). Messages follow AGENT_LANG, else the system language.": "`personagent` を実行するとローカルの設定とチャットが開きます。ディスプレイのないマシンでは `personagent up`（サービスとそのプラットフォーム）または `personagent run`（サービスのみ）を使用してください。表示言語は AGENT_LANG に従い、未設定の場合はシステムの言語に従います。",
-"It listens on 127.0.0.1 at SERVER_PORT in .env (8080 by default; when that port is taken, a free one is picked and saved there). Each process writes its log to runtime/desktop/ in the home. Press Ctrl+C, or end this process, to stop everything.": "127.0.0.1 の、.env の SERVER_PORT で指定したポートで待ち受けます（既定は 8080。使用中の場合は空いているポートを選び、.env に保存します）。各プロセスのログはホームの runtime/desktop/ に書き込まれます。Ctrl+C を押すか、このプロセスを終了するとすべて停止します。"
+"It listens on 127.0.0.1 at SERVER_PORT in .env (8080 by default; when that port is taken, a free one is picked and saved there). Each process writes its log to runtime/desktop/ in the home. Press Ctrl+C, or end this process, to stop everything.": "127.0.0.1 の、.env の SERVER_PORT で指定したポートで待ち受けます（既定は 8080。使用中の場合は空いているポートを選び、.env に保存します）。各プロセスのログはホームの runtime/desktop/ に書き込まれます。Ctrl+C を押すか、このプロセスを終了するとすべて停止します。",
+"Set up personagent: the AI service, the character, and optionally AstrBot. In a terminal it opens the welcome page; --terminal asks the questions here instead, and --no-input uses only the flags below.": "personagent を設定します：AI サービス、キャラクター、必要に応じて AstrBot。ターミナルで実行するとウェルカムページを開きます。--terminal を付けるとこのターミナルで質問し、--no-input を付けると以下のオプションだけを使います。"
 }

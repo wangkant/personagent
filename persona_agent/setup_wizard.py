@@ -2029,7 +2029,8 @@ def init_parser(prog: str) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog=prog,
         description=langs.term("Set up personagent: the AI service, the character, and "
-                    "optionally AstrBot. Asks questions in a terminal."))
+                    "optionally AstrBot. In a terminal it opens the welcome page; --terminal asks "
+                    "the questions here instead, and --no-input uses only the flags below."))
     p.add_argument("--no-input", action="store_true",
                    help=langs.term("ask nothing; use the flags below and keep everything else"))
     p.add_argument("--terminal", action="store_true", help=langs.term("use the terminal setup wizard instead of the welcome page"))
@@ -2063,8 +2064,8 @@ def run(argv: list[str] | None, prog: str) -> int:
             set_lang(args.lang or detect_lang())
             print(t("skipped", why=t("skip_tty"), cmd=again))
             return setup_without_questions(home, args, launcher)
-        # Piped without flags nothing was configured: no "Setup complete", and a script must be able to tell.
-        apply_flags(home, args)
+        # Piped without flags: nothing is written, no "Setup complete", and a script must be able to tell.
+        set_lang(langs.terminal_lang())
         print(t("skipped", why=t("skip_tty"), cmd=again))
         return 2
     run_wizard(home, launcher, flags=args)

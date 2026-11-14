@@ -61,7 +61,6 @@
 "No window opened, so the page is in your browser.": "Nenhuma janela foi aberta; por isso, a página foi aberta no navegador.",
 "personagent could not start. The details are in {0}.": "O personagent não conseguiu iniciar. Os detalhes estão em {0}.",
 "personagent is starting. Try again in a moment.": "O personagent está sendo iniciado. Tente novamente em instantes.",
-"Set up personagent: the AI service, the character, and optionally AstrBot. Asks questions in a terminal.": "Configura o personagent: o serviço de IA, o personagem e, opcionalmente, o AstrBot. Faz perguntas no terminal.",
 "ask nothing; use the flags below and keep everything else": "não faz perguntas; usa as opções abaixo e mantém todo o restante",
 "use the terminal setup wizard instead of the welcome page": "usa o assistente do terminal em vez da página de boas-vindas",
 "an AI service preset": "uma predefinição de serviço de IA",
@@ -414,5 +413,6 @@
 "React when a coding agent finishes a turn (run by coding assistants, not by hand)": "Reage quando um assistente de programação conclui um turno (executado pelos assistentes, não manualmente)",
 "one of the commands below": "um dos comandos abaixo",
 "Run `personagent` to open local setup and chat. On a machine without a display, use `personagent up` (the service and its platforms) or `personagent run` (the service alone). Messages follow AGENT_LANG, else the system language.": "Execute `personagent` para abrir a configuração e a conversa locais. Em uma máquina sem tela, use `personagent up` (o serviço e suas plataformas) ou `personagent run` (somente o serviço). As mensagens seguem AGENT_LANG ou, na falta dele, o idioma do sistema.",
-"It listens on 127.0.0.1 at SERVER_PORT in .env (8080 by default; when that port is taken, a free one is picked and saved there). Each process writes its log to runtime/desktop/ in the home. Press Ctrl+C, or end this process, to stop everything.": "Escuta em 127.0.0.1, na porta SERVER_PORT do .env (8080 por padrão; se essa porta estiver ocupada, uma livre é escolhida e salva lá). Cada processo grava seu log em runtime/desktop/ na pasta principal. Pressione Ctrl+C, ou encerre este processo, para parar tudo."
+"It listens on 127.0.0.1 at SERVER_PORT in .env (8080 by default; when that port is taken, a free one is picked and saved there). Each process writes its log to runtime/desktop/ in the home. Press Ctrl+C, or end this process, to stop everything.": "Escuta em 127.0.0.1, na porta SERVER_PORT do .env (8080 por padrão; se essa porta estiver ocupada, uma livre é escolhida e salva lá). Cada processo grava seu log em runtime/desktop/ na pasta principal. Pressione Ctrl+C, ou encerre este processo, para parar tudo.",
+"Set up personagent: the AI service, the character, and optionally AstrBot. In a terminal it opens the welcome page; --terminal asks the questions here instead, and --no-input uses only the flags below.": "Configura o personagent: o serviço de IA, o personagem e, opcionalmente, o AstrBot. Em um terminal, abre a página de boas-vindas; com --terminal, faz as perguntas aqui, e com --no-input, usa apenas as opções abaixo."
 }
