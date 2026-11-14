@@ -641,7 +641,9 @@ def test_recall_lists_the_callers_events_as_dated_lines(tmp: Path) -> None:
     a = make_agent(tmp)
     g = "g-events"
     a.memories[g] = [{"text": "the room likes jazz", "time": 1.0}]
-    base = time.time() - 5 * 86400
+    # Noon, so five hourly events stay on one date at any time of day.
+    then = datetime.fromtimestamp(time.time() - 5 * 86400, a._prompt_tz())
+    base = then.replace(hour=12, minute=0, second=0, microsecond=0).timestamp()
     store = a.episode_store
     for i, (text, who) in enumerate((("Sam and Kim planned a picnic", ["7", "9"]),
                                      ("Kim fixed the bike", ["9"]),

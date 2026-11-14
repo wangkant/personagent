@@ -214,7 +214,7 @@ AstrBot のログでプラグインの行は `personagent:` で始まります�
 | ログメッセージ | すること |
 | --- | --- |
 | `refusing unsafe personagent_url` | `personagent_url` が別のホストへの平文 HTTP か、`connector_token` のない HTTPS です。[エージェントを動かせる場所](#エージェントを動かせる場所)を参照してください。 |
-| `agent refused the request (403): invalid, stale, or replayed request envelope` | `connector_token` が空かエージェントの `CONNECTOR_TOKEN` と一致しない、2 つの時計が 5 分より離れている、またはプロキシが本文を変更しました。エージェントのログに `connector replay guard full` とあれば、空くのを待ってください。 |
+| `agent refused the request (403): invalid request envelope: …` | `connector_token` が空かエージェントの `CONNECTOR_TOKEN` と一致しない、2 つの時計が 5 分より離れている、またはプロキシが本文を変更しました。エージェントのログに `connector replay guard full` とあれば、空くのを待ってください。 |
 | `agent refused the request (403): stale or invalid sent_at` | メッセージがエージェントの `CONNECTOR_MAX_EVENT_AGE_S` より古いです。通常は AstrBot が溜まった分を届けた後に起きます。 |
 | `agent refused the request (403): authentication required` または `... only local requests accepted` | エージェントに `CONNECTOR_TOKEN` がなく、リクエストがローカルではありません。両側に同じトークンを設定してください。 |
 | `agent at capacity (429)` | エージェントがすでに `CONNECTOR_MAX_INFLIGHT` 個のターンを実行中で、再試行後もメッセージを断ったので、AstrBot 自身のモデルが答えました。頻繁に起きるなら `CONNECTOR_MAX_INFLIGHT` を上げてください。 |

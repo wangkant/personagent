@@ -6,6 +6,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Ten people's worth of first use, simulated: a newcomer, a group owner, someone who writes their own character, a person who wants to see and manage what is remembered, a sysadmin without a display, a connector author, a reader of the Japanese pages, and others. What follows is what they ran into.
+
+### Changed
+
+- **Forget this chat on the page also forgets the page's earlier chats.** New chat starts the conversation over and keeps what the character remembers, so a fact noted before New chat was still recalled afterwards, while Forget this chat answered that nothing had been noted. It now clears every chat of the page, and New chat says that memory is kept.
+- **Choosing a personality or a portrait over a persona you wrote asks first** and keeps your text as `persona.txt.bak` in the home. An emptied name box keeps the name instead of renaming the character.
+- **The memory command menu under the chat box follows the character's language** in all ten languages; it used to offer the English commands to every language but Chinese. A note is acknowledged with words that say it was saved, and asking to remember the same thing twice keeps one copy.
+- **Platform cards say how the bot gets into a group.** The QQ, Telegram and Discord cards have numbered steps that end with adding the bot to a group or server (Telegram's privacy mode included); the NapCat card warns about the account and shows the address to enter; the QQ webhook card says who needs it. The group of platforms that take up to four values is no longer titled "one or two".
+- **The hints for your own accounts and for the groups to reply in say which ids work.** A QQ bot connected by QR code sees an openid, not a QQ number; both hints point at Choose from recent chats.
+- **Backups default to the `backups` folder in the home** instead of the desktop, the choice is remembered, and the questions before Clear memory and Reset all say that the backup keeps what was deleted, the API key included, until the file is deleted.
+- **`personagent --help` lists every command with its purpose.** `up --help` says where it listens, where the logs go and how to stop it; `learned list` gains `--all`; `chat` accepts `/help`; empty states of `learned` and `memory` use the page's words.
+- **`up` reports what it did.** It prints the address and the log folder, flushes its lines when its output is a file, and says so when the port was taken and another was saved.
+- **`doctor` shows one problem once.** Rows that fail for the same reason point at the first, a row that was not asked no longer reads as a failure, the result names what to fix first, and `--json` rows carry a stable `id`.
+- **Errors to connectors name the problem.** `/v1/events` and `/v1/outbox` say which field is missing or which check of the envelope failed, and `/health/details` says which header it wants; the `code` values are unchanged. `run` prints whether callers are checked by token or accepted from this machine only.
+- **Docs.** The connector protocol defines `handled` and `owned` together, documents repeated and merged messages, lists every error code and has a section on trying a connector locally; the SDK has a README with a complete example. The guide documents the lorebook, word filter and example file formats, what each file in the home holds, how to keep the character in check, and how to remove personagent. All in ten languages.
+
+### Fixed
+
+- **A second `up` on a running home rewrote `SERVER_PORT`** before it found the home in use, so the next restart moved the service to another port. It now refuses first and changes nothing.
+- **A redelivered message was answered `owned: false`**, the flag that tells a connector to answer the message itself. It is `owned: true` with no replies.
+- **`memory`, `learned` and `doctor` on a `--home` that does not exist** created the folder or blamed the key. They name the missing folder and create nothing.
+- **A piped `init --terminal` refused to ask its questions after writing `.env` and `persona.txt`.** It writes nothing.
+- **The App view said "This is the latest version" before any check had been made**, beside "No check has been made yet".
+- **Two buttons of the practice group stayed in English** in the eight languages that load after the page; a fact noted in an earlier page chat was labelled "from a group"; an API key pasted with other words around it was reported as a network problem; with Ollama chosen the key box still asked for an `sk-` key.
+- **The image understanding hint claimed that text in images is read when it is off.** That holds only for QQ through OneBot.
+- **The agent's log held the text of memory command replies**, so a note stayed readable there after it was forgotten.
+
 ### Removed
 
 - **`tools/auto_reviewer.py`**, which asked a person to approve each before/after pair into the shared feedback pool. Learning no longer waits for a person: set `EVOLVE_AUTO_ENABLED=true` and the character decides for itself. Pairs already approved into `runtime/feedback.<lang>.jsonl` are still used. `REVIEWER_MODEL` is no longer read: `doctor` warns about it, and the service starts.

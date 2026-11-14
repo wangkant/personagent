@@ -227,9 +227,9 @@ direct 프로세스와 여기 있는 세 커넥터는 봇이 먼저 보낼 수 �
 |---|---|---|---|
 | 403 | `unauthenticated` | authentication required | `CONNECTOR_TOKEN`이 없고 호출자가 이 컴퓨터에 있지 않음 |
 | 403 | `non_local_request` | no credential is configured; only local requests accepted | `CONNECTOR_TOKEN`이 없고 요청이 브라우저, 프록시, 또는 다른 호스트 이름을 거쳐 옴 |
-| 403 | `invalid_envelope` | invalid, stale, or replayed request envelope | 토큰, 헤더, 서명의 누락 또는 오류, 5분을 넘는 시계 차이, 재사용된 nonce, 또는 재전송 방지 가득 참(에이전트 로그의 `connector replay guard full`) |
+| 403 | `invalid_envelope` | invalid request envelope: … | 토큰, 헤더, 서명의 누락 또는 오류, 5분을 넘는 시계 차이, 재사용된 nonce, 또는 재전송 방지 가득 참(에이전트 로그의 `connector replay guard full`) |
 | 403 | `stale_event` | stale or invalid sent_at | `sent_at`이 현재와 `CONNECTOR_MAX_EVENT_AGE_S`(24시간)를 넘게 차이 남. 미래 또는 밀리초 타임스탬프 포함 |
-| 400 | `invalid_schema` | invalid event schema | 필수 필드 누락: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at`, 그룹은 `conversation_id` |
+| 400 | `invalid_schema` | invalid event schema: … | 필수 필드 누락: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at`, 그룹은 `conversation_id` |
 | 400 | `client_disconnected` | client disconnected | 호출자가 보내는 도중 연결을 끊음 |
 | 408 | `body_timeout` | request body not received in time | 본문 도착에 30초를 넘게 걸림 |
 | 413 | `body_too_large` | request body too large | `SERVER_MAX_BODY_BYTES`(8MB) 초과. 대개 인라인 이미지 |

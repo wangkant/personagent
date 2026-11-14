@@ -605,9 +605,9 @@ message, and `code` is the stable field a client can branch on.
 |---|---|---|---|
 | 403 | `unauthenticated` | authentication required | no `CONNECTOR_TOKEN`, and the caller is not on this machine |
 | 403 | `non_local_request` | no credential is configured; only local requests accepted | no `CONNECTOR_TOKEN`, and the request came through a browser, a proxy or another host name |
-| 403 | `invalid_envelope` | invalid, stale, or replayed request envelope | missing or wrong token, headers or signature, clocks over 5 min apart, a reused nonce, or a full replay guard (`connector replay guard full` in the agent's log) |
+| 403 | `invalid_envelope` | invalid request envelope: … | missing or wrong token, headers or signature, clocks over 5 min apart, a reused nonce, or a full replay guard (`connector replay guard full` in the agent's log) |
 | 403 | `stale_event` | stale or invalid sent_at | `sent_at` differs from now by more than `CONNECTOR_MAX_EVENT_AGE_S` (24 h), including future or millisecond timestamps |
-| 400 | `invalid_schema` | invalid event schema | a required field is missing: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at`, and `conversation_id` for groups |
+| 400 | `invalid_schema` | invalid event schema: … | a required field is missing: `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at`, and `conversation_id` for groups |
 | 400 | `client_disconnected` | client disconnected | the caller hung up while sending |
 | 408 | `body_timeout` | request body not received in time | the body took more than 30 s to arrive |
 | 413 | `body_too_large` | request body too large | over `SERVER_MAX_BODY_BYTES` (8 MB), usually an inline image |

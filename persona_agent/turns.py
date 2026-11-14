@@ -347,7 +347,7 @@ class Turns:
         self._index_own(send_result.message_ids, answer)
         if self.on_reply:
             await self.on_reply(group_id, answer)
-        logger.info("[Agent] memory command (group=%s): %s", group_id, answer[:60])
+        logger.info("[Agent] memory command answered (group=%s, %d chars)", group_id, len(answer))
         return True
 
     async def handle_event(self, event: dict) -> dict:

@@ -384,9 +384,9 @@ AstrBot 位于 Docker 中或另一台主机上时，请参阅[使用指南](guid
 |---|---|---|---|
 | 403 | `unauthenticated` | authentication required | 没有 `CONNECTOR_TOKEN`，且调用方不在本机 |
 | 403 | `non_local_request` | no credential is configured; only local requests accepted | 没有 `CONNECTOR_TOKEN`，请求来自浏览器、代理或其他主机名 |
-| 403 | `invalid_envelope` | invalid, stale, or replayed request envelope | token、请求头或签名缺失或错误，时钟相差超过 5 分钟，nonce 重复，或防重放已满（角色服务日志中有 `connector replay guard full`） |
+| 403 | `invalid_envelope` | invalid request envelope: … | token、请求头或签名缺失或错误，时钟相差超过 5 分钟，nonce 重复，或防重放已满（角色服务日志中有 `connector replay guard full`） |
 | 403 | `stale_event` | stale or invalid sent_at | `sent_at` 与当前时间相差超过 `CONNECTOR_MAX_EVENT_AGE_S`（24 小时），包括未来或毫秒时间戳 |
-| 400 | `invalid_schema` | invalid event schema | 缺少必填字段：`platform`、`conversation_type`、`sender_id`、`message_id`、`sent_at`，群聊还有 `conversation_id` |
+| 400 | `invalid_schema` | invalid event schema: … | 缺少必填字段：`platform`、`conversation_type`、`sender_id`、`message_id`、`sent_at`，群聊还有 `conversation_id` |
 | 400 | `client_disconnected` | client disconnected | 调用方在发送时断开 |
 | 408 | `body_timeout` | request body not received in time | 请求体超过 30 秒才到达 |
 | 413 | `body_too_large` | request body too large | 超过 `SERVER_MAX_BODY_BYTES`（8 MB），通常是内嵌图片 |

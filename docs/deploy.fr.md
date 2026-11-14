@@ -227,9 +227,9 @@ Les erreurs de `/v1/events` sont listées ci-dessous. Le plugin AstrBot journali
 |---|---|---|---|
 | 403 | `unauthenticated` | authentication required | pas de `CONNECTOR_TOKEN`, et l'appelant n'est pas sur cette machine |
 | 403 | `non_local_request` | no credential is configured; only local requests accepted | pas de `CONNECTOR_TOKEN`, et la requête est passée par un navigateur, un proxy ou un autre nom d'hôte |
-| 403 | `invalid_envelope` | invalid, stale, or replayed request envelope | jeton, en-têtes ou signature manquants ou erronés, horloges à plus de 5 min d'écart, nonce réutilisé ou protection contre le rejeu pleine (`connector replay guard full` dans le journal de l'agent) |
+| 403 | `invalid_envelope` | invalid request envelope: … | jeton, en-têtes ou signature manquants ou erronés, horloges à plus de 5 min d'écart, nonce réutilisé ou protection contre le rejeu pleine (`connector replay guard full` dans le journal de l'agent) |
 | 403 | `stale_event` | stale or invalid sent_at | `sent_at` diffère de maintenant de plus de `CONNECTOR_MAX_EVENT_AGE_S` (24 h), horodatages futurs ou en millisecondes compris |
-| 400 | `invalid_schema` | invalid event schema | un champ obligatoire manque : `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at`, et `conversation_id` pour les groupes |
+| 400 | `invalid_schema` | invalid event schema: … | un champ obligatoire manque : `platform`, `conversation_type`, `sender_id`, `message_id`, `sent_at`, et `conversation_id` pour les groupes |
 | 400 | `client_disconnected` | client disconnected | l'appelant a raccroché pendant l'envoi |
 | 408 | `body_timeout` | request body not received in time | le corps a mis plus de 30 s à arriver |
 | 413 | `body_too_large` | request body too large | dépasse `SERVER_MAX_BODY_BYTES` (8 Mo), en général une image intégrée |
