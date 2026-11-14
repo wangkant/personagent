@@ -266,6 +266,9 @@ class Workspace:
                 key = key or "ollama"
             if not key or len(key) > 4096:
                 raise ValueError("key_required")
+            if not key.isascii() or any(c.isspace() for c in key):
+                # Pasted with other words around it: no service would take it.
+                raise ValueError("key_rejected")
             base = _endpoint(base)
             model = str(payload.get("model") or provider.model).strip()
             if not model or len(model) > 256:
@@ -275,7 +278,8 @@ class Workspace:
             if character not in (*sw.PERSONA_KEYS, "custom"):
                 raise ValueError("invalid_character")
             own = sw.character_for(character).name if character != "custom" else ""
-            name = str(payload.get("name") or own or sw.DEFAULT_NAMES[lang]).strip()
+            name = str(payload.get("name") or own or old.get("PERSONA_NAME")
+                       or sw.DEFAULT_NAMES[lang]).strip()
             if not name or len(name) > 64 or _expands(name):
                 raise ValueError("invalid_character")
             # dotenv would read ${VAR} back as another setting, a key included.
@@ -300,11 +304,22 @@ class Workspace:
                 values["PERSONA_AVATAR"] = sw.avatar_for(character)
             sw.write_env(self.env, values)
             if character != "custom":
+                self._keep_written_persona()
                 sw.write_persona(self.home, character, name=name, lang=lang,
                                  admin_name=old.get("ADMIN_NAME", ""),
                                  admin_relationship=old.get("ADMIN_RELATIONSHIP", ""))
             self._restart_agent()
             return self.summary()
+
+    def _keep_written_persona(self) -> None:
+        """Copy a persona.txt someone wrote to persona.txt.bak before a shipped one replaces it."""
+        path = self.home / "persona.txt"
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return
+        if text.strip() and sw.shipped_persona(text) is None:
+            atomic_write_text(path.with_name("persona.txt.bak"), text)
 
     def _restart_agent(self) -> None:
         """A running agent reads its settings and persona only as it starts."""
@@ -610,8 +625,9 @@ class Workspace:
             pass
 
     async def forget_chat(self) -> dict:
-        """Forget everything this page's chat remembers, then start a new one.
-        What other chats remember about the page's owner is kept."""
+        """Forget everything this page's chats remember, the ones "New chat" left
+        behind included, then start a new one. What chats on the platforms
+        remember about the page's owner is kept."""
         async with self._chat_lock:
             chat = self._page_key()
             self._forgetting = True
@@ -623,7 +639,7 @@ class Workspace:
     async def _forget(self, chat: str) -> dict:
         await asyncio.to_thread(self.services.start_agent)
         raw = await self._activity_call("POST", "/api/dashboard/memory/forget_chat",
-                                        json={"conv": chat})
+                                        json={"conv": chat, "earlier_page": True})
         if raw is None:
             raise ValueError("activity_unavailable")
         if raw.get("off"):

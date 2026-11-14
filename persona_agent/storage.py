@@ -160,6 +160,11 @@ class FileLock:
         self.release()
 
 
+ALREADY_RUNNING = (
+    "another personagent is already running from {home}; stop that one first, "
+    "or give this one its own folder with --home DIR (or AGENT_HOME)")
+
+
 class RuntimeInstanceLock(FileLock):
     """Non-blocking single-holder lock for one deployment root: AGENT_HOME,
     not the runtime dir, which two processes could set apart."""

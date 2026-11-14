@@ -1006,7 +1006,8 @@ def test_memory_forget_restore_and_forget_chat_go_to_the_service(client, workspa
     before = workspace._page_key()
     own = client.post("/api/activity/forget_chat", headers=HEADERS, json={"chat": before}).json()
     assert own == {"ok": True, "forgotten": 4} and workspace._page_key() != before
-    assert writes[-1] == ("/api/dashboard/memory/forget_chat", {"conv": before})
+    # With the chats "New chat" left behind, which are still recalled here.
+    assert writes[-1] == ("/api/dashboard/memory/forget_chat", {"conv": before, "earlier_page": True})
 
 
 def _table(js, code, name):

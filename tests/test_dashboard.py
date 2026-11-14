@@ -377,6 +377,26 @@ def test_forget_this_chat_clears_that_chat_only(live) -> None:
           client().post("/api/dashboard/memory/forget_chat", json={}, headers=WRITE).status_code == 400)
 
 
+def test_forgetting_the_page_chat_takes_its_earlier_chats_too(live) -> None:
+    _remember(live, "private:browser:old")
+    _remember(live, "private:browser:now")
+    _remember(live, "private:telegram:u1")
+    r = client().post("/api/dashboard/memory/forget_chat",
+                      json={"conv": "private:browser:now", "earlier_page": True}, headers=WRITE)
+    check("page forget: both page chats are counted", r.status_code == 200
+          and r.json()["forgotten"] == 2 * dashboard._memory_count(live, "private:telegram:u1"), r.text)
+    check("page forget: neither page chat remembers anything",
+          not live.memories.get("private:browser:old") and not live.memories.get("private:browser:now"))
+    check("page forget: a chat on a platform keeps everything",
+          bool(live.memories.get("private:telegram:u1")))
+    _remember(live, "telegram:c1")
+    _remember(live, "telegram:c2")
+    client().post("/api/dashboard/memory/forget_chat",
+                  json={"conv": "telegram:c1", "earlier_page": True}, headers=WRITE)
+    check("page forget: asked of a platform chat, it forgets that chat alone",
+          bool(live.memories.get("telegram:c2")))
+
+
 def test_the_memory_list_is_what_the_terminal_reads(live) -> None:
     ids = _remember(live)
     live._forget_item("telegram:c1", "episode", ids["episode"], by="terminal")

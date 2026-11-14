@@ -35,7 +35,7 @@ SPEC = Spec(
         "remember_what": ("remember what? you didn't say anything", "spill it",
                           "remember what lol"),
         "not_instructions": ("I can remember facts, not instructions",),
-        "noted": ("noted", "got it, written down", "remembered", "mhm", "ok"),
+        "noted": ("noted", "got it, written down", "remembered"),
         "forget_what": ("forget what? be specific", "which one? say more"),
         "nothing_to_forget": ("uh, never recorded that", "no recollection of that",
                               "nothing matching to forget"),

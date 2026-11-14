@@ -919,7 +919,8 @@ async def dashboard_restore(request: Request):
 
 @router.post("/api/dashboard/memory/forget_chat", include_in_schema=False)
 async def dashboard_forget_chat(request: Request):
-    """Forget everything one chat remembers, with nothing kept to restore."""
+    """Forget everything one chat remembers, with nothing kept to restore.
+    With `earlier_page`, the page's earlier chats go with its current one."""
     parsed, refused = await _memory_write(request)
     if refused is not None:
         return refused
@@ -927,9 +928,17 @@ async def dashboard_forget_chat(request: Request):
     if not conv:
         return _refused(400, "invalid_id", "give a conversation id")
     agent = _server().agent
-    async with agent.locks[conv]:
-        count = _memory_count(agent, conv)
-        agent._forget_chat(conv)
+    convs = [conv]
+    if parsed.get("earlier_page") is True and channels.platform_of(conv) == access.PAGE_PLATFORM:
+        # "New chat" on the page leaves the earlier chat's memory behind, still recalled.
+        known = set(agent.memories) | set(agent.core_memory) | set(agent.episode_store.data)
+        convs += sorted(key for key in known
+                        if key != conv and channels.platform_of(key) == access.PAGE_PLATFORM)
+    count = 0
+    for key in convs:
+        async with agent.locks[key]:
+            count += _memory_count(agent, key)
+            agent._forget_chat(key)
     return _json({"ok": True, "forgotten": count}, agent)
 
 

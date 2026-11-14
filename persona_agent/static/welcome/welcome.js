@@ -152,7 +152,10 @@ const translations = {
     characterOptions: "更改角色名称、性格或语言",
     name: "角色名称",
     character: "性格",
-    customKept: "现有人设将保留；仅在选择新的性格时才会被替换。",
+    customKept: "选择其他性格或立绘并保存后，你编写的人设将被替换。",
+    personaReplaceAsk:
+      "确定用所选性格替换你编写的人设吗？原人设将另存为 personagent 文件夹中的 persona.txt.bak。",
+    personaReplaceYes: "替换",
     custom: "保留我自己编写的人设",
     personaTitle: "人设",
     personaHint: "描述角色的身份、说话方式和关注的事物。保存后立即生效，角色已学到的内容将保留。",
@@ -206,6 +209,7 @@ const translations = {
     qqLaterHint: "如需接入其他平台，请在「连接平台」中选择，扫码或填写一至两项即可完成。",
     chatHint: "本机对话，你在此处的身份是管理员。",
     newChat: "新对话",
+    newChatDone: "已开始新的对话，角色记住的内容仍然保留。",
     forgetChat: "清除本次对话的记忆",
     forgetChatAsk: "角色将清除在本次对话中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容，随后开始新的对话。角色在本次对话中学到的内容此后不再使用，仍列在「角色学到的内容」的「已搁置」中。其他聊天中记住的内容将予以保留。此操作无法撤销。",
     forget_needs_activity: "清除记忆需要先开启动态数据，可在「角色与设置」的高级设置中开启。",
@@ -519,7 +523,10 @@ const translations = {
     name: "Character name",
     character: "Personality",
     customKept:
-      "Your edited character stays as it is unless you choose a new personality.",
+      "Choosing another personality or portrait and saving replaces the character you wrote.",
+    personaReplaceAsk:
+      "Replace the character you wrote with the chosen personality? Your text is kept as persona.txt.bak in the personagent folder.",
+    personaReplaceYes: "Replace",
     custom: "Keep my own character",
     personaTitle: "Persona",
     personaHint:
@@ -576,6 +583,7 @@ const translations = {
       "To connect another app, choose it under Connect apps. Most need only a QR code scan or one or two values.",
     chatHint: "A chat on this computer. Here you are the admin.",
     newChat: "New chat",
+    newChatDone: "A new chat has started. What the character remembers is kept.",
     forgetChat: "Forget this chat",
     forgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. A new chat then starts. What the character learned in this chat is no longer used from then on; it remains listed under Set aside in What the character has learned. What it remembers from other chats is kept. This cannot be undone.",
     forget_needs_activity: "Forgetting a chat needs activity data, which is switched off. Turn it on in the advanced settings under Character & settings.",
@@ -1054,6 +1062,12 @@ function providerChanged(reset = true) {
   }
   if (provider.id === "other" || provider.id === "ollama")
     $("advanced").open = true;
+  // Ollama runs here: it takes no key and a check costs nothing.
+  const local = provider.id === "ollama";
+  if (local || !state.configured || (reset && provider.id !== state.provider))
+    $("api-key").placeholder = local ? "" : "sk-…";
+  $("test-note").hidden = local;
+  $("base-url").placeholder = provider.id === "other" ? "https://…/v1" : "";
 }
 function showView(next) {
   if (chatting && next !== "chat") {
@@ -2081,7 +2095,8 @@ function memorySection(chat) {
           (note.saidBySelf || note.saidBy) &&
             t("activitySaidBy", { name: note.saidBySelf ? pagePerson() : note.saidBy }),
           note.by && note.by !== "auto" && t("activityFrom", { who: note.by }),
-          note.conv !== chat.id && t("activityRoomNote"),
+          // A note from another private chat (an earlier chat on this page) is not a group's.
+          note.conv !== chat.id && !String(note.conv).startsWith("private:") && t("activityRoomNote"),
           note.born && t("activityFirstNoted", { date: activityDate(note.born) }),
           note.used && t("activityLastUsed", { date: activityDate(note.used) }),
         ],
@@ -2598,6 +2613,13 @@ $("persona-save").addEventListener("click", async () => {
 $("settings-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (saving) return;
+  // A personality or portrait chosen over a character the person wrote replaces their text.
+  if (
+    state.character === "custom" &&
+    $("character").value !== "custom" &&
+    !(await ask(t("personaReplaceAsk"), t("personaReplaceYes")))
+  )
+    return;
   saving = true;
   $("form-error").hidden = true;
   $("save").disabled = true;
@@ -2658,11 +2680,22 @@ for (const button of document.querySelectorAll("[data-prompt]"))
   );
 // The commands the character takes in a chat, in the language it reads them
 // in: its name first, then the words docs/guide.md lists.
+// Per character language: remember, forget, what do you remember, what have you learned.
+const MEMORY_COMMANDS = {
+  en: ["{n}, remember ", "{n}, forget ", "{n}, what do you remember", "{n}, what have you learned"],
+  zh: ["{n} 记住 ", "{n} 忘掉 ", "{n} 你都记得什么", "{n} 学到了什么"],
+  "zh-TW": ["{n} 記住 ", "{n} 忘掉 ", "{n} 你都記得什麼", "{n} 你學到了什麼"],
+  ja: ["{n}、覚えて：", "{n}、忘れて、", "{n}、何覚えてる？", "{n}、何を学んだ？"],
+  ko: ["{n} 기억해: ", "{n} 잊어 줘: ", "{n} 뭐 기억해?", "{n} 너 뭐 배웠어?"],
+  es: ["{n}, recuerda que ", "{n}, olvídate de ", "{n}, ¿qué recuerdas?", "{n}, ¿qué has aprendido?"],
+  fr: ["{n}, retiens que ", "{n}, oublie ", "{n}, tu te souviens de quoi ?", "{n}, qu'est-ce que tu as appris ?"],
+  de: ["{n}, merk dir, dass ", "{n}, vergiss ", "{n}, was hast du dir gemerkt?", "{n}, was hast du gelernt?"],
+  "pt-BR": ["{n}, anota aí que ", "{n}, esquece ", "{n}, o que você lembra?", "{n}, o que você aprendeu?"],
+  ru: ["{n}, запомни, что ", "{n}, забудь про ", "{n}, что ты помнишь?", "{n}, чему ты научилась?"],
+};
 function memoryCommands() {
   const name = state.name || defaultName();
-  return ["zh", "zh-TW"].includes(state.lang)
-    ? [`${name}，记住 `, `${name} 忘掉 `, `${name} 你都记得什么`, `${name} 学到了什么`]
-    : [`${name}, remember `, `${name}, forget `, `${name}, what do you remember`, `${name}, what have you learned`];
+  return (MEMORY_COMMANDS[state.lang] || MEMORY_COMMANDS.en).map((line) => line.replace("{n}", name));
 }
 $("commands-show").addEventListener("click", () => {
   const open = $("chat-commands").hidden;
@@ -2705,6 +2738,7 @@ $("reset-chat").addEventListener("click", async () => {
     await api("chat/reset", {});
     showHistory(await api("chat/history"));
     learnedChanged();
+    toast(t("newChatDone"));
   } catch (error) {
     toast(t(error.message));
   }
