@@ -23,7 +23,7 @@ Para executá-lo a partir de um clone, crie para ele um venv próprio: `python -
 
 ## Adicione uma chave e converse
 
-Escolha um serviço de modelo, cole a chave de API dele e clique em **Verificar e iniciar a conversa**. Os modelos gratuitos do OpenRouter e o personagem Ouvinte acolhedor vêm selecionados inicialmente. A chave é gratuita, e o limite é de 50 solicitações por dia. **Configurações avançadas** contém o nome do modelo e o endereço da API, e **Escolher um nome ou uma personalidade** contém o nome e a personalidade do personagem.
+Escolha um serviço de modelo, cole a chave de API dele e clique em **Verificar e iniciar a conversa**. Os modelos gratuitos do OpenRouter e o personagem Ouvinte acolhedor vêm selecionados inicialmente. A chave é gratuita, e o limite é de 50 solicitações por dia; a pequena solicitação enviada para verificá-la só tem custo em um serviço pago. **Configurações avançadas** contém o nome do modelo e o endereço da API, e **Escolher um nome, uma personalidade ou um idioma** contém o nome, a personalidade e o idioma em que o personagem conversa. O menu no canto superior direito da página muda apenas o idioma em que a própria página é exibida.
 
 A chave permanece no seu computador; clique em **Mostrar** para conferi-la. As mensagens da conversa são enviadas ao serviço de modelo que você escolher, pelas tarifas habituais desse serviço.
 

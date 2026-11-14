@@ -23,7 +23,7 @@ Um personagent aus einem Klon zu starten, richten Sie eine eigene virtuelle Umge
 
 ## Schlüssel eintragen und chatten
 
-Wählen Sie einen Modelldienst, fügen Sie dessen API-Schlüssel ein und klicken Sie auf **Prüfen & Chat starten**. Voreingestellt sind die kostenlosen Modelle von OpenRouter und die Figur „Einfühlsamer Zuhörer“. Der Schlüssel ist kostenlos, das Limit beträgt 50 Anfragen pro Tag. **Erweiterte Einstellungen** enthält den Modellnamen und die API-Adresse, **Namen oder Persönlichkeit wählen** den Namen und die Persönlichkeit der Figur.
+Wählen Sie einen Modelldienst, fügen Sie dessen API-Schlüssel ein und klicken Sie auf **Prüfen & Chat starten**. Voreingestellt sind die kostenlosen Modelle von OpenRouter und die Figur „Einfühlsamer Zuhörer“. Der Schlüssel ist kostenlos, das Limit beträgt 50 Anfragen pro Tag; die eine kleine Anfrage, mit der er geprüft wird, kostet nur bei einem kostenpflichtigen Dienst etwas. **Erweiterte Einstellungen** enthält den Modellnamen und die API-Adresse, **Namen, Persönlichkeit oder Sprache wählen** den Namen, die Persönlichkeit und die Sprache, in der die Figur spricht. Das Menü oben rechts auf der Seite ändert nur die Sprache, in der die Seite selbst angezeigt wird.
 
 Der Schlüssel bleibt auf Ihrem Computer; klicken Sie auf **Anzeigen**, um ihn zu überprüfen. Chatnachrichten werden an den gewählten Modelldienst gesendet und zu dessen üblichen Preisen abgerechnet.
 

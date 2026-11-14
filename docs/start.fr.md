@@ -23,7 +23,7 @@ Pour le lancer depuis un clone, donnez-lui son propre venv : `python -m venv .ve
 
 ## Ajouter une clé et discuter
 
-Choisissez un service de modèles, collez sa clé d'API et cliquez sur **Vérifier et commencer la discussion**. Les modèles gratuits d'OpenRouter et le personnage **Interlocuteur attentionné** sont sélectionnés par défaut. La clé est gratuite et la limite est de 50 requêtes par jour. **Réglages avancés** contient le nom du modèle et l'adresse de l'API, et **Choisir un nom ou une personnalité** contient le nom et la personnalité du personnage.
+Choisissez un service de modèles, collez sa clé d'API et cliquez sur **Vérifier et commencer la discussion**. Les modèles gratuits d'OpenRouter et le personnage **Interlocuteur attentionné** sont sélectionnés par défaut. La clé est gratuite et la limite est de 50 requêtes par jour ; la petite requête envoyée pour la vérifier n'est facturée que sur un service payant. **Réglages avancés** contient le nom du modèle et l'adresse de l'API, et **Choisir un nom, une personnalité ou une langue** contient le nom, la personnalité et la langue dans laquelle parle le personnage. Le menu en haut à droite de la page ne change que la langue d'affichage de la page elle-même.
 
 La clé reste sur votre ordinateur ; cliquez sur **Afficher** pour la vérifier. Les messages de la discussion sont transmis au service de modèles que vous choisissez, aux tarifs habituels de ce service.
 

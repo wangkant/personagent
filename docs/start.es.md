@@ -23,7 +23,7 @@ Para ejecutarlo desde un clon, asígnele un entorno virtual propio: `python -m v
 
 ## Añadir una clave y chatear
 
-Elija un servicio de modelos, pegue su clave de API y seleccione **Verificar e iniciar el chat**. De forma predeterminada están seleccionados los modelos gratuitos de OpenRouter y el personaje del oyente cercano. La clave es gratuita y el límite es de 50 solicitudes al día. **Ajustes avanzados** contiene el nombre del modelo y la dirección de la API, y **Elegir un nombre o una personalidad** contiene el nombre y la personalidad del personaje.
+Elija un servicio de modelos, pegue su clave de API y seleccione **Verificar e iniciar el chat**. De forma predeterminada están seleccionados los modelos gratuitos de OpenRouter y el personaje del oyente cercano. La clave es gratuita y el límite es de 50 solicitudes al día; la pequeña solicitud que se envía para verificarla solo tiene coste en un servicio de pago. **Ajustes avanzados** contiene el nombre del modelo y la dirección de la API, y **Elegir un nombre, una personalidad o un idioma** contiene el nombre, la personalidad y el idioma en que habla el personaje. El menú de la esquina superior derecha de la página solo cambia el idioma en que se muestra la propia página.
 
 La clave permanece en su equipo; seleccione **Mostrar** para comprobarla. Los mensajes del chat se envían al servicio de modelos que usted elija, con las tarifas habituales de dicho servicio.
 
