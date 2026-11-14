@@ -914,15 +914,6 @@ class Learning:
 
     # ---------------- The character decides (adoption.py) ----------------
 
-    def _adoption_state(self, name: str, factory):
-        """Per-process judgement state; built lazily for agents made without
-        __init__ (test harnesses)."""
-        value = self.__dict__.get(name)
-        if value is None:
-            value = factory()
-            self.__dict__[name] = value
-        return value
-
     def _judging_on(self) -> bool:
         """The character may decide: its switch is on and the operator has
         not stopped automatic learning."""
@@ -944,24 +935,23 @@ class Learning:
             asyncio.get_running_loop()
         except RuntimeError:
             return
-        if key in self._adoption_state("_adoption_inflight", set):
+        if key in self._adoption_inflight:
             return
         self._spawn(judge(cid))
 
     def _adoption_lock(self) -> asyncio.Lock:
         """One lock per ledger language: a verdict is applied only after the
         candidate is re-read under it."""
-        locks = self._adoption_state("_adoption_locks", dict)
+        locks = self._adoption_locks
         return locks.setdefault(self.agent_lang, asyncio.Lock())
 
     def _backing_off(self, key: str, now: float) -> bool:
-        _attempts, next_at = self._adoption_state(
-            "_adoption_retry", dict).get(key, (0, 0.0))
+        _attempts, next_at = self._adoption_retry.get(key, (0, 0.0))
         return next_at > now
 
     def _back_off(self, key: str, now: float) -> None:
         """No row is written for a failure; the next try waits twice as long."""
-        retry = self._adoption_state("_adoption_retry", dict)
+        retry = self._adoption_retry
         attempts = retry.get(key, (0, 0.0))[0] + 1
         delay = min(float(self.promote_judge_interval_s) * 2 ** (attempts - 1),
                     MAX_BACKOFF_S)
@@ -970,7 +960,7 @@ class Learning:
     def _judgement_budget(self, now: float) -> bool:
         """At most PROMOTE_JUDGE_BATCH judgements per interval, whatever
         asked for them: the model API is paid."""
-        calls = self._adoption_state("_adoption_calls", list)
+        calls = self._adoption_calls
         window = float(self.promote_judge_interval_s)
         calls[:] = [t for t in calls if now - t < window]
         if len(calls) >= max(1, int(self.promote_judge_batch)):
@@ -1123,7 +1113,7 @@ class Learning:
         if verdict is None:
             self._back_off(key, now)
             return None
-        self._adoption_state("_adoption_retry", dict).pop(key, None)
+        self._adoption_retry.pop(key, None)
         return verdict
 
     async def _character_decide(self, cid: str) -> str:
@@ -1133,7 +1123,7 @@ class Learning:
         deferred, failed, stale, adopted, discarded, observed)."""
         if not self._judging_on():
             return "off"
-        inflight = self._adoption_state("_adoption_inflight", set)
+        inflight = self._adoption_inflight
         if cid in inflight:
             return "busy"
         inflight.add(cid)
@@ -1279,11 +1269,6 @@ class Learning:
                 return True
         return False
 
-    def _taught_by_its_recipient(self, cand: dict, linked) -> bool:
-        return any(evidence._same_person(e) for e in linked
-                   if promotion.supports_candidate(e, cand,
-                                                   policy=self.promotion_policy))
-
     async def _character_review_promoted(self, cid: str) -> str:
         """A bystander's accepted objection to an item in use: the character
         keeps it (recorded) or stops using it. What the person it was for
@@ -1291,7 +1276,7 @@ class Learning:
         if not self._judging_on():
             return "off"
         key = f"dispute:{cid}"
-        inflight = self._adoption_state("_adoption_inflight", set)
+        inflight = self._adoption_inflight
         if key in inflight:
             return "busy"
         inflight.add(key)

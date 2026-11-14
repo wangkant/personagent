@@ -18,7 +18,6 @@ from .storage import append_jsonl, atomic_write_text, read_validated_jsonl
 KINDS = ("note", "episode", "thread", "core")
 REASONS = ("replaced", "merged", "ended", "evicted", "rolled_up", "rewritten",
            "forgotten_page", "unreadable")
-BYS = ("fold", "cap", "reply", "page", "terminal", "load")
 #: How long a removal stays restorable, by who removed it.
 RESTORE_S = {"page": 86400.0, "terminal": 86400.0}
 DEFAULT_RESTORE_S = 30 * 86400.0

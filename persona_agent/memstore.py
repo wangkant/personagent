@@ -25,8 +25,6 @@ FORMAT = 2
 PRE_V2_SUFFIX = ".pre-v2"
 BAK_SUFFIX = ".bak"
 
-#: Where a fact came from.
-SOURCES = ("reply", "command", "fold", "migration")
 #: A reply's own note, a person's command; the fold rates the rest.
 IMP_REPLY, IMP_COMMAND, IMP_DEFAULT = 3, 4, 3
 
@@ -81,21 +79,6 @@ def relax_markers(text: str) -> str:
     """[image:...] and [sticker] as plain words, so an event or a summary that
     mentions one passes the bracket rule of the memory validator."""
     return _MARKER.sub(lambda m: f"({m.group(1)})", str(text or ""))
-
-
-def fill_fields(row: dict, src: str, imp: int, taken: Iterable[str] = (),
-                now: Optional[float] = None) -> dict:
-    """Give a new note the fields this version keeps; existing values stay."""
-    now = time.time() if now is None else now
-    row.setdefault("time", now)
-    if "id" not in row:
-        row["id"] = new_id("m", taken)
-    row.setdefault("imp", imp)
-    row.setdefault("uses", 0)
-    row.setdefault("used", 0.0)
-    row.setdefault("src", src)
-    row.setdefault("born", float(row.get("time") or now))
-    return row
 
 
 def readable_row(row) -> bool:

@@ -341,10 +341,8 @@ class Retrieval:
     def _prompt_tz() -> timezone:
         """The zone of the prompt's "Current local time", so a date and a
         time word mean the same day the model is told it is."""
-        from .connector import current_tz_offset_h
         from .textproc import _env_tz_offset
-        hours = current_tz_offset_h.get()
-        return timezone(timedelta(hours=_env_tz_offset() if hours is None else hours))
+        return timezone(timedelta(hours=_env_tz_offset()))
 
     def _memory_budget(self) -> int:
         settings = getattr(self, "settings", None)

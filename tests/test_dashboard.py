@@ -241,7 +241,7 @@ def test_forgetting_a_note_follows_the_same_rules(live) -> None:
     url = "/api/dashboard/memory/forget"
     note = c.get("/api/dashboard/conversation",
                  params={"id": "telegram:c1"}).json()["memories"][0]
-    body = {"conv": note["conv"], "note": note["id"]}
+    body = {"conv": note["conv"], "kind": "note", "id": note["id"]}
     refused = {
         "a caller without the token": client(signed_in=False).post(url, json=body, headers=WRITE),
         "no custom header": c.post(url, json=body),

@@ -866,10 +866,6 @@ class Memory:
         """The local page's forget: one note, by id or `embeddings.text_key`."""
         return bool(self._forget_item(conv, "note", note_id))
 
-    def _forget_core(self, conv: str) -> bool:
-        """The local page's forget for the whole core note."""
-        return bool(self._forget_item(conv, "core"))
-
     def _trash_live(self, row: dict) -> bool:
         """Is a trash row's item still in its store, unchanged: a crash came
         between the append and the store's rewrite."""

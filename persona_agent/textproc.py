@@ -2058,13 +2058,8 @@ class TextProcessing:
 
     @staticmethod
     def _current_time_str() -> str:
-        """Local time and time of day, grounding the prompt. The embedder's
-        per-user `current_tz_offset_h` wins over PERSONA_TZ_OFFSET_HOURS."""
-        from .connector import current_tz_offset_h
-        tz_hours = current_tz_offset_h.get()
-        if tz_hours is None:
-            tz_hours = _env_tz_offset()
-        tz = timezone(timedelta(hours=tz_hours))
+        """Local time and time of day, grounding the prompt."""
+        tz = timezone(timedelta(hours=_env_tz_offset()))
         now = datetime.now(tz)
         weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         h = now.hour

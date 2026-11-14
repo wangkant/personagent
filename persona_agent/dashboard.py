@@ -880,9 +880,8 @@ async def dashboard_forget(request: Request):
     conv = _conv_of(parsed)
     if not conv:
         return _refused(400, "invalid_id", "give a conversation id")
-    # The older body: {conv, note} forgets a fact, {conv} the always-present note.
-    item = str(parsed.get("id") or parsed.get("note") or "")
-    kind = str(parsed.get("kind") or ("note" if item else "core"))
+    item = str(parsed.get("id") or "")
+    kind = str(parsed.get("kind") or "")
     if kind not in MEMORY_KINDS or len(item) > 128:
         return _refused(400, "invalid_kind", "kind is one of " + ", ".join(MEMORY_KINDS))
     by = parsed.get("by") if parsed.get("by") in _FORGET_BY else "page"
