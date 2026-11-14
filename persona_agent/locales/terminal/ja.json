@@ -82,8 +82,6 @@
 "also switch on this adapter in AstrBot's own config": "AstrBot 自身の設定でこのアダプターも有効にします",
 "the adapter's bot token": "アダプターのボットトークン",
 "Slack's app-level token": "Slack のアプリレベルトークン",
-"Lark / Feishu app id": "Lark / Feishu のアプリ ID",
-"Lark / Feishu app secret": "Lark / Feishu のアプリシークレット",
 "the address the plugin posts to, such as an https:// one (default http://127.0.0.1:<SERVER_PORT>)": "プラグインの送信先アドレス。https:// のものなど（既定 http://127.0.0.1:<SERVER_PORT>）",
 "Port {0} is in use. Leave --port out to pick a free one.": "ポート {0} は使用中です。--port を省略すると、空いているポートが選択されます。",
 "--provider other needs --base-url": "--provider other には --base-url が必要です",
@@ -437,5 +435,7 @@
 "{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0}（{1}）が検索ツールを呼び出さなかったため、キャラクターはウェブ検索を一切行いません。LLM_JUDGE_MODEL をツール呼び出しに対応したモデルに設定してください。",
 "Fix first: {0}": "最初に修正すべき点：{0}",
 "Not critical, but failing: {0}": "重要ではありませんが失敗しています：{0}",
-"There is no personagent home at {0}. Run `{1}` to set one up there.": "{0} に personagent のホームがありません。そこに作成するには `{1}` を実行してください。"
+"There is no personagent home at {0}. Run `{1}` to set one up there.": "{0} に personagent のホームがありません。そこに作成するには `{1}` を実行してください。",
+"with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "astrbot --platform lark または qq_official で使用：アプリ ID（connect qq では --appid を使用）",
+"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "astrbot --platform lark または qq_official で使用：アプリシークレット（connect qq では --secret を使用）"
 }

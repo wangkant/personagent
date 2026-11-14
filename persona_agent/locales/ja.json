@@ -408,7 +408,6 @@
 "Optional: put the bot on a chat platform.\npersonagent connects QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat itself.\nTo connect one of them, run `{cmd} <platform>` after this setup; the next steps show how.\nOther platforms, such as Slack, KOOK or Feishu, are connected through AstrBot, which this step\ncan connect, and download and install if it is not installed yet.": "任意：ボットをチャットプラットフォームに参加させます。\npersonagent は QQ、WeChat、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat と直接連携できます。\nいずれかと連携するには、このセットアップの完了後に `{cmd} <プラットフォーム>` を実行してください。方法は次の手順で説明します。\nSlack、KOOK、Feishu などのその他のプラットフォームは AstrBot 経由で連携します。この手順では AstrBot と接続でき、\n未インストールの場合はダウンロードとインストールも行えます。",
 "AstrBot installation failed: {error}\nYour agent settings are saved. Retry with `{cmd}`.": "AstrBot のインストールに失敗しました：{error}\nエージェントの設定は保存されています。`{cmd}` でやり直せます。",
 "To connect one, run `{cmd} <platform>`, for example `{cmd} telegram`. To disconnect it, add --remove.": "連携するには `{cmd} <プラットフォーム>` を実行してください（例：`{cmd} telegram`）。連携を解除するには --remove を付けてください。",
-"Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot`. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "Slack、KOOK、Feishu などのその他のプラットフォームは AstrBot 経由で連携します：`{cmd} astrbot`。コーディングアシスタント：`{cmd} claude-code`、`codex`、`dsh`。",
 "personagent cannot connect \"{name}\". Run `{cmd}` to list the platforms it can connect.": "personagent は「{name}」と連携できません。`{cmd}` を実行すると、連携可能なプラットフォームの一覧が表示されます。",
 "\"{choice}\" is not one of the options. Enter a number from 0 to 6.": "「{choice}」は選択肢にありません。0 から 6 までの数字を入力してください。",
 "--key-env {name}: that environment variable is empty, so there is no API key to save. Nothing was changed.": "--key-env {name}：この環境変数は空のため、保存する API キーがありません。変更は行われていません。",
@@ -439,5 +438,6 @@
 "The key was saved but not tested.": "キーは保存されましたが、まだテストされていません。",
 "/help": "/help",
 "show these commands again": "これらのコマンドをもう一度表示します",
-"Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "記憶コマンドもここで使えます。たとえば「{name}、〜を覚えておいて」や「{name}、何を覚えてる？」です。ここで覚えた内容は試用の中だけに保存され、{memory} には表示されません。"
+"Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "記憶コマンドもここで使えます。たとえば「{name}、〜を覚えておいて」や「{name}、何を覚えてる？」です。ここで覚えた内容は試用の中だけに保存され、{memory} には表示されません。",
+"Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` connects one you already run. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "Slack、KOOK、Feishu などのその他のプラットフォームは AstrBot 経由で連携します。`{cmd} astrbot --install` でここに AstrBot をインストールし、`{cmd} astrbot DATA_DIR` で実行中の AstrBot に接続します。コーディングアシスタント：`{cmd} claude-code`、`codex`、`dsh`。"
 }

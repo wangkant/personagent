@@ -882,12 +882,12 @@ def test_terminal_columns_are_counted_in_one_place(monkeypatch, capsys) -> None:
     check("the wizard's headers ask it", capsys.readouterr().out == "\n-- 中文字 " + "-" * 58 + "\n")
 
     class Session:
-        t = {"commands": [("/命令", "does it")]}
-        name = "Nova"
+        t = {"commands": [("/命令", "does it")], "memory_hint": "memory"}
+        name, lang = "Nova", "en"
 
     chat.ChatSession.commands(Session())
     check("the trial's command list asks it",
-          capsys.readouterr().out == "\n  /命令" + " " * 14 + "does it\n\n")
+          capsys.readouterr().out == "\n  /命令" + " " * 14 + "does it\n  memory\n\n")
 
 
 #: What each adapter's fields were asked as before connections.py named them.

@@ -408,7 +408,6 @@
 "Optional: put the bot on a chat platform.\npersonagent connects QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat itself.\nTo connect one of them, run `{cmd} <platform>` after this setup; the next steps show how.\nOther platforms, such as Slack, KOOK or Feishu, are connected through AstrBot, which this step\ncan connect, and download and install if it is not installed yet.": "選用：將機器人接入聊天平台。\npersonagent 可直接連接 QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat。\n如需連接其中之一，請在完成本設定後執行 `{cmd} <平台>`；後續步驟會說明具體方法。\n其他平台（如 Slack、KOOK 或飛書）須透過 AstrBot 連接。本步驟可連接 AstrBot，\n若尚未安裝，也可自動下載並安裝。",
 "AstrBot installation failed: {error}\nYour agent settings are saved. Retry with `{cmd}`.": "AstrBot 安裝未完成：{error}\n機器人設定已儲存。可執行 `{cmd}` 重試。",
 "To connect one, run `{cmd} <platform>`, for example `{cmd} telegram`. To disconnect it, add --remove.": "如需連接，請執行 `{cmd} <平台>`，例如 `{cmd} telegram`。如需中斷連線，請加上 --remove。",
-"Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot`. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "其他平台（如 Slack、KOOK 或飛書）須透過 AstrBot 連接：`{cmd} astrbot`。程式設計助理：`{cmd} claude-code`、`codex` 或 `dsh`。",
 "personagent cannot connect \"{name}\". Run `{cmd}` to list the platforms it can connect.": "personagent 無法連接「{name}」。請執行 `{cmd}` 查看可連接的平台。",
 "\"{choice}\" is not one of the options. Enter a number from 0 to 6.": "「{choice}」不是可選項目。請輸入 0 至 6 之間的數字。",
 "--key-env {name}: that environment variable is empty, so there is no API key to save. Nothing was changed.": "--key-env {name}：此環境變數為空，沒有可儲存的 API 金鑰。未做任何變更。",
@@ -439,5 +438,6 @@
 "The key was saved but not tested.": "金鑰已儲存，但尚未測試。",
 "/help": "/help",
 "show these commands again": "再次顯示這些命令",
-"Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "記憶命令在此處同樣可用，例如「{name}，記住……」和「{name}，你記得什麼」。此處記下的內容僅保存在試用中，{memory} 不會顯示這些內容。"
+"Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "記憶命令在此處同樣可用，例如「{name}，記住……」和「{name}，你記得什麼」。此處記下的內容僅保存在試用中，{memory} 不會顯示這些內容。",
+"Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` connects one you already run. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "其他平台（如 Slack、KOOK 或飛書）須透過 AstrBot 連接：`{cmd} astrbot --install` 可在此處安裝 AstrBot，`{cmd} astrbot DATA_DIR` 可連接已在執行的 AstrBot。程式設計助理：`{cmd} claude-code`、`codex` 或 `dsh`。"
 }

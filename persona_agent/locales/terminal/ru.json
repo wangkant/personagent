@@ -82,8 +82,6 @@
 "also switch on this adapter in AstrBot's own config": "также включает этот адаптер в настройках самого AstrBot",
 "the adapter's bot token": "токен бота для адаптера",
 "Slack's app-level token": "токен приложения Slack",
-"Lark / Feishu app id": "ID приложения Lark / Feishu",
-"Lark / Feishu app secret": "секрет приложения Lark / Feishu",
 "the address the plugin posts to, such as an https:// one (default http://127.0.0.1:<SERVER_PORT>)": "адрес, на который отправляет плагин, например https:// (по умолчанию http://127.0.0.1:<SERVER_PORT>)",
 "Port {0} is in use. Leave --port out to pick a free one.": "Порт {0} занят. Уберите --port, чтобы выбрать свободный.",
 "--provider other needs --base-url": "для --provider other нужен --base-url",
@@ -437,5 +435,7 @@
 "{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0} ({1}) не вызвала инструмент поиска, поэтому персонаж никогда не ищет в интернете. Укажите в LLM_JUDGE_MODEL модель, которая поддерживает вызов инструментов.",
 "Fix first: {0}": "Исправьте в первую очередь: {0}",
 "Not critical, but failing: {0}": "Не критично, но не проходит: {0}",
-"There is no personagent home at {0}. Run `{1}` to set one up there.": "В {0} нет домашней папки personagent. Выполните `{1}`, чтобы создать её там."
+"There is no personagent home at {0}. Run `{1}` to set one up there.": "В {0} нет домашней папки personagent. Выполните `{1}`, чтобы создать её там.",
+"with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "для astrbot --platform lark или qq_official: ID приложения (для connect qq используйте --appid)",
+"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "для astrbot --platform lark или qq_official: секрет приложения (для connect qq используйте --secret)"
 }

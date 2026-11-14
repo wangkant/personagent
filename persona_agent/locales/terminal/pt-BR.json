@@ -82,8 +82,6 @@
 "also switch on this adapter in AstrBot's own config": "ativa também este adaptador na configuração do próprio AstrBot",
 "the adapter's bot token": "o token de bot do adaptador",
 "Slack's app-level token": "o token de nível de aplicativo do Slack",
-"Lark / Feishu app id": "ID do aplicativo Lark / Feishu",
-"Lark / Feishu app secret": "segredo do aplicativo Lark / Feishu",
 "the address the plugin posts to, such as an https:// one (default http://127.0.0.1:<SERVER_PORT>)": "o endereço para o qual o plugin envia, como um endereço https:// (padrão: http://127.0.0.1:<SERVER_PORT>)",
 "Port {0} is in use. Leave --port out to pick a free one.": "A porta {0} está em uso. Omita --port para que uma porta livre seja escolhida.",
 "--provider other needs --base-url": "--provider other requer --base-url",
@@ -437,5 +435,7 @@
 "{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0} ({1}) não chamou a ferramenta de busca, então o personagem nunca pesquisa na web. Defina LLM_JUDGE_MODEL como um modelo que aceite chamadas de ferramentas.",
 "Fix first: {0}": "Corrija primeiro: {0}",
 "Not critical, but failing: {0}": "Não é crítico, mas está falhando: {0}",
-"There is no personagent home at {0}. Run `{1}` to set one up there.": "Não há pasta principal do personagent em {0}. Execute `{1}` para criar uma lá."
+"There is no personagent home at {0}. Run `{1}` to set one up there.": "Não há pasta principal do personagent em {0}. Execute `{1}` para criar uma lá.",
+"with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "com astrbot --platform lark ou qq_official: o ID do aplicativo (para connect qq, use --appid)",
+"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "com astrbot --platform lark ou qq_official: o segredo do aplicativo (para connect qq, use --secret)"
 }

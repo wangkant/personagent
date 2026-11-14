@@ -346,9 +346,11 @@ _TEXT: dict[str, tuple[str, str]] = {
                         "如需连接，请运行 `{cmd} <平台>`，例如 "
                         "`{cmd} telegram`。如需断开连接，请加上 --remove。"),
     "direct_list_more": ("Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: "
-                         "`{cmd} astrbot`. Coding assistants: `{cmd} claude-code`, "
+                         "`{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` "
+                         "connects one you already run. Coding assistants: `{cmd} claude-code`, "
                          "`codex` or `dsh`.",
-                         "其他平台（如 Slack、KOOK 或飞书）需通过 AstrBot 接入：`{cmd} astrbot`。"
+                         "其他平台（如 Slack、KOOK 或飞书）需通过 AstrBot 接入：`{cmd} astrbot --install` "
+                         "可在此处安装 AstrBot，`{cmd} astrbot DATA_DIR` 可连接已在运行的 AstrBot。"
                          "编程助手：`{cmd} claude-code`、`codex` 或 `dsh`。"),
     "direct_unknown": ("personagent cannot connect \"{name}\". Run `{cmd}` to list the "
                        "platforms it can connect.",
@@ -2385,7 +2387,9 @@ def connect_parser(prog: str) -> argparse.ArgumentParser:
     for kind in KINDS:
         spec = connections.platform(kind)
         for item in spec.fields:
-            label = f"{connections.say(spec.name, shown)}: {connections.say(item.label, shown)}"
+            # The command each value belongs to, so --appid (connect qq) is not taken for --app-id.
+            label = (f"{connections.say(spec.name, shown)} (connect {DIRECT_WORDS.get(kind, kind)}): "
+                     f"{connections.say(item.label, shown)}")
             values.add_argument(_flag(item.key), dest=f"field_{item.key}", metavar="VALUE",
                                 help=label.replace("%", "%%"))
     own = [react, p.add_argument("data_dir", nargs="?", metavar="DATA_DIR",
@@ -2405,8 +2409,10 @@ def connect_parser(prog: str) -> argparse.ArgumentParser:
                               help=langs.term("also switch on this adapter in AstrBot's own config")))
     own.append(p.add_argument("--token", default="", help=langs.term("the adapter's bot token")))
     own.append(p.add_argument("--app-token", default="", help=langs.term("Slack's app-level token")))
-    own.append(p.add_argument("--app-id", default="", help=langs.term("Lark / Feishu app id")))
-    own.append(p.add_argument("--app-secret", default="", help=langs.term("Lark / Feishu app secret")))
+    own.append(p.add_argument("--app-id", default="", help=langs.term(
+        "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)")))
+    own.append(p.add_argument("--app-secret", default="", help=langs.term(
+        "with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)")))
     own.append(p.add_argument("--url", default="",
                               help=langs.term("the address the plugin posts to, such as an https:// one "
                                    "(default http://127.0.0.1:<SERVER_PORT>)")))

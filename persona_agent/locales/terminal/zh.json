@@ -82,8 +82,6 @@
 "also switch on this adapter in AstrBot's own config": "同时在 AstrBot 自身的配置中启用此适配器",
 "the adapter's bot token": "适配器的机器人令牌",
 "Slack's app-level token": "Slack 的应用级令牌",
-"Lark / Feishu app id": "飞书 / Lark 应用 ID",
-"Lark / Feishu app secret": "飞书 / Lark 应用密钥",
 "the address the plugin posts to, such as an https:// one (default http://127.0.0.1:<SERVER_PORT>)": "插件发送请求的地址，例如 https:// 地址（默认 http://127.0.0.1:<SERVER_PORT>）",
 "Port {0} is in use. Leave --port out to pick a free one.": "端口 {0} 已被占用。省略 --port 即可自动选择空闲端口。",
 "--provider other needs --base-url": "--provider other 需同时指定 --base-url",
@@ -437,5 +435,7 @@
 "{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0}（{1}）未调用搜索工具，因此角色永远不会联网搜索。请将 LLM_JUDGE_MODEL 设为支持工具调用的模型。",
 "Fix first: {0}": "首先需要修复：{0}",
 "Not critical, but failing: {0}": "非关键项，但未通过：{0}",
-"There is no personagent home at {0}. Run `{1}` to set one up there.": "{0} 处没有 personagent 主目录。运行 `{1}` 可在该处建立。"
+"There is no personagent home at {0}. Run `{1}` to set one up there.": "{0} 处没有 personagent 主目录。运行 `{1}` 可在该处建立。",
+"with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "用于 astrbot --platform lark 或 qq_official：应用 ID（connect qq 请使用 --appid）",
+"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "用于 astrbot --platform lark 或 qq_official：应用密钥（connect qq 请使用 --secret）"
 }

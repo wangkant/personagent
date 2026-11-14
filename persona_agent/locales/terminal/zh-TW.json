@@ -82,8 +82,6 @@
 "also switch on this adapter in AstrBot's own config": "同時在 AstrBot 本身的設定中開啟此配接器",
 "the adapter's bot token": "配接器的機器人權杖",
 "Slack's app-level token": "Slack 的應用程式層級權杖",
-"Lark / Feishu app id": "飛書 / Lark 應用程式 ID",
-"Lark / Feishu app secret": "飛書 / Lark 應用程式密鑰",
 "the address the plugin posts to, such as an https:// one (default http://127.0.0.1:<SERVER_PORT>)": "外掛程式傳送請求的位址，例如一個 https:// 位址（預設為 http://127.0.0.1:<SERVER_PORT>）",
 "Port {0} is in use. Leave --port out to pick a free one.": "連接埠 {0} 已被佔用。省略 --port 即可自動選擇可用的連接埠。",
 "--provider other needs --base-url": "--provider other 須同時指定 --base-url",
@@ -437,5 +435,7 @@
 "{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0}（{1}）未呼叫搜尋工具，因此角色永遠不會上網搜尋。請將 LLM_JUDGE_MODEL 設為支援工具呼叫的模型。",
 "Fix first: {0}": "首先需要修復：{0}",
 "Not critical, but failing: {0}": "非關鍵項目，但未通過：{0}",
-"There is no personagent home at {0}. Run `{1}` to set one up there.": "{0} 處沒有 personagent 主目錄。執行 `{1}` 可在該處建立。"
+"There is no personagent home at {0}. Run `{1}` to set one up there.": "{0} 處沒有 personagent 主目錄。執行 `{1}` 可在該處建立。",
+"with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "用於 astrbot --platform lark 或 qq_official：應用程式 ID（connect qq 請使用 --appid）",
+"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "用於 astrbot --platform lark 或 qq_official：應用程式密鑰（connect qq 請使用 --secret）"
 }

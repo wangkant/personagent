@@ -82,8 +82,6 @@
 "also switch on this adapter in AstrBot's own config": "active aussi cet adaptateur dans la configuration d'AstrBot",
 "the adapter's bot token": "le jeton de bot de l'adaptateur",
 "Slack's app-level token": "le jeton d'application de Slack",
-"Lark / Feishu app id": "ID d'application Lark / Feishu",
-"Lark / Feishu app secret": "secret d'application Lark / Feishu",
 "the address the plugin posts to, such as an https:// one (default http://127.0.0.1:<SERVER_PORT>)": "l'adresse à laquelle le plugin envoie, par exemple en https:// (par défaut http://127.0.0.1:<SERVER_PORT>)",
 "Port {0} is in use. Leave --port out to pick a free one.": "Le port {0} est déjà utilisé. Retirez --port pour en choisir un libre.",
 "--provider other needs --base-url": "--provider other a besoin de --base-url",
@@ -437,5 +435,7 @@
 "{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0} ({1}) n'a pas appelé l'outil de recherche ; le personnage ne cherchera donc jamais sur le web. Définissez LLM_JUDGE_MODEL sur un modèle qui prend en charge les appels d'outils.",
 "Fix first: {0}": "À corriger en premier : {0}",
 "Not critical, but failing: {0}": "Non critique, mais en échec : {0}",
-"There is no personagent home at {0}. Run `{1}` to set one up there.": "Il n'y a pas de dossier principal personagent dans {0}. Lancez `{1}` pour en créer un à cet endroit."
+"There is no personagent home at {0}. Run `{1}` to set one up there.": "Il n'y a pas de dossier principal personagent dans {0}. Lancez `{1}` pour en créer un à cet endroit.",
+"with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "avec astrbot --platform lark ou qq_official : l'ID de l'application (pour connect qq, utilisez --appid)",
+"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "avec astrbot --platform lark ou qq_official : le secret de l'application (pour connect qq, utilisez --secret)"
 }
