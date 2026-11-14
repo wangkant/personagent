@@ -142,7 +142,6 @@
 "invalid choice: %(value)r (choose from %(choices)s)": "ungültige Auswahl: %(value)r (Auswahl: %(choices)s)",
 "expected one argument": "ein Argument erwartet",
 "argument %(argument_name)s: %(message)s": "Argument %(argument_name)s: %(message)s",
-"language code: {0} (default: en)": "Sprachcode: {0} (Standard: en)",
 ", and as a QQ entry it closes every QQ group not listed": ", und als QQ-Eintrag schließt es jede nicht aufgeführte QQ-Gruppe",
 "groups": "Gruppen",
 "users besides the admin": "Nutzer außer dem Administrator",
@@ -437,5 +436,6 @@
 "Not critical, but failing: {0}": "Nicht kritisch, aber fehlgeschlagen: {0}",
 "There is no personagent home at {0}. Run `{1}` to set one up there.": "Unter {0} gibt es keinen personagent-Stammordner. Führen Sie `{1}` aus, um dort einen einzurichten.",
 "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "mit astrbot --platform lark oder qq_official: die App-ID (für connect qq --appid verwenden)",
-"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "mit astrbot --platform lark oder qq_official: das App-Secret (für connect qq --secret verwenden)"
+"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "mit astrbot --platform lark oder qq_official: das App-Secret (für connect qq --secret verwenden)",
+"language code: {0} (default: AGENT_LANG, else en)": "Sprachcode: {0} (Standard: AGENT_LANG, sonst en)"
 }

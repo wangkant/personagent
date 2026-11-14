@@ -142,7 +142,6 @@
 "invalid choice: %(value)r (choose from %(choices)s)": "escolha inválida: %(value)r (escolha entre %(choices)s)",
 "expected one argument": "era esperado um argumento",
 "argument %(argument_name)s: %(message)s": "argumento %(argument_name)s: %(message)s",
-"language code: {0} (default: en)": "código de idioma: {0} (padrão: en)",
 ", and as a QQ entry it closes every QQ group not listed": ", e como entrada do QQ fecha todos os grupos do QQ não listados",
 "groups": "grupos",
 "users besides the admin": "usuários além do administrador",
@@ -437,5 +436,6 @@
 "Not critical, but failing: {0}": "Não é crítico, mas está falhando: {0}",
 "There is no personagent home at {0}. Run `{1}` to set one up there.": "Não há pasta principal do personagent em {0}. Execute `{1}` para criar uma lá.",
 "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "com astrbot --platform lark ou qq_official: o ID do aplicativo (para connect qq, use --appid)",
-"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "com astrbot --platform lark ou qq_official: o segredo do aplicativo (para connect qq, use --secret)"
+"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "com astrbot --platform lark ou qq_official: o segredo do aplicativo (para connect qq, use --secret)",
+"language code: {0} (default: AGENT_LANG, else en)": "código de idioma: {0} (padrão: AGENT_LANG ou, na falta dele, en)"
 }

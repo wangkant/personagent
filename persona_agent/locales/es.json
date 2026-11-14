@@ -311,9 +311,7 @@
 "strong": "fuerte",
 "negative only": "solo negativa",
 "weak": "débil",
-"personagent demo: scripted model, real ledger and promotion code": "personagent demo: modelo guionizado, registro y código de promoción reales",
 "No API key needed, and nothing is sent anywhere. The model's answers\nare fixed; what is done with them is decided by the real code.\nThe ledger is the record of how people reacted to its replies.\nTo use your own model instead (it costs tokens): {online}": "No se requiere clave de API y no se envía nada a ningún lugar. Las respuestas\ndel modelo son fijas; lo que se hace con ellas lo decide el código real.\nEl registro recoge cómo reaccionaron las personas a sus respuestas.\nPara utilizar su propio modelo (consume tokens): {online}",
-"personagent demo: your model ({model}), real ledger and promotion code": "personagent demo: su modelo ({model}), registro y código de promoción reales",
 "This asks your model for every reply and every judgement, so it costs\ntokens, and the answers differ from run to run: the scenes below may\nnot play out as described. The scripted version: {offline}": "Esta versión solicita a su modelo cada respuesta y cada evaluación, por lo que consume\ntokens, y las respuestas varían de una ejecución a otra: es posible que las escenas\nno se desarrollen como se describe. La versión guionizada: {offline}",
 "== quiet: most of a group chat is not for {name} ==": "== silencio: casi nada de un chat de grupo va dirigido a {name} ==",
 "{name} answers when named. Otherwise it joins in only when a gate model\nthinks a person would, and here it asks after {n} messages (the live\ndefault is {live}).": "{name} responde cuando lo nombran. En caso contrario, solo interviene cuando un modelo de filtro\nconsidera que una persona lo haría, y aquí lo consulta tras {n} mensajes (el valor\npredeterminado real es {live}).",
@@ -439,5 +437,7 @@
 "/help": "/help",
 "show these commands again": "vuelve a mostrar estos comandos",
 "Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "Los comandos de memoria también funcionan aquí, como «{name}, recuerda ...» y «{name}, ¿qué recuerdas?». Lo que se guarda aquí queda en la prueba: {memory} no lo muestra.",
-"Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` connects one you already run. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "Otras plataformas, como Slack, KOOK o Feishu, se conectan a través de AstrBot: `{cmd} astrbot --install` lo instala aquí y `{cmd} astrbot DATA_DIR` conecta uno que ya tenga en marcha. Asistentes de programación: `{cmd} claude-code`, `codex` o `dsh`."
+"Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` connects one you already run. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "Otras plataformas, como Slack, KOOK o Feishu, se conectan a través de AstrBot: `{cmd} astrbot --install` lo instala aquí y `{cmd} astrbot DATA_DIR` conecta uno que ya tenga en marcha. Asistentes de programación: `{cmd} claude-code`, `codex` o `dsh`.",
+"personagent demo: short scenes played with scripted answers": "personagent demo: escenas breves con respuestas predefinidas",
+"personagent demo: the same scenes, played by your model ({model})": "personagent demo: las mismas escenas, con su modelo ({model})"
 }

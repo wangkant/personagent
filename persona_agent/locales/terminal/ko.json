@@ -142,7 +142,6 @@
 "invalid choice: %(value)r (choose from %(choices)s)": "잘못된 선택: %(value)r (선택지: %(choices)s)",
 "expected one argument": "인수가 하나 필요합니다",
 "argument %(argument_name)s: %(message)s": "인수 %(argument_name)s: %(message)s",
-"language code: {0} (default: en)": "언어 코드: {0} (기본값: en)",
 ", and as a QQ entry it closes every QQ group not listed": ", 또한 QQ 항목으로서 목록에 없는 모든 QQ 그룹을 닫습니다",
 "groups": "그룹",
 "users besides the admin": "관리자 외 사용자",
@@ -437,5 +436,6 @@
 "Not critical, but failing: {0}": "필수는 아니지만 실패한 항목: {0}",
 "There is no personagent home at {0}. Run `{1}` to set one up there.": "{0}에 personagent 홈이 없습니다. 그곳에 만들려면 `{1}`을(를) 실행하십시오.",
 "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "astrbot --platform lark 또는 qq_official에서 사용: 앱 ID (connect qq에는 --appid 사용)",
-"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "astrbot --platform lark 또는 qq_official에서 사용: 앱 시크릿 (connect qq에는 --secret 사용)"
+"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "astrbot --platform lark 또는 qq_official에서 사용: 앱 시크릿 (connect qq에는 --secret 사용)",
+"language code: {0} (default: AGENT_LANG, else en)": "언어 코드: {0} (기본값: AGENT_LANG, 없으면 en)"
 }

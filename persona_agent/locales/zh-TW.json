@@ -239,9 +239,7 @@
 "strong": "明確",
 "negative only": "僅否定",
 "weak": "弱",
-"personagent demo: scripted model, real ledger and promotion code": "personagent 示範：模型回答為預先編寫的腳本，學習紀錄與採用判定均由實際的程式碼執行",
 "No API key needed, and nothing is sent anywhere. The model's answers\nare fixed; what is done with them is decided by the real code.\nThe ledger is the record of how people reacted to its replies.\nTo use your own model instead (it costs tokens): {online}": "無須 API 金鑰，也不會傳送任何資料。模型的回答已預先寫定，對這些回答的處理則由實際的程式碼決定。\n學習紀錄用於記錄成員對角色回覆的反應。\n如需改用你自己的模型（將消耗 token）：{online}",
-"personagent demo: your model ({model}), real ledger and promotion code": "personagent 示範：使用你的模型（{model}），學習紀錄與採用判定均由實際的程式碼執行",
 "This asks your model for every reply and every judgement, so it costs\ntokens, and the answers differ from run to run: the scenes below may\nnot play out as described. The scripted version: {offline}": "每則回覆和每次判定都會請求你的模型，因此會消耗 token，\n且每次執行的結果均不相同，下列場景未必依描述進行。\n腳本版本：{offline}",
 "== quiet: most of a group chat is not for {name} ==": "== 保持沉默：群組中的多數訊息並非傳給{name} ==",
 "{name} answers when named. Otherwise it joins in only when a gate model\nthinks a person would, and here it asks after {n} messages (the live\ndefault is {live}).": "{name}被點名時必定回覆；未被點名時，僅在判斷模型認為真人會參與對話時發言。\n本示範每累計 {n} 則訊息判斷一次（正式執行的預設值為 {live} 則）。",
@@ -439,5 +437,7 @@
 "/help": "/help",
 "show these commands again": "再次顯示這些命令",
 "Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "記憶命令在此處同樣可用，例如「{name}，記住……」和「{name}，你記得什麼」。此處記下的內容僅保存在試用中，{memory} 不會顯示這些內容。",
-"Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` connects one you already run. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "其他平台（如 Slack、KOOK 或飛書）須透過 AstrBot 連接：`{cmd} astrbot --install` 可在此處安裝 AstrBot，`{cmd} astrbot DATA_DIR` 可連接已在執行的 AstrBot。程式設計助理：`{cmd} claude-code`、`codex` 或 `dsh`。"
+"Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` connects one you already run. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "其他平台（如 Slack、KOOK 或飛書）須透過 AstrBot 連接：`{cmd} astrbot --install` 可在此處安裝 AstrBot，`{cmd} astrbot DATA_DIR` 可連接已在執行的 AstrBot。程式設計助理：`{cmd} claude-code`、`codex` 或 `dsh`。",
+"personagent demo: short scenes played with scripted answers": "personagent 示範：以預設的回答示範幾個簡短場景",
+"personagent demo: the same scenes, played by your model ({model})": "personagent 示範：由你的模型（{model}）示範同樣的場景"
 }

@@ -39,7 +39,7 @@ async def play(tmp: Path, scenes, lang: str = "en") -> str:
 
 async def test_quiet_scene_says_why_for_every_line(tmp: Path) -> None:
     out = await play(tmp, ["quiet"])
-    assert "scripted model, real ledger and promotion code" in out
+    assert "short scenes played with scripted answers" in out
     assert out.count("(quiet: not addressed,") == 4
     assert "(quiet: not addressed, 3 of 4 messages)" in out
     assert "(joins in: 4 of 4 messages, and the gate model said speak)" in out
@@ -125,7 +125,7 @@ async def test_troll_scene_changes_nothing(tmp: Path, lang: str) -> None:
 
 async def test_every_scene_runs_in_chinese(tmp: Path) -> None:
     out = await play(tmp, demo.SCENES, "zh")
-    assert "模型回答为预设脚本，学习记录与生效判定均由真实代码执行" in out
+    assert "以预设的回答演示几个简短场景" in out
     assert "（未发言：未被点名，已累计 1/4 条消息）" in out
     assert "（主动发言：已累计 4/4 条消息，判断模型认为应当发言）" in out
     assert out.rstrip().endswith("先运行 `personagent init`）。")
@@ -167,7 +167,7 @@ def test_main_runs_offline_without_a_key(tmp: Path, monkeypatch, capsys) -> None
     monkeypatch.setattr(tempfile, "tempdir", str(tmp))
     assert demo.main(["quiet", "--lang", "en"]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("personagent demo: scripted model, real ledger and promotion code")
+    assert out.startswith("personagent demo: short scenes played with scripted answers")
     assert "== quiet:" in out and "== teach:" not in out
     assert list(tmp.iterdir()) == []
 

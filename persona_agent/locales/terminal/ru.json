@@ -142,7 +142,6 @@
 "invalid choice: %(value)r (choose from %(choices)s)": "недопустимый выбор: %(value)r (варианты: %(choices)s)",
 "expected one argument": "ожидается один аргумент",
 "argument %(argument_name)s: %(message)s": "аргумент %(argument_name)s: %(message)s",
-"language code: {0} (default: en)": "код языка: {0} (по умолчанию en)",
 ", and as a QQ entry it closes every QQ group not listed": ", а как запись QQ он закрывает все группы QQ, которых нет в списке",
 "groups": "группы",
 "users besides the admin": "пользователи, кроме администратора",
@@ -437,5 +436,6 @@
 "Not critical, but failing: {0}": "Не критично, но не проходит: {0}",
 "There is no personagent home at {0}. Run `{1}` to set one up there.": "В {0} нет домашней папки personagent. Выполните `{1}`, чтобы создать её там.",
 "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "для astrbot --platform lark или qq_official: ID приложения (для connect qq используйте --appid)",
-"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "для astrbot --platform lark или qq_official: секрет приложения (для connect qq используйте --secret)"
+"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "для astrbot --platform lark или qq_official: секрет приложения (для connect qq используйте --secret)",
+"language code: {0} (default: AGENT_LANG, else en)": "код языка: {0} (по умолчанию: AGENT_LANG, иначе en)"
 }

@@ -142,7 +142,6 @@
 "invalid choice: %(value)r (choose from %(choices)s)": "無効な選択です：%(value)r（選択肢：%(choices)s）",
 "expected one argument": "引数が 1 つ必要です",
 "argument %(argument_name)s: %(message)s": "引数 %(argument_name)s：%(message)s",
-"language code: {0} (default: en)": "言語コード：{0}（既定：en）",
 ", and as a QQ entry it closes every QQ group not listed": "。さらに QQ の項目として、記載のない QQ グループをすべて閉じます",
 "groups": "グループ",
 "users besides the admin": "管理者以外のユーザー",
@@ -437,5 +436,6 @@
 "Not critical, but failing: {0}": "重要ではありませんが失敗しています：{0}",
 "There is no personagent home at {0}. Run `{1}` to set one up there.": "{0} に personagent のホームがありません。そこに作成するには `{1}` を実行してください。",
 "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "astrbot --platform lark または qq_official で使用：アプリ ID（connect qq では --appid を使用）",
-"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "astrbot --platform lark または qq_official で使用：アプリシークレット（connect qq では --secret を使用）"
+"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "astrbot --platform lark または qq_official で使用：アプリシークレット（connect qq では --secret を使用）",
+"language code: {0} (default: AGENT_LANG, else en)": "言語コード：{0}（既定：AGENT_LANG、未設定なら en）"
 }

@@ -142,7 +142,6 @@
 "invalid choice: %(value)r (choose from %(choices)s)": "無效的選擇：%(value)r（可選：%(choices)s）",
 "expected one argument": "需要一個參數",
 "argument %(argument_name)s: %(message)s": "參數 %(argument_name)s：%(message)s",
-"language code: {0} (default: en)": "語言代碼：{0}（預設：en）",
 ", and as a QQ entry it closes every QQ group not listed": "，且作為 QQ 項目，它會關閉所有未列出的 QQ 群組",
 "groups": "群組",
 "users besides the admin": "管理員以外的使用者",
@@ -437,5 +436,6 @@
 "Not critical, but failing: {0}": "非關鍵項目，但未通過：{0}",
 "There is no personagent home at {0}. Run `{1}` to set one up there.": "{0} 處沒有 personagent 主目錄。執行 `{1}` 可在該處建立。",
 "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "用於 astrbot --platform lark 或 qq_official：應用程式 ID（connect qq 請使用 --appid）",
-"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "用於 astrbot --platform lark 或 qq_official：應用程式密鑰（connect qq 請使用 --secret）"
+"with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "用於 astrbot --platform lark 或 qq_official：應用程式密鑰（connect qq 請使用 --secret）",
+"language code: {0} (default: AGENT_LANG, else en)": "語言代碼：{0}（預設取 AGENT_LANG，未設定時為 en）"
 }

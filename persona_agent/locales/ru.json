@@ -311,9 +311,7 @@
 "strong": "сильная",
 "negative only": "только негативная",
 "weak": "слабая",
-"personagent demo: scripted model, real ledger and promotion code": "personagent demo: модель по сценарию, настоящие записи об обучении и код применения",
 "No API key needed, and nothing is sent anywhere. The model's answers\nare fixed; what is done with them is decided by the real code.\nThe ledger is the record of how people reacted to its replies.\nTo use your own model instead (it costs tokens): {online}": "API-ключ не нужен, ничего никуда не отправляется. Ответы модели заранее\nзаданы; что с ними делать, решает настоящий код.\nЗаписи об обучении фиксируют, как люди реагировали на ответы.\nЧтобы использовать свою модель (тратит токены): {online}",
-"personagent demo: your model ({model}), real ledger and promotion code": "personagent demo: ваша модель ({model}), настоящие записи об обучении и код применения",
 "This asks your model for every reply and every judgement, so it costs\ntokens, and the answers differ from run to run: the scenes below may\nnot play out as described. The scripted version: {offline}": "Здесь ваша модель пишет каждый ответ и каждую оценку, поэтому тратятся токены,\nа ответы от запуска к запуску разные: сцены могут пойти не так, как описано.\nВерсия по сценарию: {offline}",
 "== quiet: most of a group chat is not for {name} ==": "== тишина: большая часть группового чата обращена не к персонажу {name} ==",
 "{name} answers when named. Otherwise it joins in only when a gate model\nthinks a person would, and here it asks after {n} messages (the live\ndefault is {live}).": "{name} отвечает, когда зовут по имени. Иначе вступает, только если модель-фильтр\nсчитает, что человек бы вступил; здесь она спрашивает после сообщений: {n}\n(настоящее значение по умолчанию: {live}).",
@@ -434,5 +432,7 @@
 "/help": "/help",
 "show these commands again": "снова показать эти команды",
 "Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "Здесь тоже работают команды памяти, например «{name}, запомни ...» и «{name}, что ты помнишь?». Сохранённое здесь остаётся в пробном чате: {memory} это не показывает.",
-"Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` connects one you already run. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "Другие платформы, например Slack, KOOK или Feishu, подключаются через AstrBot: `{cmd} astrbot --install` устанавливает его здесь, а `{cmd} astrbot DATA_DIR` подключает уже работающий. Помощники для программирования: `{cmd} claude-code`, `codex` или `dsh`."
+"Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` connects one you already run. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "Другие платформы, например Slack, KOOK или Feishu, подключаются через AstrBot: `{cmd} astrbot --install` устанавливает его здесь, а `{cmd} astrbot DATA_DIR` подключает уже работающий. Помощники для программирования: `{cmd} claude-code`, `codex` или `dsh`.",
+"personagent demo: short scenes played with scripted answers": "personagent demo: короткие сцены с заранее заданными ответами",
+"personagent demo: the same scenes, played by your model ({model})": "personagent demo: те же сцены, которые разыгрывает ваша модель ({model})"
 }

@@ -313,9 +313,7 @@
 "strong": "강함",
 "negative only": "부정만",
 "weak": "약함",
-"personagent demo: scripted model, real ledger and promotion code": "personagent demo: 대본 모델과 실제 학습 기록·적용 코드",
 "No API key needed, and nothing is sent anywhere. The model's answers\nare fixed; what is done with them is decided by the real code.\nThe ledger is the record of how people reacted to its replies.\nTo use your own model instead (it costs tokens): {online}": "API 키가 필요 없고 아무것도 전송하지 않습니다. 모델의 답은 정해져 있고,\n그 답을 어떻게 처리할지는 실제 코드가 결정합니다.\n학습 기록은 사람들이 답장에 어떻게 반응했는지를 남긴 것입니다.\n사용자의 모델을 쓰려면(토큰 사용): {online}",
-"personagent demo: your model ({model}), real ledger and promotion code": "personagent demo: 사용자의 모델({model})과 실제 학습 기록·적용 코드",
 "This asks your model for every reply and every judgement, so it costs\ntokens, and the answers differ from run to run: the scenes below may\nnot play out as described. The scripted version: {offline}": "모든 답장과 판정을 모델에 물어보므로 토큰을 쓰고, 답도 매번 다릅니다.\n아래 장면이 설명대로 진행되지 않을 수 있습니다. 대본 버전: {offline}",
 "== quiet: most of a group chat is not for {name} ==": "== 조용히: 그룹 채팅 대부분은 {name}에게 하는 말이 아닙니다 ==",
 "{name} answers when named. Otherwise it joins in only when a gate model\nthinks a person would, and here it asks after {n} messages (the live\ndefault is {live}).": "{name} 캐릭터는 이름이 불리면 답합니다. 그 밖에는 사람이라면 끼어들겠다고 판단 모델이\n생각할 때만 끼어들고, 여기서는 메시지 {n}개마다 묻습니다(실제 기본값은 {live}개).",
@@ -434,5 +432,7 @@
 "/help": "/help",
 "show these commands again": "이 명령들을 다시 표시합니다",
 "Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "기억 명령도 여기에서 쓸 수 있습니다. 예: \"{name}, ... 기억해 줘\", \"{name}, 뭐 기억해?\". 여기서 기억한 내용은 체험 안에만 저장되며 {memory}에는 표시되지 않습니다.",
-"Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` connects one you already run. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "Slack, KOOK, Feishu 등 그 밖의 플랫폼은 AstrBot을 통해 연결합니다. `{cmd} astrbot --install`은 여기에 AstrBot을 설치하고, `{cmd} astrbot DATA_DIR`은 이미 실행 중인 AstrBot을 연결합니다. 코딩 어시스턴트: `{cmd} claude-code`, `codex` 또는 `dsh`."
+"Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` connects one you already run. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "Slack, KOOK, Feishu 등 그 밖의 플랫폼은 AstrBot을 통해 연결합니다. `{cmd} astrbot --install`은 여기에 AstrBot을 설치하고, `{cmd} astrbot DATA_DIR`은 이미 실행 중인 AstrBot을 연결합니다. 코딩 어시스턴트: `{cmd} claude-code`, `codex` 또는 `dsh`.",
+"personagent demo: short scenes played with scripted answers": "personagent 데모: 미리 정해 둔 답변으로 짧은 장면을 보여 줍니다",
+"personagent demo: the same scenes, played by your model ({model})": "personagent 데모: 같은 장면을 사용자의 모델({model})로 보여 줍니다"
 }
