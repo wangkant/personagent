@@ -52,14 +52,6 @@ def _clip(text, limit: int = 30) -> str:
 
 class DataViews:
     @staticmethod
-    def _load_json_dict(path: Path) -> dict:
-        """JSON object from disk; missing → {}."""
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            return {}
-
-    @staticmethod
     def _save_json(path: Path, obj, label: str) -> None:
         try:
             atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=2))

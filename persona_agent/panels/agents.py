@@ -60,13 +60,7 @@ def _launcher() -> list[str]:
 
 def _hook_entry(home: Path, *, powershell: bool = False) -> dict:
     """coding._hook_entry, started with the console interpreter."""
-    program, *rest = _launcher()
-    program, folder, tail = Path(program).as_posix(), home.as_posix(), " ".join(rest)
-    entry = {"type": "command", "timeout": coding.HOOK_TIMEOUT_S}
-    if powershell:
-        return {**entry, "shell": "powershell", "command": f'& "{program}" {tail} --home "{folder}" hook'}
-    program, folder = (f'"{part}"' if " " in part else part for part in (program, folder))
-    return {**entry, "command": f"{program} {tail} --home {folder} hook"}
+    return coding._hook_entry(home, powershell=powershell, launcher=_launcher())
 
 
 def _same(a, b) -> bool:

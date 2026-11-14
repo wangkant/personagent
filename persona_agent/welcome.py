@@ -116,12 +116,6 @@ async def send_chat_items(url: str, token: str, conversation: str, text: str, *,
     return [item for item in response.get("replies") or [] if isinstance(item, dict)]
 
 
-async def send_chat_event(url: str, token: str, conversation: str, text: str, **kwargs) -> str:
-    """One message in the owner's one-to-one chat; the text of what comes back."""
-    items = await send_chat_items(url, token, conversation, text, **kwargs)
-    return "\n".join(str(item.get("text", "")) for item in items if item.get("type") == "text")
-
-
 def append_saved_chat(home: Path, conversation: str, entries: list[dict]) -> None:
     """Add messages to the page's saved chat while no page holds it, numbered
     as `Workspace._append` numbers them; nothing if a new chat has started."""
@@ -224,14 +218,12 @@ class Workspace:
                                                           else "deepseek" if values.get("LLM_API_KEY")
                                                           else sw.PROVIDERS[0].key),
                     "model": values.get("LLM_MODEL", ""), "baseUrl": values.get("LLM_BASE_URL", ""),
-                    "keyHint": sw.mask_secret(values["LLM_API_KEY"]) if values.get("LLM_API_KEY") else "",
                     "name": values.get("PERSONA_NAME", ""), "lang": langs.normalize(values.get("AGENT_LANG")),
                     # What the page calls the person at it, where a name is set.
                     "adminName": values.get("ADMIN_NAME", "").strip()[:64],
                     # An earlier release's template is on no menu: it maps to the plain one.
                     "character": sw.default_character(origin) if origin else ("custom" if card.is_file() else "warm-listener"),
                     "avatar": avatar,
-                    "platformInstalled": installation.python.is_file(),
                     "platforms": platforms, "platformStatus": status,
                     "agentRunning": self.services.running("agent"),
                     "platformRunning": self.services.running("astrbot") or direct_on, "job": job,
@@ -933,8 +925,7 @@ class Workspace:
     async def activity_forget(self, payload: dict) -> dict:
         """Forget one remembered item; the trash id comes back for Undo."""
         chat, conv = str(payload.get("chat") or ""), str(payload.get("conv") or "")
-        item = str(payload.get("id") or payload.get("note") or "")
-        kind = str(payload.get("kind") or ("note" if item else "core"))
+        item, kind = str(payload.get("id") or ""), str(payload.get("kind") or "")
         if (not chat or len(chat) > 512 or len(conv) > 512 or kind not in MEMORY_KINDS
                 or len(item) > 128):
             raise ValueError("invalid_chat")

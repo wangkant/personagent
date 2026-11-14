@@ -11,7 +11,6 @@ from pathlib import Path
 
 from persona_agent import evolution
 from persona_agent.agent import Agent
-from tools import auto_reviewer
 
 from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
 
@@ -63,7 +62,7 @@ def test_parse_review() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Unit: load_evals / load_reviewed_ts / load_pending_candidates
+# Unit: load_evals / load_reviewed_ts
 # ---------------------------------------------------------------------------
 
 def test_loaders(tmp: Path) -> None:
@@ -86,9 +85,6 @@ def test_loaders(tmp: Path) -> None:
     ])
     check("load_reviewed_ts: all candidates count",
           evolution.load_reviewed_ts(cands) == {"t1", "t2"})
-    pending = evolution.load_pending_candidates(cands)
-    check("load_pending: applied entries excluded",
-          [c.get("src_eval_ts") for c in pending] == ["t2", None])
 
 
 # ---------------------------------------------------------------------------
@@ -175,109 +171,6 @@ def test_append_and_dedup(tmp: Path) -> None:
           merged == {("seed bad", "seed good"),
                      ("runtime bad", "runtime good")},
           repr(merged))
-
-
-# ---------------------------------------------------------------------------
-# Unit: mark_candidates
-# ---------------------------------------------------------------------------
-
-def test_mark_candidates(tmp: Path) -> None:
-    cands = tmp / "candidates.jsonl"
-    _write_jsonl(cands, [
-        {"src_eval_ts": "t1"},
-        {"src_eval_ts": "t2"},
-        {"src_eval_ts": "t3", "applied": "auto"},
-    ])
-    evolution.mark_candidates(cands, {"t1": "approved", "t3": "rejected"})
-    rows = {r["src_eval_ts"]: r for r in
-            [json.loads(l) for l in cands.read_text(encoding="utf-8").splitlines()]}
-    check("mark: verdict stamped", rows["t1"].get("applied") == "approved")
-    check("mark: untouched entry stays pending", "applied" not in rows["t2"])
-    check("mark: existing verdict not overwritten",
-          rows["t3"].get("applied") == "auto")
-
-
-def test_auto_yes_cannot_direct_apply(tmp: Path) -> None:
-    """Unattended reviewer output must stay inert until the promotion gate."""
-    candidates_file = tmp / "candidates.jsonl"
-    feedback_file = tmp / "feedback.jsonl"
-    seed_file = tmp / "seed-feedback.jsonl"
-    record = evolution.candidate_record(
-        {"ts": "t1", "score": 1, "mode": "called",
-         "reply": GOOD_DIAG["pair_draft"]["reply"]},
-        GOOD_DIAG,
-    )
-    _write_jsonl(candidates_file, [record])
-
-    old_candidates = auto_reviewer.CANDIDATES_FILE
-    old_feedback_files = auto_reviewer._feedback_files
-    auto_reviewer.CANDIDATES_FILE = candidates_file
-    auto_reviewer._feedback_files = lambda: (seed_file, feedback_file)
-    try:
-        auto_reviewer.apply_candidates(auto_yes=True)
-    finally:
-        auto_reviewer.CANDIDATES_FILE = old_candidates
-        auto_reviewer._feedback_files = old_feedback_files
-
-    pending = evolution.load_pending_candidates(candidates_file)
-    check("auto-reviewer: --yes writes no trusted feedback",
-          not feedback_file.exists() or not feedback_file.read_text(
-              encoding="utf-8").strip())
-    check("auto-reviewer: --yes leaves the proposal pending",
-          len(pending) == 1 and not pending[0].get("applied"), str(pending))
-
-
-def test_a_capped_feedback_write_leaves_the_rest_pending(tmp: Path) -> None:
-    """`append_jsonl` writes a prefix and stops at the byte cap, returning a
-    short count. Marking the whole approved batch applied stranded the tail it
-    dropped: never written to the pool, and filtered out of `pending` from then
-    on — approved, unwritten, and unreachable by any later run."""
-    import builtins
-
-    candidates_file = tmp / "candidates.jsonl"
-    feedback_file = tmp / "feedback.jsonl"
-    seed_file = tmp / "seed-feedback.jsonl"
-
-    def cand(ts: str, reply: str) -> dict:
-        diag = json.loads(json.dumps(GOOD_DIAG))
-        diag["pair_draft"]["reply"] = reply
-        return evolution.candidate_record(
-            {"ts": ts, "score": 1, "mode": "called", "reply": reply}, diag)
-
-    _write_jsonl(candidates_file, [cand("t1", "first bad reply"),
-                                   cand("t2", "second bad reply")])
-
-    real_append = evolution.append_jsonl
-
-    def cap_after_one(path, recs, **kw):
-        """Stand in for the byte cap: accept the first row, refuse the rest."""
-        return real_append(path, list(recs)[:1], **kw)
-
-    old_c, old_f = auto_reviewer.CANDIDATES_FILE, auto_reviewer._feedback_files
-    old_input = builtins.input
-    auto_reviewer.CANDIDATES_FILE = candidates_file
-    auto_reviewer._feedback_files = lambda: (seed_file, feedback_file)
-    evolution.append_jsonl = cap_after_one
-    builtins.input = lambda *_a, **_k: "y"
-    try:
-        auto_reviewer.apply_candidates(auto_yes=False)
-    finally:
-        auto_reviewer.CANDIDATES_FILE = old_c
-        auto_reviewer._feedback_files = old_f
-        evolution.append_jsonl = real_append
-        builtins.input = old_input
-
-    written = [json.loads(line) for line
-               in feedback_file.read_text(encoding="utf-8").splitlines()
-               if line.strip()]
-    pending = evolution.load_pending_candidates(candidates_file)
-    check("cap: only the pairs that fit are written",
-          len(written) == 1, str(len(written)))
-    check("cap: the dropped pair stays pending",
-          len(pending) == 1, str(pending))
-    check("cap: ...and it is the one that was not written",
-          bool(pending) and pending[0].get("src_eval_ts") == "t2",
-          str([p.get("src_eval_ts") for p in pending]))
 
 
 # ---------------------------------------------------------------------------

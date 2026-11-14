@@ -125,10 +125,9 @@ SPEAK_STRATA = {(m, lbl) for m in be.MODES for lbl in be.LABELS} - {("owner", "s
 
 def test_every_dataset_has_a_valid_schema_and_balanced_labels() -> None:
     files = sorted(p.name for p in be.EVAL_DATA.glob("*.jsonl"))
-    # address.jsonl is the zero-cost suite tests/test_addressing.py runs.
     check("every dataset file is a known suite in en and zh",
           files == sorted([f"{s}.{lang}.jsonl" for s in be.SUITES
-                           for lang in ("en", "zh")] + ["address.jsonl"]), str(files))
+                           for lang in ("en", "zh")]), str(files))
     for lang in ("en", "zh"):
         speak = be.load_cases("speak", lang)
         labels = Counter(c["label"] for c in speak)

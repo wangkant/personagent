@@ -113,8 +113,6 @@
 "Setup questions skipped: {why}. Run `{cmd}` in a terminal, or pass --no-input with --provider, --key-env and --name.": "已略過設定問答：{why}。請在終端機中執行 `{cmd}`，或加上 --no-input 以及 --provider、--key-env、--name 等參數。",
 "The API key saved for the previous AI service was cleared, so it is not sent to the new one. Pass --key-env VAR to set a key for this service.": "先前 AI 服務的 API 金鑰已清除，不會傳送給新服務。請使用 --key-env VAR 為此服務設定金鑰。",
 "input is not a terminal": "輸入來源不是終端機",
-"personagent is already set up. Run the setup questions again?": "personagent 已完成設定。是否重新回答設定問題？",
-"Keeping the current setup.": "保留現有設定。",
 "AGENT_HOME in {env} points at {other}, so personagent reads its settings there,\nnot here. Move the files there, or remove that line.": "{env} 中的 AGENT_HOME 指向 {other}，因此 personagent 會從該處讀取設定，\n而非此處。請將檔案移至該處，或刪除該行。",
 "AGENT_HOME is {value}, which cannot be resolved; check it before starting.": "AGENT_HOME 為 {value}，無法解析；請在啟動前檢查。",
 "openrouter/free picks one of OpenRouter's free models for each request. The key costs nothing and the limit is 50 requests a day. Some free providers keep what they receive.": "openrouter/free 每次請求會選用 OpenRouter 的一個免費模型。此金鑰不需付費，每天限 50 次請求。部分免費服務商會保留收到的內容。",

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from .storage import atomic_write_text, load_rebuildable_json
+from .storage import num as _num
 
 FORMAT = 1
 KEEP_HOURS = 72.0
@@ -26,12 +27,6 @@ CAPS = {"lines": LINES_MAX, "spill": SPILL_MAX, "dm": DM_MAX,
 #: Times kept per chat beside its lines (see clean_entry).
 MARKS = ("reply", "opener", "proactive")
 
-
-def _num(value, kind=float):
-    try:
-        return kind(value or 0)
-    except (TypeError, ValueError):
-        return kind(0)
 
 
 def clean_entry(entry: dict) -> tuple[dict, int]:

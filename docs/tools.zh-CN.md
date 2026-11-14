@@ -14,9 +14,6 @@
 |---|---|---|---|---|
 | `import_stickers_folder.py` | 将一个图片文件夹导入表情包库并逐张添加标签，使新库不必从零开始。`--dry-run` 显示数量，`--no-tag` 只复制文件 | 一个图片文件夹；添加标签还需要 `VISION_MODEL`、`VISION_API_KEY` 和 `VISION_BASE_URL` | 是，每张图一次视觉调用，除非加 `--dry-run` 或 `--no-tag` | 受支持 |
 | `bootstrap_from_history.py` | 用一个 QQ 群的历史记录为新部署一次性完成初始化。该脚本生成管理员的表情包和消息长度画像，并将读取到的表情包存入库中 | 第三方 QQ 客户端 NapCat 的 HTTP 服务，地址为 `QQ_ONEBOT_URL`（必填），以及 `ACCESS_GROUPS` 或 `--group` 中的 QQ 群 | 否。运行中的机器人之后会用视觉模型为存入的表情包添加标签 | 实验性，仅 QQ 和 NapCat |
-| `auto_reviewer.py` | 读取 `runtime/eval.jsonl` 中的低自评分，由模型将每一条转换为一对修改前后的对照。添加 `--apply` 时会逐对询问你是否加入共享反馈池 | 须先开启 `EVAL_ENABLED=true` 一段时间，才会产生分数 | 是，每条审阅一次调用（`--limit`，默认 20）。`--dry-run` 不调用 | 实验性。`--apply` 写入所有聊天共用的池。设置 `EVOLVE_AUTO_ENABLED=true` 后，运行中的角色会只针对一个聊天生成同类修正；只有原回复的对象也对该回复提出过异议、且角色决定采用时，修正才会投入使用；`personagent learned` 会列出这些修正 |
-| `evolution_benchmark.py` | 让真实的 agent 在 `data/benchmark/` 的场景上运行数轮，一次开启自我改进循环，一次关闭，再比较两者。开启循环时，生成的修正与实际聊天中一样遵循相同的规则：每条低分回复原本的对象按脚本提出异议，角色的判断按脚本选择采用。`run` 负责运行，`ingest` 读回评审分数 | `LLM_API_KEY`，以及一个不同于被测模型的评审（`--judge export`、`openai` 或 `anthropic`，配 `BENCH_JUDGE_MODEL`） | 是，调用次数很多：每个场景、每轮、每组 | 实验性 |
-| `scenario_probe.py` | 用真实模型试验候选基准场景，报告哪些能暴露基准需要的失败 | `LLM_API_KEY`，一个形如 `data/benchmark/scenarios.train.en.jsonl` 的候选场景文件，以及评审环节用的 `--judge-model` | 是，每个场景一次回复、一次自评和一次评审调用 | 实验性，用于构建基准 |
 | `sticker_holdout_eval.py` | 使用你手工标注的表情包衡量表情包审批门的稳定性和准确度 | `runtime/holdout.jsonl`（格式见 `tools/holdout.example.jsonl`）和三个 `VISION_*` 设置 | 是，图片数 × `--runs`（默认 5）次视觉调用，30 张图约 150 次 | 实验性 |
 | `package_smoke.py` | 端到端检查已安装的 `personagent` 命令：版本、`init --no-input`、`chat`、带 `/health` 的 `run`，以及 `doctor --json` | 一个已安装的 `personagent`（`--personagent PATH`），无其他要求 | 否，由替身服务器应答 | 受支持。CI 在 Linux 和 Windows 上运行 |
 | `welcome_smoke.py` | 端到端检查已安装的本地页面：`start --no-browser`、保存密钥、与真实角色进行一次聊天、第二次启动复用页面、正常退出 | 一个已安装的 `personagent`（`--personagent PATH`），无其他要求 | 否，由同一个替身服务器应答 | 受支持。CI 在 Linux 和 Windows 上运行 |

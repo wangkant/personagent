@@ -2,8 +2,7 @@
 
 ROOT is the deployment folder (home.find_home(): AGENT_HOME, a checkout, or
 ~/personagent), never the package directory. It holds .env, persona.txt and
-stickers; mutable state goes under ``runtime_dir()``, where a root-level file
-from an older layout is copied on first use. Read-only seed data comes from
+stickers; mutable state goes under ``runtime_dir()``. Read-only seed data comes from
 ``seed_file()``: ``<ROOT>/data/...`` when present (a user's override, and how
 a checkout reads its tracked data), else the copy shipped in the package.
 """
@@ -67,11 +66,6 @@ def resolve_runtime_state_file(value: str | Path) -> Path:
         raise ValueError(
             f"relative runtime state path must stay under {base}: {value}"
         ) from exc
-    legacy = ROOT / path
-    if not target.exists() and legacy.is_file():
-        from .storage import atomic_write_text
-
-        atomic_write_text(target, legacy.read_text(encoding="utf-8"))
     return target
 
 

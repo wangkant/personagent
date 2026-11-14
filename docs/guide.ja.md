@@ -672,7 +672,7 @@ personagent eval --suite all --lang zh --repeat 5
 
 ペルソナと学習のスイートには、測定対象とは別の判定モデルが必要です。`BENCH_JUDGE_MODEL` を設定し、別のエンドポイントが提供するなら `BENCH_JUDGE_BASE_URL` と `BENCH_JUDGE_API_KEY` も設定してください。別の判定役がなければ、これらのスイートは実行を拒否します。`--allow-same-judge` はそれでも実行し、レポートに印を付けます。学習スイートは自分では何も昇格せず、期待値は昇格設定に従います。既定より厳しいポリシーでは、すべてのシナリオが保留されると期待されます。ほかのスイートの実行はすべてモデルを呼び、どのスイートも状態の使い捨てコピーで動きます。`--keep` はコピーを残し、場所を出力します。
 
-モデルもキーも要らないチェックが 2 つあり、クローンからプロジェクトのテストとともに実行されます。`data/evals/address.jsonl` には、すべてのチャット言語で、キャラクターを名前またはニックネームで呼ぶ行と呼ばない行（`ＬＵＮＡ are you there`、`Lunar eclipse tonight` など）が入っており、`tests/test_addressing.py` がそれぞれを確認します。`tests/test_behavior_eval.py` は、スクリプト化されたモデルを相手にすべてのスイートを最初から最後まで実行し、モデルの品質ではなく、`personagent eval` の配管、分離、計算を確認します。
+モデルもキーも要らないチェックが 2 つあり、クローンからプロジェクトのテストとともに実行されます。`tests/data/address.jsonl` には、すべてのチャット言語で、キャラクターを名前またはニックネームで呼ぶ行と呼ばない行（`ＬＵＮＡ are you there`、`Lunar eclipse tonight` など）が入っており、`tests/test_addressing.py` がそれぞれを確認します。`tests/test_behavior_eval.py` は、スクリプト化されたモデルを相手にすべてのスイートを最初から最後まで実行し、モデルの品質ではなく、`personagent eval` の配管、分離、計算を確認します。
 
 `--rejudge REPORT` は残したレポートの返信を、今設定している `BENCH_JUDGE_MODEL` で、テスト対象のモデルを呼ばずに再判定し、結果を元のレポートの横に書きます。返信、ベースライン、昇格ポリシーの動作はそのままです。
 

@@ -1,5 +1,5 @@
 """Addressing: when a line calls the persona by its name or a nickname, in
-every chat language, at no model cost (data/evals/address.jsonl).
+every chat language, at no model cost (tests/data/address.jsonl).
 
     python -m pytest tests/test_addressing.py
 """
@@ -18,7 +18,7 @@ from persona_agent.decision import choose_group_mode
 
 from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
 
-SUITE = Path(__file__).resolve().parents[1] / "data" / "evals" / "address.jsonl"
+SUITE = Path(__file__).resolve().parent / "data" / "address.jsonl"
 CASES = [json.loads(ln) for ln in SUITE.read_text(encoding="utf-8").splitlines()
          if ln.strip()]
 

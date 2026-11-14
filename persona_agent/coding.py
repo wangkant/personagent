@@ -350,10 +350,10 @@ def _launcher() -> list[str]:
     return [sys.executable, "-m", "persona_agent"]
 
 
-def _hook_entry(home: Path, *, powershell: bool = False) -> dict:
+def _hook_entry(home: Path, *, powershell: bool = False, launcher: list[str] | None = None) -> dict:
     """Our Stop hook. A bare path runs in every shell, and a quoted one followed by
     arguments is a syntax error in PowerShell, so quote only what has a space."""
-    program, *rest = _launcher()
+    program, *rest = launcher or _launcher()
     program, folder, tail = Path(program).as_posix(), home.as_posix(), " ".join(rest)
     entry = {"type": "command", "timeout": HOOK_TIMEOUT_S}
     if powershell:

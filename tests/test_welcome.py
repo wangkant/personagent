@@ -984,11 +984,6 @@ def test_memory_forget_restore_and_forget_chat_go_to_the_service(client, workspa
     assert done["tid"] == "r1234567890" and done["chat"]["id"] == "telegram:-100"
     assert writes[-1] == ("/api/dashboard/memory/forget",
                           {"conv": "telegram:-100", "kind": "episode", "id": "e0123456789"})
-    # The older body still forgets a fact, or with no id the always-present note.
-    client.post("/api/activity/forget", headers=HEADERS, json={"chat": "telegram:-100", "note": "m1"})
-    assert writes[-1][1] == {"conv": "telegram:-100", "kind": "note", "id": "m1"}
-    client.post("/api/activity/forget", headers=HEADERS, json={"chat": "telegram:-100"})
-    assert writes[-1][1] == {"conv": "telegram:-100", "kind": "core", "id": ""}
     back = client.post("/api/activity/restore", headers=HEADERS, json={"chat": "telegram:-100", "tid": "r1234567890"})
     assert back.json()["id"] == "telegram:-100" and writes[-1] == ("/api/dashboard/memory/restore",
                                                                   {"tid": "r1234567890"})
@@ -1087,7 +1082,7 @@ def test_page_languages_are_listed_once_everywhere():
 def test_each_page_language_translates_known_strings_with_their_fields(client, code):
     data = json.loads((welcome.ASSETS / "i18n" / f"{code}.json").read_text(encoding="utf-8"))
     english = _page_strings("en")
-    assert set(data) == {"language", "strings", "catalog"}
+    assert set(data) == {"strings", "catalog"}
     # A string a translation lacks shows in English, so a subset is enough;
     # an unknown key or a lost {field} is a mistake.
     assert set(data["strings"]) <= set(english)

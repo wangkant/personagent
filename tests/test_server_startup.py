@@ -247,15 +247,6 @@ def test_the_replay_log_compacts_once_stale_lines_dominate(tmp_path) -> None:
     assert lines == [json.dumps(["new", start + 100])], lines[:3]
 
 
-def test_the_replay_log_reads_a_whole_file_json_object(tmp_path) -> None:
-    now = int(time.time())
-    state = tmp_path / "gateway_nonces.json"
-    state.write_text(json.dumps({"a": now, "b": now}) + "\n", encoding="utf-8")
-    guard = server.ReplayGuard(state_file=state)
-    assert guard.accept("a", now, now) is False
-    assert guard.accept("c", now, now) is True
-
-
 def test_one_bad_byte_costs_its_own_line_not_every_nonce(tmp_path) -> None:
     now = int(time.time())
     state = tmp_path / "gateway_nonces.json"

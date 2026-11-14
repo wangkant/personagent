@@ -672,7 +672,7 @@ personagent eval --suite all --lang zh --repeat 5
 
 페르소나와 학습 스위트에는 측정 대상과 다른 판정 모델이 필요합니다. `BENCH_JUDGE_MODEL`을 설정하고, 다른 엔드포인트가 제공한다면 `BENCH_JUDGE_BASE_URL`과 `BENCH_JUDGE_API_KEY`도 설정하십시오. 별도의 판정자가 없으면 이 스위트는 실행을 거부합니다. `--allow-same-judge`는 그래도 실행하고 보고서에 표시합니다. 학습 스위트는 스스로 아무것도 승격하지 않고, 기대값은 승격 설정을 따릅니다. 기본값보다 엄격한 정책에서는 모든 시나리오가 보류될 것으로 기대됩니다. 다른 스위트는 실행할 때마다 모델을 호출하며, 모든 스위트는 상태의 일회용 사본에서 동작합니다. `--keep`은 사본을 유지하고 위치를 출력합니다.
 
-모델도 키도 필요 없는 점검이 두 가지 있으며, 클론에서 프로젝트의 테스트와 함께 실행됩니다. `data/evals/address.jsonl`에는 모든 채팅 언어로 된, 캐릭터를 이름이나 별명으로 부르는 줄과 부르지 않는 줄(`ＬＵＮＡ are you there`, `Lunar eclipse tonight` 등)이 들어 있으며, `tests/test_addressing.py`가 각 줄을 점검합니다. `tests/test_behavior_eval.py`는 스크립트로 된 모델을 상대로 모든 스위트를 처음부터 끝까지 실행하여, 모델의 품질이 아니라 `personagent eval`의 연결, 격리, 계산을 점검합니다.
+모델도 키도 필요 없는 점검이 두 가지 있으며, 클론에서 프로젝트의 테스트와 함께 실행됩니다. `tests/data/address.jsonl`에는 모든 채팅 언어로 된, 캐릭터를 이름이나 별명으로 부르는 줄과 부르지 않는 줄(`ＬＵＮＡ are you there`, `Lunar eclipse tonight` 등)이 들어 있으며, `tests/test_addressing.py`가 각 줄을 점검합니다. `tests/test_behavior_eval.py`는 스크립트로 된 모델을 상대로 모든 스위트를 처음부터 끝까지 실행하여, 모델의 품질이 아니라 `personagent eval`의 연결, 격리, 계산을 점검합니다.
 
 `--rejudge REPORT`는 보관한 보고서의 답장을 지금 설정한 `BENCH_JUDGE_MODEL`로, 테스트 대상 모델을 호출하지 않고 다시 판정하며, 결과를 원본 옆에 씁니다. 답장, 기준선, 승격 정책이 한 일은 그대로입니다.
 

@@ -59,12 +59,6 @@ current_sink: contextvars.ContextVar[Optional["ConnectorSink"]] = contextvars.Co
     "current_sink", default=None,
 )
 
-# Per-turn, like `current_sink`. None means PERSONA_TZ_OFFSET_HOURS applies;
-# an embedder may set a per-user offset for the duration of a turn.
-current_tz_offset_h: contextvars.ContextVar[Optional[float]] = contextvars.ContextVar(
-    "current_tz_offset_h", default=None,
-)
-
 
 def message_to_reply_item(
         message, *, platform: str = "", native: bool = False,

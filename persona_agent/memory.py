@@ -8,6 +8,7 @@ import time
 from datetime import datetime
 from typing import Callable, Optional
 
+from .storage import num as _num
 from . import access
 from . import channels
 from . import chatlangs
@@ -75,13 +76,6 @@ _CLAIM_LINES = 30
 _CLAIM_SHARE = 0.5
 
 _TEXT_KEY = re.compile(r"[0-9a-f]{32}")
-
-
-def _num(value) -> float:
-    try:
-        return float(value or 0.0)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _shapes(*patterns: str) -> tuple[re.Pattern, ...]:
@@ -865,10 +859,6 @@ class Memory:
     def _forget_note(self, conv: str, note_id: str) -> bool:
         """The local page's forget: one note, by id or `embeddings.text_key`."""
         return bool(self._forget_item(conv, "note", note_id))
-
-    def _forget_core(self, conv: str) -> bool:
-        """The local page's forget for the whole core note."""
-        return bool(self._forget_item(conv, "core"))
 
     def _trash_live(self, row: dict) -> bool:
         """Is a trash row's item still in its store, unchanged: a crash came

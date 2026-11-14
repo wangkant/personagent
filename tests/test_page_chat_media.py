@@ -188,15 +188,6 @@ def test_the_service_can_reach_the_page_chat_after_a_message(monkeypatch, worksp
     assert outbox.route(workspace._page_key())["connector_id"] == welcome.PAGE_CONNECTOR
 
 
-def test_the_coding_assistants_send_as_before(monkeypatch, workspace):
-    events = []
-    _replying(monkeypatch, workspace, [{"type": "text", "text": "a"}, {"type": "image", "b64": "x"},
-                                       {"type": "text", "text": "b"}], events)
-    text = asyncio.run(welcome.send_chat_event("http://127.0.0.1:1", "t", "conv", "hi",
-                                               connector_id="coding-agent", timeout_s=5))
-    assert text == "a\nb" and "capabilities" not in events[0]
-
-
 def test_a_later_message_reaches_the_page_and_its_history_in_order(monkeypatch, workspace):
     _replying(monkeypatch, workspace, [{"type": "text", "text": "first"}])
     asyncio.run(workspace.chat("hi"))

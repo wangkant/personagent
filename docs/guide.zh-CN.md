@@ -689,7 +689,7 @@ personagent eval --suite all --lang zh --repeat 5
 
 **裁判。** `persona` 和 `learning` 需要一个不同于被测模型的裁判模型（`BENCH_JUDGE_MODEL`；如果由其他接口提供，还要设置 `BENCH_JUDGE_BASE_URL` 和 `BENCH_JUDGE_API_KEY`），否则拒绝运行。确需使用同一个模型作为裁判时，请添加 `--allow-same-judge`，报告中会予以注明。
 
-**无需模型的检查。** 有两项检查不需要模型和密钥，在克隆的仓库中随项目测试一同运行。`data/evals/address.jsonl` 收录了各聊天语言中是否以名字或别名点名角色的句子，例如 `ＬＵＮＡ are you there` 和 `Lunar eclipse tonight`，由 `tests/test_addressing.py` 逐条检查。`tests/test_behavior_eval.py` 用预设脚本的模型端到端运行每个测试集，检查 `personagent eval` 的流程、隔离和计算，而不评价模型的好坏。
+**无需模型的检查。** 有两项检查不需要模型和密钥，在克隆的仓库中随项目测试一同运行。`tests/data/address.jsonl` 收录了各聊天语言中是否以名字或别名点名角色的句子，例如 `ＬＵＮＡ are you there` 和 `Lunar eclipse tonight`，由 `tests/test_addressing.py` 逐条检查。`tests/test_behavior_eval.py` 用预设脚本的模型端到端运行每个测试集，检查 `personagent eval` 的流程、隔离和计算，而不评价模型的好坏。
 
 **更换裁判重新判定。** `--rejudge 报告路径` 使用当前设置的 `BENCH_JUDGE_MODEL` 对一份已有报告中的回复重新判定，不再调用被测模型，结果写在原报告旁边。回复、对照回复和晋升规则当时的决定都保持原样。
 

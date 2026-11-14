@@ -11,13 +11,10 @@ from pathlib import Path
 from typing import Optional
 
 from . import memstore, ranking
+from .storage import num as _num
 
 THREAD_MAX_CHARS = 400
 EPISODE_MAX_CHARS = 240
-
-
-def _readable(row) -> bool:
-    return isinstance(row, dict) and isinstance(row.get("text"), str)
 
 
 class EpisodeStore:
@@ -44,11 +41,11 @@ class EpisodeStore:
             rows = entry.get("episodes")
             rows = rows if isinstance(rows, list) else []
             for row in rows:
-                if not _readable(row):
+                if not memstore.readable_row(row):
                     self.unreadable.append(
                         (conv, row if isinstance(row, dict) else {"value": row}))
-            clean: dict = {"episodes": [r for r in rows if _readable(r)]}
-            if _readable(entry.get("thread")):
+            clean: dict = {"episodes": [r for r in rows if memstore.readable_row(r)]}
+            if memstore.readable_row(entry.get("thread")):
                 clean["thread"] = entry["thread"]
             data[conv] = clean
         self._data = data
@@ -151,9 +148,3 @@ class EpisodeStore:
                 return sorted(months[month], key=lambda r: _num(r.get("t0")))
         return []
 
-
-def _num(value) -> float:
-    try:
-        return float(value or 0.0)
-    except (TypeError, ValueError):
-        return 0.0

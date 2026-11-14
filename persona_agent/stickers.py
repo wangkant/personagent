@@ -24,9 +24,6 @@ MIN_CONTEXTS_TO_TAG = 2
 SAVE_MIN_INTERVAL_SEC = 5.0  # _save() throttle floor; hot paths call it per sighting
 RECENT_USE_COOLDOWN_SEC = 300  # gap before re-sending a sticker; too often reads as a bot
 
-# Bump when the persona-fit criteria change, so every entry is re-judged.
-PERSONA_PROMPT_VERSION = 2
-
 _IMAGE_EXT = {"image/png": "png", "image/jpeg": "jpg",
               "image/gif": "gif", "image/webp": "webp"}
 
@@ -319,7 +316,6 @@ class StickerLibrary:
                 entry["persona_fit"] = bool(parsed.get("fit"))
             entry["auto_tagged"] = True
             entry["tagged_ts"] = time.time()
-            entry["_persona_version"] = PERSONA_PROMPT_VERSION
             self._save(force=True)  # a crash would otherwise pay to re-tag
             fit_mark = " [SKIP-not-fit]" if entry.get("persona_fit") is False else ""
             logger.info("[stickers] tagged %s: meaning=%r tags=%s%s",
@@ -329,79 +325,6 @@ class StickerLibrary:
                            filename, type(e).__name__, e)
         finally:
             self._tagging_inflight.discard(filename)
-
-    async def recheck_persona_fit_all(self, limit: int = 50) -> int:
-        """Re-judge persona fit for tagged entries with a stale
-        _persona_version; returns the count rechecked."""
-        if not self.persona_brief or not self._llm_caller:
-            return 0
-        todo = [
-            (fn, v) for fn, v in self.entries.items()
-            if v.get("auto_tagged") and (
-                "persona_fit" not in v
-                or v.get("_persona_version", 0) < PERSONA_PROMPT_VERSION
-            )
-        ][:limit]
-        if not todo:
-            return 0
-        checked = 0
-        for fn, v in todo:
-            meaning = (v.get("meaning") or "").strip()
-            tags = v.get("tags", [])
-            if not meaning and not tags:
-                continue
-            prompt = (
-                f"[Persona]\n{self.persona_brief}\n\n"
-                f"[Sticker]\nmeaning: {meaning}\ntags: {tags}\n\n"
-                "Judge whether **this person would actually send this sticker**.\n"
-                "Stickers in the sarcastic / teasing / eyeroll / speechless / "
-                "playful / mocking / doge / amused / 'can't keep a straight face' "
-                "family typically count as **fit=true** — that's everyday "
-                "conversational range.\n"
-                "**fit=false criteria**:\n"
-                "  - Vulgar / crude (toilet humor, sexual content, slurs, swearing)\n"
-                "  - Macho / bro-fight aesthetic / aggressive in-jokes / heavy "
-                "subculture-specific anime\n"
-                "  - Hostile with real intent (kill / beat / blood / horror / gore)\n"
-                "  - Heavy depression imagery (self-harm / suicide / nihilism)\n"
-                "  - Pure filler with no expression / meaning\n"
-                "  - Political / sensitive\n"
-                "  - **Tacky / dated aesthetic**: older family-group style (floral "
-                "greeting fonts / morning-evening blessings / roses / big-head "
-                "dolls / animated sparkle text), chain-message style, loud printed "
-                "fonts on saturated color blocks, low-effort short-video memes, "
-                "2010s subculture, low-res outlined stickers, stale cute style.\n"
-                "  **Reference keywords**: morning/evening blessings, animated "
-                "text, rose-themed greetings, excessive exclamation marks, "
-                "low-resolution, ornamental fonts.\n"
-                "Everything else defaults to fit=true. **Strict on tacky; lenient "
-                "elsewhere — better to keep through than to mis-ban.**\n"
-                '[Output a single JSON line] {"fit":true|false}'
-            )
-            try:
-                raw = await self._llm_caller(
-                    system="You are a sticker / persona-fit classifier. Output JSON only.",
-                    messages=[{"role": "user", "content": prompt}],
-                    model=self.tagger_model,
-                    max_tokens=300,
-                    enable_search=False,
-                    disable_thinking=True,
-                    json_object=True,
-                )
-                raw = strip_json_fences(raw)
-                parsed = json.loads(raw)
-                v["persona_fit"] = bool(parsed.get("fit"))
-                v["_persona_version"] = PERSONA_PROMPT_VERSION
-                checked += 1
-                logger.info("[stickers] persona-fit %s: %s (%r)",
-                            fn, v["persona_fit"], meaning)
-            except Exception as e:
-                logger.warning("[stickers] persona recheck failed for %s: %s", fn, e)
-                continue
-            await asyncio.sleep(0.4)
-        if checked:
-            self._save(force=True)  # one-time startup work — don't lose it to the throttle
-        return checked
 
     def purge_unfit(self) -> int:
         """Delete entries flagged persona_fit=false, record and file."""

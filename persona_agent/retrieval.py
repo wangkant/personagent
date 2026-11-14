@@ -11,6 +11,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from itertools import chain
 
+from .storage import num as _num
 from . import channels, embeddings, people, ranking, timewords
 from .endpoints import embedding_endpoint
 from .textproc import (
@@ -33,13 +34,6 @@ _EVENTS_MAX = 4
 #: A reply must share this many focus tokens with an item to count as using it.
 _USE_OVERLAP = 2
 _USE_FLUSH_S = 60.0
-
-
-def _num(value) -> float:
-    try:
-        return float(value or 0.0)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _moment(t: float, tz) -> str:
@@ -341,10 +335,8 @@ class Retrieval:
     def _prompt_tz() -> timezone:
         """The zone of the prompt's "Current local time", so a date and a
         time word mean the same day the model is told it is."""
-        from .connector import current_tz_offset_h
         from .textproc import _env_tz_offset
-        hours = current_tz_offset_h.get()
-        return timezone(timedelta(hours=_env_tz_offset() if hours is None else hours))
+        return timezone(timedelta(hours=_env_tz_offset()))
 
     def _memory_budget(self) -> int:
         settings = getattr(self, "settings", None)

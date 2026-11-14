@@ -50,6 +50,11 @@ TEMPLATE_EXEMPT = frozenset({
 DROPPED = {
     "LAB_MODEL": "tools/prompt_lab.py, its only reader, was removed",
     "PROMPT_LAB_MODEL": "tools/prompt_lab.py, its only reader, was removed",
+    "REVIEWER_MODEL": "tools/auto_reviewer.py, its only reader, was removed",
+    "ANTHROPIC_API_KEY": "tools/evolution_benchmark.py, its only reader, was removed",
+    "ANTHROPIC_BASE_URL": "tools/evolution_benchmark.py, its only reader, was removed",
+    "BENCH_EVAL_DELAY_S": "tools/evolution_benchmark.py, its only reader, was removed",
+    "BENCH_EVAL_DELAY": "tools/evolution_benchmark.py, its only reader, was removed",
 }
 
 #: Every setting name retired in 1.0 -> its replacement. None is read: a start
@@ -110,7 +115,6 @@ RENAMED = {
     "EVAL_ENABLE": "EVAL_ENABLED",
     "AGENT_EVIDENCE_WARN_BYTES": "LEDGER_EVIDENCE_WARN_BYTES",
     "AGENT_CANDIDATE_LEDGER_WARN_BYTES": "LEDGER_CANDIDATES_WARN_BYTES",
-    "BENCH_EVAL_DELAY": "BENCH_EVAL_DELAY_S",
     # Older aliases of the same settings.
     "GLM_API_KEY": "VISION_API_KEY",
     "GLM_BASE_URL": "VISION_BASE_URL",

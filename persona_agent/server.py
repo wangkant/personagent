@@ -322,9 +322,8 @@ class ReplayGuard:
             except (json.JSONDecodeError, TypeError):
                 continue
             self._log_lines += 1
-            # One [nonce, timestamp] per line; an object line is the 0.x file.
-            pairs = row.items() if isinstance(row, dict) else (
-                [row] if isinstance(row, list) and len(row) == 2 else [])
+            # One [nonce, timestamp] per line.
+            pairs = [row] if isinstance(row, list) and len(row) == 2 else []
             for nonce, timestamp in pairs:
                 if not isinstance(nonce, str) or not nonce or len(nonce) > 128:
                     continue
@@ -637,13 +636,7 @@ async def lifespan(app: FastAPI):
         _spawn(agent.stickers.bootstrap_tag_all())
 
         async def _recheck_then_purge():
-            # Text persona-fit, then vision aesthetics; each stamps a version
-            # on the entry, so bumping it re-judges the library.
-            n = await agent.stickers.recheck_persona_fit_all()
-            if n:
-                agent.stickers.purge_unfit()
-            m = await agent.visual_recheck_aesthetic_all()
-            if m:
+            if await agent.visual_recheck_aesthetic_all():
                 agent.stickers.purge_unfit()
         _spawn(_recheck_then_purge())
     if _dashboard_served():

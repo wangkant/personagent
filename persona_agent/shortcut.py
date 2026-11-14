@@ -17,8 +17,6 @@ from . import langs, window
 
 WINDOWS = os.name == "nt"
 LINK = "personagent.lnk"
-# The desktop and the Start menu's Programs folder, wherever Windows keeps them.
-EVERYWHERE = "@([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))"
 # Where each kind of link lives; Startup is the one that runs at sign-in.
 SPECIAL = {"desktop": "Desktop", "programs": "Programs", "startup": "Startup"}
 ICON = ("desktop", "programs")
