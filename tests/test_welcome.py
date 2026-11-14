@@ -755,7 +755,8 @@ def test_a_refused_direct_platform_shows_as_failed_even_after_the_runner_exits(w
     direct_base.Status(workspace.home).set("telegram", "refused", "token_rejected")
     monkeypatch.setattr(workspace.services, "running", lambda name: False)
     assert workspace.summary()["platformStatus"] == {"telegram": "failed", "discord": "paused"}
-    assert [p["id"] for p in welcome.conn.catalog() if not p["groups"]] == ["weixin_oc"]
+    assert [p["id"] for p in welcome.conn.catalog() if not p["groups"]] == [
+        "weixin_oc", "wecom", "weixin_official_account"]
 
 
 def test_moving_a_platform_off_astrbot_restarts_it_and_disconnecting_clears_both(workspace, monkeypatch):
