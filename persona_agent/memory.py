@@ -504,6 +504,10 @@ class Memory:
                         item["said_by"] = caller
                         if user_name:
                             item["said_by_name"] = user_name
+            same = " ".join(content.split()).casefold()
+            if any(" ".join(str(it.get("text") or "").split()).casefold() == same
+                   for it in self.memories.get(group_id, [])):
+                return say("noted")  # already kept: a second copy would only crowd out others
             self._append_memory(group_id, item)
             return say("noted")
 

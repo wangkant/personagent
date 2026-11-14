@@ -689,3 +689,14 @@ def test_forget_deletes_an_event_only_its_sole_participant_owns(tmp: Path) -> No
           == ["Sam and Kim shared the cake"])
     check("and the file agrees", "alone" not in a.episode_store.path.read_text(
         encoding="utf-8"))
+
+
+def test_the_same_note_twice_is_kept_once(tmp: Path) -> None:
+    a = make_agent(tmp)
+    g = "g-twice"
+    first = a._handle_memory_command(g, "Luna, remember my server is called atlas", "7", "Sam")
+    again = a._handle_memory_command(g, "Luna remember  my server is called Atlas", "7", "Sam")
+    check("both acknowledged", first in _COMMAND_REPLIES["en"]["noted"]
+          and again in _COMMAND_REPLIES["en"]["noted"], f"{first!r} {again!r}")
+    check("one note kept", [it["text"] for it in a.memories.get(g, [])]
+          == ["my server is called atlas"], repr(a.memories.get(g)))
