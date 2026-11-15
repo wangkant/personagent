@@ -980,11 +980,50 @@ def test_activity_reads_the_service_with_its_token_and_keeps_only_what_the_view_
     assert chat["learned"][0]["kind"] == "repeat" and chat["learned"][0]["actions"] == ["rollback"]
     assert chat["learned"][0]["by"] == {"by": "character", "why": "It fits."}
     assert chat["notes"] == [{"text": "match night at Sam's", "by": "Sam", "about": "", "when": 3.0,
-                              "id": "", "conv": "", "born": 0, "used": 0, "saidBy": ""}]
+                              "id": "", "conv": "", "born": 0, "used": 0, "saidBy": "",
+                              "checked": 0, "refs": 0}]
     assert chat["thread"] is None and chat["events"] == chat["removed"] == [] and chat["status"] is None
+    assert chat["log"] is None
     # Oldest first, like a chat; the service lists newest first.
     assert [r["text"] for r in chat["recent"]] == ["lol", "sure"] and chat["recent"][0]["count"] == 3
     assert "checklist" not in json.dumps(chat) and "past" not in chat and "history" not in json.dumps(chat)
+
+
+def test_activity_shows_the_chat_record_and_each_items_evidence(client, workspace, monkeypatch):
+    seen = []
+    def handler(request):
+        seen.append(request)
+        if request.url.path == "/api/dashboard/memory/evidence":
+            if request.url.params["id"] == "gone":
+                return httpx.Response(409, json={"error": "gone", "code": "already_forgotten"})
+            return httpx.Response(200, json={"refs": 3, "on": True, "lines": [
+                {"seq": 4, "t": 10.0, "name": "you", "self": False, "text": "I moved to Lyon"},
+                {"seq": 5, "t": 11.0, "name": "Nova", "self": True, "text": "Lyon, nice"}]})
+        return httpx.Response(200, json={
+            **CONVERSATION, "id": "private:browser:x", "platform": "browser", "kind": "dm",
+            "memories": [{"text": "lives in Lyon", "about": "you", "refs": [4, 5], "checked": 12.0}],
+            "episodes": [{"id": "e1", "text": "moved", "t0": 1.0, "t1": 2.0, "refs": [4]}],
+            "log": {"on": True, "days": 30, "lines": 9, "first_at": 1.0}})
+    _activity_service(workspace, monkeypatch, handler)
+    chat = client.get("/api/activity/chat", params={"id": "private:browser:x"}, headers=HEADERS).json()
+    assert (chat["notes"][0]["checked"], chat["notes"][0]["refs"], chat["events"][0]["refs"]) == (12.0, 2, 1)
+    assert chat["log"] == {"on": True, "days": 30, "lines": 9, "first": 1.0}
+    shown = client.get("/api/activity/evidence", headers=HEADERS, params={
+        "chat": "private:browser:x", "conv": "private:browser:x", "kind": "note", "id": "n1"}).json()
+    assert dict(seen[-1].url.params) == {"conv": "private:browser:x", "kind": "note", "id": "n1"}
+    # The page's own person is "you" on the page, the character's lines are marked as its own.
+    assert shown == {"refs": 3, "on": True, "lines": [
+        {"when": 10.0, "text": "I moved to Lyon", "name": "", "you": True},
+        {"when": 11.0, "text": "Lyon, nice", "name": "Nova", "character": True}]}
+    gone = client.get("/api/activity/evidence", headers=HEADERS, params={
+        "chat": "private:browser:x", "kind": "note", "id": "gone"})
+    assert gone.status_code == 400 and gone.json()["error"] == "activity_changed"
+    for bad in ({"chat": "", "kind": "note", "id": "n1"}, {"chat": "x", "kind": "core", "id": "n1"},
+                {"chat": "x", "kind": "note", "id": ""}, {"chat": "x", "kind": "note", "id": "n" * 129}):
+        before = len(seen)
+        response = client.get("/api/activity/evidence", headers=HEADERS, params=bad)
+        assert response.status_code == 400 and len(seen) == before, bad
+    assert client.get("/api/activity/evidence", params={"chat": "x", "kind": "note", "id": "n1"}).status_code == 403
 
 
 def test_activity_decisions_go_to_the_service_as_writes_and_come_back_as_the_chat(client, workspace,

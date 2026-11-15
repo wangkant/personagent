@@ -34,7 +34,7 @@ from dotenv import dotenv_values
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from . import __version__, access, candidates, home as homes, langs
+from . import __version__, access, candidates, channels, home as homes, langs
 from . import connections as conn
 from . import direct  # noqa: F401  tests reach the platforms through welcome.direct
 from .direct import base as direct_base
@@ -1029,6 +1029,27 @@ class Workspace:
             shown["retired"] = True
         return shown
 
+    async def activity_evidence(self, chat: str, conv: str, kind: str, item: str) -> dict:
+        """The logged lines one remembered fact or event of a chat rests on."""
+        chat, conv, kind, item = (str(v or "") for v in (chat, conv, kind, item))
+        if (not chat or len(chat) > 512 or len(conv) > 512 or kind not in ("note", "episode")
+                or not item or len(item) > 128):
+            raise ValueError("invalid_chat")
+        raw = await self._activity_call("GET", "/api/dashboard/memory/evidence",
+                                        params={"conv": conv or chat, "kind": kind, "id": item})
+        if raw is None or raw.get("off"):
+            raise ValueError("activity_unavailable")
+        page = channels.platform_of(conv or chat) == access.PAGE_PLATFORM
+        lines = []
+        for row in raw.get("lines") or []:
+            name = str(row.get("name") or "")
+            mine = page and not row.get("self") and name == PAGE_SENDER
+            lines.append({"when": row.get("t", 0), "text": str(row.get("text") or ""),
+                          "name": "" if mine else name,
+                          **({"you": True} if mine else {}),
+                          **({"character": True} if row.get("self") else {})})
+        return {"refs": int(raw.get("refs") or 0), "on": bool(raw.get("on")), "lines": lines}
+
     async def activity_decide(self, payload: dict) -> dict:
         cid, action = str(payload.get("id") or ""), str(payload.get("action") or "")
         chat = str(payload.get("chat") or "")
@@ -1125,7 +1146,7 @@ def _activity_chat(raw: dict) -> dict:
             out["by"] = {"by": str(by.get("by") or ""), "why": str(by.get("why") or "")}
         return out
 
-    thread, status = raw.get("thread"), raw.get("memory_status")
+    thread, status, log = raw.get("thread"), raw.get("memory_status"), raw.get("log")
     return {"id": raw.get("id", ""), "platform": raw.get("platform", ""), "kind": raw.get("kind", ""),
             "observing": [item(c) for c in raw.get("observing") or []],
             "learned": [item(c) for c in raw.get("learned") or []],
@@ -1133,6 +1154,7 @@ def _activity_chat(raw: dict) -> dict:
                        "when": m.get("time", 0), "id": m.get("id", ""), "conv": m.get("conv", ""),
                        "born": m.get("born", 0), "used": m.get("used", 0),
                        "saidBy": own(m.get("said_by_name", "")),
+                       "checked": m.get("checked") or 0, "refs": len(m.get("refs") or []),
                        **flag("aboutSelf", mine(m.get("about"))),
                        **flag("saidBySelf", mine(m.get("said_by_name")))}
                       for m in raw.get("memories") or []],
@@ -1143,6 +1165,7 @@ def _activity_chat(raw: dict) -> dict:
             if isinstance(thread, dict) else None,
             "events": [{"id": e.get("id", ""), "text": e.get("text", ""), "from": e.get("t0", 0),
                         "to": e.get("t1", 0), "names": [n for n in e.get("names") or [] if own(n)],
+                        "refs": len(e.get("refs") or []),
                         **flag("self", any(mine(n) for n in e.get("names") or []))}
                        for e in raw.get("episodes") or []],
             "removed": [{"tid": r.get("tid", ""), "kind": r.get("kind", ""), "why": r.get("why", ""),
@@ -1153,6 +1176,10 @@ def _activity_chat(raw: dict) -> dict:
             "status": {"used": status.get("calls_today", 0), "cap": status.get("cap", 0),
                        "paused": status.get("paused_until", 0), "next": status.get("next_at", 0)}
             if isinstance(status, dict) else None,
+            # The chat's record: whether it is kept, for how many days, from when.
+            "log": {"on": bool(log.get("on")), "days": int(log.get("days") or 0),
+                    "lines": int(log.get("lines") or 0), "first": log.get("first_at") or 0}
+            if isinstance(log, dict) else None,
             "recent": [{"when": d.get("ts", 0), "spoke": bool(d.get("spoke")), "mode": d.get("mode", ""),
                         "reason": d.get("reason", ""), "text": d.get("excerpt", ""),
                         "answered": d.get("answered", ""),
@@ -1493,6 +1520,10 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     @app.get("/api/activity/chat")
     async def activity_chat(id: str = ""):
         return await workspace.activity_chat(id)
+
+    @app.get("/api/activity/evidence")
+    async def activity_evidence(chat: str = "", conv: str = "", kind: str = "", id: str = ""):
+        return await workspace.activity_evidence(chat, conv, kind, id)
 
     @app.post("/api/activity/decide")
     async def activity_decide(request: Request):

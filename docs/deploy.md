@@ -118,6 +118,13 @@ The API lives under `/api/dashboard/` on the agent service:
 - `GET memory/list?conv=<chat id>` lists what each chat remembers and what
   can still be restored; `personagent memory` reads it while the service
   runs.
+- `GET memory/evidence?conv=<chat id>&kind=note|episode&id=<id>` returns the
+  lines of the chat record that one fact or event rests on (`lines`, each
+  with `seq`, `t`, `name`, `self` and `text`), how many lines it cites
+  (`refs`) and whether the record is on (`on`). In `conversation` and
+  `memory/list`, each fact also carries `refs` and `checked` (when a review
+  last found that it holds; `0` for never), each event `refs`, and each chat
+  `log` (`on`, `days`, `lines` and `first_at`).
 
 Every call needs the header `X-Personagent-Dashboard-Token` with the token in
 `dashboard.token` in the runtime folder (`<home>/runtime/` unless
@@ -528,6 +535,12 @@ add any proxy or tunnel, even on one host.
   `memory.json.pre-v2` loses what was forgotten, so no copy in `runtime/`
   keeps it; a backup made earlier still does. Back up `runtime/`, because it holds
   everything the bot has learned and remembers.
+- **Chat record.** Each chat's record in `runtime/log/` keeps its lines for
+  `MEMORY_LOG_DAYS` (30) days and at most 5,000 lines, and is pruned once a
+  day. It has no `.bak` copy, is never put in a backup, and every kind of
+  forgetting reaches it. Reviewing facts against it rides on consolidation
+  calls, and a quiet chat gets at most one review-only call a day, inside
+  `MEMORY_CALLS_PER_DAY`.
 
 ## When the bot goes quiet
 

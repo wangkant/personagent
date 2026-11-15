@@ -1075,7 +1075,7 @@ MEMORY_STEPS = {
 MEMORY_MECHANISMS = (
     "recall", "update", "merge", "attribution", "injection", "time", "rooms",
     "private", "restart", "forget", "restore", "budget", "calls", "identity",
-    "migration")
+    "migration", "review", "log")
 MEMORY_NOTE = (
     "No model is asked anything: each consolidation answer is written in the "
     "case, every other model call fails the case, and the checks read the "
@@ -1217,7 +1217,10 @@ class _MemoryRun:
                     return row[key]
             raise MemoryCaseError(f"scripted answer: nothing in the call holds {ref!r}")
 
-        lines = payload.get("lines") or []
+        reviews = payload.get("review") or []
+        # A review's evidence lines are cited like the stretch's own.
+        lines = (payload.get("lines") or []) + [
+            line for r in reviews for line in r.get("evidence") or []]
         notes = payload.get("notes") or []
         events = (payload.get("episodes") or []) + (
             (payload.get("fold_month") or {}).get("episodes") or [])
@@ -1243,6 +1246,8 @@ class _MemoryRun:
                 o["from"] = [find(notes, "n", r) for r in o["from"]]
             if "e" in o:
                 o["e"] = find(events, "e", o["e"])
+            if "r" in o:
+                o["r"] = find(reviews, "r", o["r"])
             if "about" in o:
                 o["about"] = speaker(o["about"])
             return o
@@ -1382,7 +1387,9 @@ class _MemoryRun:
 
     async def _fold(self, n: int, conv: str, s: dict) -> None:
         a = self.agent
-        reason = s.get("reason") or a._fold_due(conv) or "idle"
+        due = a._fold_due(conv)
+        # A step folds the lines it set up; a review-only call reads none.
+        reason = s.get("reason") or (due if due != "review" else None) or "idle"
         inp = a._fold_input(conv, reason)
         if inp is None:
             self._need(f"step {n}: something waited to be consolidated", False)
@@ -1560,6 +1567,10 @@ class _MemoryRun:
                         str(row.get("user_id")) == self.uid(who))
                     self._need(f"{where}: {frag!r} is about {who or 'the group'}", ok,
                                str(row.get("user_id")))
+                if "checked" in want:
+                    self._need(f"{where}: {frag!r} is {'' if want['checked'] else 'not '}"
+                               "checked", bool(row.get("checked")) == bool(want["checked"]),
+                               str(row.get("checked")))
                 if "said_by" in want:
                     who = want["said_by"]
                     ok = (not row.get("said_by")) if who is None else (
@@ -1599,6 +1610,7 @@ class _MemoryRun:
             snap = a._recent.snapshot(conv) or {}
             for key in ("lines", "spill", "dm", "dm_spill"):
                 rows += list(snap.get(key) or [])
+            rows += a.chat_log.read(conv)
             words = _fill(frag, self.name).lower()
             self._need(f"{where}: no kept line holds {frag!r}", not any(
                 words in str(r.get("text") or r.get("content") or "").lower()

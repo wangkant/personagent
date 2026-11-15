@@ -203,7 +203,8 @@ class Desk:
                         or path.name.endswith(SKIP_SUFFIXES)):
                     continue
                 # The practice room is a throwaway copy.
-                if label == "runtime" and relative.parts[0] == "trial":
+                # The chat log is never copied: a forget must reach every line of it.
+                if label == "runtime" and relative.parts[0] in ("trial", "log"):
                     continue
                 found.append((path, f"{label}/{relative.as_posix()}"))
         return found

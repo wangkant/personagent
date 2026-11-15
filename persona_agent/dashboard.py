@@ -33,7 +33,7 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
-from . import (access, candidates, channels, decision_log, embeddings, evidence,
+from . import (access, candidates, channels, chatlog, decision_log, embeddings, evidence,
                langs, learning as learning_rules, lineage, memstate, promotion)
 from .config_env import env_bool, env_float, env_int
 from .paths import ROOT, resolve_runtime_lang_file, runtime_dir
@@ -558,24 +558,31 @@ _FORGET_BY = ("page", "terminal")
 REMOVED_LIMIT = 50
 
 
-def _note_view(where: str, item: dict) -> dict:
+def _note_view(where: str, item: dict, evidence: bool = False) -> dict:
     """One remembered fact: who it is about, who said it, when it was first
-    noted and last drawn on."""
+    noted and last drawn on; with `evidence`, the log lines it rests on and
+    when the review last found it holds."""
     text = str(item.get("text") or "")
     by = item.get("saved_by_name") or ("auto" if item.get("auto") else "")
-    return {"text": _clip(text, 500), "time": _epoch(item.get("time")), "by": by,
+    view = {"text": _clip(text, 500), "time": _epoch(item.get("time")), "by": by,
             "about": item.get("user_name") or "", "conv": where,
             # The old text key still names a note that has no id yet.
             "id": str(item.get("id") or embeddings.text_key(text)),
             "born": _epoch(item.get("born") or item.get("time")),
             "used": _epoch(item.get("used")),
             "said_by_name": str(item.get("said_by_name") or "")}
+    if evidence:
+        view.update(refs=chatlog.refs_of(item), checked=_epoch(item.get("checked")))
+    return view
 
 
-def _episode_view(row: dict) -> dict:
-    return {"id": str(row.get("id") or ""), "text": _clip(row.get("text"), 300),
+def _episode_view(row: dict, evidence: bool = False) -> dict:
+    view = {"id": str(row.get("id") or ""), "text": _clip(row.get("text"), 300),
             "t0": _epoch(row.get("t0")), "t1": _epoch(row.get("t1") or row.get("t0")),
             "names": [str(n) for n in row.get("names") or [] if n][:8]}
+    if evidence:
+        view["refs"] = chatlog.refs_of(row)
+    return view
 
 
 def _thread_view(row: dict | None) -> dict | None:
@@ -611,9 +618,11 @@ def _remembered(agent, conv: str) -> dict:
                     reverse=True)
     return {"core_at": float(agent.memory_state.core_at(conv) or 0.0),
             "thread": _thread_view(store.thread(conv)),
-            "episodes": [_episode_view(e) for e in events[:LIST_LIMIT * 3]],
+            "episodes": [_episode_view(e, evidence=True) for e in events[:LIST_LIMIT * 3]],
             "removed": [_removed_view(r) for r in agent._removed_items(conv, now)][:REMOVED_LIMIT],
-            "memory_status": _consolidation(agent, conv, now)}
+            "memory_status": _consolidation(agent, conv, now),
+            "log": {key: value for key, value in agent.chat_log.status(conv).items()
+                    if key != "last_at"}}
 
 
 def memory_listing(agent, conv: str = "") -> dict:
@@ -630,8 +639,10 @@ def memory_listing(agent, conv: str = "") -> dict:
                  "core": {"text": core, "at": float(agent.memory_state.core_at(key) or 0.0)}
                  if core else None,
                  "thread": _thread_view(store.thread(key)),
-                 "facts": [_note_view(key, item) for item in agent.memories.get(key, [])],
-                 "events": [_episode_view(e) for e in events]}
+                 "facts": [_note_view(key, item, evidence=True)
+                           for item in agent.memories.get(key, [])],
+                 "events": [_episode_view(e, evidence=True) for e in events],
+                 "log": agent.chat_log.status(key)}
         if entry["core"] or entry["thread"] or entry["facts"] or entry["events"]:
             chats.append(entry)
     return {"chats": chats,
@@ -685,12 +696,12 @@ def conversation_payload(agent, conv_id: str) -> dict:
             placed[cand.get("candidate_id", "")] = {k: full[k] for k in STANDING_SENT}
     memories, core = [], ""
     remembered = {"core_at": 0.0, "thread": None, "episodes": [], "removed": [],
-                  "memory_status": None}
+                  "memory_status": None, "log": None}
     if agent is not None:
         kept = [(conv_id, item) for item in reversed(agent.memories.get(conv_id, []))]
         # What its prompt also reads, so the page shows all it knows here.
         kept += agent._notes_from_rooms(conv_id)
-        memories = [_note_view(where, item) for where, item in kept]
+        memories = [_note_view(where, item, evidence=True) for where, item in kept]
         core = _clip(agent.core_memory.get(conv_id, ""), 600)
         remembered = _remembered(agent, conv_id)
     return {
@@ -966,3 +977,52 @@ async def dashboard_memory_list(request: Request, conv: str = ""):
     if agent is None:
         return _refused(503, "agent_off", "the character is not running")
     return _json(memory_listing(agent, conv), agent)
+
+
+EVIDENCE_KINDS = ("note", "episode")
+
+
+def _cited_by(agent, conv: str, kind: str, item_id: str) -> dict | None:
+    """The fact or event of a chat with this id (a note may still go by its text key)."""
+    if not item_id:
+        return None
+    if kind == "episode":
+        return agent.episode_store.get(conv, item_id)
+    for item in agent.memories.get(conv, []):
+        if item.get("id") == item_id or (
+                not item.get("id") and embeddings.text_key(item.get("text") or "") == item_id):
+            return item
+    return None
+
+
+def evidence_lines(agent, conv: str, kind: str, item_id: str) -> dict | None:
+    """The log lines one fact or event cites, as far as the log still keeps them."""
+    item = _cited_by(agent, conv, kind, item_id)
+    if item is None:
+        return None
+    refs = chatlog.refs_of(item)
+    rows = agent.chat_log.lines(conv, refs) if refs else []
+    return {"refs": len(refs), "on": agent.chat_log.on,
+            "lines": [{"seq": r["seq"], "t": r["t"], "name": r.get("name") or "",
+                       "self": bool(r.get("self")), "text": _clip(r.get("text"), 500)}
+                      for r in rows]}
+
+
+@router.get("/api/dashboard/memory/evidence", include_in_schema=False)
+async def dashboard_memory_evidence(request: Request, conv: str = "", kind: str = "note",
+                                    id: str = ""):
+    """The chat's own lines one remembered fact or event rests on."""
+    refused = _check(request)
+    if refused is not None:
+        return refused
+    if not conv or len(conv) > 512:
+        return _refused(400, "invalid_id", "give a conversation id")
+    if kind not in EVIDENCE_KINDS or not id or len(id) > 128:
+        return _refused(400, "invalid_kind", "kind is one of " + ", ".join(EVIDENCE_KINDS))
+    agent = _server().agent
+    if agent is None:
+        return _refused(503, "agent_off", "the character is not running")
+    found = evidence_lines(agent, conv, kind, id)
+    if found is None:
+        return _refused(409, "already_forgotten", "that item is already gone")
+    return _json(found, agent)

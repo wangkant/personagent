@@ -8,7 +8,7 @@
 .venv/bin/python tools/<script>.py --help     # Windows: .venv\Scripts\python.exe
 ```
 
-日常の作業はスクリプトではなく `personagent` のサブコマンドで行います。`personagent doctor`、`personagent learned`、`personagent eval` です。プロンプトの変更を試すには `personagent chat`、測るには `personagent eval` を使います。`personagent eval --suite memory` はスクリプト化された整理の回答を使ってオフラインで実行され、言語ごとに 21 のケースがあり、キーは要りません。このバージョンでは、すべてのケースが期待どおりに動作します。ほかのスイートはモデルを呼び出します。
+日常の作業はスクリプトではなく `personagent` のサブコマンドで行います。`personagent doctor`、`personagent learned`、`personagent eval` です。プロンプトの変更を試すには `personagent chat`、測るには `personagent eval` を使います。`personagent eval --suite memory` は台本どおりの整理の回答を使ってオフラインで実行され、言語ごとに 21 のケースがあり、キーは要りません。このバージョンでは、すべてのケースが期待どおりに動作します。ほかのスイートはモデルを呼び出します。
 
 | スクリプト | 内容 | 必要なもの | モデル呼び出し | 状態 |
 |---|---|---|---|---|

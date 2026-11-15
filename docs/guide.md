@@ -79,7 +79,7 @@ Once a model is set up, **Character & settings** ends with **Advanced settings**
 | **Speaking and reply style** | **Time zone** (`PERSONA_TZ_OFFSET_HOURS`); **In groups, reply only when addressed** (`CHAT_ONLY_WHEN_CALLED`); **Messages before joining in** (`CHAT_TRIGGER_COUNT`); **How often it starts conversations**, which sets the seven `PROACTIVE_*` timings at once; **Reply style**: emoji, three sets of symbols and the maximum reply length, written to `persona.card.json`. |
 | **Models** | A backup model with its own service address and key (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_API_KEY`), the model for quick decisions (`LLM_JUDGE_MODEL`) and the model for private chats (`LLM_DM_MODEL`). The backup model is tested before it is saved. |
 | **Learning** | `REACT_LEARN_ENABLED`, `REACT_LEARN_ADMIN_ONLY`, `REACT_ELICIT_ENABLED`, `PROMOTE_AUTO_ENABLED`, `PROMOTE_MIN_SPEAKERS` (1 or 2), `PROMOTE_JUDGE_ENABLED` (the character decides what reactions cannot settle) and `PROMOTE_OBSERVE_MAX_DAYS` (days without a new reaction before an item under observation is set aside). **Restart learning** writes a new `PERSONA_VERSION`, so that what the character learned so far is no longer used. Nothing is deleted. |
-| **Memory** | `MEMORY_CALLS_PER_DAY`, `MEMORY_TIDY_EVERY`, `CHAT_CONTEXT_MESSAGES`, `MEMORY_PROMPT_CHARS`, `MEMORY_EPISODES_MAX` and `MEMORY_KEEP_RECENT`. See [Memory](#memory). |
+| **Memory** | `MEMORY_CALLS_PER_DAY`, `MEMORY_TIDY_EVERY`, `CHAT_CONTEXT_MESSAGES`, `MEMORY_PROMPT_CHARS`, `MEMORY_EPISODES_MAX`, `MEMORY_KEEP_RECENT` and `MEMORY_LOG_DAYS`. See [Memory](#memory). |
 | **Other settings** | `DASHBOARD_ENABLED`, `UPDATE_CHECK_ENABLED`, the seven `PROACTIVE_*` timings, `CHAT_FOLLOWUP_WINDOW_S`, the `REACT_*` and `PROMOTE_*` limits, `REACT_MODEL`, the model, interval and batch size of the character's own decisions (`PROMOTE_JUDGE_MODEL`, `PROMOTE_JUDGE_INTERVAL_S`, `PROMOTE_JUDGE_BATCH`) and `PERSONA_VERSION`. |
 
 **Save** writes only the settings that changed and leaves the rest of `.env` as it was. It then restarts the character, except when `UPDATE_CHECK_ENABLED` is the only change. Turning off replies (`AGENT_ENABLED`) asks first. So does renaming the character under **Character name**, because a new name starts a new character.
@@ -593,15 +593,21 @@ Each chat has its own memory, kept in `runtime/` in the home folder. The charact
 
 ### What it keeps
 
+- **The chat record**: the messages the character took in and the replies it sent, each with its time and speaker, kept as plain text in `runtime/log/` for `MEMORY_LOG_DAYS` (30) days and at most 5,000 lines per chat. The character checks its notes against it and quotes it when asked about the past. Groups set to stay silent and the practice chat (`personagent chat`) keep no record. With `MEMORY_LOG_DAYS=0` or `MEMORY_KEEP_RECENT=false` no chat keeps one, and the record already kept is deleted.
 - **Recent messages**, each with the time it was sent. The last 60 lines of a group and the last 60 turns of a private chat are written to `runtime/recent.json` for 72 hours, so a restart does not lose the conversation. With `MEMORY_KEEP_RECENT=false` they are kept only while the character runs. A reply reads at most the last 60 messages, or the last 30 when the character is called, and the model is told about pauses of 30 minutes or more. Recent messages are not listed under **Remembers** in Activity.
 - **The summary of earlier conversation.** When older messages leave the recent window, the character writes a short running summary of the chat: open questions, plans and who is doing what. The page shows it as **Earlier in this chat**.
 - **Facts** about people and about the group. They come from the memory commands, from notes the character writes while replying, from corrections that teach a fact, and from consolidation (below). Each fact records whom it is about, when it was first noted and when a reply last drew on it. A fact is a person's own only when that person's own messages carry it. What one member says about another is kept as said by that member: it stays in the chat where it was said, and it never changes, ends or merges into the facts that the person's own words gave. A fact about the group that names someone needs a message from that person; otherwise it is kept as said by the member whose words carry it. The same holds for notes the character writes while replying.
 - **Events**: what happened and between whom, each with its date and the people who took part. The date and the people are taken from the stored messages, never from the model, so a message cannot back-date an event. When an event is a plan for a given day, the character may ask after it once in a private chat after that day, if it is allowed to speak first there ([Speaking first](#speaking-first)). Dates, and the day of a plan, are taken in the character's time zone (`PERSONA_TZ_OFFSET_HOURS`; see [Troubleshooting](#troubleshooting)).
 - **The core note**, shown as **Always in mind**: a short note about the whole chat that the character sees in every reply. Each earlier version is kept, and **Restore previous version** brings it back.
+- **Evidence.** Each fact and event records the lines of the chat record it rests on, at most six, and each fact records when a review last found that it holds. Facts noted before this version, and some saved with a memory command, cite no lines; they keep working and are simply not checked.
 
 ### How it stays current
 
 When older messages leave the recent window, or a chat has been quiet for three hours, one model call reads that stretch of the chat. This consolidation updates the summary, adds events, and adds, updates, ends or merges facts: a new address replaces the old one, a plan that is over is ended, and two notes that say the same thing become one. Each change is checked on its own before it is kept. A fact about a person must come from that person's own words, the text must be supported by the messages it cites, and a fact that someone saved on purpose changes only when the person it is about says otherwise. A change that fails a check is dropped, and the others are kept. Notes the character writes while replying also start a consolidation once `MEMORY_TIDY_EVERY` (8) of them have collected in a chat.
+
+**Review against the record.** Each consolidation also re-reads up to six facts, each with the lines it cites or, when it cites none, the lines of the chat record that best match the person it is about. Facts that have never been checked and that replies draw on most come first, then those checked longest ago; a fact is not reviewed again within 7 days. The review may find that a fact holds, which marks it as checked; that it is wrong, and correct it from the lines that show it; or that it is no longer true or no longer supported, and end it. A correction or an ending is checked by code under every rule above before it is kept, and can be restored for 30 days like any other change. A fact saved with a memory command can be confirmed but never changed by a review, and a fact whose lines are no longer in the record is left as it is.
+
+**A review of its own.** A chat that has been quiet for three hours and holds facts due for review whose lines are still in the record gets one review-only call, at most once a day. With nothing to review, no call is made.
 
 ### What a reply sees
 
@@ -609,12 +615,15 @@ Each reply receives, within `MEMORY_PROMPT_CHARS` (2,400 characters), the summar
 
 When a message refers to a time, such as yesterday, last week or last month, in any of the ten chat languages, events from that time come first. Each event reaches the model with its date and its people, so the character can say truthfully when something happened. When it remembers nothing from that time, it is told so and does not invent anything. A fact or event counts as used only when a reply that drew on it was sent.
 
+When a message refers to a past time or asks what someone said, and few facts or events bear on it, the reply also receives up to three matching lines from the chat record, within the same `MEMORY_PROMPT_CHARS`. Each comes with its date and speaker and is marked as a quotation from the chat's own record, never as something said just now. Lines still among the recent messages are not repeated, and in a group the decision whether to speak sees none of them. Only when the record has nothing from that time either is the character told that it remembers nothing.
+
 ### What stays where
 
 - The summary, the events, the recent messages and the core note of a chat never appear in another chat.
 - What one member said about another stays in the chat where it was said.
 - Facts from a private chat stay in that private chat. The only exception is the admin: facts from the admin's private chats, the page's chat included, reach the admin's other private chats, never a group.
 - A group's facts about a person reach that person's private chat with the character, and other groups only with `MEMORY_SHARE_ROOMS` on.
+- A chat's record never reaches another chat, and a consolidation sends only the lines of the chat it consolidates.
 
 ### What it forgets, and what can be restored
 
@@ -627,6 +636,7 @@ When a message refers to a time, such as yesterday, last week or last month, in 
 - After a forget asked for in chat or **Forget this chat**, the daily copies of the memory files (`.bak`) are written again from the current files, and the copy kept from the first start of this version (`memory.json.pre-v2`) loses what was forgotten, so no copy in `runtime/` keeps it; a backup made earlier still does. An item forgotten on the page or in the terminal stays among the removed items for 24 hours, and so also in that day's copies.
 - When something is forgotten while a consolidation of that chat is running, the consolidation's answer is discarded and the messages are read again later, so the forgotten item does not return.
 - **Clear memory** in the App view deletes all memory, after saving a backup to `backups/` that keeps it until you delete that file.
+- Every kind of forgetting reaches the chat record. A forget asked for in chat removes the matching lines; forgetting a fact or an event on the page or in the terminal removes the lines it cites; **Forget this chat** removes the chat's whole record; **Clear memory** and **Reset all** remove every record. The record has no daily copy and is never put in a backup, so what leaves it is gone, and restoring a forgotten item does not bring its lines back.
 
 ### See and change it
 
@@ -643,6 +653,8 @@ personagent memory restore <id>               # bring a removed item back
 
 The command goes through the running character, or edits the files when the character is stopped. If `memory.json`, `core_memory.json` or `episodes.json` is damaged, `personagent run`, `up` and `memory` stop with one sentence that names the file and the dated copy (`.bak`) to put in its place; the damaged file is left untouched.
 
+On the page, each fact says whether and when a review found that it holds (**Checked against the chat record**, or **Not yet checked against the chat record**). **Show source** unfolds the lines a fact or event rests on, or says that they are no longer kept, and a line under **Remembers** says how many days the chat record keeps, or that it is off. In the terminal, the list has a **Checked** column and the same line for each chat, and `--json` carries `refs`, `checked` and `log`.
+
 ### Settings and cost
 
 | Setting | Default | Does |
@@ -653,12 +665,15 @@ The command goes through the running character, or edits the files when the char
 | `MEMORY_PROMPT_CHARS` | 2400 | Characters of remembered material placed in each reply |
 | `MEMORY_EPISODES_MAX` | 120 | Events kept per chat |
 | `MEMORY_KEEP_RECENT` | `true` | Keep recent messages on disk for 72 hours |
+| `MEMORY_LOG_DAYS` | 30 | Days each chat's record is kept. `0` keeps no record and deletes the one kept |
 | `MEMORY_MAX_PER_CONVERSATION` | 50 | Facts kept per chat |
 | `MEMORY_SHARE_ROOMS` | `false` | Let a group's facts about a person reach other groups that person talks in |
 
-The first six are under **Memory** in [Advanced settings](#advanced-settings), and `MEMORY_SHARE_ROOMS` is **Share memory between groups** under **More features**.
+The first seven are under **Memory** in [Advanced settings](#advanced-settings), and `MEMORY_SHARE_ROOMS` is **Share memory between groups** under **More features**.
 
 Consolidation is the only part of memory that calls a model. It uses the judge model (`LLM_JUDGE_MODEL`) and sends it one chat's recent messages and that chat's notes, never another chat's. A chat gets at most 16 calls a day, at least 20 minutes apart, and all chats together at most `MEMORY_CALLS_PER_DAY`. A quiet chat needs one call a day or none. After a failed call, the chat waits 10 minutes, then twice as long after each further failure, up to 6 hours; three failures in a row pause consolidation in every chat for an hour. An answer that cannot be read as a whole, such as one with an operation of no known kind, counts as a failed call, and its valid changes are still kept. An unexpected error while an answer is applied changes nothing. While consolidation waits, messages are kept and are consolidated later, oldest first. **Remembers** shows how many of today's calls are used. The memory commands, recall, forgetting and restoring call no model.
+
+Review adds no new kind of call. It rides on consolidation calls, and the review-only call of a quiet chat counts against the same limits: at most 16 calls a chat and `MEMORY_CALLS_PER_DAY` for all chats together. A quiet chat therefore needs at most one more call a day, and a busy chat no more calls than before. A consolidation that reviews also sends the lines of the chat record that the reviewed facts cite. Looking up the record for a reply calls no model.
 
 ## Activity
 
@@ -668,7 +683,7 @@ The view lists every chat the character knows, with the platform, whether it is 
 
 - **Learned** lists what is in use. Each item is either a **Better wording**, with what it said crossed out and what to say instead, or a **Reply worth repeating**, and says how it came into use: because the reactions agreed, by the character's own decision with its reason, or by a person. **Undo** stops using it.
 - **Still under observation** lists what the character is still watching. Each item says in one sentence where it stands: how many agreeing reactions it has of how many it needs, that reactions alone cannot settle it and the character is deciding it itself, or that the character looked at it and keeps observing it, with its reason. It also shows the date on which it will be set aside if no new reaction arrives. This part has no buttons, and nothing in it needs you.
-- **Remembers** shows what the character remembers in that chat, in five groups: **Always in mind** (the core note, with the date it last changed), **Earlier in this chat** (the summary, with the period it covers), **Facts** (whom each is about, **Said by** for what one member said about another, when it was first noted and last used), **Events** (dated, with the people who took part) and **Recently removed** (what was removed, why, and until when it can be restored). **Forget** removes one item, and the message that confirms it has **Undo**. **Restore** brings back a removed item, and **Restore previous version** brings back the earlier core note. While consolidation is on, a line shows how many of today's calls are used, or when it tries again after an error. **Forget this chat**, at the end, forgets everything the chat remembers, after asking. In a DM the part also includes what groups noted about that person.
+- **Remembers** shows what the character remembers in that chat, in five groups: **Always in mind** (the core note, with the date it last changed), **Earlier in this chat** (the summary, with the period it covers), **Facts** (whom each is about, **Said by** for what one member said about another, when it was first noted and last used), **Events** (dated, with the people who took part) and **Recently removed** (what was removed, why, and until when it can be restored). **Forget** removes one item, and the message that confirms it has **Undo**. **Restore** brings back a removed item, and **Restore previous version** brings back the earlier core note. While consolidation is on, a line shows how many of today's calls are used, or when it tries again after an error. **Forget this chat**, at the end, forgets everything the chat remembers, after asking. In a DM the part also includes what groups noted about that person. Each fact also says whether it has been checked against the chat record, and when. **Show source** unfolds the lines of the chat record that a fact or event rests on, and a line at the top says how many days the chat record keeps, or that it is off.
 - **Recent** shows the latest messages and its replies. Each reply carries a tag for why it spoke: **called**, **joined in on its own**, **follow-up**, **proactive** or **admin**. Lines it let pass show why it stayed quiet or what happened instead: the model did not answer, the reply was held back by a safety check, the reply could not be delivered, it considered starting a conversation and decided against it, or the message was answered in the same reply as another message. When several people call the character at almost the same time, one reply answers them all and its @ goes to the latest caller. When that reply is not sent, each caller gets a line of their own with the reason. Recent activity is kept in memory only, so a restart clears it.
 
 Every Undo is written to the same ledger as `personagent learned`, with the actor `dashboard` and the reason `local page`.
@@ -735,6 +750,8 @@ Learning runs beside that path, never inside it, and keeps its state in plain fi
 
 Everything personagent stores stays on your machine, in the home folder: `.env` with your keys, `persona.txt`, `persona.card.json`, `runtime/`, and `platforms/` with the platform credentials. In a clone, none of these files is committed to Git. They can hold credentials and real conversations, so back them up and keep them private. The recent messages of each chat are kept in `runtime/recent.json` for 72 hours unless `MEMORY_KEEP_RECENT=false`, and what the character removes from memory stays restorable in `runtime/memory_trash.jsonl` for up to 30 days. The local page never puts the key in browser storage.
 
+Each chat's record is kept as plain text in `runtime/log/` for `MEMORY_LOG_DAYS` (30) days. It is never copied into a backup, every kind of forgetting reaches it, and `MEMORY_LOG_DAYS=0` keeps none.
+
 The [Activity](#activity) view is part of the local page, which listens on 127.0.0.1 only. The service's API behind it answers only requests that carry the token from `runtime/dashboard.token`, a file created readable only by your own account; on Windows, who else can read it depends on the permissions of the home folder. `CONNECTOR_TOKEN` does not open it. The view never shows API keys or tokens. `DASHBOARD_ENABLED=false` turns it off.
 
 At most once a day, the local page, `personagent up` and `personagent doctor` ask pypi.org for the newest version number. The request carries personagent's own version and nothing else. `UPDATE_CHECK_ENABLED=false` stops it.
@@ -743,7 +760,7 @@ The model provider sees conversations:
 
 - Chat context goes to your `LLM_BASE_URL`.
 - If you configure a fallback (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`), it is also called on ordinary turns for the reply gate, search decisions, reaction judging, self-evaluation and sticker tagging, and it receives chat context as well.
-- Memory consolidation sends one chat's recent messages and that chat's notes to the judge model (`LLM_JUDGE_MODEL`), never another chat's. `MEMORY_CALLS_PER_DAY=0` turns it off.
+- Memory consolidation sends one chat's recent messages and that chat's notes to the judge model (`LLM_JUDGE_MODEL`), never another chat's. `MEMORY_CALLS_PER_DAY=0` turns it off. When it reviews facts, it also sends the lines of that chat's record that those facts cite.
 - When the character decides a learned item itself, the reply, the reactions to it and the candidate wordings go to `PROMOTE_JUDGE_MODEL` (blank: `REACT_MODEL`). `PROMOTE_JUDGE_ENABLED=false` turns this off.
 - Images go to the vision endpoint.
 - When the model decides to look something up, the search query goes to Tavily (if `TAVILY_API_KEY` is set) or DuckDuckGo.
@@ -762,6 +779,7 @@ What each file and folder in the home holds:
 | `platforms/` | `direct.json` with the credentials of the platforms personagent connects itself, and the managed AstrBot with its settings | Secrets |
 | `runtime/memory.json`, `core_memory.json`, `episodes.json` | Facts, the core note, events and summaries of each chat | Chat content |
 | `runtime/recent.json` | Recent messages of each chat, for 72 hours | Chat text |
+| `runtime/log/` | Each chat's record: its messages and the character's replies, for `MEMORY_LOG_DAYS` days, in plain text | Chat text |
 | `runtime/memory_trash.jsonl` | Removed memory items, for up to 30 days | Chat content |
 | `runtime/pending_reactions.json` | Replies sent in the last 15 minutes that await a reaction, with a few messages before each | Chat text |
 | `runtime/candidate_ledger.<lang>.jsonl` and the other learning records | What the character learned, with the replies and reactions behind it | Chat text |
@@ -773,7 +791,7 @@ What each file and folder in the home holds:
 | `data/` | Your own lorebook, example and filter files | Only what you put there |
 | `backups/` | Backup zips | Both |
 
-A backup is an unencrypted zip that holds the key, the memory, what the character learned and the platform logins. **Clear memory** and **Reset all** in the App view first save one to `backups/`, so what they clear stays in that file until you delete it. Backups saved to the Desktop or Documents stay there as well.
+A backup is an unencrypted zip that holds the key, the memory, what the character learned and the platform logins. **Clear memory** and **Reset all** in the App view first save one to `backups/`, so what they clear stays in that file until you delete it. Backups saved to the Desktop or Documents stay there as well. The chat record (`runtime/log/`) is never included in a backup.
 
 ## Troubleshooting
 

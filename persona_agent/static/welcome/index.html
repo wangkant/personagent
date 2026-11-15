@@ -112,7 +112,7 @@
                 OpenRouter 免费模型：密钥本身不收费，每天限 50 次请求。每次请求使用的模型可能不同，部分免费服务商会保留收到的内容。
               </p>
               <div class="label-line">
-                <label for="api-key">API Key</label
+                <label for="api-key" data-t="labelKey">API Key</label
                 ><a
                   id="key-link"
                   target="_blank"
@@ -138,7 +138,7 @@
               <details id="advanced">
                 <summary data-t="advanced">高级设置</summary>
                 <label for="model" data-t="model">模型名称</label
-                ><input id="model" autocomplete="off" /><label for="base-url"
+                ><input id="model" autocomplete="off" /><label for="base-url" data-t="labelBase"
                   >API Base URL</label
                 ><input id="base-url" type="url" autocomplete="off" />
               </details>
@@ -309,9 +309,9 @@
                   ></label
                 >
                 <div id="vision-own" hidden>
-                  <label for="vision-base">API Base URL</label
+                  <label for="vision-base" data-t="labelBase">API Base URL</label
                   ><input id="vision-base" type="url" autocomplete="off" />
-                  <label for="vision-key">API Key</label
+                  <label for="vision-key" data-t="labelKey">API Key</label
                   ><input
                     id="vision-key"
                     type="password"

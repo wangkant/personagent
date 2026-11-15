@@ -15,7 +15,7 @@
 
 *これは英語版 README の翻訳です。基準となるのは英語版で、こちらより新しい場合があります。*
 
-personagent はあなた自身のコンピューターで動き、保存する内容はすべてそのコンピューターに残ります。QQ、WeChat、Telegram、Discord とさらに 18 のプラットフォームのグループチャットと個人チャット、あなたのコンピューター上のウィンドウ、Claude Code や Codex などのコーディングアシスタントなど、お使いの場所のどこでも動作します。キャラクターは選ぶことも自分で書くこともでき、OpenAI 互換の任意のモデルで動作します。
+personagent はあなた自身のコンピューターで動き、保存する内容はすべてそのコンピューターに残ります。QQ、WeChat、Telegram、Discord とさらに 18 のプラットフォームのグループチャットと DM（ダイレクトメッセージ）、あなたのコンピューター上のウィンドウ、Claude Code や Codex などのコーディングアシスタントなど、普段使っている場所ならどこでも動きます。キャラクターは選ぶことも自分で書くこともでき、OpenAI 互換の任意のモデルで動作します。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="ローカルページの「プラットフォーム連携」画面。スキャンまたはいくつかの値の貼り付けで連携できるプラットフォーム、折りたたまれた上級のプラットフォーム、参加できるコーディングアシスタントが表示されている" width="960">
@@ -29,7 +29,7 @@ personagent はあなた自身のコンピューターで動き、保存する�
 <tr>
 <td width="220" valign="top"><strong>独自のキャラクターを持っています。</strong></td>
 <td valign="top">
-既成の性格が 7 つあります。そのうち 3 つは、コミュニティですでに描かれてきたキャラクター、DeepSeek クジラ娘、GPT ドラゴン娘、Claude お嬢様です。立ち絵はまばたきし、考え、話します。<br>
+既成のキャラクターが 7 つあります。そのうち DeepSeek クジラ娘、GPT ドラゴン娘、Claude お嬢様の 3 つは、コミュニティですでに描かれてきたキャラクターです。立ち絵はまばたきし、考え、話します。<br>
 ペルソナはいつでも書き直せます。キャラクターが学んだことは残ります。
 </td>
 </tr>
@@ -45,7 +45,7 @@ personagent はあなた自身のコンピューターで動き、保存する�
 <tr>
 <td width="220" valign="top"><strong>記憶します。</strong></td>
 <td valign="top">
-チャットごとに独立した記憶を持ちます。再起動しても失われない最近のメッセージ、これまでの会話の要約、日付付きの出来事、人についての事実で、これらを自ら最新の状態に保ちます。<br>
+チャットごとに独立した記憶を持ちます。再起動しても失われない最近のメッセージ、これまでの会話の要約、日付付きの出来事、人についてのメモで、これらを自ら最新の状態に保ちます。<br>
 記憶しているすべての内容はアクティビティビューに一覧表示され、どの項目も削除または復元できます。
 </td>
 </tr>
@@ -54,7 +54,7 @@ personagent はあなた自身のコンピューターで動き、保存する�
 <td valign="top">
 訂正で教わったこと（たとえば、グループでトレーニングジムを何と呼んでいるか）は、そのチャットでのその後のすべての返信に反映されます。<br>
 荒らしや通りすがりの人が学習し直させることはできません。<br>
-反応だけでは決められない変更はキャラクター自身が判断し、その理由を記録します。誰かが承認する必要はありません。<br>
+反応だけでは判断できない変更は、キャラクターが自分で判断し、その理由を記録します。誰かが承認する必要はありません。<br>
 すべての変更は記録され、どれでも元に戻せます。
 </td>
 </tr>
@@ -66,9 +66,9 @@ personagent はあなた自身のコンピューターで動き、保存する�
 </td>
 </tr>
 <tr>
-<td width="220" valign="top"><strong>すべてのプラットフォームに接続します。</strong></td>
+<td width="220" valign="top"><strong>すべてのプラットフォームと連携します。</strong></td>
 <td valign="top">
-22 のチャットプラットフォームを 1 つのページから、スマートフォンでのスキャンかいくつかの値を貼り付けるだけで連携できます。その多くはグループチャットにも個人チャットにも対応します。<br>
+22 のチャットプラットフォームを 1 つのページから、スマートフォンでのスキャンかいくつかの値を貼り付けるだけで連携できます。その多くはグループチャットにも DM にも対応します。<br>
 同じエージェントが、あなたのコンピューター上のウィンドウでも、Claude Code、Codex、DeepSeek Harness の中でも応答します。<br>
 その他のプラットフォームは、AstrBot、Koishi、Matrix のブリッジ、または自分で書くコネクターを通じて追加できます。
 </td>
@@ -82,7 +82,7 @@ OpenAI 互換の任意のモデルを使えます。OpenRouter の無料モデ�
 </tr>
 </table>
 
-チャットで頼めば、覚えることも忘れることもできます（ノヴァは既定のキャラクターの名前です）：`ノヴァ、覚えて：ケイはベジタリアン`、`ノヴァ、忘れて、ベジタリアンのこと`（[記憶コマンド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶コマンド)）。何をどのくらいの期間保持するかは、ガイドの[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶)の節に記載しています。
+チャットで頼めば、覚えることも忘れることもできます（ノヴァは既定のキャラクターの名前です）：`ノヴァ、覚えて：ケイはベジタリアン`、`ノヴァ、ベジタリアンのこと忘れて`（[記憶コマンド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶コマンド)）。何をどのくらいの期間保持するかは、ガイドの[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#記憶)の節に記載しています。
 
 ## はじめに
 
@@ -93,7 +93,7 @@ personagent
 
 [uv](https://docs.astral.sh/uv/) があれば、`uvx personagent` で個別のインストールなしに実行できます。Windows では、ソースの ZIP をダウンロードして `start.bat` をダブルクリックする方法もあります。
 
-Windows では専用のウィンドウで開き、macOS と Linux ではブラウザーで開きます。モデルの API キーを貼り付けて **確認してチャットを開始** をクリックします。まだキーがない場合も、最初から OpenRouter の無料モデルが選ばれていて、そのキーは無料で取得できます。`personagent demo` はキーなしで、台本のある 3 つの場面を再生します。[はじめに](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)では、ページを画面ごとに説明しています。
+Windows では専用のウィンドウで開き、macOS と Linux ではブラウザーで開きます。モデルの API キーを貼り付けて **確認してチャットを開始** をクリックします。まだキーがない場合も、最初から OpenRouter の無料モデルが選ばれていて、そのキーは無料で取得できます。`personagent demo` はキーなしで、台本どおりの 3 つの場面を再生します。[はじめに](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)では、ページを画面ごとに説明しています。
 
 personagent 自体は無料です。料金は、選んだモデルサービスに、そのサービスの料金で支払います。1 件のメッセージで複数回のモデルリクエストが発生することがあります。返信のほかに、グループで発言するかどうかの判断、返信がどう受け止められたかの判断、記憶の整理を行うことがあるためです。OpenRouter の無料モデルは 1 日 50 リクエストまで使え、無料のプロバイダーの中には受け取った内容を保持するところもあります。Ollama ならキーなしで自分のコンピューター上でモデルを動かせます。
 
@@ -103,11 +103,11 @@ personagent 自体は無料です。料金は、選んだモデルサービス�
 
 | ページ上の表示 | プラットフォーム | 必要なもの |
 |---|---|---|
-| スキャンで連携 | QQ、個人 WeChat | スマートフォン。WeChat のボットは 1 対 1 のチャットのみ |
+| スキャンで連携 | QQ、個人 WeChat | スマートフォン。WeChat のボットは DM のみ |
 | いくつかの値を貼り付け | Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat、KOOK、Feishu/Lark、DingTalk、Slack、WeCom AI ボット、Mattermost、Misskey | プラットフォームのコンソールで取得する値。どの値かはページに表示されます |
 | 上級 | WeCom アプリ、WeChat 公式アカウント、QQ Webhook、OneBot v11 (NapCat)、Satori | 公開アドレス、またはこのコンピューター上の他のソフトウェア |
 
-連携中のプラットフォームは personagent を起動するたびに再び起動します。スキャンで連携するプラットフォームと Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat には personagent が自分で接続し、それ以外は personagent がダウンロードしてバックグラウンドで動かす [AstrBot](https://github.com/AstrBotDevs/AstrBot) を経由します。ディスプレイのないサーバーでは、personagent が自分で接続するこれらのプラットフォームを、ターミナルから `personagent connect <platform>` を使ってページと同じ手順と確認で接続でき、`personagent up` でブラウザーなしですべてを起動できます。プラットフォームごとの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#チャットに入れる)に、QQ をゼロからつなぐ手順は[中国語のデプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)にあります。
+連携中のプラットフォームは personagent を起動するたびに再び起動します。スキャンで連携するプラットフォームと Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat とは personagent が直接連携し、それ以外は personagent がダウンロードしてバックグラウンドで動かす [AstrBot](https://github.com/AstrBotDevs/AstrBot) を経由します。ディスプレイのないサーバーでは、personagent が直接連携するこれらのプラットフォームと、ターミナルから `personagent connect <platform>` を使ってページと同じ手順と確認で連携でき、`personagent up` でブラウザーなしですべてを起動できます。プラットフォームごとの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#チャットに入れる)に、QQ をゼロから連携する詳しい手順は、[中国語版のデプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)にのみ掲載しています。
 
 すでに AstrBot、Koishi、Matrix を運用している場合は、personagent をその背後でエージェントとして動かすことができます。[自分で動かすブリッジ](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#自分で動かすブリッジ)、[Satori コネクター](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ja.md)、[Matrix コネクター](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ja.md)を参照してください。
 
@@ -135,7 +135,7 @@ PyPI に新しいバージョンが出ると、ページに通知とアップデ
 
 ## プライバシー
 
-personagent が保存するものはすべて、あなたのマシン上の 1 つのホームフォルダーに置かれます。選んだモデルプロバイダーは、自分が応答する会話を見ることになります。また personagent は 1 日に 1 回、新しいバージョンが出ていないか pypi.org に問い合わせます（`UPDATE_CHECK_ENABLED=false` で止められます）。実在の人々とつなぐ前に、ボットであることを伝えて同意を得てください。何がどこに送られるかは[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#プライバシーと同意)に記載しています。
+personagent が保存するものはすべて、あなたのマシン上の 1 つのホームフォルダーに置かれます。選んだモデルプロバイダーは、自分が応答する会話を見ることになります。また personagent は 1 日に 1 回、新しいバージョンが出ていないか pypi.org に問い合わせます（`UPDATE_CHECK_ENABLED=false` で止められます）。実在の人がいるチャットと連携する前に、ボットであることを伝えて同意を得てください。何がどこに送られるかは[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#プライバシーと同意)に記載しています。
 
 ## ドキュメント
 

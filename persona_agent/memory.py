@@ -12,6 +12,7 @@ from .storage import num as _num
 from . import access
 from . import channels
 from . import chatlangs
+from . import chatlog
 from . import embeddings
 from . import episodes as episodes_mod
 from . import memstate
@@ -59,6 +60,7 @@ _SENTENCE_END = re.compile(r"(?<=[.!?;])\s+|(?<=[。！？；\n])\s*")
 TRASH_FILE = "memory_trash.jsonl"
 EPISODES_FILE = "episodes.json"
 STATE_FILE = "memory_state.json"
+LOG_DIR = "log"
 
 # A core rewrite that keeps too little of a long note is a truncation.
 _CORE_SHRINK_MIN_OLD = 120
@@ -66,6 +68,9 @@ _CORE_SHRINK_LEN = 0.5
 _CORE_SHRINK_TOKENS = 0.4
 _CORE_OPEN = re.compile(r"\[\s*CORE_UPDATE\s*\]", re.IGNORECASE)
 _CORE_CLOSE = re.compile(r"\[\s*/\s*CORE_UPDATE\s*\]", re.IGNORECASE)
+
+#: The newest lines a note written while replying may cite as its cause.
+_CAUSE_LINES = 30
 
 #: Events a recall lists after the facts.
 _RECALL_EVENTS = 3
@@ -233,6 +238,62 @@ class Memory:
             if dropped:
                 self._save_episodes()
         return store
+
+    @property
+    def chat_log(self) -> chatlog.ChatLog:
+        """The chats' logs; off with MEMORY_LOG_DAYS=0 or MEMORY_KEEP_RECENT=false."""
+        s = getattr(self, "settings", None)
+        days = int(getattr(s, "memory_log_days", 30) or 0) \
+            if getattr(s, "memory_keep_recent", True) else 0
+        folder = self.memory_file.with_name(LOG_DIR)
+        log = self.__dict__.get("_chat_log")
+        if log is None or log.folder != folder:
+            log = self.__dict__["_chat_log"] = chatlog.ChatLog(folder, days)
+        log.days = float(days)
+        return log
+
+    def _log_rows(self, conv: str) -> list[dict]:
+        """The chat's held lines (spill and window) in the log's row shape."""
+        window_rows = getattr(self, "_window_rows", None)
+        if window_rows is None:
+            return []
+        reader = channels.dm_user(conv)
+        spill, window = window_rows(conv)
+        out = []
+        for row in spill + window:
+            if not isinstance(row, dict):
+                continue
+            if reader:
+                bot = row.get("role") != "user"
+                out.append({"seq": row.get("seq"), "t": row.get("t"), "t1": row.get("t1"),
+                            "user_id": "" if bot else reader,
+                            "name": self.persona_name if bot else str(row.get("name") or ""),
+                            "text": row.get("content"), "self": bot, "mid": row.get("mid")})
+            else:
+                bot = not row.get("user_id") and row.get("name") == self.persona_name
+                out.append(dict(row, self=bot))
+        return out
+
+    def _cause_refs(self, conv: str, text: str, uid: str = "") -> list[int]:
+        """The log lines a note written now cites: the newest two human
+        lines (by `uid` when given) that share its words; [] when none do."""
+        tokens = _focus_tokens(str(text or ""), "zh")
+        if not tokens:
+            return []
+        uids = self._same_person(uid) if uid else frozenset()
+        rows = [r for r in self._log_rows(conv) if not r.get("self")
+                and isinstance(r.get("text"), str)
+                and (not uids or str(r.get("user_id") or "") in uids)][-_CAUSE_LINES:]
+        scored = sorted(((len(tokens & _focus_tokens(r["text"], "zh")), _num(r.get("seq"), int))
+                         for r in rows), reverse=True)
+        return chatlog.merge_refs(seq for n, seq in scored[:2] if n > 0)
+
+    def _log_chat(self, conv: str) -> int:
+        """Append what the chat's log lacks; never raises, never waits long."""
+        log = self.chat_log
+        if not log.on:
+            return 0
+        return log.take(conv, self._log_rows(conv))
 
     def _load_memories(self) -> dict:
         """memory.json, migrated once (memstore.migrate); a damaged file, or a
@@ -504,6 +565,9 @@ class Memory:
                         item["said_by"] = caller
                         if user_name:
                             item["said_by_name"] = user_name
+            refs = self._cause_refs(group_id, content, caller)
+            if refs:
+                item["refs"] = refs
             same = " ".join(content.split()).casefold()
             if any(" ".join(str(it.get("text") or "").split()).casefold() == same
                    for it in self.memories.get(group_id, [])):
@@ -787,11 +851,20 @@ class Memory:
                 snap[key] = filtered(snap.get(key, []))
             if removed != before:
                 recent.put(conv, snap)
+        removed += self._log_forget(conv, lambda row: hit(row["text"]) and mine(row))
         if removed:
             dirty = getattr(self, "_recent_dirty", None)
             if isinstance(dirty, set):
                 dirty.add(conv)
         return removed
+
+    def _log_forget(self, conv: str, gone: Callable[[dict], bool]) -> int:
+        """Remove matching lines from the chat's log; how many went."""
+        try:
+            return self.chat_log.forget(conv, gone)
+        except (OSError, chatlog.LockUnavailable) as e:
+            logger.warning("[Agent] chat log not rewritten: %s", e)
+            return 0
 
     def _drop_vector(self, text: str) -> None:
         if not getattr(self, "embedding_model", "") or not text:
@@ -810,6 +883,7 @@ class Memory:
         item_id = str(item_id or "")
         texts: list[str] = []
         tids: list[str] = []
+        refs: set[int] = set()
         if kind == "note":
             items = self.memories.get(conv, [])
             legacy = bool(_TEXT_KEY.fullmatch(item_id))
@@ -823,6 +897,7 @@ class Memory:
             self.memories[conv] = [it for it in items if not any(it is h for h in hits)]
             self._save_memories()
             texts = [it["text"] for it in hits]
+            refs = {r for it in hits for r in chatlog.refs_of(it)}
         elif kind == "episode":
             store = self.episode_store
             row = store.get(conv, item_id) if item_id else None
@@ -832,6 +907,7 @@ class Memory:
             store.remove(conv, item_id)
             self._save_episodes()
             texts = [row.get("text", "")]
+            refs = set(chatlog.refs_of(row))
         elif kind == "thread":
             store = self.episode_store
             thread = store.thread(conv)
@@ -856,6 +932,9 @@ class Memory:
         for text in texts:
             self.memory_state.add_tombstone(conv, memstore.token_hashes(text))
             self._drop_vector(text)
+        if refs:
+            # The lines it cites go with it, so a review cannot raise it again.
+            self._log_forget(conv, lambda row: row["seq"] in refs)
         self._forgot(conv)
         self._save_memory_state()
         return next((t for t in tids if t), "-")
@@ -1014,6 +1093,10 @@ class Memory:
             dirty = getattr(self, "_recent_dirty", None)
             if isinstance(dirty, set):
                 dirty.add(conv)
+        try:
+            changed = self.chat_log.drop(conv) or changed
+        except (OSError, chatlog.LockUnavailable) as e:
+            logger.warning("[Agent] chat log not removed: %s", e)
         for row in (rows or []) + [r.get("item") or {} for r in trashed]:
             self._drop_vector(row.get("text", ""))
         for ep in old.get("episodes") or []:
@@ -1130,11 +1213,15 @@ class Memory:
             old["text"] = text
             old["time"] = now
             old.pop("tidied", None)
+            old.pop("checked", None)
             # Only a DM gets here with a subject the note lacked.
             if uid and not old.get("user_id"):
                 old["user_id"], old["user_name"] = uid, name
             if not old.get("id"):
                 old["id"] = memstore.new_id("m", self._note_ids(group_id))
+            refs = chatlog.merge_refs(chatlog.refs_of(old), self._cause_refs(group_id, text))
+            if refs:
+                old["refs"] = refs
             self._save_memories()
             # Never the text: a forgotten note must not live on in the log.
             logger.info("[Agent] auto-memory updated (group=%s, %d chars)",
@@ -1152,6 +1239,9 @@ class Memory:
             item["said_by"] = said_by
             if said_name:
                 item["said_by_name"] = said_name
+        refs = self._cause_refs(group_id, text)
+        if refs:
+            item["refs"] = refs
         self._append_memory(group_id, item)
         logger.info("[Agent] auto-memory (group=%s%s, %d chars)", group_id,
                     ", about a member" if "user_id" in item else "", len(text))

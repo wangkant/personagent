@@ -497,7 +497,8 @@ class PromptBuilder:
         return ", ".join([f"{nick}({uid})" for uid, nick in unique[:5]])
 
     def _core_memory_for_prompt(self, group_id: str) -> str:
-        note = self.core_memory.get(group_id, "").strip()
+        # Every write keeps it within the cap; an older, longer one is cut here.
+        note = self.core_memory.get(group_id, "").strip()[:self.CORE_MEMORY_MAX_CHARS + 3]
         if not note:
             return ""
         return (

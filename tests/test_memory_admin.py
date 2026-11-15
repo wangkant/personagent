@@ -106,6 +106,65 @@ def test_the_terminal_speaks_the_install_language(home, monkeypatch, capsys) -> 
     check("zh: the refusal", "没有与该编号对应的项。" in capsys.readouterr().out)
 
 
+def _with_record(home: Path) -> float:
+    """The fact cites two logged lines and was checked; a second fact cites nothing."""
+    from persona_agent import chatlog
+
+    now = time.time()
+    chatlog.ChatLog(home / "runtime" / "log").take("telegram:c1", [
+        {"seq": 1, "t": now - 86400 * 2, "user_id": "telegram:42", "name": "Sam", "text": "got a dog"},
+        {"seq": 2, "t": now - 3600, "user_id": "telegram:42", "name": "Sam", "text": "Pip"}])
+    checked = dict(FACT, refs=[1, 2], checked=now - 60)
+    plain = dict(FACT, text="Sam likes tea")
+    (home / "runtime" / "memory.json").write_text(
+        json.dumps({"telegram:c1": [checked, plain]}), encoding="utf-8")
+    return now
+
+
+def test_the_list_says_what_is_checked_and_what_the_chat_record_keeps(home, monkeypatch, capsys) -> None:
+    from datetime import datetime
+
+    now = _with_record(home)
+    run()
+    out = capsys.readouterr().out
+    first = datetime.fromtimestamp(now - 86400 * 2).strftime("%Y-%m-%d")
+    check("the record line under the chat",
+          f"  Chat record: kept for 30 days; the oldest line is from {first}." in out, out)
+    check("a Checked column", "Checked" in out.splitlines()[2], out)
+    checked_row = next(line for line in out.splitlines() if "Sam has a dog now" in line)
+    plain_row = next(line for line in out.splitlines() if "Sam likes tea" in line)
+    check("the checked fact shows its day, the other 'not yet'",
+          datetime.fromtimestamp(now - 60).strftime("%Y-%m-%d") in checked_row
+          and "not yet" in plain_row, out)
+    check("json: refs, checked and the record", run("list", "--json") == 0)
+    chat = json.loads(capsys.readouterr().out)[0]
+    check("json: the facts carry refs and checked, the chat its record",
+          chat["facts"][0]["refs"] == [1, 2] and chat["facts"][0]["checked"] > 0
+          and chat["facts"][1]["checked"] == 0 and chat["log"]["on"] is True
+          and chat["log"]["lines"] == 2, repr(chat))
+    monkeypatch.setenv("AGENT_LANG", "de")
+    run()
+    check("de: the record line translated, the values kept",
+          f"Chatprotokoll: 30 Tage aufbewahrt; die älteste Zeile stammt vom {first}."
+          in capsys.readouterr().out)
+    monkeypatch.setenv("AGENT_LANG", "en")
+    monkeypatch.setattr(memory_admin, "_file_backend", lambda: memory_admin.FileBackend(
+        home / "runtime" / "memory.json", home / "runtime" / "core_memory.json", home / "runtime",
+        AgentSettings(api_key="", memory_log_days=0)))
+    run()
+    check("with MEMORY_LOG_DAYS=0 the record is off, and says what that costs",
+          "Chat record: off; what is remembered here cannot be checked against the chat again."
+          in capsys.readouterr().out)
+
+
+def test_the_help_mentions_the_chat_record(home, capsys) -> None:
+    with pytest.raises(SystemExit):
+        memory_admin.main(["--help"], prog="personagent memory")
+    out = " ".join(capsys.readouterr().out.split())
+    check("help: one sentence on the record", "chat record (runtime/log)" in out
+          and "MEMORY_LOG_DAYS" in out, out)
+
+
 def test_refusals_say_where_to_look(home, monkeypatch, capsys) -> None:
     monkeypatch.setattr(memory_admin, "_memory_command", lambda sub="": f"personagent memory {sub}".strip())
     check("an unknown id", run("forget", "zzz") == 1)

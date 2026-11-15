@@ -50,6 +50,7 @@ API는 에이전트 서비스의 `/api/dashboard/` 아래에 있습니다.
 - `POST memory/forget`은 본문 `{"conv": "<chat id>", "kind": "note", "id": "<id>"}`로 항목 하나를 삭제하고, `POST memory/restore`(`{"tid": "<tid>"}`)로 그 항목을 복원할 때 쓰는 `tid`를 응답합니다. `kind`는 `note`, `episode`, `thread`, `core` 중 하나입니다. 이전 본문 `{"conv": "<chat id>", "note": "<note id>"}`도 계속 동작하며, `note`가 없으면 그 채팅의 핵심 메모를 삭제합니다.
 - `POST memory/forget_chat`은 `{"conv": "<chat id>"}`로 그 채팅이 기억하는 모든 것을 삭제합니다. 되돌릴 수 없습니다.
 - `GET memory/list?conv=<chat id>`는 각 채팅이 기억하는 것과 아직 복원할 수 있는 것을 나열합니다. 서비스가 실행 중이면 `personagent memory`가 이것을 읽습니다.
+- `GET memory/evidence?conv=<chat id>&kind=note|episode&id=<id>`는 사실이나 사건 하나의 근거가 된 채팅 기록의 줄(`lines`, 각 줄에 `seq`, `t`, `name`, `self`, `text`), 인용한 줄의 수(`refs`), 기록이 켜져 있는지(`on`)를 반환합니다. `conversation`과 `memory/list`에서는 각 사실에 `refs`와 `checked`(대조에서 맞다고 확인된 마지막 시각, 대조된 적이 없으면 `0`), 각 사건에 `refs`, 각 채팅에 `log`(`on`, `days`, `lines`, `first_at`)도 포함됩니다.
 
 모든 호출에는 런타임 폴더(`AGENT_RUNTIME_DIR`로 옮기지 않으면 `<home>/runtime/`)의 `dashboard.token`에 있는 토큰을 `X-Personagent-Dashboard-Token` 헤더에 담아야 합니다. 이 파일은 소유자만 읽을 수 있고, 서비스가 시작할 때 만듭니다. 헤더가 없는 호출은 401(`dashboard_token`), 잘못된 토큰은 403(`wrong_token`)을 받습니다. `CONNECTOR_TOKEN`과 `X-Personagent-Token`으로는 열 수 없습니다. 이들은 커넥터와 `/health/details` 전용입니다.
 
@@ -208,6 +209,7 @@ direct 프로세스와 여기 있는 세 커넥터는 봇이 먼저 보낼 수 �
 - **`personagent eval`**은 케이스마다 모델을 호출합니다. 단, `memory` 스위트는 스크립트로 된 답으로 오프라인에서 실행됩니다. 페르소나와 학습 스위트에는 판정용 두 번째 모델(`BENCH_JUDGE_MODEL`)도 필요합니다.
 - **메모리.** 네임스페이스가 붙은(QQ 외) 대화가 256개를 넘으면 가장 오래 활동이 없던 유휴 대화가 메모리에서 제외되고 대기 중인 반응을 잃습니다. 아직 통합되지 않은 메시지는 먼저 통합되며, 최근 메시지는 `MEMORY_KEEP_RECENT=false`가 아니면 `runtime/recent.json`에 72시간 동안 남습니다. 사실, 사건, 핵심 메모, 학습 기록은 남습니다. 요청 처리 중인 대화는 절대 밀려나지 않습니다. 장기 기억은 시작할 때 디스크에서 불러오며 이 상한의 대상이 아닙니다.
 - **디스크.** `runtime/`의 증거 로그와 후보 학습 기록은 추가 전용이고 잘리지 않습니다. `personagent doctor`는 어느 쪽이든 50MB를 넘으면 경고합니다(`LEDGER_EVIDENCE_WARN_BYTES`, `LEDGER_CANDIDATES_WARN_BYTES`). 기억 파일은 작게 유지됩니다. `recent.json`은 최근 72시간 안에 활동한 채팅만 보관하고, `memory_trash.jsonl`은 삭제된 항목을 많아야 30일 동안 보관합니다. 매일 첫 변경 전에 `memory.json`, `core_memory.json`, `episodes.json`은 이름 끝에 `.bak`이 붙은 같은 이름의 파일로 복사되며, 이 버전을 처음 시작할 때 이전 기억 파일을 `memory.json.pre-v2`로 보관합니다. **이 채팅의 기억 삭제**나 채팅에서 요청한 삭제 후에는 `.bak` 사본이 현재 파일에서 다시 기록되고 `memory.json.pre-v2`에서도 삭제된 내용이 지워지므로, `runtime/`의 어떤 사본에도 남지 않습니다. 다만 그 전에 만든 백업에는 남아 있습니다. 봇이 배우고 기억하는 모든 것이 들어 있으니 `runtime/`을 백업하십시오.
+- **채팅 기록.** `runtime/log/`에 있는 각 채팅의 기록은 줄을 `MEMORY_LOG_DAYS`(30)일 동안, 최대 5,000줄까지 보관하며 하루에 한 번 정리됩니다. `.bak` 사본이 없고 백업에도 포함되지 않으며, 모든 삭제가 기록에도 적용됩니다. 기록과의 사실 대조는 기억 통합 호출에 포함되고, 조용한 채팅의 대조만 하는 호출은 하루에 최대 한 번이며 `MEMORY_CALLS_PER_DAY` 범위 안에서 이루어집니다.
 
 ## 봇이 조용해졌을 때
 

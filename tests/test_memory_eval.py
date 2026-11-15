@@ -163,3 +163,28 @@ async def test_the_model_suites_still_need_a_key(tmp: Path, monkeypatch) -> None
     with pytest.raises(be.EvalRefused, match="LLM_API_KEY"):
         await be.run(be.parse_args(["--suite", "speak", "--out", str(tmp / "r.json")]),
                      env={})
+
+
+async def test_without_the_review_the_review_cases_fail(tmp: Path, monkeypatch) -> None:
+    monkeypatch.setattr(consolidate.Consolidation, "_review_due", lambda *_a, **_k: [])
+    held = _held(await _run(tmp, "en", {"mem-22", "mem-23", "mem-24", "mem-25"}))
+    check("every review case fails when nothing is offered for review",
+          held == dict.fromkeys(("mem-22", "mem-23", "mem-24", "mem-25"), False), repr(held))
+
+
+async def test_without_the_log_reaching_a_forget_the_line_comes_back(tmp: Path,
+                                                                     monkeypatch) -> None:
+    from persona_agent import chatlog
+    monkeypatch.setattr(chatlog.ChatLog, "forget", lambda *_a, **_k: 0)
+    held = _held(await _run(tmp, "zh", {"mem-26"}))
+    check("the forget case fails when the log keeps the line", held == {"mem-26": False},
+          repr(held))
+
+
+async def test_without_the_lookup_last_weeks_lines_are_not_read(tmp: Path, monkeypatch) -> None:
+    from persona_agent import retrieval
+    monkeypatch.setattr(retrieval.Retrieval, "_log_lines",
+                        lambda self, conv, text, span, left, tz: ([], left))
+    held = _held(await _run(tmp, "en", {"mem-27"}))
+    check("the log case fails when a reply never reads the log", held == {"mem-27": False},
+          repr(held))

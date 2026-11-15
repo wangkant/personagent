@@ -79,7 +79,7 @@ Depois que um modelo é configurado, **Personagem e configurações** termina co
 | **Participação e estilo de resposta** | **Fuso horário** (`PERSONA_TZ_OFFSET_HOURS`); **Nos grupos, responder apenas quando chamado** (`CHAT_ONLY_WHEN_CALLED`); **Mensagens antes de participar** (`CHAT_TRIGGER_COUNT`); **Frequência com que inicia conversas**, que define de uma só vez os sete intervalos `PROACTIVE_*`; **Estilo de resposta**: emojis, três conjuntos de símbolos e o tamanho máximo da resposta, gravados em `persona.card.json`. |
 | **Modelos** | Um modelo reserva com endereço de serviço e chave próprios (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_API_KEY`), o modelo para decisões rápidas (`LLM_JUDGE_MODEL`) e o modelo para conversas privadas (`LLM_DM_MODEL`). O modelo reserva é testado antes de ser salvo. |
 | **Aprendizado** | `REACT_LEARN_ENABLED`, `REACT_LEARN_ADMIN_ONLY`, `REACT_ELICIT_ENABLED`, `PROMOTE_AUTO_ENABLED`, `PROMOTE_MIN_SPEAKERS` (1 ou 2), `PROMOTE_JUDGE_ENABLED` (o personagem decide o que as reações não conseguem resolver) e `PROMOTE_OBSERVE_MAX_DAYS` (dias sem nenhuma reação nova antes que um item em observação seja deixado de lado). **Reiniciar o aprendizado** grava um novo `PERSONA_VERSION`, de modo que o que o personagem aprendeu até então deixa de ser usado. Nada é apagado. |
-| **Memória** | `MEMORY_CALLS_PER_DAY`, `MEMORY_TIDY_EVERY`, `CHAT_CONTEXT_MESSAGES`, `MEMORY_PROMPT_CHARS`, `MEMORY_EPISODES_MAX` e `MEMORY_KEEP_RECENT`. Veja [Memória](#memória). |
+| **Memória** | `MEMORY_CALLS_PER_DAY`, `MEMORY_TIDY_EVERY`, `CHAT_CONTEXT_MESSAGES`, `MEMORY_PROMPT_CHARS`, `MEMORY_EPISODES_MAX`, `MEMORY_KEEP_RECENT` e `MEMORY_LOG_DAYS`. Veja [Memória](#memória). |
 | **Outras configurações** | `DASHBOARD_ENABLED`, `UPDATE_CHECK_ENABLED`, os sete intervalos `PROACTIVE_*`, `CHAT_FOLLOWUP_WINDOW_S`, os limites `REACT_*` e `PROMOTE_*`, `REACT_MODEL`, o modelo, o intervalo e o tamanho do lote das decisões do próprio personagem (`PROMOTE_JUDGE_MODEL`, `PROMOTE_JUDGE_INTERVAL_S`, `PROMOTE_JUDGE_BATCH`) e `PERSONA_VERSION`. |
 
 **Salvar** grava apenas as configurações alteradas e mantém o restante do `.env` como estava. Em seguida, reinicia o personagem, exceto quando `UPDATE_CHECK_ENABLED` é a única alteração. Desativar as respostas (`AGENT_ENABLED`) pede confirmação antes. O mesmo ocorre ao renomear o personagem em **Nome do personagem**, pois um novo nome inicia um novo personagem.
@@ -593,15 +593,21 @@ Cada chat tem a sua própria memória, guardada em `runtime/` na pasta inicial. 
 
 ### O que ele guarda
 
+- **O registro da conversa**: as mensagens que o personagem recebeu e as respostas que enviou, cada uma com seu horário e seu autor, guardadas em texto simples em `runtime/log/` por `MEMORY_LOG_DAYS` (30) dias e até 5.000 linhas por chat. O personagem confere suas anotações com ele e o cita quando perguntam sobre o passado. Os grupos em que ele deve ficar em silêncio e o chat de treino (`personagent chat`) não mantêm registro. Com `MEMORY_LOG_DAYS=0` ou `MEMORY_KEEP_RECENT=false`, nenhum chat mantém registro, e o registro já mantido é apagado.
 - **Mensagens recentes**, cada uma com o horário em que foi enviada. As últimas 60 linhas de um grupo e os últimos 60 turnos de uma conversa privada são gravados em `runtime/recent.json` por 72 horas, de modo que um reinício não perde a conversa. Com `MEMORY_KEEP_RECENT=false`, elas só são mantidas enquanto o personagem está em execução. Uma resposta lê no máximo as últimas 60 mensagens, ou as últimas 30 quando o personagem é chamado, e o modelo é informado das pausas de 30 minutos ou mais. As mensagens recentes não aparecem em **Memória**, na Atividade.
 - **O resumo da conversa anterior.** Quando as mensagens mais antigas saem da janela recente, o personagem escreve um resumo curto e contínuo do chat: perguntas em aberto, planos e quem está fazendo o quê. A página o mostra como **Anteriormente nesta conversa**.
 - **Fatos** sobre pessoas e sobre o grupo. Eles vêm dos comandos de memória, das notas que o personagem escreve enquanto responde, das correções que ensinam um fato e da consolidação (abaixo). Cada fato registra de quem trata, quando foi anotado pela primeira vez e quando uma resposta se baseou nele pela última vez. Um fato só pertence a uma pessoa quando as próprias mensagens dela o trazem. O que um membro diz sobre outro é guardado como dito por esse membro: fica no chat em que foi dito e nunca altera, encerra nem se funde aos fatos que as próprias palavras da pessoa forneceram. Um fato sobre o grupo que cita alguém precisa de uma mensagem dessa pessoa; caso contrário, é guardado como dito pelo membro cujas palavras o trazem. O mesmo vale para as notas que o personagem escreve enquanto responde.
 - **Eventos**: o que aconteceu e entre quem, cada um com a data e as pessoas que participaram. A data e as pessoas são tiradas das mensagens armazenadas, nunca do modelo, então uma mensagem não pode antedatar um evento. Quando um evento é um plano para um determinado dia, o personagem pode perguntar sobre ele uma vez, em uma conversa privada, depois desse dia, se tiver permissão para falar primeiro ali ([Falar primeiro](#falar-primeiro)). As datas, e o dia de um plano, são consideradas no fuso horário do personagem (`PERSONA_TZ_OFFSET_HOURS`; veja [Solução de problemas](#solução-de-problemas)).
 - **A nota principal**, mostrada como **Sempre em mente**: uma nota curta sobre o chat inteiro que o personagem vê em cada resposta. Cada versão anterior é guardada, e **Restaurar a versão anterior** a traz de volta.
+- **Fontes.** Cada fato e cada evento guardam as linhas do registro da conversa em que se baseiam, no máximo seis, e cada fato guarda quando uma revisão confirmou pela última vez que ele se mantém. Fatos anotados antes desta versão, e alguns salvos com um comando de memória, não citam nenhuma linha; continuam funcionando, mas não são conferidos.
 
 ### Como ela se mantém atual
 
 Quando as mensagens mais antigas saem da janela recente, ou quando um chat fica em silêncio por três horas, uma chamada ao modelo lê esse trecho do chat. Essa consolidação atualiza o resumo, acrescenta eventos e acrescenta, atualiza, encerra ou junta fatos: um endereço novo substitui o antigo, um plano que já passou é encerrado, e duas notas que dizem a mesma coisa passam a ser uma só. Cada mudança é verificada separadamente antes de ser mantida. Um fato sobre uma pessoa precisa vir das próprias palavras dessa pessoa, o texto precisa ser sustentado pelas mensagens que cita, e um fato que alguém salvou de propósito só muda quando a pessoa de quem ele trata diz outra coisa. Uma mudança que não passa em uma verificação é descartada, e as demais são mantidas. As notas que o personagem escreve enquanto responde também iniciam uma consolidação depois que `MEMORY_TIDY_EVERY` (8) delas se acumulam em um chat.
+
+**Revisão com o registro.** Cada consolidação também relê até seis fatos, cada um com as linhas que cita ou, quando não cita nenhuma, com as linhas do registro da conversa que melhor correspondem à pessoa de quem trata. Vêm primeiro os fatos nunca conferidos que as respostas mais usam, depois os conferidos há mais tempo; um fato não é revisado de novo antes de 7 dias. A revisão pode concluir que um fato se mantém, e marcá-lo como conferido; que está errado, e corrigi-lo a partir das linhas que mostram isso; ou que não é mais verdadeiro ou não tem mais respaldo, e encerrá-lo. Antes de ser mantida, cada correção ou encerramento é verificado pelo código segundo todas as regras acima, e pode ser restaurado por 30 dias como qualquer outra mudança. Um fato salvo com um comando de memória pode ser confirmado, mas nunca alterado por uma revisão, e um fato cujas linhas não estão mais no registro fica como está.
+
+**Uma revisão própria.** Um chat que está quieto há três horas e contém fatos com revisão pendente cujas linhas ainda estão no registro recebe uma chamada só de revisão, no máximo uma vez por dia. Sem nada a revisar, nenhuma chamada é feita.
 
 ### O que uma resposta vê
 
@@ -609,12 +615,15 @@ Cada resposta recebe, dentro de `MEMORY_PROMPT_CHARS` (2.400 caracteres), o resu
 
 Quando uma mensagem se refere a um momento, como ontem, a semana passada ou o mês passado, em qualquer um dos dez idiomas de chat, os eventos desse período vêm primeiro. Cada evento chega ao modelo com a data e as pessoas, para que o personagem possa dizer com exatidão quando algo aconteceu. Quando ele não lembra nada desse período, é informado disso e não inventa nada. Um fato ou evento só conta como usado quando uma resposta que se baseou nele foi enviada.
 
+Quando uma mensagem se refere a um momento passado ou pergunta o que alguém disse, e poucos fatos ou eventos têm relação com ela, a resposta também recebe até três linhas correspondentes do registro da conversa, dentro do mesmo `MEMORY_PROMPT_CHARS`. Cada uma vem com sua data e seu autor e é marcada como citação do próprio registro do chat, nunca como algo dito agora. As linhas que ainda estão entre as mensagens recentes não são repetidas, e em um grupo a decisão de falar não vê nenhuma delas. Somente quando o registro também não tem nada daquele momento o personagem é informado de que não se lembra de nada.
+
 ### O que fica onde
 
 - O resumo, os eventos, as mensagens recentes e a nota principal de um chat nunca aparecem em outro chat.
 - O que um membro disse sobre outro fica no chat em que foi dito.
 - Os fatos de uma conversa privada ficam nessa conversa privada. A única exceção é o administrador: os fatos das conversas privadas do administrador, incluindo a conversa da página, chegam às outras conversas privadas do administrador, nunca a um grupo.
 - Os fatos de um grupo sobre uma pessoa chegam à conversa privada dessa pessoa com o personagem, e a outros grupos somente com `MEMORY_SHARE_ROOMS` ativado.
+- O registro de um chat nunca chega a outro chat, e uma consolidação envia apenas as linhas do chat que ela consolida.
 
 ### O que ele esquece e o que pode ser restaurado
 
@@ -627,6 +636,7 @@ Quando uma mensagem se refere a um momento, como ontem, a semana passada ou o m�
 - Depois de um esquecimento pedido no chat ou de **Esquecer esta conversa**, as cópias diárias dos arquivos de memória (`.bak`) são gravadas de novo a partir dos arquivos atuais, e a cópia guardada na primeira inicialização desta versão (`memory.json.pre-v2`) perde o que foi esquecido, de modo que nenhuma cópia em `runtime/` o mantém; um backup feito antes ainda o mantém. Um item esquecido na página ou no terminal permanece entre os itens removidos por 24 horas e, portanto, também nas cópias desse dia.
 - Quando algo é esquecido enquanto uma consolidação desse chat está em andamento, a resposta da consolidação é descartada e as mensagens são lidas de novo mais tarde, de modo que o item esquecido não volta.
 - **Limpar a memória**, na visão Aplicativo, apaga toda a memória, depois de salvar em `backups/` um backup que a mantém até você excluir esse arquivo.
+- Toda forma de esquecer alcança o registro da conversa. Um esquecimento pedido no chat remove as linhas correspondentes; esquecer um fato ou um evento na página ou no terminal remove as linhas que ele cita; **Esquecer esta conversa** remove todo o registro do chat; **Limpar a memória** e **Redefinir tudo** removem todos os registros. O registro não tem cópia diária e nunca entra em um backup, então o que sai dele se perde, e restaurar um item esquecido não traz suas linhas de volta.
 
 ### Ver e alterar
 
@@ -643,6 +653,8 @@ personagent memory restore <id>               # bring a removed item back
 
 O comando passa pelo personagem em execução ou, quando o personagem está parado, edita os arquivos. Se `memory.json`, `core_memory.json` ou `episodes.json` estiver danificado, `personagent run`, `up` e `memory` param com uma frase que nomeia o arquivo e a cópia datada (`.bak`) a colocar no lugar dele; o arquivo danificado não é alterado.
 
+Na página, cada fato informa se e quando uma revisão confirmou que ele se mantém (**Conferido com o registro da conversa em …** ou **Ainda não conferido com o registro da conversa**). **Mostrar a fonte** expande as linhas em que um fato ou evento se baseia, ou informa que elas não são mais mantidas, e uma linha abaixo de **Memória** informa por quantos dias o registro da conversa é mantido, ou que ele está desativado. No terminal, a lista tem uma coluna **Conferido** e a mesma linha para cada chat, e `--json` traz `refs`, `checked` e `log`.
+
 ### Configurações e custo
 
 | Configuração | Padrão | O que faz |
@@ -653,12 +665,15 @@ O comando passa pelo personagem em execução ou, quando o personagem está para
 | `MEMORY_PROMPT_CHARS` | 2400 | Caracteres de material lembrado colocados em cada resposta |
 | `MEMORY_EPISODES_MAX` | 120 | Eventos mantidos por chat |
 | `MEMORY_KEEP_RECENT` | `true` | Mantém as mensagens recentes em disco por 72 horas |
+| `MEMORY_LOG_DAYS` | 30 | Dias em que o registro de cada chat é mantido. `0` não mantém registro e apaga o já mantido |
 | `MEMORY_MAX_PER_CONVERSATION` | 50 | Fatos mantidos por chat |
 | `MEMORY_SHARE_ROOMS` | `false` | Permite que os fatos de um grupo sobre uma pessoa cheguem a outros grupos em que essa pessoa fala |
 
-As seis primeiras ficam em **Memória**, nas [Configurações avançadas](#configurações-avançadas), e `MEMORY_SHARE_ROOMS` corresponde a **Compartilhar a memória entre grupos**, em **Mais recursos**.
+As sete primeiras ficam em **Memória**, nas [Configurações avançadas](#configurações-avançadas), e `MEMORY_SHARE_ROOMS` corresponde a **Compartilhar a memória entre grupos**, em **Mais recursos**.
 
 A consolidação é a única parte da memória que chama um modelo. Ela usa o modelo juiz (`LLM_JUDGE_MODEL`) e envia a ele as mensagens recentes de um chat e as notas desse chat, nunca as de outro chat. Um chat recebe no máximo 16 chamadas por dia, com pelo menos 20 minutos de intervalo, e todos os chats juntos no máximo `MEMORY_CALLS_PER_DAY`. Um chat pouco movimentado precisa de uma chamada por dia ou de nenhuma. Depois de uma chamada que falhou, o chat espera 10 minutos e, depois de cada nova falha, o dobro do tempo, até 6 horas; três falhas seguidas pausam a consolidação em todos os chats por uma hora. Uma resposta que não pode ser lida por inteiro, como uma que contém uma operação de tipo desconhecido, conta como uma chamada que falhou, e as alterações válidas dela são mantidas mesmo assim. Um erro inesperado durante a aplicação de uma resposta não altera nada. Enquanto a consolidação espera, as mensagens são mantidas e consolidadas depois, das mais antigas para as mais novas. **Memória**, na visão Atividade, mostra quantas das chamadas de hoje já foram usadas. Os comandos de memória, a recuperação de lembranças, o esquecimento e a restauração não chamam nenhum modelo.
+
+A revisão não acrescenta nenhum tipo novo de chamada. Ela vai junto nas chamadas de consolidação, e a chamada só de revisão de um chat quieto conta nos mesmos limites: no máximo 16 chamadas por chat e `MEMORY_CALLS_PER_DAY` para todos os chats juntos. Assim, um chat quieto precisa de no máximo uma chamada a mais por dia, e um chat movimentado não faz mais chamadas do que antes. Uma consolidação que revisa também envia as linhas do registro da conversa citadas pelos fatos revisados. Consultar o registro para uma resposta não chama nenhum modelo.
 
 ## Atividade
 
@@ -668,7 +683,7 @@ A visão lista cada chat que o personagem conhece, com a plataforma, se é um gr
 
 - **Aprendizado** lista o que está em uso. Cada item é uma **Redação aprimorada**, com o que ele disse riscado e o que dizer no lugar, ou uma **Resposta a ser reutilizada**, e diz como entrou em uso: porque as reações concordaram, por decisão do próprio personagem, com o motivo dele, ou por uma pessoa. **Desfazer** deixa de usá-lo.
 - **Ainda em observação** lista o que o personagem ainda acompanha. Cada item diz em uma frase em que pé está: quantas reações concordantes tem das que precisa, que as reações sozinhas não conseguem resolvê-lo e o próprio personagem o está decidindo, ou que o personagem o examinou e continua a observá-lo, com o motivo. Mostra também a data em que será deixado de lado se nenhuma reação nova chegar. Esta parte não tem botões, e nada nela depende de você.
-- **Memória** mostra o que o personagem lembra nesse chat, em cinco grupos: **Sempre em mente** (a nota principal, com a data da última alteração), **Anteriormente nesta conversa** (o resumo, com o período que abrange), **Fatos** (de quem trata cada um, **Segundo** seguido do nome para o que um membro disse sobre outro, quando foi anotado pela primeira vez e quando foi usado pela última vez), **Eventos** (datados, com as pessoas que participaram) e **Removidos recentemente** (o que foi removido, por quê e até quando pode ser restaurado). **Esquecer** remove um item, e a mensagem que confirma isso oferece **Desfazer**. **Restaurar** traz de volta um item removido, e **Restaurar a versão anterior** traz de volta a nota principal anterior. Enquanto a consolidação está ativada, uma linha mostra quantas das chamadas de hoje já foram usadas, ou quando ela tentará de novo depois de um erro. **Esquecer esta conversa**, no fim, esquece tudo o que o chat lembra, depois de pedir confirmação. Em uma conversa privada, a parte inclui também o que os grupos anotaram sobre essa pessoa.
+- **Memória** mostra o que o personagem lembra nesse chat, em cinco grupos: **Sempre em mente** (a nota principal, com a data da última alteração), **Anteriormente nesta conversa** (o resumo, com o período que abrange), **Fatos** (de quem trata cada um, **Segundo** seguido do nome para o que um membro disse sobre outro, quando foi anotado pela primeira vez e quando foi usado pela última vez), **Eventos** (datados, com as pessoas que participaram) e **Removidos recentemente** (o que foi removido, por quê e até quando pode ser restaurado). **Esquecer** remove um item, e a mensagem que confirma isso oferece **Desfazer**. **Restaurar** traz de volta um item removido, e **Restaurar a versão anterior** traz de volta a nota principal anterior. Enquanto a consolidação está ativada, uma linha mostra quantas das chamadas de hoje já foram usadas, ou quando ela tentará de novo depois de um erro. **Esquecer esta conversa**, no fim, esquece tudo o que o chat lembra, depois de pedir confirmação. Em uma conversa privada, a parte inclui também o que os grupos anotaram sobre essa pessoa. Cada fato também informa se foi conferido com o registro da conversa, e quando. **Mostrar a fonte** expande as linhas do registro da conversa em que um fato ou evento se baseia, e uma linha no topo informa por quantos dias o registro da conversa é mantido, ou que ele está desativado.
 - **Recente** mostra as últimas mensagens e as respostas dele. Cada resposta leva um rótulo com o motivo de ele ter falado: **mencionado**, **participou por iniciativa própria**, **continuação**, **iniciou um assunto** ou **administrador**. As linhas que ele deixou passar mostram por que ficou em silêncio ou o que aconteceu no lugar: o modelo não respondeu, a resposta foi retida por uma verificação de segurança, a resposta não pôde ser entregue, ele pensou em iniciar uma conversa e decidiu não fazê-lo, ou a mensagem foi respondida na mesma resposta que outra mensagem. Quando várias pessoas chamam o personagem quase ao mesmo tempo, uma única resposta atende a todas, e o @ dela vai para quem chamou por último. Quando essa resposta não é enviada, cada pessoa que chamou recebe uma linha própria com o motivo. A atividade recente fica só na memória, então um reinício a apaga.
 
 Cada **Desfazer** é escrito no mesmo registro que `personagent learned`, com o ator `dashboard` e o motivo `local page`.
@@ -735,6 +750,8 @@ O aprendizado funciona paralelamente a esse caminho, nunca dentro dele, e guarda
 
 Tudo o que o personagent armazena fica na sua máquina, na pasta inicial: `.env` com suas chaves, `persona.txt`, `persona.card.json`, `runtime/` e `platforms/` com as credenciais das plataformas. Em um clone, nenhum desses arquivos é versionado no Git. Eles podem conter credenciais e conversas reais, então faça backup e mantenha-os privados. As mensagens recentes de cada chat são mantidas em `runtime/recent.json` por 72 horas, a menos que `MEMORY_KEEP_RECENT=false`, e o que o personagem remove da memória continua restaurável em `runtime/memory_trash.jsonl` por até 30 dias. A página local nunca coloca a chave no armazenamento do navegador.
 
+O registro de cada chat é guardado em texto simples em `runtime/log/` por `MEMORY_LOG_DAYS` (30) dias. Ele nunca é copiado para um backup, toda forma de esquecer o alcança e `MEMORY_LOG_DAYS=0` não mantém nenhum.
+
 A visão [Atividade](#atividade) faz parte da página local, que só escuta em 127.0.0.1. A API do serviço por trás dela só responde a solicitações com o token de `runtime/dashboard.token`, um arquivo criado com leitura permitida apenas para a sua própria conta; no Windows, se outras pessoas podem lê-lo depende das permissões da pasta inicial. `CONNECTOR_TOKEN` não a abre. A visão nunca mostra chaves de API nem tokens. `DASHBOARD_ENABLED=false` a desativa.
 
 No máximo uma vez por dia, a página local, `personagent up` e `personagent doctor` perguntam a pypi.org o número da versão mais recente. A solicitação contém apenas a versão do personagent. `UPDATE_CHECK_ENABLED=false` interrompe isso.
@@ -743,7 +760,7 @@ O provedor de modelos vê as conversas:
 
 - O contexto do chat vai para o seu `LLM_BASE_URL`.
 - Se você configurar um fallback (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`), ele também é chamado em turnos comuns para o filtro de resposta, as decisões de busca, o julgamento de reações, a autoavaliação e a rotulagem de figurinhas, e também recebe o contexto do chat.
-- A consolidação da memória envia as mensagens recentes de um chat e as notas desse chat ao modelo juiz (`LLM_JUDGE_MODEL`), nunca as de outro chat. `MEMORY_CALLS_PER_DAY=0` a desativa.
+- A consolidação da memória envia as mensagens recentes de um chat e as notas desse chat ao modelo juiz (`LLM_JUDGE_MODEL`), nunca as de outro chat. `MEMORY_CALLS_PER_DAY=0` a desativa. Quando revisa fatos, ela também envia as linhas do registro desse chat citadas por esses fatos.
 - Quando o próprio personagem decide um item aprendido, a resposta, as reações a ela e as redações candidatas vão para `PROMOTE_JUDGE_MODEL` (vazio: `REACT_MODEL`). `PROMOTE_JUDGE_ENABLED=false` desativa isso.
 - As imagens vão para o endpoint de visão.
 - Quando o modelo decide procurar algo, a consulta vai para o Tavily (se `TAVILY_API_KEY` estiver definido) ou para o DuckDuckGo.
@@ -762,6 +779,7 @@ O que cada arquivo e pasta da pasta inicial contém:
 | `platforms/` | `direct.json`, com as credenciais das plataformas que o personagent conecta por conta própria, e o AstrBot gerenciado com as configurações dele | Segredos |
 | `runtime/memory.json`, `core_memory.json`, `episodes.json` | Fatos, nota principal, eventos e resumos de cada conversa | Conteúdo de conversas |
 | `runtime/recent.json` | Mensagens recentes de cada conversa, por 72 horas | Texto de conversas |
+| `runtime/log/` | O registro de cada chat: suas mensagens e as respostas do personagem, por `MEMORY_LOG_DAYS` dias, em texto simples | Texto das conversas |
 | `runtime/memory_trash.jsonl` | Itens de memória removidos, por até 30 dias | Conteúdo de conversas |
 | `runtime/pending_reactions.json` | Respostas enviadas nos últimos 15 minutos que aguardam uma reação, com algumas mensagens anteriores a cada uma | Texto de conversas |
 | `runtime/candidate_ledger.<lang>.jsonl` e os demais registros de aprendizado | O que o personagem aprendeu, com as respostas e reações por trás disso | Texto de conversas |
@@ -773,7 +791,7 @@ O que cada arquivo e pasta da pasta inicial contém:
 | `data/` | Seus próprios arquivos de lorebook, exemplos e filtros | Apenas o que você colocar |
 | `backups/` | Backups em zip | Ambos |
 
-Um backup é um zip sem criptografia que contém a chave, a memória, o que o personagem aprendeu e os logins das plataformas. **Limpar a memória** e **Redefinir tudo**, na visão Aplicativo, salvam primeiro um backup em `backups/`; assim, o que foi apagado permanece nesse arquivo até você excluí-lo. Backups salvos na Área de Trabalho ou em Documentos também permanecem lá.
+Um backup é um zip sem criptografia que contém a chave, a memória, o que o personagem aprendeu e os logins das plataformas. **Limpar a memória** e **Redefinir tudo**, na visão Aplicativo, salvam primeiro um backup em `backups/`; assim, o que foi apagado permanece nesse arquivo até você excluí-lo. Backups salvos na Área de Trabalho ou em Documentos também permanecem lá. O registro da conversa (`runtime/log/`) nunca entra em um backup.
 
 ## Solução de problemas
 

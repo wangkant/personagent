@@ -87,7 +87,8 @@ class MemoryState:
         return int(self._map("lost_lines").get(conv) or 0)
 
     def drop_conv(self, conv: str) -> None:
-        for key in ("per_conv", "lost_lines", "core_at", "tombstones"):
+        for key in ("per_conv", "lost_lines", "core_at", "tombstones", "review_day",
+                    "review_offered"):
             self._map(key).pop(conv, None)
         self.touch()
 

@@ -217,7 +217,7 @@ PA.strings({
     line.id = "runtime-version";
     line.setAttribute("role", "status");
     line.append(
-      make("span", "", PA.t("runtime_verNow", { version: info.version }) + " "),
+      make("span", "", PA.t("runtime_verNow", { version: info.version }) + (PA.lang === "zh" || PA.lang === "zh-TW" || PA.lang === "ja" ? "" : " ")),
       make("strong", info.update ? "runtime-new" : "", info.update
         ? PA.t("runtime_verNew", { version: info.update.version })
         // Neither a check that never reached the server nor one not yet made says "up to date".

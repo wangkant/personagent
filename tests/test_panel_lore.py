@@ -154,7 +154,9 @@ def test_a_broken_file_is_reported_and_can_be_replaced_or_reset(client, workspac
     own_file(workspace).write_text('{"entries": [\n  {"keywords": ["a"],}\n]}', encoding="utf-8")
     body = get(client)
     assert body["own"] and body["entries"] == []
-    assert body["error"] == {"reason": "syntax", "line": 2, "column": 22}
+    # Python 3.13 reports the trailing comma itself, earlier versions the brace after it.
+    assert body["error"]["reason"] == "syntax" and body["error"]["line"] == 2
+    assert body["error"]["column"] in (21, 22)
     saved = post(client, {"entries": [{"keywords": ["a"], "content": "b"}], "stamp": body["stamp"]}).json()
     assert saved["error"] == {} and len(saved["entries"]) == 1
     assert "keywords\": [\"a\"],}" in own_file(workspace).with_name("lorebook.zh.json.bak").read_text(

@@ -139,6 +139,9 @@ class AgentSettings:
     memory_episodes_max: int = 120
     #: Keep each chat's recent messages on disk for 72 hours.
     memory_keep_recent: bool = True
+    #: Days each chat's log of lines is kept, so notes can be checked against
+    #: it; 0 keeps no log (nor does MEMORY_KEEP_RECENT=false).
+    memory_log_days: int = 30
     message_debounce_sec: float = 2.5
     #: Persona document; ``None`` means the agent loads ``PERSONA_FILE``, so
     #: file reads stay out of this record.
@@ -415,6 +418,9 @@ class AgentSettings:
                 minimum=1, maximum=10_000, env=env),
             memory_keep_recent=env_bool(
                 "MEMORY_KEEP_RECENT", declared["memory_keep_recent"], env=env),
+            memory_log_days=env_int(
+                "MEMORY_LOG_DAYS", declared["memory_log_days"],
+                minimum=0, maximum=3650, env=env),
             admin_ids=identity.written["ADMIN_IDS"],
             admin_name=_str("ADMIN_NAME"),
             admin_relationship=_str("ADMIN_RELATIONSHIP"),

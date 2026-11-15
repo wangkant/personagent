@@ -3,7 +3,7 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · 日本語 · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
 
 
-このコネクターは [personagent](https://github.com/wangkant/personagent) を [Satori](https://satori.chat) サーバーにつなぎます。Satori はクロスプラットフォームのチャットプロトコルです。[Koishi](https://koishi.chat)（`server-satori` プラグイン付き）、Chronocat、LLOneBot などのサーバーがチャットプラットフォームにログインし、このようなクライアントは 1 本の websocket ですべてのログインのすべてのメッセージを受け取ります。そのため、1 つのコネクタープロセスで、サーバーにアダプターがあるすべてのプラットフォームにペルソナを置けます。
+このコネクターは [personagent](https://github.com/wangkant/personagent) を [Satori](https://satori.chat) サーバーと連携させます。Satori はクロスプラットフォームのチャットプロトコルです。[Koishi](https://koishi.chat)（`server-satori` プラグイン付き）、Chronocat、LLOneBot などのサーバーがチャットプラットフォームにログインし、このようなクライアントは 1 本の websocket ですべてのログインのすべてのメッセージを受け取ります。そのため、1 つのコネクタープロセスで、サーバーにアダプターがあるすべてのプラットフォームにペルソナを置けます。
 
 Satori と Koishi はサードパーティのソフトウェアです。personagent が自分で接続する QQ、WeChat、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat や、ローカルページが AstrBot 経由で設定するプラットフォームには必要ありません。すでに Koishi を動かしている場合や、Koishi でしか届かないプラットフォームを使いたい場合に、このコネクターを使ってください。
 
@@ -50,7 +50,7 @@ Satori と Koishi はサードパーティのソフトウェアです。personag
 
 ## 設定
 
-| 設定 | デフォルト | 意味 |
+| 設定 | 既定値 | 意味 |
 |---|---|---|
 | `SATORI_URL` | `http://127.0.0.1:5140/satori` | Satori サーバー。末尾の `/v1` は省略できます。 |
 | `SATORI_TOKEN` | | サーバーのトークン（Koishi では `server-satori` → `token`）。 |
@@ -70,7 +70,7 @@ Satori と Koishi はサードパーティのソフトウェアです。personag
 
 ## 許可リスト
 
-コネクターはデフォルトで拒否します。リストが空なら何も転送しません。
+コネクターは既定で拒否します。リストが空なら何も転送しません。
 
 - グループは Satori のチャンネルです。チャンネル ID またはギルド ID が `SATORI_GROUPS` にあるときに転送されます。そのため Discord や KOOK では、1 つのギルド ID でそのギルドの全チャンネルが許可され、各チャンネルは別々の会話のままです。
 - DM は、送信者のユーザー ID が `SATORI_DM_USERS` にあるときに転送されます。

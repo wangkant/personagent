@@ -221,6 +221,7 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 - `POST memory/forget` 帶上請求本文 `{"conv": "<chat id>", "kind": "note", "id": "<id>"}`，刪除一項記憶，並傳回 `tid`；將 `{"tid": "<tid>"}` 傳送給 `POST memory/restore` 即可還原。`kind` 可以是 `note`、`episode`、`thread` 或 `core`。原有的請求本文 `{"conv": "<chat id>", "note": "<note id>"}` 仍然可用，未帶 `note` 時刪除該聊天的核心筆記。
 - `POST memory/forget_chat` 帶上 `{"conv": "<chat id>"}`，清除該聊天記住的全部內容，無法復原。
 - `GET memory/list?conv=<chat id>` 列出各聊天記住的內容以及仍可還原的內容；服務執行時，`personagent memory` 透過它讀取。
+- `GET memory/evidence?conv=<chat id>&kind=note|episode&id=<id>` 傳回某則事實或事件所依據的聊天紀錄行（`lines`，每行含 `seq`、`t`、`name`、`self` 和 `text`）、其引用的行數（`refs`）以及聊天紀錄是否開啟（`on`）。在 `conversation` 和 `memory/list` 中，每則事實還帶有 `refs` 和 `checked`（最近一次複核確認其成立的時間；`0` 表示從未核對），每個事件帶有 `refs`，每個聊天帶有 `log`（`on`、`days`、`lines` 和 `first_at`）。
 
 每次呼叫都須帶有 `X-Personagent-Dashboard-Token` 請求標頭，其值為執行目錄（預設為 `<home>/runtime/`，除非已由 `AGENT_RUNTIME_DIR` 變更）中 `dashboard.token` 檔案內的權杖。此檔案僅限本人讀取，於服務啟動時產生。未帶此請求標頭的呼叫會收到 401（`dashboard_token`），權杖錯誤則收到 403（`wrong_token`）。`CONNECTOR_TOKEN` 和 `X-Personagent-Token` 無法存取此介面，兩者僅用於聯結器和 `/health/details`。
 
@@ -365,6 +366,7 @@ AstrBot 位於 Docker 中或另一台主機上時，請參閱[使用手冊](guid
 - **`personagent eval`** 對每個測試案例都會呼叫模型，`memory` 測試集除外：它以預設的回答離線執行。人設和學習兩組測試案例還需要第二個模型擔任裁判（`BENCH_JUDGE_MODEL`）。
 - **記憶。** 帶命名空間（非 QQ）的對話超過 256 個時，閒置最久的對話會從記憶體中移除，並失去待處理的反應。移除前會先整理其尚未整理的訊息；除非設定 `MEMORY_KEEP_RECENT=false`，其近期訊息會在 `runtime/recent.json` 中保留 72 小時。事實、事件、核心筆記和學習紀錄會保留。正在處理請求的對話不會被清除。長期記憶在啟動時從磁碟載入，不受此上限限制。
 - **磁碟。** `runtime/` 中的證據記錄檔和候選項目記錄檔只會追加，從不截斷。任一檔案超過 50 MB 時，`personagent doctor` 會加以標示（`LEDGER_EVIDENCE_WARN_BYTES`、`LEDGER_CANDIDATES_WARN_BYTES`）。記憶檔案始終較小：`recent.json` 只保存最近 72 小時內活躍的聊天，`memory_trash.jsonl` 中被移除的內容最多保留 30 天。每天第一次修改之前，`memory.json`、`core_memory.json` 和 `episodes.json` 會複製為同名的 `.bak` 檔案；本版本首次啟動時，會將舊的記憶檔案保留為 `memory.json.pre-v2`。使用「清除此聊天的記憶」或在聊天中要求忘記之後，`.bak` 副本會依目前的檔案重新寫入，`memory.json.pre-v2` 也會刪去被忘記的內容，因此 `runtime/` 中不會留下任何副本；但先前製作的備份仍保有這些內容。請備份 `runtime/`，因為機器人學到和記住的所有內容都在其中。
+- **聊天紀錄。** 每個聊天在 `runtime/log/` 中的紀錄保留 `MEMORY_LOG_DAYS`（30）天、最多 5,000 行，每天清理一次。它沒有 `.bak` 副本，從不放入備份，各種刪除都會作用於它。依據聊天紀錄複核事實隨記憶整理呼叫一併進行；安靜的聊天每天最多進行一次單獨的複核呼叫，計入 `MEMORY_CALLS_PER_DAY`。
 
 ### 完整排查清單
 

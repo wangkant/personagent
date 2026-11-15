@@ -70,6 +70,7 @@ FIELDS: tuple[Field, ...] = (
     Field("MEMORY_PROMPT_CHARS", "memory", "int", 2400, 200, 100_000),
     Field("MEMORY_EPISODES_MAX", "memory", "int", 120, 1, 10_000),
     Field("MEMORY_KEEP_RECENT", "memory", "bool", True),
+    Field("MEMORY_LOG_DAYS", "memory", "int", 30, 0, 3650),
     Field("DASHBOARD_ENABLED", "more", "bool", True),
     Field("UPDATE_CHECK_ENABLED", "more", "bool", True, live=True),
     Field("PROACTIVE_INTERVAL_S", "more", "int", 1500, 60, DAY),

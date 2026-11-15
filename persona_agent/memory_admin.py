@@ -23,12 +23,16 @@ from . import langs
 
 KINDS = {"core": "Always in mind", "thread": "Earlier in this chat",
          "note": "Fact", "episode": "Event"}
-REASONS = {"replaced": "Replaced by a newer fact", "merged": "Merged with another fact",
-           "ended": "No longer current", "evicted": "Removed to make room",
+# A review against the chat record removes with the same reasons as consolidation.
+REASONS = {"replaced": "Corrected, or replaced by a newer fact", "merged": "Merged with another fact",
+           "ended": "No longer current, or no longer supported by the chat record",
+           "evicted": "Removed to make room",
            "rolled_up": "Removed to make room", "rewritten": "Earlier version",
            "unreadable": "Could not be read"}
 CORE_ID = "core"
 PRACTICE_APART = "What is said in `personagent chat` is practice, kept apart, and does not show here."
+RECORD_HELP = ("Each chat's messages are also kept in its chat record (runtime/log) for "
+               "MEMORY_LOG_DAYS days; facts are checked against it, and forgetting reaches it.")
 TEXT_WIDTH = 60
 
 
@@ -94,6 +98,8 @@ def _files_class():
 
         def __init__(self, memory_file: Path, core_file: Path, runtime: Path, settings) -> None:
             self.memory_file, self.core_memory_file, self.runtime = memory_file, core_file, runtime
+            # The log's switch, so a forget here reaches the log as well.
+            self.settings = settings
             self.memory_max_per_conversation = settings.memory_max_per_conversation
             self.memory_share_rooms = settings.memory_share_rooms
             self.embedding_model = settings.embedding_model
@@ -238,17 +244,18 @@ def _memory_rows(chat: dict) -> list[list[str]]:
     rows = []
     core, thread = chat.get("core"), chat.get("thread")
     if core:
-        rows.append([CORE_ID, langs.term(KINDS["core"]), "", _day(core.get("at")), "—",
+        rows.append([CORE_ID, langs.term(KINDS["core"]), "", _day(core.get("at")), "—", "—",
                      _short(core.get("text"))])
     if thread:
         rows.append([thread["id"], langs.term(KINDS["thread"]), "", _day(thread.get("from_t")), "—",
-                     _short(thread.get("text"))])
+                     "—", _short(thread.get("text"))])
     for fact in chat.get("facts", []):
+        checked = _day(fact["checked"]) if fact.get("checked") else langs.term("not yet")
         rows.append([fact["id"], langs.term(KINDS["note"]), _about(fact), _day(fact.get("born")),
-                     _day(fact.get("used")), _short(fact.get("text"))])
+                     _day(fact.get("used")), checked, _short(fact.get("text"))])
     for event in chat.get("events", []):
         rows.append([event["id"], langs.term(KINDS["episode"]),
-                     ", ".join(event.get("names") or []), _day(event.get("t0")), "—",
+                     ", ".join(event.get("names") or []), _day(event.get("t0")), "—", "—",
                      _short(event.get("text"))])
     return rows
 
@@ -261,6 +268,21 @@ def _chat_line(conv: str) -> str:
     if platform_of(conv) == PAGE_PLATFORM:
         return langs.term(f"Chat: This page (key {conv})", keep=(conv,))
     return langs.term(f"Chat: {conv}", keep=(conv,))
+
+
+def _record_line(log) -> str:
+    """What the chat's record keeps, or that it is off and what that costs."""
+    if not isinstance(log, dict):
+        return ""
+    days = str(int(log.get("days") or 0))
+    if not log.get("on"):
+        return langs.term("Chat record: off; what is remembered here cannot be checked "
+                          "against the chat again.")
+    if log.get("lines") and log.get("first_at"):
+        first = _day(log["first_at"])
+        return langs.term(f"Chat record: kept for {days} days; the oldest line is from {first}.",
+                          keep=(days, first))
+    return langs.term(f"Chat record: kept for {days} days; nothing recorded yet.", keep=(days,))
 
 
 def _reason(row: dict) -> str:
@@ -287,7 +309,11 @@ def cmd_list(args, backend) -> int:
         if i:
             print()
         print(_chat_line(chat["conv"]))
-        _table(_memory_rows(chat), ["Id", "Kind", "About", "First noted", "Last used", "Text"])
+        record = _record_line(chat.get("log"))
+        if record:
+            print("  " + record)
+        _table(_memory_rows(chat), ["Id", "Kind", "About", "First noted", "Last used", "Checked",
+                                    "Text"])
     return 0
 
 
@@ -410,8 +436,11 @@ def memory_problem():
 
 
 def _parser(prog: str | None) -> argparse.ArgumentParser:
+    record = langs.term(RECORD_HELP)
+    # A full-width stop needs no space after it.
+    epilog = record + ("" if record.endswith("。") else " ") + langs.term(PRACTICE_APART)
     p = argparse.ArgumentParser(prog=prog, description=langs.term(__doc__.splitlines()[0]),
-                                epilog=langs.term(PRACTICE_APART))
+                                epilog=epilog)
     sub = p.add_subparsers(dest="cmd")
     for name, helptext in (("list", "list what the character remembers (the default)"),
                            ("removed", "list what was removed and can still be brought back")):

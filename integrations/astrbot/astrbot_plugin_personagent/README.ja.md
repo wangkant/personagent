@@ -3,11 +3,11 @@
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · 日本語 · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [Русский](README.ru.md)
 
 
-この [AstrBot](https://github.com/AstrBotDevs/AstrBot) プラグインは、AstrBot を [personagent](https://github.com/wangkant/personagent) につなぎます。許可されたメッセージをエージェントへ転送し、エージェントの返信をチャットへ返します。
+この [AstrBot](https://github.com/AstrBotDevs/AstrBot) プラグインは、AstrBot を [personagent](https://github.com/wangkant/personagent) と連携させます。許可されたメッセージをエージェントへ転送し、エージェントの返信をチャットへ返します。
 
 ## 必要ですか？
 
-QQ、WeChat、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat には必要ありません。personagent が AstrBot なしで直接つなぎます。`personagent` を実行してローカルページを開き、**プラットフォーム連携** で追加するか、ターミナルで `personagent connect <platform>` を実行してください。
+QQ、WeChat、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat には必要ありません。personagent が AstrBot なしで直接連携します。`personagent` を実行してローカルページを開き、**プラットフォーム連携** で追加するか、ターミナルで `personagent connect <platform>` を実行してください。
 
 このプラグインが必要なのは、AstrBot が会話を運ぶときです。次の 2 つの場合があります。
 
@@ -126,7 +126,7 @@ personagent connect astrbot <AstrBot data dir>        # add --qq to route QQ (Na
 
 ## NapCat 経由の QQ
 
-QQ 公式ボットは personagent が AstrBot なしで直接つなぎます。この節は、NapCat（または別の OneBot v11 実装）で動かす QQ アカウントを AstrBot の `aiocqhttp` アダプターの後ろで使う場合だけを扱います。personagent 自身のページで OneBot v11 を追加すると、`excluded_platforms` から `aiocqhttp` を除き、`CONNECTOR_QQ_PLATFORMS` を設定します。
+QQ 公式ボットは personagent が AstrBot なしで直接連携します。この節は、NapCat（または別の OneBot v11 実装）で動かす QQ アカウントを AstrBot の `aiocqhttp` アダプターの後ろで使う場合だけを扱います。personagent 自身のページで OneBot v11 を追加すると、`excluded_platforms` から `aiocqhttp` を除き、`CONNECTOR_QQ_PLATFORMS` を設定します。
 
 1. `excluded_platforms` から `aiocqhttp` を除き、QQ グループを `groups` に追加します。
 2. エージェントの `.env` に `CONNECTOR_QQ_PLATFORMS=aiocqhttp` と `QQ_BOT_ID`（ボットアカウントの番号）を設定します。
@@ -185,7 +185,7 @@ AstrBot に活発な QQ グループを任せる前に、AstrBot の 2 つの設
 - 配信はそれぞれ会話自身の AstrBot セッションを通じて順番に送られ、各メッセージは最大 1 回送られます。
 - 配信先は、プラグイン自身が同じ会話のメッセージから得たセッションだけです。これらのセッションは AstrBot のプラグインストアに保存されるので、再読み込みしても残ります。エージェントにイベントを投稿する他のものがアウトボックスを別のチャットへ向けることはできず、プラグインはそうした配信を拒否します。
 - プラグインは送信時に許可リストと `excluded_platforms` を再確認し、その後除かれた会話を拒否します。
-- 先に話しかけられないプラットフォーム（表を参照）にアウトボックスのメッセージは届きません。プラグインがその会話にアウトボックスを宣言しないからです。
+- ボットから話しかけられないプラットフォーム（表を参照）にアウトボックスのメッセージは届きません。プラグインがその会話にアウトボックスを宣言しないからです。
 - アウトボックスのないエージェントは 404 を返します。プラグインは 10 分ごとに再度尋ねます。
 
 エージェントはこの AstrBot を `connector_id` で識別します。プラグインが一度生成して保持します。1 つのエージェントと話す 2 台の AstrBot ホストには別々の id が必要です。

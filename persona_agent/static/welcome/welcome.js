@@ -80,12 +80,20 @@ const translations = {
     activityCovers: "涵盖 {from} 至 {to}",
     activityFirstNoted: "首次记下于 {date}",
     activityLastUsed: "最近使用于 {date}",
+    activityChecked: "已于 {date} 与聊天记录核对",
+    activityNotChecked: "尚未与聊天记录核对",
+    activitySource: "查看依据",
+    activitySourceHide: "收起依据",
+    activitySourceLoading: "正在读取依据…",
+    activitySourceGone: "此条所依据的消息已不在聊天记录中。",
+    activitySourceOff: "聊天记录已关闭，无法显示此条所依据的消息。",
+    activitySourcePartial: "此条所依据的部分消息已不在聊天记录中。",
     activitySaidBy: "由 {name} 所述",
     activityKindFact: "事实",
     activityKindEvent: "事件",
-    activityWhyReplaced: "已被更新的事实取代",
+    activityWhyReplaced: "已被更正，或被更新的事实取代",
     activityWhyMerged: "已与另一条事实合并",
-    activityWhyEnded: "已不再成立",
+    activityWhyEnded: "已不再成立，或在聊天记录中已无依据",
     activityWhyEvicted: "为腾出空间而移除",
     activityWhyRewritten: "旧版本",
     activityWhyForgotten: "已在本页删除",
@@ -94,9 +102,12 @@ const translations = {
     activityUntil: "可恢复至 {date}",
     activityFoldUsed: "记忆整理：今日已使用 {used} 次调用，上限为 {cap} 次。",
     activityFoldPaused: "记忆整理因出错已暂停，下次尝试时间为 {time}。",
+    activityLogOn: "聊天记录：本聊天的消息保留 {days} 天，现存最早的一条来自 {date}。角色据此核对所记住的内容，并用于回答有关过去的问题。",
+    activityLogEmpty: "聊天记录：本聊天的消息保留 {days} 天，目前尚无记录。角色据此核对所记住的内容，并用于回答有关过去的问题。",
+    activityLogOff: "聊天记录：已关闭。角色在此聊天中记住的内容无法再与当时的对话核对，有关过去的问题只能依据其笔记回答。可在「角色与设置」的「高级设置」中的「记忆」部分开启。",
     activityForgetChat: "清除此聊天的记忆",
-    activityForgetChatAsk: "角色将清除在此聊天中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容。其他聊天中记住的内容将予以保留。在此聊天中学到的内容也将保留并继续使用。此操作无法撤销。",
-    activityForgetOldChatAsk: "角色将清除在此聊天中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容。其他聊天中记住的内容将予以保留。此操作无法撤销。",
+    activityForgetChatAsk: "角色将清除在此聊天中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息、聊天记录，以及尚可恢复的已删除内容。其他聊天中记住的内容将予以保留。在此聊天中学到的内容也将保留并继续使用。此操作无法撤销。",
+    activityForgetOldChatAsk: "角色将清除在此聊天中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息、聊天记录，以及尚可恢复的已删除内容。其他聊天中记住的内容将予以保留。此操作无法撤销。",
     ariaNav: "导航",
     ariaLanguage: "页面语言",
     ariaSend: "发送",
@@ -164,6 +175,8 @@ const translations = {
       "确定用所选性格替换你编写的人设吗？原人设将另存为 personagent 文件夹中的 persona.txt.bak。",
     personaReplaceYes: "替换",
     custom: "保留我自己编写的人设",
+    labelKey: "API 密钥",
+    labelBase: "服务地址（API Base URL）",
     personaTitle: "人设",
     personaHint: "描述角色的身份、说话方式和关注的事物。保存后立即生效，角色已学到的内容将保留。",
     personaSave: "保存人设",
@@ -230,7 +243,7 @@ const translations = {
     newChat: "新对话",
     newChatDone: "已开始新的对话，角色记住的内容仍然保留。",
     forgetChat: "清除本次对话的记忆",
-    forgetChatAsk: "角色将清除在本次对话中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息，以及尚可恢复的已删除内容，随后开始新的对话。角色在本次对话中学到的内容此后不再使用，仍列在「角色学到的内容」的「已搁置」中。本页面此前对话中记住的内容也将一并清除；在已连接平台的聊天中记住的内容将予以保留。此操作无法撤销。",
+    forgetChatAsk: "角色将清除在本次对话中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息、聊天记录，以及尚可恢复的已删除内容，随后开始新的对话。角色在本次对话中学到的内容此后不再使用，仍列在「角色学到的内容」的「已搁置」中。本页面此前对话中记住的内容也将一并清除；在已连接平台的聊天中记住的内容将予以保留。此操作无法撤销。",
     forget_needs_activity: "清除记忆需要先开启动态数据，可在「角色与设置」的高级设置中开启。",
     forgetChatDone: "已清除本次对话的记忆，并已开始新的对话。",
     forgetChatNone: "本次对话中没有记下任何内容，已开始新的对话。",
@@ -468,12 +481,20 @@ const translations = {
     activityCovers: "Covers {from} to {to}",
     activityFirstNoted: "First noted {date}",
     activityLastUsed: "Last used {date}",
+    activityChecked: "Checked against the chat record {date}",
+    activityNotChecked: "Not yet checked against the chat record",
+    activitySource: "Show source",
+    activitySourceHide: "Hide source",
+    activitySourceLoading: "Loading source…",
+    activitySourceGone: "The messages this rests on are no longer in the chat record.",
+    activitySourceOff: "The chat record is turned off, so the messages this rests on cannot be shown.",
+    activitySourcePartial: "Some of the messages this rests on are no longer in the chat record.",
     activitySaidBy: "Said by {name}",
     activityKindFact: "Fact",
     activityKindEvent: "Event",
-    activityWhyReplaced: "Replaced by a newer fact",
+    activityWhyReplaced: "Corrected, or replaced by a newer fact",
     activityWhyMerged: "Merged with another fact",
-    activityWhyEnded: "No longer current",
+    activityWhyEnded: "No longer current, or no longer supported by the chat record",
     activityWhyEvicted: "Removed to make room",
     activityWhyRewritten: "Earlier version",
     activityWhyForgotten: "Forgotten on this page",
@@ -482,9 +503,12 @@ const translations = {
     activityUntil: "Restorable until {date}",
     activityFoldUsed: "Memory consolidation: {used} of {cap} calls used today.",
     activityFoldPaused: "Memory consolidation is paused after errors; the next attempt is at {time}.",
+    activityLogOn: "Chat record: this chat's messages are kept for {days} days; the oldest kept is from {date}. The character checks what it remembers against them and uses them to answer questions about the past.",
+    activityLogEmpty: "Chat record: this chat's messages are kept for {days} days; none has been recorded yet. The character checks what it remembers against them and uses them to answer questions about the past.",
+    activityLogOff: "Chat record: turned off. What the character remembers from this chat can no longer be checked against what was said, and questions about the past are answered from its notes alone. It can be turned on in Character & settings, under Advanced settings, Memory.",
     activityForgetChat: "Forget this chat",
-    activityForgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. What it remembers from other chats is kept. What it learned in this chat is kept and stays in use. This cannot be undone.",
-    activityForgetOldChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. What it remembers from other chats is kept. This cannot be undone.",
+    activityForgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages, the chat record and the removed items that could still be restored. What it remembers from other chats is kept. What it learned in this chat is kept and stays in use. This cannot be undone.",
+    activityForgetOldChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages, the chat record and the removed items that could still be restored. What it remembers from other chats is kept. This cannot be undone.",
     ariaNav: "Navigation",
     ariaLanguage: "Page language",
     ariaSend: "Send",
@@ -557,6 +581,8 @@ const translations = {
       "Replace the character you wrote with the chosen personality? Your text is kept as persona.txt.bak in the personagent folder.",
     personaReplaceYes: "Replace",
     custom: "Keep my own character",
+    labelKey: "API key",
+    labelBase: "API base URL",
     personaTitle: "Persona",
     personaHint:
       "Who it is, how it talks and what it cares about. Saving applies it right away and keeps what it has learned.",
@@ -627,7 +653,7 @@ const translations = {
     newChat: "New chat",
     newChatDone: "A new chat has started. What the character remembers is kept.",
     forgetChat: "Forget this chat",
-    forgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages and the removed items that could still be restored. A new chat then starts. What the character learned in this chat is no longer used from then on; it remains listed under Set aside in What the character has learned. What it remembers from earlier chats on this page is forgotten too; what it remembers from chats on connected apps is kept. This cannot be undone.",
+    forgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages, the chat record and the removed items that could still be restored. A new chat then starts. What the character learned in this chat is no longer used from then on; it remains listed under Set aside in What the character has learned. What it remembers from earlier chats on this page is forgotten too; what it remembers from chats on connected apps is kept. This cannot be undone.",
     forget_needs_activity: "Forgetting a chat needs activity data, which is switched off. Turn it on in the advanced settings under Character & settings.",
     forgetChatDone: "The character has forgotten this chat, and a new chat has started.",
     forgetChatNone: "The character had noted nothing in this chat. A new chat has started.",
@@ -1741,6 +1767,8 @@ let activity = null,
   activityStartError = "",
   // Bumped by every load and decision, so an older answer never wins.
   activitySeq = 0,
+  // The cited lines unfolded under remembered items, by item: loading, lines or error.
+  activitySources = {},
   // What the view last drew; a poll that brings nothing new leaves the
   // page, and the keyboard focus in it, alone.
   activityShown = "";
@@ -1856,6 +1884,7 @@ function renderActivity() {
     activityStartError,
     activity,
     activityChat,
+    activitySources,
     // "3 min ago" moves on even when nothing else does.
     Math.floor(Date.now() / 60000),
   ]);
@@ -2120,6 +2149,7 @@ function selectChat(id) {
   if (id === activitySelected) return;
   activitySelected = id;
   activityChat = null;
+  activitySources = {};
   renderActivity();
   activityLoop();
 }
@@ -2194,6 +2224,83 @@ function memoryItem(text, details, ...buttons) {
   item.append(body, ...buttons);
   return item;
 }
+// The chat's own lines a fact or event rests on, unfolded under it on request.
+function sourceKey(kind, conv, id) {
+  return `${kind}:${conv}:${id}`;
+}
+function sourceButton(kind, conv, id) {
+  const shown = activitySources[sourceKey(kind, conv, id)];
+  const button = action(
+    shown?.loading ? "activitySourceLoading" : shown ? "activitySourceHide" : "activitySource",
+    "quiet",
+    `source:${sourceKey(kind, conv, id)}`,
+    () => toggleSource(kind, conv, id),
+  );
+  button.setAttribute("aria-expanded", String(Boolean(shown && !shown.loading)));
+  if (shown?.loading) button.setAttribute("aria-busy", "true");
+  return button;
+}
+async function toggleSource(kind, conv, id) {
+  const key = sourceKey(kind, conv, id);
+  if (activitySources[key]?.loading) return;
+  if (activitySources[key]) {
+    const { [key]: _closed, ...rest } = activitySources;
+    activitySources = rest;
+    renderActivity();
+    return;
+  }
+  activitySources = { ...activitySources, [key]: { loading: true } };
+  renderActivity();
+  const query = new URLSearchParams({ chat: activitySelected, conv, kind, id });
+  let value;
+  try {
+    value = await api(`activity/evidence?${query}`);
+  } catch (error) {
+    value = { error: error.message };
+  }
+  // Folded again, or another chat opened, while it loaded.
+  if (!activitySources[key]) return;
+  activitySources = { ...activitySources, [key]: value };
+  renderActivity();
+}
+function sourceBlock(kind, conv, id) {
+  const shown = activitySources[sourceKey(kind, conv, id)];
+  if (!shown || shown.loading) return null;
+  const box = el("div", "memory-source");
+  box.setAttribute("aria-live", "polite");
+  if (shown.error) {
+    box.append(el("p", "source-note error-note", t(shown.error)));
+    return box;
+  }
+  const lines = shown.lines || [];
+  for (const line of lines) {
+    const row = el("div", "source-line");
+    const who = line.you ? pagePerson() : line.name;
+    const when = line.when ? `${activityDate(line.when)} ${clockTime(line.when)}` : "";
+    row.append(el("small", "", [when, who].filter(Boolean).join(" · ")), el("span", "", line.text));
+    box.append(row);
+  }
+  if (!lines.length)
+    box.append(el("p", "source-note", t(shown.on ? "activitySourceGone" : "activitySourceOff")));
+  else if ((shown.refs || 0) > lines.length)
+    box.append(el("p", "source-note", t("activitySourcePartial")));
+  return box;
+}
+function withSource(item, kind, conv, id) {
+  const block = sourceBlock(kind, conv, id);
+  if (block) item.querySelector(".memory-body").append(block);
+  return item;
+}
+// What the chat's record keeps and what it is for; or that it is off, and what that costs.
+function recordLine(log) {
+  if (!log) return null;
+  let text;
+  if (!log.on) text = t("activityLogOff");
+  else if (log.lines && log.first)
+    text = t("activityLogOn", { days: String(log.days), date: activityDate(log.first) });
+  else text = t("activityLogEmpty", { days: String(log.days) });
+  return el("p", "section-hint memory-record", text);
+}
 function memoryGroup(part, key, items) {
   if (!items.length) return;
   part.append(el("h4", "memory-group", t(key)));
@@ -2205,10 +2312,13 @@ function memorySection(chat) {
   const notes = chat.notes || [];
   const events = chat.events || [];
   const removed = chat.removed || [];
-  if (!chat.core && !chat.thread && !notes.length && !events.length && !removed.length)
+  const logged = Boolean(chat.log?.lines);
+  if (!chat.core && !chat.thread && !notes.length && !events.length && !removed.length && !logged)
     return null;
   const part = section("activityNotes");
   part.id = "activity-memory";
+  const record = recordLine(chat.log);
+  if (record) part.append(record);
   const status = chat.status;
   if (status) {
     const next = Math.max(status.paused || 0, status.next || 0);
@@ -2261,7 +2371,7 @@ function memorySection(chat) {
     part,
     "activityFacts",
     notes.map((note) =>
-      memoryItem(
+      withSource(memoryItem(
         note.text,
         [
           (note.aboutSelf || note.about) &&
@@ -2273,22 +2383,27 @@ function memorySection(chat) {
           note.conv !== chat.id && !String(note.conv).startsWith("private:") && t("activityRoomNote"),
           note.born && t("activityFirstNoted", { date: activityDate(note.born) }),
           note.used && t("activityLastUsed", { date: activityDate(note.used) }),
+          note.checked
+            ? t("activityChecked", { date: activityDate(note.checked) })
+            : t("activityNotChecked"),
         ],
+        ...(note.refs ? [sourceButton("note", note.conv, note.id)] : []),
         forgetButton(`forget:${note.id}`, () => forget("note", note.conv, note.id)),
-      ),
+      ), "note", note.conv, note.id),
     ),
   );
   memoryGroup(
     part,
     "activityEvents",
     events.map((event) =>
-      memoryItem(
+      withSource(memoryItem(
         event.text,
         [eventWhen(event), [...(event.self ? [pagePerson()] : []), ...event.names].join(t("listSep"))],
+        ...(event.refs ? [sourceButton("episode", chat.id, event.id)] : []),
         forgetButton(`forget:episode:${event.id}`, () =>
           forget("episode", chat.id, event.id),
         ),
-      ),
+      ), "episode", chat.id, event.id),
     ),
   );
   if (removed.length) {

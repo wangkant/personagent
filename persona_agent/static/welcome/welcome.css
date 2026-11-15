@@ -47,6 +47,11 @@
 body {
   margin: 0;
 }
+/* Japanese has no spaces, so break between phrases rather than inside a word. */
+:lang(ja) {
+  line-break: strict;
+  word-break: auto-phrase;
+}
 ::selection {
   background: var(--select);
 }
@@ -1915,6 +1920,31 @@ label.check input:checked {
   padding-top: 10px;
   margin-top: 6px;
   border-top: 1px solid var(--line);
+}
+/* The chat's own lines an item rests on: quoted under it, not boxed. */
+.memory-source {
+  margin: 6px 0 2px;
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
+}
+.source-line + .source-line {
+  margin-top: 5px;
+}
+.notes .memory-source span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.source-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+.source-note.error-note {
+  color: var(--error);
+}
+.memory-record {
+  margin-top: 0;
 }
 .toast-action {
   margin-left: 10px;

@@ -31,6 +31,17 @@ _THREAD_FULL_BUDGET = 800
 _PRESENCE_LINES = 60
 _GROUP_FACTS_MAX, _PERSON_FACTS_MAX, _PERSONS_MAX = 8, 5, 6
 _EVENTS_MAX = 4
+#: The log is looked up when fewer remembered items than this bear on the
+#: message, for at most this many lines, each cut to this length.
+_LOG_WHEN_FEWER = 3
+_LOG_LINES = 3
+_LOG_LINE_CHARS = 200
+# A message asking what someone said.
+_ASKS_SAID = re.compile(
+    r"\b(?:said|say|says|told|tell|mention(?:ed)?|talk(?:ed)? about)\b"
+    r"|\u8bf4\u8fc7|\u8bf4\u4e86|\u8bf4\u7684|\u63d0\u5230|\u63d0\u8fc7|"
+    r"\u8bb2\u8fc7|\u8bb2\u7684|\u804a\u8fc7|\u804a\u4e86",
+    re.IGNORECASE)
 #: A reply must share this many focus tokens with an item to count as using it.
 _USE_OVERLAP = 2
 _USE_FLUSH_S = 60.0
@@ -519,8 +530,13 @@ class Retrieval:
             if row.get("id"):
                 placed.append((c["conv"], c["kind"], str(row["id"])))
 
+        past = bool(span and span[1] <= now - 60)
+        quoted: list[str] = []
+        if (past or _ASKS_SAID.search(focus_text)) and self._few_bear_on(
+                candidates, placed, focus_text) and left > 0:
+            quoted, left = self._log_lines(conv, focus_text, span if past else None, left, tz)
         nothing_from = ""
-        if (span and span[1] <= now - 60 and not any(c["match"] for c in candidates)
+        if (past and not quoted and not any(c["match"] for c in candidates)
                 and self.episode_store.episodes(conv)):
             nothing_from = timewords.phrase(span, tz=tz)
         parts: list[str] = []
@@ -531,6 +547,9 @@ class Retrieval:
             parts.append("\n".join(lines))
         if events:
             parts.append("What happened:\n" + "\n".join(events))
+        if quoted:
+            parts.append("Lines from this chat's own record, as they were said "
+                         "at the time shown (not now):\n" + "\n".join(quoted))
         if not parts and not nothing_from:
             return thread_block, placed
         body = "\n\n".join(parts)
@@ -552,6 +571,46 @@ class Retrieval:
             + ("\n" + body if body else "")
             + "\n</memories>\n"
         ), placed
+
+    def _few_bear_on(self, candidates: list, placed: list, focus_text: str) -> bool:
+        """Do fewer than _LOG_WHEN_FEWER of the placed items share a word with
+        the message or fall in the time it asks about?"""
+        ids = {item_id for _c, _k, item_id in placed}
+        words = _focus_tokens(focus_text, "zh")
+        bearing = sum(1 for c in candidates if str(c["row"].get("id") or "") in ids and (
+            c["match"] or words & _focus_tokens(str(c["row"].get("text", "")), "zh")))
+        return bearing < _LOG_WHEN_FEWER
+
+    def _log_lines(self, conv: str, focus_text: str, span, left: int,
+                   tz) -> tuple[list[str], int]:
+        """Up to _LOG_LINES lines of the chat's log for a message about the
+        past: by its words (inside the time it names), else the newest of
+        that time. Lines still in view are not repeated. (lines, budget left)"""
+        log = getattr(self, "chat_log", None)
+        if log is None or not log.on:
+            return [], left
+        # The minute's lines not written yet are read too.
+        self._log_chat(conv)
+        window = getattr(self, "_window_rows", None)
+        in_view = {_num(r.get("seq"), int) for r in (window(conv)[1] if window else [])
+                   if isinstance(r, dict)}
+        since, until = (span or (0.0, 0.0))
+        rows = log.read(conv)
+        found = log.search(conv, focus_text, since=since, until=until, limit=_LOG_LINES,
+                           lang=self.agent_lang, skip=in_view, rows=rows)
+        if not found and span:
+            found = log.search(conv, "", since=since, until=until, limit=_LOG_LINES,
+                               skip=in_view, rows=rows)
+        out = []
+        for row in sorted(found, key=lambda r: r["seq"]):
+            said = f"{_clean_prompt_source(row.get('name')) or '?'}: " \
+                   f"{_clean_prompt_source(row.get('text'))}"[:_LOG_LINE_CHARS]
+            when = datetime.fromtimestamp(row["t"], tz).strftime("%Y-%m-%d %H:%M")
+            line = f"- {json.dumps(said, ensure_ascii=False)} (said {when})"
+            if len(line) + 1 <= left:
+                out.append(line)
+                left -= len(line) + 1
+        return out, left
 
     def _memories_for_prompt(self, group_id: str, focus_text: str = "") -> str:
         return self._memory_block(group_id, focus_text)[0]

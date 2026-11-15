@@ -388,6 +388,9 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         """Load recent.json (or, with MEMORY_KEEP_RECENT off, delete it). A
         room's lines wait for its first use; the rest is filled now."""
         store = self._recent
+        if not self.chat_log.on:
+            # Off: no line of any chat stays on disk in a log either.
+            self.chat_log.clear()
         if not getattr(self.settings, "memory_keep_recent", True):
             store.delete()
             return
@@ -436,7 +439,9 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         snap = self._recent.snapshot(conv)
         if snap:
             self._load_recent_entry(conv, snap)
-        self.window_seq.setdefault(conv, 0)
+        # Numbers stay ahead of the log's, should recent.json have been lost.
+        logged = self.chat_log.last_seq(conv) if self.chat_log.on else 0
+        self.window_seq[conv] = max(self.window_seq.get(conv, 0), logged)
 
     def _recent_entry(self, conv: str) -> Optional[dict]:
         """A chat's entry for recent.json from what is held now; None when
@@ -498,6 +503,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         store = self._recent
         convs = [only] if only else list(dirty)
         for conv in convs:
+            self._log_chat(conv)
             entry = self._recent_entry(conv)
             if entry is None:
                 store.drop(conv)

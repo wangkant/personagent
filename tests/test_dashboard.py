@@ -317,6 +317,73 @@ def test_the_chat_payload_carries_every_kind_of_memory(live) -> None:
     check("no status line while consolidation is off", off["memory_status"] is None)
 
 
+def _logged(agent: Agent, conv: str = "telegram:c1") -> dict:
+    """A chat whose log keeps three lines, a fact citing two of them and an event citing one."""
+    now = time.time()
+    agent.chat_log.take(conv, [
+        {"seq": 1, "t": now - 300, "user_id": "telegram:42", "name": "Sam", "text": "I got a dog"},
+        {"seq": 2, "t": now - 240, "user_id": "telegram:42", "name": "Sam", "text": "her name is Pip"},
+        {"seq": 3, "t": now - 200, "user_id": "1", "name": "Nova", "text": "Pip!", "self": True}])
+    agent._append_memory(conv, {"text": "Sam has a dog called Pip", "time": now, "auto": True,
+                                "user_id": "telegram:42", "user_name": "Sam", "refs": [1, 2],
+                                "checked": now - 60})
+    agent._append_memory(conv, {"text": "Sam likes tea", "time": now, "auto": True,
+                                "user_id": "telegram:42", "user_name": "Sam"})
+    event = agent.episode_store.add(conv, {"text": "Nova met Pip", "t0": now - 240, "t1": now - 200,
+                                           "who": ["telegram:42"], "names": ["Sam"], "refs": [3]})
+    agent._save_episodes()
+    facts = agent.memories[conv]
+    return {"fact": facts[-2]["id"], "plain": facts[-1]["id"], "event": event["id"]}
+
+
+def test_the_chat_payload_says_what_is_checked_and_what_the_log_keeps(live) -> None:
+    ids = _logged(live)
+    detail = client().get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()
+    notes = {n["id"]: n for n in detail["memories"]}
+    check("a checked fact carries its lines and when it was checked",
+          notes[ids["fact"]]["refs"] == [1, 2] and notes[ids["fact"]]["checked"] > 0, repr(notes))
+    check("a fact without evidence is unchecked",
+          notes[ids["plain"]]["refs"] == [] and notes[ids["plain"]]["checked"] == 0.0, repr(notes))
+    check("an event carries its lines", detail["episodes"][0]["refs"] == [3], repr(detail["episodes"]))
+    log = detail["log"]
+    check("the log: on, its days, its lines and the oldest line's time",
+          (log["on"], log["days"], log["lines"]) == (True, 30, 3) and log["first_at"] > 0
+          and "last_at" not in log, repr(log))
+    live.settings.memory_log_days = 0
+    off = client().get("/api/dashboard/conversation", params={"id": "telegram:c1"}).json()["log"]
+    check("with MEMORY_LOG_DAYS=0 the log says it is off", off["on"] is False and off["days"] == 0, repr(off))
+
+
+def test_the_evidence_route_answers_an_items_logged_lines(live) -> None:
+    ids = _logged(live)
+    url = "/api/dashboard/memory/evidence"
+
+    def get(**params):
+        return client().get(url, params={"conv": "telegram:c1", **params})
+
+    check("evidence: the token is needed",
+          client(signed_in=False).get(url, params={"conv": "telegram:c1", "id": ids["fact"]}).status_code == 401)
+    fact = get(kind="note", id=ids["fact"]).json()
+    check("evidence: a fact's two lines, oldest first",
+          fact["refs"] == 2 and fact["on"] is True
+          and [(r["seq"], r["name"], r["text"], r["self"]) for r in fact["lines"]]
+          == [(1, "Sam", "I got a dog", False), (2, "Sam", "her name is Pip", False)], repr(fact))
+    event = get(kind="episode", id=ids["event"]).json()
+    check("evidence: an event's line, the character's own",
+          [(r["seq"], r["self"]) for r in event["lines"]] == [(3, True)], repr(event))
+    plain = get(kind="note", id=ids["plain"]).json()
+    check("evidence: a fact that cites nothing has no lines", plain == {"refs": 0, "on": True, "lines": []})
+    live.chat_log.forget("telegram:c1", lambda row: row["seq"] == 1)
+    check("evidence: a line no longer kept is not shown, the count still says it was cited",
+          [r["seq"] for r in get(kind="note", id=ids["fact"]).json()["lines"]] == [2])
+    check("evidence: another chat's id finds nothing",
+          client().get(url, params={"conv": "telegram:c2", "kind": "note", "id": ids["fact"]}).status_code == 409)
+    for params in ({"kind": "core", "id": "x"}, {"kind": "note", "id": ""}, {"kind": "note", "id": "x" * 129}):
+        check(f"evidence: refused {params}", get(**params).status_code == 400)
+    check("evidence: no chat is refused",
+          client().get(url, params={"kind": "note", "id": ids["fact"]}).status_code == 400)
+
+
 def test_each_kind_is_forgotten_and_brought_back(live) -> None:
     ids = _remember(live)
     c = client()

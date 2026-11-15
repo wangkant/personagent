@@ -108,26 +108,31 @@ def test_the_memory_settings_save_and_read_back_as_the_character_reads_them(clie
 
     body = post(client, {"values": {"MEMORY_CALLS_PER_DAY": "12", "MEMORY_TIDY_EVERY": "5",
                                     "CHAT_CONTEXT_MESSAGES": "90", "MEMORY_PROMPT_CHARS": "1800",
-                                    "MEMORY_EPISODES_MAX": "60", "MEMORY_KEEP_RECENT": False}}).json()
+                                    "MEMORY_EPISODES_MAX": "60", "MEMORY_KEEP_RECENT": False,
+                                    "MEMORY_LOG_DAYS": "7"}}).json()
     assert body["changed"] and workspace.restarts == [True]
     again = client.get("/api/tuning", headers=HEADERS).json()["values"]
     assert (again["MEMORY_CALLS_PER_DAY"], again["MEMORY_TIDY_EVERY"], again["CHAT_CONTEXT_MESSAGES"],
-            again["MEMORY_PROMPT_CHARS"], again["MEMORY_EPISODES_MAX"], again["MEMORY_KEEP_RECENT"]) == (
-        "12", "5", "90", "1800", "60", "false")
+            again["MEMORY_PROMPT_CHARS"], again["MEMORY_EPISODES_MAX"], again["MEMORY_KEEP_RECENT"],
+            again["MEMORY_LOG_DAYS"]) == ("12", "5", "90", "1800", "60", "false", "7")
     read = AgentSettings.from_env(env=workspace.config())
     assert (read.memory_calls_per_day, read.memory_tidy_every, read.chat_context_messages,
-            read.memory_prompt_chars, read.memory_episodes_max, read.memory_keep_recent) == (
-        12, 5, 90, 1800, 60, False)
+            read.memory_prompt_chars, read.memory_episodes_max, read.memory_keep_recent,
+            read.memory_log_days) == (12, 5, 90, 1800, 60, False, 7)
     # Zero turns consolidation off; under the floors settings.py keeps is refused.
     assert post(client, {"values": {"MEMORY_CALLS_PER_DAY": "0"}}).status_code == 200
+    # Zero keeps no chat record.
+    assert post(client, {"values": {"MEMORY_LOG_DAYS": "0"}}).status_code == 200
+    assert AgentSettings.from_env(env=workspace.config()).memory_log_days == 0
     for key, value in (("MEMORY_PROMPT_CHARS", "100"), ("MEMORY_EPISODES_MAX", "0"),
-                       ("MEMORY_CALLS_PER_DAY", "-1"), ("CHAT_CONTEXT_MESSAGES", "5")):
+                       ("MEMORY_CALLS_PER_DAY", "-1"), ("CHAT_CONTEXT_MESSAGES", "5"),
+                       ("MEMORY_LOG_DAYS", "-1"), ("MEMORY_LOG_DAYS", "4000")):
         response = post(client, {"values": {key: value}})
         assert response.status_code == 400 and key in response.json()["error"], (key, response.text)
     assert {f.key for f in tuning.FIELDS if f.section == "memory"} == {
         "MEMORY_CALLS_PER_DAY", "MEMORY_TIDY_EVERY", "CHAT_CONTEXT_MESSAGES", "MEMORY_PROMPT_CHARS",
-        "MEMORY_EPISODES_MAX", "MEMORY_KEEP_RECENT"}
-    for key in ("MEMORY_CALLS_PER_DAY", "MEMORY_PROMPT_CHARS", "MEMORY_EPISODES_MAX"):
+        "MEMORY_EPISODES_MAX", "MEMORY_KEEP_RECENT", "MEMORY_LOG_DAYS"}
+    for key in ("MEMORY_CALLS_PER_DAY", "MEMORY_PROMPT_CHARS", "MEMORY_EPISODES_MAX", "MEMORY_LOG_DAYS"):
         field = tuning.BY_KEY[key]
         default = AgentSettings.__dataclass_fields__[key.lower()].default
         assert field.default == default, key
