@@ -452,5 +452,7 @@
 "There is no personagent home at {0}. Run `{1}` to set one up there.": "{0} 处没有 personagent 主目录。运行 `{1}` 可在该处建立。",
 "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "用于 astrbot --platform lark 或 qq_official：应用 ID（connect qq 请使用 --appid）",
 "with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "用于 astrbot --platform lark 或 qq_official：应用密钥（connect qq 请使用 --secret）",
-"language code: {0} (default: AGENT_LANG, else en)": "语言代码：{0}（默认取 AGENT_LANG，未设置时为 en）"
+"language code: {0} (default: AGENT_LANG, else en)": "语言代码：{0}（默认取 AGENT_LANG，未设置时为 en）",
+"take the API key from this environment variable and save a copy of its value in .env": "从此环境变量读取 API 密钥，并将其值复制保存到 .env",
+"why, in a few words; kept in the item's history": "原因，简短说明；记入该条目的历史"
 }

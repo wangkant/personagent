@@ -44,7 +44,7 @@ from . import updates
 from . import window as appwindow
 from .astrbot_install import AstrBotInstallation, install_astrbot
 from .services import Services, stop_leftovers
-from .storage import FileLock, LockUnavailable, atomic_write_text
+from .storage import FileLock, LockUnavailable, atomic_write_text, dated_copy
 from .storage import replace as storage_replace
 
 ASSETS = Path(__file__).with_name("static") / "welcome"
@@ -361,7 +361,10 @@ class Workspace:
         except (OSError, UnicodeDecodeError):
             return
         if text.strip() and sw.shipped_persona(text) is None:
-            atomic_write_text(path.with_name("persona.txt.bak"), text)
+            kept = path.with_name("persona.txt.bak")
+            atomic_write_text(kept, text)
+            # The next replacement writes persona.txt.bak again: this one stays.
+            dated_copy(kept)
 
     def _restart_agent(self) -> None:
         """A running agent reads its settings and persona only as it starts."""

@@ -94,6 +94,14 @@ def error_code(response: httpx.Response) -> str:
         return ""
 
 
+def error_text(response: httpx.Response) -> str:
+    """The agent's own sentence about a refused request, or ""."""
+    try:
+        return str(response.json().get("error") or "")
+    except Exception:
+        return ""
+
+
 def endpoint_url(base_url: str, path: str) -> str:
     """One endpoint under the agent's base URL."""
     return base_url.rstrip("/") + path
@@ -192,13 +200,16 @@ class Connector:
             except httpx.HTTPStatusError as exc:
                 pause = 600.0 if exc.response.status_code == 404 else backoff
                 if exc.response.status_code == 404:
-                    logger.info("agent has no outbox (turned off, or an older "
-                                "version); retrying in 10 minutes")
+                    # A warning: an unconfigured logger shows nothing below it.
+                    logger.warning("agent has no outbox (turned off, or an older "
+                                   "version); retrying in 10 minutes")
                 else:
                     code = error_code(exc.response)
-                    logger.warning("outbox pull refused (%s, code %s)%s",
+                    said = error_text(exc.response)
+                    logger.warning("outbox pull refused (%s, code %s)%s%s",
                                    exc.response.status_code, code or "none",
-                                   _HINTS.get(code, ""))
+                                   _HINTS.get(code, ""),
+                                   f"; the agent said: {said}" if said else "")
                 backoff = min(backoff * 2, 60.0)
                 await self._sleep(pause, stop)
                 continue

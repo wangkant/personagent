@@ -113,8 +113,14 @@ def test_a_turned_off_agent_is_told_how_to_turn_it_on(monkeypatch, caplog) -> No
     monkeypatch.setattr(server, "agent", None)
     monkeypatch.setattr(server, "AGENT_ENABLED", False)
     monkeypatch.setattr(server, "_dashboard_served", lambda: False)
+    monkeypatch.delenv("AGENT_ENABLED", raising=False)
     banner = server._banner("127.0.0.1", 8080)
     assert "AGENT_ENABLED=true" in banner and "init`" not in banner, banner
+    monkeypatch.setenv("AGENT_ENABLED", "false")
+    monkeypatch.setattr(server.home, "FROM_ENV_FILE", set())
+    banner = server._banner("127.0.0.1", 8080)
+    assert "set in the environment, which overrides .env" in banner, banner
+    monkeypatch.delenv("AGENT_ENABLED")
     monkeypatch.setattr(server, "_AGENT_OFF_WARNED", False)
     caplog.set_level(logging.ERROR, logger="bot")
     server._warn_agent_off_once()

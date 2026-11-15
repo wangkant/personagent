@@ -131,6 +131,28 @@ async def test_the_agent_logs_a_rooms_lines_with_the_windows_numbers(tmp: Path) 
     check("in runtime/log beside memory.json", agent.chat_log.folder == tmp / "log")
 
 
+async def test_the_last_line_of_a_turn_is_written_without_a_later_line(tmp: Path) -> None:
+    """A reply follows its question within the write interval; a stop right
+    after it used to lose the reply and leave the question looking unanswered."""
+    import asyncio
+    from persona_agent import agent as agent_mod
+    agent = make_agent(tmp)
+    interval, agent_mod._RECENT_FLUSH_S = agent_mod._RECENT_FLUSH_S, 0.2
+    try:
+        agent._append_buffer(ROOM, "Ann", "hello", "7")
+        agent._maybe_flush_recent()
+        agent._append_buffer(ROOM, "Luna", "hi Ann", "")
+        agent._maybe_flush_recent()
+        check("held back by the interval", len(agent.chat_log.read(ROOM)) == 1)
+        await asyncio.sleep(0.6)
+        check("and written when it has passed, with no further line",
+              [r["text"] for r in agent.chat_log.read(ROOM)] == ["hello", "hi Ann"])
+        recent = agent.memory_file.with_name("recent.json").read_text(encoding="utf-8")
+        check("in the recent messages too", "hi Ann" in recent)
+    finally:
+        agent_mod._RECENT_FLUSH_S = interval
+
+
 async def test_numbers_stay_ahead_of_the_log_when_the_window_file_is_lost(tmp: Path) -> None:
     agent = make_agent(tmp)
     for i in range(3):
@@ -210,10 +232,156 @@ async def test_forgetting_one_note_removes_the_lines_it_cites(tmp: Path) -> None
           [r["text"] for r in agent.chat_log.read(ROOM)] == ["cool"])
 
 
+async def test_a_note_forgotten_before_its_line_is_logged_keeps_it_out(tmp: Path) -> None:
+    """The log is written a little after a line arrives; a forget in that
+    gap must still keep the line out of the log and out of the window."""
+    agent = make_agent(tmp)
+    log = agent.chat_log
+    log.take = lambda conv, rows: 0     # the write has not happened yet
+    agent._append_buffer(ROOM, "Bob", "my pin is 9921", "52")
+    agent._append_buffer(ROOM, "Bo", "cool", "9")
+    del log.take
+    seq = next(r["seq"] for r in agent._log_rows(ROOM) if r["text"] == "my pin is 9921")
+    check("nothing is logged yet", agent.chat_log.read(ROOM) == [])
+    agent._append_memory(ROOM, {"text": "Bob's pin is 9921", "time": time.time(),
+                                "auto": True, "refs": [seq], "user_id": "52"})
+    nid = agent.memories[ROOM][0]["id"]
+    check("forgotten", agent._forget_item(ROOM, "note", nid))
+    check("the line left the window",
+          [r["text"] for r in agent._log_rows(ROOM)] == ["cool"])
+    agent.flush_state()
+    check("and the later write does not log it",
+          [r["text"] for r in agent.chat_log.read(ROOM)] == ["cool"])
+    check("nor keep it among the recent lines on disk",
+          "9921" not in agent.memory_file.with_name("recent.json").read_text(encoding="utf-8"))
+
+
+async def test_forget_this_chat_drops_the_replies_awaiting_a_reaction(tmp: Path) -> None:
+    """They hold the chat's own lines as context, on disk."""
+    agent = make_agent(tmp)
+    page, other = "private:browser:abc", "private:telegram:7"
+    for conv in (page, other):
+        agent.pending_reactions.record(
+            "dm:" + conv[len("private:"):], reply="noted", mode="dm",
+            ctx_lines=["you: I live in Hangzhou"], ts=time.time())
+    agent.pending_reactions.flush()
+    agent._forget_chat(page)
+    agent.pending_reactions.flush()
+    kept = agent.pending_reactions.state_file.read_text(encoding="utf-8")
+    check("the forgotten chat's pending replies are gone", "dm:browser:abc" not in kept, kept)
+    check("another chat's stay", "dm:telegram:7" in kept, kept)
+
+
+async def test_a_command_said_one_to_one_is_its_own_evidence(tmp: Path) -> None:
+    agent = make_agent(tmp)
+    conv = "private:telegram:7"
+    name = agent.persona_name
+    check("saved", agent._handle_memory_command(conv, f"{name}, remember I am allergic to peanuts",
+                                                "telegram:7", "Ann"))
+    note = agent.memories[conv][0]
+    lines = agent.chat_log.lines(conv, note.get("refs") or [])
+    check("the note cites the command itself",
+          [r["text"] for r in lines] == [f"{name}, remember I am allergic to peanuts"], repr(lines))
+
+
+async def test_a_line_that_shares_a_word_is_not_evidence(tmp: Path) -> None:
+    agent = make_agent(tmp)
+    agent._append_buffer(ROOM, "Ann", "Ann here, I work as a nurse", "7")
+    agent.flush_state()
+    refs = agent._cause_refs(ROOM, "Ann works night shifts on weekends", "7")
+    check("one shared name does not make a source", refs == [], repr(refs))
+    refs = agent._cause_refs(ROOM, "Ann works as a nurse", "7")
+    check("most of the note's words do", len(refs) == 1, repr(refs))
+
+
+async def test_forgetting_a_note_spares_a_line_another_note_rests_on(tmp: Path) -> None:
+    agent = make_agent(tmp)
+    agent._append_buffer(ROOM, "Ann", "I work at the aquarium and I keep bees", "7")
+    agent.flush_state()
+    seq = agent.chat_log.read(ROOM)[0]["seq"]
+    for text in ("Ann works at the aquarium", "Ann keeps bees"):
+        agent._append_memory(ROOM, {"text": text, "time": time.time(), "auto": True,
+                                    "refs": [seq], "user_id": "7"})
+    first = agent.memories[ROOM][0]["id"]
+    check("forgotten", agent._forget_item(ROOM, "note", first))
+    check("the shared line stays for the other note", len(agent.chat_log.read(ROOM)) == 1)
+    check("forgotten too", agent._forget_item(ROOM, "note", agent.memories[ROOM][0]["id"]))
+    check("and goes with the last note that cites it", agent.chat_log.read(ROOM) == [])
+
+
+async def test_a_forget_that_removes_only_its_own_line_says_nothing_was_forgotten(
+        tmp: Path) -> None:
+    from persona_agent import chatlangs
+    agent = make_agent(tmp)
+    replies = chatlangs.spec("en").replies
+    agent._append_memory(ROOM, {"text": "Ann has a parrot", "time": time.time(),
+                                "user_id": "7", "user_name": "Ann"})
+    agent._append_buffer(ROOM, "Bo", "Luna forget parrot", "9")
+    said = agent._handle_memory_command(ROOM, "Luna forget parrot", "9", "Bo")
+    check("another member's note stays", len(agent.memories[ROOM]) == 1)
+    check("and the answer does not claim otherwise",
+          said in replies["nothing_to_forget"], repr(said))
+    check("the command's own line still leaves the window",
+          [r["text"] for r in agent._log_rows(ROOM)] == [])
+    agent._append_buffer(ROOM, "Bo", "my parrot bites", "9")
+    agent._append_buffer(ROOM, "Bo", "Luna forget parrot", "9")
+    said = agent._handle_memory_command(ROOM, "Luna forget parrot", "9", "Bo")
+    check("a line of the caller's own that went counts", said in replies["forgotten"], repr(said))
+
+
+async def test_a_forgotten_note_takes_the_characters_own_recital_with_it(tmp: Path) -> None:
+    agent = make_agent(tmp)
+    name = agent.persona_name
+    for text in ("Ann works at the aquarium", "Ann keeps bees."):
+        agent._append_memory(ROOM, {"text": text, "time": time.time(),
+                                    "user_id": "7", "user_name": "Ann"})
+    agent._append_buffer(ROOM, name, "Here is what I have:\nAnn works at the aquarium", "")
+    agent._append_buffer(ROOM, "Bo", "Ann works at the aquarium, right?", "9")
+    agent._append_buffer(ROOM, name, "I also have: ann keeps bees", "")
+    agent._append_buffer(ROOM, "Bo", "fine", "9")
+    agent._append_buffer(ROOM, name, "good morning", "")
+    agent.flush_state()
+    nid = next(it["id"] for it in agent.memories[ROOM] if "aquarium" in it["text"])
+    check("forgotten on the page", agent._forget_item(ROOM, "note", nid))
+    check("the character's line that read it back is gone; a member's line is not its to take",
+          [r["text"] for r in agent.chat_log.read(ROOM)] == [
+              "Ann works at the aquarium, right?", "I also have: ann keeps bees", "fine",
+              "good morning"], repr(agent.chat_log.read(ROOM)))
+    agent._handle_memory_command(ROOM, f"{name} forget bees", "7", "Ann")
+    agent.flush_state()
+    check("a forget asked in chat does the same, punctuation and case aside",
+          [r["text"] for r in agent._log_rows(ROOM)] == [
+              "Ann works at the aquarium, right?", "fine", "good morning"],
+          repr(agent._log_rows(ROOM)))
+    check("and in the log", "bees" not in agent.chat_log.path(ROOM).read_text(encoding="utf-8"))
+
+
+async def test_a_note_removed_in_an_earlier_page_chat_can_be_restored_from_the_new_one(
+        tmp: Path) -> None:
+    """New chat gives the page a new conversation; the earlier one's notes
+    still show there, so their removal must be restorable there too."""
+    from persona_agent import dashboard
+    agent = make_agent(tmp)
+    old, new = "private:browser:aaa", "private:browser:bbb"
+    agent._append_memory(old, {"text": "I have a cat called Dumpling", "time": time.time()})
+    nid = agent.memories[old][0]["id"]
+    check("the note reaches the new chat", [w for w, _ in agent._notes_from_rooms(new)] == [old])
+    check("removed where it lives", agent._forget_item(old, "note", nid))
+    shown = dashboard.conversation_payload(agent, new)["removed"]
+    check("and listed as restorable in the new chat",
+          [r["text"] for r in shown] == ["I have a cat called Dumpling"], repr(shown))
+    check("a stranger's chat does not list it",
+          dashboard.conversation_payload(agent, "private:telegram:9")["removed"] == [])
+    check("restored", agent._restore(shown[0]["tid"]) == "ok")
+    check("back where it was", [it["text"] for it in agent.memories[old]] == [
+        "I have a cat called Dumpling"])
+
+
 async def test_the_terminal_forget_reaches_the_log(tmp: Path) -> None:
     from persona_agent import memory_admin
     agent = make_agent(tmp)
     agent._append_buffer(ROOM, "Ann", "I work at the aquarium", "7")
+    agent._append_buffer(ROOM, agent.persona_name, "I have: Ann works at the aquarium", "")
     agent.flush_state()
     seq = agent.chat_log.read(ROOM)[0]["seq"]
     agent._append_memory(ROOM, {"text": "Ann works at the aquarium", "time": time.time(),
@@ -222,7 +390,8 @@ async def test_the_terminal_forget_reaches_the_log(tmp: Path) -> None:
     backend = memory_admin.FileBackend(agent.memory_file, agent.core_memory_file, tmp,
                                        agent.settings)
     check("the terminal forgets it", backend.forget(ROOM, "note", nid))
-    check("and the line it cites", agent.chat_log.read(ROOM) == [])
+    check("and the line it cites, and the character's recital of it",
+          agent.chat_log.read(ROOM) == [])
 
 
 def test_a_backup_never_holds_the_log(tmp: Path) -> None:

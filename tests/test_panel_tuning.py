@@ -233,6 +233,21 @@ def test_owner_ids_are_written_canonical(client, workspace):
     assert workspace.config()["ACCESS_GROUPS"] == "discord:9"
 
 
+@pytest.mark.parametrize("field", ["ADMIN_IDS", "ACCESS_GROUPS", "ACCESS_DM_USERS", "ACCESS_PAUSED_GROUPS"])
+@pytest.mark.parametrize("entry", ["我的QQ", "qq群:abc", "telegram-100", "qq:abc", "42,my group"])
+def test_an_entry_that_names_no_account_is_refused_not_saved_as_a_qq_id(client, workspace, field, entry):
+    """A bare entry is a QQ number: saved, "telegram-100" would close every QQ group."""
+    before = workspace.config().get(field, "")
+    answer = post(client, {"values": {field: entry}})
+    assert answer.status_code == 400, answer.text
+    assert workspace.config().get(field, "") == before
+
+
+def test_ids_of_any_platform_and_bare_qq_numbers_are_kept(client, workspace):
+    post(client, {"values": {"ACCESS_GROUPS": "123456, telegram:-1001234567890, qq_official:AbC-9_x, matrix:!room:example.org"}})
+    assert workspace.config()["ACCESS_GROUPS"] == "123456,telegram:-1001234567890,qq_official:AbC-9_x,matrix:!room:example.org"
+
+
 def test_owner_name_rerenders_a_shipped_persona_but_not_a_custom_one(client, workspace):
     key = sw.PERSONA_KEYS[0]
     sw.write_persona(workspace.home, key, name="Mira", lang="en")

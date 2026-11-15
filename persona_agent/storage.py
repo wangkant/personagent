@@ -8,6 +8,7 @@ import errno
 import json
 import logging
 import os
+import shutil
 import tempfile
 import time
 from dataclasses import dataclass
@@ -21,6 +22,21 @@ DEFAULT_LOCK_TIMEOUT_SEC = 30.0
 DEFAULT_WARNING_BYTES = 50_000_000
 
 _T = TypeVar("_T")
+
+
+def dated_copy(path: str | Path) -> Path:
+    """Copy `path` (a `.bak`) beside itself under a name that carries the
+    time, which no later backup overwrites: `x.bak` -> `x.20261115-123456.bak`."""
+    path = Path(path)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    stem = path.name[:-len(path.suffix)] if path.suffix else path.name
+    dated = path.with_name(f"{stem}.{stamp}{path.suffix}")
+    n = 1
+    while dated.exists():
+        n += 1
+        dated = path.with_name(f"{stem}.{stamp}-{n}{path.suffix}")
+    shutil.copy2(path, dated)
+    return dated
 
 
 def num(value, kind=float):

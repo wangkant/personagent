@@ -881,7 +881,7 @@ def warn_if_agent_home_diverges(env_path: Path, home: Path) -> None:
 # ---------------------------------------------------------------------------
 
 # A personification's name in each language: the product name plus this.
-_NAME_SUFFIX = {"zh": "娘", "zh-TW": "娘", "ja": "ちゃん", "ko": "짱"}
+_NAME_SUFFIX = {"zh": "娘", "zh-TW": "娘", "ja": "ちゃん", "ko": "쨩"}
 
 
 @dataclass(frozen=True)
@@ -1540,7 +1540,24 @@ class Launcher:
             return [f"uvx personagent {tail}"]
         if shutil.which("personagent"):
             return [f"personagent {tail}"]
+        launcher = _started_by_launcher()
+        if launcher:
+            return [f"{_program(launcher)} {tail}"]
         return [f"{_program(self.python)} -m persona_agent {tail}"]
+
+
+def _started_by_launcher() -> str | None:
+    """The `personagent` script that started this process, when it was one (a venv
+    run by its full path without being activated)."""
+    started = Path(sys.argv[0]) if sys.argv and sys.argv[0] else None
+    if started is None or started.name.lower() not in ("personagent", "personagent.exe"):
+        return None
+    beside = Path(sys.executable).parent
+    for candidate in (started, started.with_name("personagent.exe"),
+                      beside / "personagent.exe", beside / "personagent"):
+        if candidate.is_file():
+            return str(candidate)
+    return None
 
 
 def command(sub: str, home: Path | None = None) -> str:
@@ -2116,7 +2133,8 @@ def init_parser(prog: str) -> argparse.ArgumentParser:
     p.add_argument("--base-url", help=langs.term("the service's API address (needed with --provider other)"))
     p.add_argument("--model", help=langs.term("the model id (default: the preset's)"))
     p.add_argument("--key-env", metavar="VAR",
-                   help=langs.term("read the API key from this environment variable"))
+                   help=langs.term("take the API key from this environment variable and save "
+                                   "a copy of its value in .env"))
     p.add_argument("--name", help=langs.term("the bot's name (default: one in the chosen language)"))
     p.add_argument("--lang", choices=LANGS, help=langs.term("the language (default: the system's)"))
     p.add_argument("--persona", choices=PERSONA_KEYS,

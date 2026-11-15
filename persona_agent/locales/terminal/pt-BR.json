@@ -452,5 +452,7 @@
 "There is no personagent home at {0}. Run `{1}` to set one up there.": "Não há pasta principal do personagent em {0}. Execute `{1}` para criar uma lá.",
 "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "com astrbot --platform lark ou qq_official: o ID do aplicativo (para connect qq, use --appid)",
 "with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "com astrbot --platform lark ou qq_official: o segredo do aplicativo (para connect qq, use --secret)",
-"language code: {0} (default: AGENT_LANG, else en)": "código de idioma: {0} (padrão: AGENT_LANG ou, na falta dele, en)"
+"language code: {0} (default: AGENT_LANG, else en)": "código de idioma: {0} (padrão: AGENT_LANG ou, na falta dele, en)",
+"take the API key from this environment variable and save a copy of its value in .env": "obtém a chave de API desta variável de ambiente e salva uma cópia do valor em .env",
+"why, in a few words; kept in the item's history": "o motivo, em poucas palavras; fica registrado no histórico do item"
 }

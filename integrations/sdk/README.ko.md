@@ -37,7 +37,10 @@ async def deliver(delivery: dict) -> tuple[str, int]:
 
 async def chat(conn: Connector) -> None:
     while True:
-        text = await asyncio.to_thread(input, "> ")
+        try:
+            text = await asyncio.to_thread(input, "> ")
+        except EOFError:
+            return
         if not text.strip():
             continue
         answer = await conn.send_event({
@@ -62,13 +65,18 @@ async def chat(conn: Connector) -> None:
 
 async def main() -> None:
     conn = Connector(BASE_URL, TOKEN, connector_id="console-1")
+    outbox = asyncio.create_task(conn.run_outbox(deliver))
     try:
-        await asyncio.gather(chat(conn), conn.run_outbox(deliver))
+        await chat(conn)
     finally:
+        outbox.cancel()
         await conn.aclose()
 
 
-asyncio.run(main())
+try:
+    asyncio.run(main())
+except KeyboardInterrupt:
+    pass
 ```
 
 `deliver`는 `(status, sent_items)`를 돌려줍니다. status는 프로토콜의 ack 표와 같이 `sent`, `partial`, `failed`, `refused`, `unsupported` 중 하나입니다. 일부 항목만 보냈다면 `("partial", n)`을 돌려주십시오. 루프는 각 배달의 ack를 다음 가져오기 때 보내고, 같은 배달을 두 번 보내지 않으며, `deliver`를 호출하기 전에 시간이 지난 배달은 `expired`로 보고합니다.

@@ -290,6 +290,20 @@ class ChatLog:
         except OSError:
             return []
 
+    def private_chats(self, platform: str) -> set[str]:
+        """The one-to-one chats of `platform` that have a log, told from the
+        speaker ids in their own lines (a file's name is only a hash)."""
+        found = set()
+        for path in self._files():
+            for row in self._read_path(path):
+                uid = str(row.get("user_id") or "")
+                if uid.startswith(platform + ":"):
+                    conv = "private:" + uid
+                    if file_name(conv) == path.name:
+                        found.add(conv)
+                    break
+        return found
+
     def clear(self) -> int:
         """Every chat's log goes (the log turned off, a reset)."""
         gone = 0

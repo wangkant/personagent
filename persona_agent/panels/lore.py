@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import HTTPException, Request
 
 from ..settings import content_lang
-from ..storage import atomic_write_text
+from ..storage import atomic_write_text, dated_copy
 from ..views import DATA_FILES, data_file_status, parse_lorebook
 
 # The loader has no limits of its own; these keep one file and one prompt sane.
@@ -231,7 +231,10 @@ class Lore:
             if not current["own"]:
                 return {**current, "changed": False, "restarted": False}
             path = Path(current["path"])
-            os.replace(path, path.with_name(path.name + ".bak"))
+            kept = path.with_name(path.name + ".bak")
+            os.replace(path, kept)
+            # A later save or restore writes the .bak again: this copy stays.
+            dated_copy(kept)
             return self._applied()
 
     @staticmethod

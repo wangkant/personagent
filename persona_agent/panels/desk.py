@@ -46,6 +46,7 @@ SKIP_NAMES = {"dashboard.token", "gateway_nonces.json", "__pycache__"}
 SKIP_SUFFIXES = (".lock", ".tmp", ".pyc", ".part")
 # What "forget" leaves in the runtime folder: the sticker library and the
 # record of model use (the person's check on their bill) are not memory.
+HELD_WAIT_S = 10.0
 KEEP_ON_FORGET = {"stickers.json", "unknown_stickers.jsonl", "dashboard.token", usage.USAGE_FILE}
 SERVICES = ("agent", "astrbot", "direct")
 MAX_MEMBERS = 50_000
@@ -334,10 +335,17 @@ class Desk:
     def _held(self):
         # Held while files change: a service started elsewhere, or starting now, cannot load them.
         lock = RuntimeInstanceLock(self.home)
-        try:
-            lock.acquire()
-        except LockUnavailable:
-            raise ValueError("desk_service_elsewhere") from None
+        # The service this page just stopped lets go of the lock a moment after
+        # its launcher has ended: wait for that before blaming another process.
+        deadline = time.monotonic() + HELD_WAIT_S
+        while True:
+            try:
+                lock.acquire()
+                break
+            except LockUnavailable:
+                if time.monotonic() >= deadline:
+                    raise ValueError("desk_service_elsewhere") from None
+                time.sleep(0.2)
         try:
             yield
         finally:
@@ -376,7 +384,9 @@ class Desk:
                 path.unlink()
 
     def _unpack(self, path: Path, plan, runtime: Path) -> None:
-        self._clear_runtime(runtime, keep=set())
+        # A backup never holds the chat record, so a restore has none to put back:
+        # the one on disk stays rather than being lost with nothing to replace it.
+        self._clear_runtime(runtime, keep={"log"})
         if (self.home / "stickers").is_dir():
             shutil.rmtree(self.home / "stickers")
         with zipfile.ZipFile(path) as archive:

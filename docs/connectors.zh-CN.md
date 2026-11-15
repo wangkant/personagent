@@ -28,7 +28,7 @@ curl http://127.0.0.1:8080/health
 
 - `CONNECTOR_TOKEN` 为空时，agent 只接受本机上调用 `127.0.0.1` 或 `localhost` 的程序，这些程序无需发送认证请求头。`personagent init` 不会设置它。本地页面、`personagent up` 和 `personagent connect astrbot` 会在它为空时写入一个随机值。
 - 如需设置，请在 `.env` 中写入一个足够长的随机值，例如 `python -c "import secrets; print(secrets.token_urlsafe(32))"` 的输出，为连接器配置相同的值，然后重启 agent。
-- `GET /health` 返回 `{"status": "ok", "agent_enabled": true}`，不产生任何费用。`"agent_enabled": false` 表示 agent 无法回答（没有 `LLM_API_KEY`，或 `AGENT_ENABLED=false`），此时每个事件都会得到 `owned: false`。`GET /health/details` 还会检查模型和其他服务，可能产生少量费用。设置了令牌时，它要求带上 `X-Personagent-Token` 请求头；未设置时只接受本机请求；其他请求会得到 `403` 和代码 `forbidden`。
+- `GET /health` 返回 `{"status": "ok", "agent_enabled": true}`，不产生任何费用。`"agent_enabled": false` 表示 agent 无法回答（没有 `LLM_API_KEY`，或 `AGENT_ENABLED=false`），此时每个事件都会得到 `owned: false`。`GET /health/details` 还会检查模型和其他服务，可能产生少量费用。设置了令牌时，它要求带上 `X-Personagent-Token` 请求头；未设置时只接受本机请求；其他请求会得到 `403` 和代码 `forbidden`。未设置令牌时，来自本机但带有浏览器或代理请求头的请求会得到 `non_local_request`，与其他端点相同。
 
 ## 配置
 
@@ -49,7 +49,7 @@ curl http://127.0.0.1:8080/health
 
 ## 地址
 
-personagent 将每个 id 存储为 `<platform>:<id>`，例如群 `telegram:-1001234` 或用户 `discord:4242`。`platform` 是连接器为平台指定的名称，使用小写，且不含 `:`。
+personagent 将每个 id 存储为 `<platform>:<id>`，例如群 `telegram:-1001234` 或用户 `discord:4242`。`platform` 是连接器为平台指定的名称，使用小写，且不含 `:`。名称区分大小写：`Telegram` 与 `telegram` 是记忆互相独立的两个平台，因此请始终使用同一种写法。含 `:` 的名称会以 `invalid_schema` 拒绝。
 
 QQ 是唯一的例外，为兼容而保留。其 id 存储时不带前缀（`123456`），在任何设置中写 `qq:123456` 含义相同。如果连接器接入 QQ，且希望学到的状态与已有的 QQ 部署保持一致，请将其平台名称写入 `CONNECTOR_QQ_PLATFORMS`。AstrBot 插件的 QQ 适配器是 `aiocqhttp`。此处列出的平台，其 id 同样不带前缀存储。
 
@@ -91,7 +91,7 @@ QQ 是唯一的例外，为兼容而保留。其 id 存储时不带前缀（`123
 }
 ```
 
-必填字段是 `platform`、`conversation_type`（`group` 或 `dm`）、`sender_id`、`message_id` 和 `sent_at`，群聊还须包含 `conversation_id`。`sent_at` 是平台为消息标记的时间，单位为 unix 秒，取整数（也接受纯数字字符串）。角色看到的每条消息都附有这一时间。agent 启动后，在某个平台的第一条消息到达起两分钟内，如果群聊消息到达时已超过 10 分钟，即视为重启后补发的积压消息：只作为上下文保留，不予回复。两分钟之后，较早的 `sent_at` 不再使消息被搁下，因此时钟偏慢的连接器发来的消息仍会得到回复。请发送平台原始 id，前缀由 agent 添加。
+必填字段是 `platform`、`conversation_type`（`group` 或 `dm`）、`sender_id`、`message_id` 和 `sent_at`，群聊还须包含 `conversation_id`。`sent_at` 是平台为消息标记的时间，单位为 unix 秒（也接受纯数字字符串，小数部分会被舍去）。角色看到的每条消息都附有这一时间。agent 启动后，在某个平台的第一条消息到达起两分钟内，如果群聊消息到达时已超过 10 分钟，即视为重启后补发的积压消息：只作为上下文保留，不予回复。两分钟之后，较早的 `sent_at` 不再使消息被搁下，因此时钟偏慢的连接器发来的消息仍会得到回复。请发送平台原始 id，前缀由 agent 添加。
 
 `addressed` 由连接器设置。消息提及机器人、回复机器人的某条消息，或按平台自身规则是对机器人说的，该字段即为 true。agent 本身也会留意文本中出现的名称。它将对自身消息的引用或对机器人的 @ 视为可供学习的反应，因此回复机器人消息时须设置 `addressed`。对其他成员消息的引用从不视为对机器人的反应。转发消息中对机器人的提及不算对机器人说话，因此不要为此设置 `addressed`。
 
@@ -168,7 +168,7 @@ QQ 是唯一的例外，为兼容而保留。其 id 存储时不带前缀（`123
 }
 ```
 
-agent 最多将请求挂起 `wait_s` 秒（上限 30），直到有内容排队，然后返回：
+agent 最多将请求挂起 `wait_s` 秒（上限 30），直到有内容排队，然后立即返回此刻已排队的内容。`max_deliveries` 只是上限，agent 不会等到凑满再返回：
 
 ```json
 {
@@ -204,6 +204,8 @@ agent 最多将请求挂起 `wait_s` 秒（上限 30），直到有内容排队�
 | `refused` | 连接器不再允许该会话。 |
 | `unsupported` | 平台无法主动向该会话发送。 |
 
+其他任何 `status` 都按 `failed` 处理，agent 的日志会提示一次。
+
 规则：
 
 - **最多一次。** 无论 ack 结果如何，agent 只交出一次投递，绝不重发。请保留最近几百个 `delivery_id`，同一投递绝不发送两次。
@@ -221,15 +223,15 @@ agent 最多将请求挂起 `wait_s` 秒（上限 30），直到有内容排队�
 
 | 状态码 | `code` | 端点 | 原因 |
 |---|---|---|---|
-| 400 | `invalid_schema` | 两者 | 请求体不是 JSON 对象；缺少必填字段或字段为空；`conversation_type` 既不是 `group` 也不是 `dm`；`segments` 不是列表；请求体类型错误（见“请求体类型”）；拉取请求没有可用的 `connector_id`（最多 128 个字符），`wait_s` 或 `max_deliveries` 不是数字，或 ack 超过 1,000 条。 |
+| 400 | `invalid_schema` | 两者 | 请求体为空或不是 JSON 对象；`platform` 不是字符串或含有 `:`；缺少必填字段或字段为空；`conversation_type` 既不是 `group` 也不是 `dm`；`segments` 不是列表；请求体类型错误（见“请求体类型”）；拉取请求没有可用的 `connector_id`（最多 128 个字符），`wait_s` 或 `max_deliveries` 不是数字，或 ack 超过 1,000 条。`error` 会指出出错的字段。 |
 | 400 | `client_disconnected` | 两者 | 调用方在发送请求体时断开了连接。 |
 | 403 | `unauthenticated` | 两者 | 没有 `CONNECTOR_TOKEN`，且调用方不在 agent 所在的机器上。 |
-| 403 | `non_local_request` | 两者 | 没有 `CONNECTOR_TOKEN`，且请求带有本地程序不会发送的请求头：`Origin`、值不为 `none` 的 `Sec-Fetch-Site`、`localhost`、`127.0.0.1` 和 `::1` 以外的 `Host`，或 `X-Forwarded-For` 之类的代理请求头。 |
+| 403 | `non_local_request` | 两者 | 没有 `CONNECTOR_TOKEN`，且请求带有本地程序不会发送的请求头：`Origin`、值不为 `none` 的 `Sec-Fetch-Site`、`localhost`、`127.0.0.1` 和 `::1` 以外的 `Host`，或 `X-Forwarded-For` 之类的代理请求头。`error` 会指出是哪个请求头。 |
 | 403 | `invalid_envelope` | 两者 | 设置了 `CONNECTOR_TOKEN`，而令牌或某个请求头缺失或错误、签名不匹配、时间戳相差超过五分钟、nonce 已用过，或重放防护已满。 |
-| 403 | `stale_event` | events | `sent_at` 不是整数秒，或与 agent 的时钟相差超过 `CONNECTOR_MAX_EVENT_AGE_S`（24 小时），无论偏早还是偏晚。以毫秒为单位的值会落在遥远的未来。 |
+| 403 | `stale_event` | events | `sent_at` 不是数字，或与 agent 的时钟相差超过 `CONNECTOR_MAX_EVENT_AGE_S`（24 小时），无论偏早还是偏晚。以毫秒为单位的值会落在遥远的未来。`error` 会说明原因。 |
 | 404 | `outbox_disabled` | outbox | `CONNECTOR_OUTBOX_ENABLED=false`，或 agent 已关闭（`AGENT_ENABLED=false`）。 |
 | 408 | `body_timeout` | 两者 | 请求体超过 30 秒仍未送达。 |
-| 413 | `body_too_large` | 两者 | 请求体大于 `SERVER_MAX_BODY_BYTES`（8,000,000 字节），通常是内联图片所致。 |
+| 413 | `body_too_large` | 两者 | 请求体大于 `SERVER_MAX_BODY_BYTES`（8,000,000 字节），通常是内联图片所致。agent 读到 `Content-Length` 即作出回应并关闭连接，因此部分客户端（如 Python 的 `urllib`）报告的是连接被重置。 |
 | 429 | `capacity_exceeded` | 两者 | 同时请求过多：事件端点进行中的轮次超过 `CONNECTOR_MAX_INFLIGHT`（默认 64），或 outbox 的拉取超过 16 个。`Retry-After` 响应头给出需等待的秒数：3，outbox 为 5。 |
 
 路径错误会得到 `404 {"detail": "Not Found"}`，方法错误（例如 `GET /v1/events`）会得到 `405 {"detail": "Method Not Allowed"}`。这两种响应来自 Web 框架，不带 `code`。

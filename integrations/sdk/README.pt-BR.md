@@ -37,7 +37,10 @@ async def deliver(delivery: dict) -> tuple[str, int]:
 
 async def chat(conn: Connector) -> None:
     while True:
-        text = await asyncio.to_thread(input, "> ")
+        try:
+            text = await asyncio.to_thread(input, "> ")
+        except EOFError:
+            return
         if not text.strip():
             continue
         answer = await conn.send_event({
@@ -62,13 +65,18 @@ async def chat(conn: Connector) -> None:
 
 async def main() -> None:
     conn = Connector(BASE_URL, TOKEN, connector_id="console-1")
+    outbox = asyncio.create_task(conn.run_outbox(deliver))
     try:
-        await asyncio.gather(chat(conn), conn.run_outbox(deliver))
+        await chat(conn)
     finally:
+        outbox.cancel()
         await conn.aclose()
 
 
-asyncio.run(main())
+try:
+    asyncio.run(main())
+except KeyboardInterrupt:
+    pass
 ```
 
 `deliver` retorna `(status, sent_items)`, em que status é `sent`, `partial`, `failed`, `refused` ou `unsupported`, como na tabela de confirmações do protocolo. Quando só alguns itens saíram, retorne `("partial", n)`. O ciclo confirma cada entrega na consulta seguinte, não envia nenhuma duas vezes e informa como `expired` uma entrega cujo prazo venceu antes de `deliver` ser chamado.

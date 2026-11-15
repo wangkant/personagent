@@ -137,12 +137,33 @@ def _take_home(args: list[str]) -> tuple[str | None, list[str]]:
     return home, rest
 
 
+def _unknown_leading_option(words: list[str]) -> str | None:
+    """An option before the command that personagent does not know; argparse
+    would take the word after it for the command (`--hme H doctor`)."""
+    i = 0
+    while i < len(words):
+        word = words[i]
+        if word == "--home":
+            i += 2
+        elif word in ("-h", "--help", "--version") or word.startswith("--home="):
+            i += 1
+        elif word.startswith("-") and word != "--":
+            return word
+        else:
+            return None
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     langs.utf8_console()
     # argparse asks gettext for its own words: usage, options, its errors.
     argparse._ = langs.term
     p = _parser()
-    args = p.parse_args(sys.argv[1:] if argv is None else argv)
+    words = sys.argv[1:] if argv is None else argv
+    unknown = _unknown_leading_option(words)
+    if unknown:
+        p.error(argparse._("unrecognized arguments: %s") % unknown)
+    args = p.parse_args(words)
     if not args.command and langs.interactive():
         args.command = "start"
     if not args.command:

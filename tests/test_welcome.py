@@ -113,6 +113,12 @@ def test_a_chosen_personality_keeps_a_copy_of_the_persona_someone_wrote(client, 
     # A shipped persona is not worth a copy: the one someone wrote stays in the .bak.
     client.post("/api/config", headers=HEADERS, json={"character": "bookworm", "name": "Mira"})
     assert kept.read_text(encoding="utf-8") == "My own character"
+    # A second persona someone wrote takes the .bak; the first keeps its dated copy.
+    persona.write_text("My second character", encoding="utf-8")
+    client.post("/api/config", headers=HEADERS, json={"character": "dry-wit", "name": "Mira"})
+    assert kept.read_text(encoding="utf-8") == "My second character"
+    copies = sorted(p.read_text(encoding="utf-8") for p in workspace.home.glob("persona.txt.*.bak"))
+    assert copies == ["My own character", "My second character"]
 
 
 @pytest.mark.parametrize("key", ["密钥 sk-abc", "sk-abc def"])
@@ -174,7 +180,7 @@ def test_the_catalog_names_each_character_and_its_portrait(client, portraits):
     assert list(characters) == list(sw.PERSONA_KEYS)
     assert characters["claude"]["defaultNames"]["en"] == "Claude-chan"
     assert characters["claude"]["defaultNames"]["zh"] == "Claude娘"
-    assert set(characters["claude"]["ownNames"]) >= {"Claude", "Claude-chan", "Claude娘", "Claudeちゃん", "Claude짱"}
+    assert set(characters["claude"]["ownNames"]) >= {"Claude", "Claude-chan", "Claude娘", "Claudeちゃん", "Claude쨩"}
     assert characters["claude"]["avatar"] == "/assets/characters/claude.webp"
     assert characters["deepseek"]["defaultNames"]["ja"] == "DeepSeekちゃん" and characters["deepseek"]["avatar"] is None
     assert "ChatGPT" in characters["chatgpt"]["ownNames"]

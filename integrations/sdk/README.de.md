@@ -37,7 +37,10 @@ async def deliver(delivery: dict) -> tuple[str, int]:
 
 async def chat(conn: Connector) -> None:
     while True:
-        text = await asyncio.to_thread(input, "> ")
+        try:
+            text = await asyncio.to_thread(input, "> ")
+        except EOFError:
+            return
         if not text.strip():
             continue
         answer = await conn.send_event({
@@ -62,13 +65,18 @@ async def chat(conn: Connector) -> None:
 
 async def main() -> None:
     conn = Connector(BASE_URL, TOKEN, connector_id="console-1")
+    outbox = asyncio.create_task(conn.run_outbox(deliver))
     try:
-        await asyncio.gather(chat(conn), conn.run_outbox(deliver))
+        await chat(conn)
     finally:
+        outbox.cancel()
         await conn.aclose()
 
 
-asyncio.run(main())
+try:
+    asyncio.run(main())
+except KeyboardInterrupt:
+    pass
 ```
 
 `deliver` gibt `(status, sent_items)` zurück; status ist `sent`, `partial`, `failed`, `refused` oder `unsupported`, wie in der Ack-Tabelle des Protokolls. Wenn nur einige Einträge hinausgingen, geben Sie `("partial", n)` zurück. Die Schleife bestätigt jede Zustellung bei der nächsten Abfrage, sendet keine zweimal und meldet eine Zustellung als `expired`, deren Frist abgelaufen war, bevor `deliver` aufgerufen wurde.

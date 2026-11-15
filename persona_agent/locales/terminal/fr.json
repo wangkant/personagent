@@ -133,8 +133,8 @@
 "The personagent shortcuts are gone.": "Les raccourcis personagent ont été retirés.",
 "personagent is on your desktop and in the Start menu.": "personagent est sur votre bureau et dans le menu Démarrer.",
 "usage: ": "usage : ",
-"positional arguments": "arguments positionnels",
-"options": "options",
+"positional arguments": "arguments positionnels ",
+"options": "options ",
 "show this help message and exit": "affiche cette aide et quitte",
 "show program's version number and exit": "affiche le numéro de version et quitte",
 "%(prog)s: error: %(message)s\n": "%(prog)s : erreur : %(message)s\n",
@@ -449,8 +449,10 @@
 "{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0} ({1}) n'a pas appelé l'outil de recherche ; le personnage ne cherchera donc jamais sur le web. Définissez LLM_JUDGE_MODEL sur un modèle qui prend en charge les appels d'outils.",
 "Fix first: {0}": "À corriger en premier : {0}",
 "Not critical, but failing: {0}": "Non critique, mais en échec : {0}",
-"There is no personagent home at {0}. Run `{1}` to set one up there.": "Il n'y a pas de dossier principal personagent dans {0}. Lancez `{1}` pour en créer un à cet endroit.",
+"There is no personagent home at {0}. Run `{1}` to set one up there.": "Il n'y a pas de dossier personnel personagent dans {0}. Lancez `{1}` pour en créer un à cet endroit.",
 "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "avec astrbot --platform lark ou qq_official : l'ID de l'application (pour connect qq, utilisez --appid)",
 "with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "avec astrbot --platform lark ou qq_official : le secret de l'application (pour connect qq, utilisez --secret)",
-"language code: {0} (default: AGENT_LANG, else en)": "code de langue : {0} (par défaut : AGENT_LANG, sinon en)"
+"language code: {0} (default: AGENT_LANG, else en)": "code de langue : {0} (par défaut : AGENT_LANG, sinon en)",
+"take the API key from this environment variable and save a copy of its value in .env": "prend la clé API dans cette variable d'environnement et en enregistre une copie dans .env",
+"why, in a few words; kept in the item's history": "le motif, en quelques mots ; conservé dans l'historique de l'élément"
 }

@@ -434,5 +434,6 @@
 "Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "Здесь тоже работают команды памяти, например «{name}, запомни ...» и «{name}, что ты помнишь?». Сохранённое здесь остаётся в пробном чате: {memory} это не показывает.",
 "Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` connects one you already run. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "Другие платформы, например Slack, KOOK или Feishu, подключаются через AstrBot: `{cmd} astrbot --install` устанавливает его здесь, а `{cmd} astrbot DATA_DIR` подключает уже работающий. Помощники для программирования: `{cmd} claude-code`, `codex` или `dsh`.",
 "personagent demo: short scenes played with scripted answers": "personagent demo: короткие сцены с заранее заданными ответами",
-"personagent demo: the same scenes, played by your model ({model})": "personagent demo: те же сцены, которые разыгрывает ваша модель ({model})"
+"personagent demo: the same scenes, played by your model ({model})": "personagent demo: те же сцены, которые разыгрывает ваша модель ({model})",
+"unknown command {cmd}; /help lists the commands": "неизвестная команда {cmd}; список команд — /help"
 }

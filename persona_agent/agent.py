@@ -119,7 +119,8 @@ class _RecentBuffers(dict):
         return self[key] if self._saved(key) else default
 
 
-_RECENT_FLUSH_S = 60.0
+# A few seconds: a kill loses at most the last turn, and one file write a turn is cheap.
+_RECENT_FLUSH_S = 5.0
 
 
 class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
@@ -489,7 +490,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         return entry
 
     def _maybe_flush_recent(self, force: bool = False, only: str = "") -> None:
-        """Write the changed chats to recent.json: at most once a minute, or
+        """Write the changed chats to recent.json: at most every few seconds, or
         now with `force` (shutdown) or `only` (a chat about to be evicted)."""
         dirty = self._recent_dirty
         if not getattr(self.settings, "memory_keep_recent", True):
@@ -499,6 +500,9 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         if not (force or only) and (not dirty or (
                 self._recent_flushed_at is not None
                 and mono - self._recent_flushed_at < _RECENT_FLUSH_S)):
+            if dirty:
+                self._flush_recent_later(
+                    self._recent_flushed_at + _RECENT_FLUSH_S - mono)
             return
         store = self._recent
         convs = [only] if only else list(dirty)
@@ -519,6 +523,22 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
             logger.warning("[Agent] recent messages save failed: %s", e)
         if not only:
             self._recent_flushed_at = mono
+
+    def _flush_recent_later(self, delay: float) -> None:
+        """The last line of a turn has no later line to carry its write: a
+        timer does, so a stop a few seconds on loses nothing."""
+        if self.__dict__.get("_recent_timer") is not None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        def fire() -> None:
+            self._recent_timer = None
+            self._maybe_flush_recent()
+
+        self._recent_timer = loop.call_later(max(0.0, delay) + 0.05, fire)
 
     def _load_seen_msg_ids(self) -> None:
         """Refill the de-dup ring from disk."""
@@ -746,6 +766,9 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
 
     async def aclose(self) -> None:
         """Stop owned work, close transports, then persist final state."""
+        timer = self.__dict__.pop("_recent_timer", None)
+        if timer is not None:
+            timer.cancel()
         # Waiting deliveries end as not sent, and open long-polls return.
         await self.outbox.aclose()
         tasks = [task for task in self._bg_tasks

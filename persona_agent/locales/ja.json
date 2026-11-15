@@ -439,5 +439,6 @@
 "Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "記憶コマンドもここで使えます。たとえば「{name}、〜を覚えておいて」や「{name}、何を覚えてる？」です。ここで覚えた内容は試用の中だけに保存され、{memory} には表示されません。",
 "Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` connects one you already run. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "Slack、KOOK、Feishu などのその他のプラットフォームは AstrBot 経由で連携します。`{cmd} astrbot --install` でここに AstrBot をインストールし、`{cmd} astrbot DATA_DIR` で実行中の AstrBot と連携します。コーディングアシスタント：`{cmd} claude-code`、`codex`、`dsh`。",
 "personagent demo: short scenes played with scripted answers": "personagent デモ：あらかじめ用意した回答で短い場面をいくつか再生します",
-"personagent demo: the same scenes, played by your model ({model})": "personagent デモ：同じ場面をあなたのモデル（{model}）で再生します"
+"personagent demo: the same scenes, played by your model ({model})": "personagent デモ：同じ場面をあなたのモデル（{model}）で再生します",
+"unknown command {cmd}; /help lists the commands": "不明なコマンド {cmd} です。/help でコマンドの一覧を表示します。"
 }

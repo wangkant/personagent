@@ -28,7 +28,7 @@ curl http://127.0.0.1:8080/health
 
 - Con `CONNECTOR_TOKEN` vacío, el agente acepta solo programas del mismo equipo que llamen a `127.0.0.1` o `localhost`, y estos no envían cabeceras de autenticación. `personagent init` lo deja vacío. La página local, `personagent up` y `personagent connect astrbot` escriben uno aleatorio cuando está vacío.
 - Para establecer uno, escriba un valor aleatorio largo en `.env`, por ejemplo la salida de `python -c "import secrets; print(secrets.token_urlsafe(32))"`, configure el mismo valor en el conector y reinicie el agente.
-- `GET /health` responde `{"status": "ok", "agent_enabled": true}` y no tiene coste. `"agent_enabled": false` significa que el agente no puede responder (sin `LLM_API_KEY`, o con `AGENT_ENABLED=false`), y todos los eventos reciben `owned: false`. `GET /health/details` comprueba además el modelo y los demás servicios, lo que puede tener un pequeño coste. Exige la cabecera `X-Personagent-Token` cuando hay un token configurado y, si no lo hay, una solicitud del mismo equipo; cualquier otra recibe `403` con el código `forbidden`.
+- `GET /health` responde `{"status": "ok", "agent_enabled": true}` y no tiene coste. `"agent_enabled": false` significa que el agente no puede responder (sin `LLM_API_KEY`, o con `AGENT_ENABLED=false`), y todos los eventos reciben `owned: false`. `GET /health/details` comprueba además el modelo y los demás servicios, lo que puede tener un pequeño coste. Exige la cabecera `X-Personagent-Token` cuando hay un token configurado y, si no lo hay, una solicitud del mismo equipo; cualquier otra recibe `403` con el código `forbidden`. Sin token, una solicitud del mismo equipo que lleva una cabecera de navegador o de proxy recibe `non_local_request`, como en los demás endpoints.
 
 ## Configuración
 
@@ -49,7 +49,7 @@ Una lista de grupos o de mensajes directos vacía no reenvía nada de ese tipo. 
 
 ## Direcciones
 
-personagent guarda cada id como `<platform>:<id>`, por ejemplo `telegram:-1001234` para un grupo o `discord:4242` para un usuario. `platform` es el nombre que el conector asigna a la plataforma, en minúsculas y sin `:`.
+personagent guarda cada id como `<platform>:<id>`, por ejemplo `telegram:-1001234` para un grupo o `discord:4242` para un usuario. `platform` es el nombre que el conector asigna a la plataforma, en minúsculas y sin `:`. El nombre distingue mayúsculas y minúsculas: `Telegram` y `telegram` son dos plataformas con memorias separadas, así que mantenga una sola grafía. Un nombre con `:` se rechaza con `invalid_schema`.
 
 QQ es la única excepción, que se mantiene por compatibilidad. Sus id se guardan sin prefijo (`123456`), y `qq:123456` tiene el mismo significado en cualquier ajuste. Si un conector gestiona QQ y desea que su estado aprendido coincida con un despliegue de QQ existente, añada su plataforma a `CONNECTOR_QQ_PLATFORMS`. El adaptador de QQ del complemento de AstrBot es `aiocqhttp`. Los id de las plataformas indicadas allí también se guardan sin prefijo.
 
@@ -91,7 +91,7 @@ Cada solicitud contiene un mensaje y devuelve las respuestas a dicho mensaje.
 }
 ```
 
-Los campos obligatorios son `platform`, `conversation_type` (`group` o `dm`), `sender_id`, `message_id` y `sent_at`, además de `conversation_id` para los grupos. `sent_at` es el momento en que la plataforma registró el mensaje, en segundos unix enteros (también se acepta una cadena de dígitos). El personaje ve cada mensaje con esa hora. Un mensaje de grupo que tiene más de 10 minutos de antigüedad al llegar, dentro de los dos minutos siguientes al primer mensaje de la plataforma desde que se inició el agente, es un mensaje acumulado que se entrega tras un reinicio: se conserva como contexto y no se responde. Pasados esos dos minutos, un `sent_at` antiguo ya no retiene un mensaje, de modo que se sigue respondiendo a un conector cuyo reloj va atrasado. Envíe los id sin procesar de la plataforma. El agente añade el prefijo.
+Los campos obligatorios son `platform`, `conversation_type` (`group` o `dm`), `sender_id`, `message_id` y `sent_at`, además de `conversation_id` para los grupos. `sent_at` es el momento en que la plataforma registró el mensaje, en segundos unix (también se acepta una cadena de dígitos, y la fracción se descarta). El personaje ve cada mensaje con esa hora. Un mensaje de grupo que tiene más de 10 minutos de antigüedad al llegar, dentro de los dos minutos siguientes al primer mensaje de la plataforma desde que se inició el agente, es un mensaje acumulado que se entrega tras un reinicio: se conserva como contexto y no se responde. Pasados esos dos minutos, un `sent_at` antiguo ya no retiene un mensaje, de modo que se sigue respondiendo a un conector cuyo reloj va atrasado. Envíe los id sin procesar de la plataforma. El agente añade el prefijo.
 
 El conector define `addressed`. Su valor es verdadero cuando el mensaje menciona al bot, responde a uno de los mensajes del bot o va dirigido al bot según las propias reglas de la plataforma. El agente también detecta por sí mismo su nombre en el texto. Interpreta una cita de su propio mensaje, o una @mención al bot, como una reacción de la que puede aprender, por lo que debe definir `addressed` en las respuestas al bot. Una cita del mensaje de otro miembro nunca es una reacción al bot. Una mención al bot dentro de un mensaje reenviado no se dirige al bot, por lo que no debe definir `addressed` para ella.
 
@@ -168,7 +168,7 @@ Solicitud:
 }
 ```
 
-El agente retiene la solicitud durante un máximo de `wait_s` segundos (30 como máximo) hasta que haya algo en la cola y, entonces, responde:
+El agente retiene la solicitud durante un máximo de `wait_s` segundos (30 como máximo) hasta que haya algo en la cola y, entonces, responde de inmediato con lo que haya en la cola en ese momento. `max_deliveries` es un límite superior, no un lote que el agente espere completar:
 
 ```json
 {
@@ -204,6 +204,8 @@ Informe de cada entrega en `acks` en la siguiente consulta:
 | `refused` | El conector ya no permite la conversación. |
 | `unsupported` | La plataforma no permite enviar mensajes sin solicitud previa a esta conversación. |
 
+Cualquier otro `status` cuenta como `failed`, y el registro del agente lo indica una vez.
+
 Reglas:
 
 - **Como máximo una vez.** El agente entrega cada elemento una sola vez y nunca más, independientemente del ack. Conserve los últimos cientos de `delivery_id` y no envíe nunca uno dos veces.
@@ -221,15 +223,15 @@ Un error responde `{"error": "...", "code": "..."}`. `code` es estable, así que
 
 | Estado | `code` | Endpoint | Causa |
 |---|---|---|---|
-| 400 | `invalid_schema` | ambos | El cuerpo no es un objeto JSON; falta un campo obligatorio o está vacío; `conversation_type` no es `group` ni `dm`; `segments` no es una lista; un cuerpo del tipo equivocado (véase «Tipos de cuerpo»); una consulta sin un `connector_id` válido (128 caracteres como máximo), con un `wait_s` o `max_deliveries` que no es un número, o con más de 1000 acks. |
+| 400 | `invalid_schema` | ambos | El cuerpo está vacío o no es un objeto JSON; `platform` no es una cadena o contiene `:`; falta un campo obligatorio o está vacío; `conversation_type` no es `group` ni `dm`; `segments` no es una lista; un cuerpo del tipo equivocado (véase «Tipos de cuerpo»); una consulta sin un `connector_id` válido (128 caracteres como máximo), con un `wait_s` o `max_deliveries` que no es un número, o con más de 1000 acks. `error` indica el campo. |
 | 400 | `client_disconnected` | ambos | El cliente cortó la conexión mientras enviaba el cuerpo. |
 | 403 | `unauthenticated` | ambos | No hay `CONNECTOR_TOKEN` y el cliente no está en el equipo del agente. |
-| 403 | `non_local_request` | ambos | No hay `CONNECTOR_TOKEN` y la solicitud lleva una cabecera que un programa local no envía: `Origin`, un `Sec-Fetch-Site` distinto de `none`, un `Host` distinto de `localhost`, `127.0.0.1` o `::1`, o una cabecera de proxy como `X-Forwarded-For`. |
+| 403 | `non_local_request` | ambos | No hay `CONNECTOR_TOKEN` y la solicitud lleva una cabecera que un programa local no envía: `Origin`, un `Sec-Fetch-Site` distinto de `none`, un `Host` distinto de `localhost`, `127.0.0.1` o `::1`, o una cabecera de proxy como `X-Forwarded-For`. `error` indica la cabecera. |
 | 403 | `invalid_envelope` | ambos | `CONNECTOR_TOKEN` está configurado y falta el token o una cabecera o es incorrecto, la firma no coincide, la marca de tiempo se desvía más de cinco minutos, el nonce ya se usó o la protección contra repeticiones está llena. |
-| 403 | `stale_event` | events | `sent_at` no es un número entero de segundos o se aleja más de `CONNECTOR_MAX_EVENT_AGE_S` (24 horas) del reloj del agente, en cualquier sentido. Un valor en milisegundos queda en un futuro lejano. |
+| 403 | `stale_event` | events | `sent_at` no es un número o se aleja más de `CONNECTOR_MAX_EVENT_AGE_S` (24 horas) del reloj del agente, en cualquier sentido. Un valor en milisegundos queda en un futuro lejano. `error` indica el motivo. |
 | 404 | `outbox_disabled` | outbox | `CONNECTOR_OUTBOX_ENABLED=false`, o el agente está desactivado (`AGENT_ENABLED=false`). |
 | 408 | `body_timeout` | ambos | El cuerpo tardó más de 30 segundos en llegar. |
-| 413 | `body_too_large` | ambos | El cuerpo supera `SERVER_MAX_BODY_BYTES` (8 000 000 bytes), normalmente por una imagen incrustada. |
+| 413 | `body_too_large` | ambos | El cuerpo supera `SERVER_MAX_BODY_BYTES` (8 000 000 bytes), normalmente por una imagen incrustada. El agente responde en cuanto lee `Content-Length` y cierra la conexión, por lo que algunos clientes, como `urllib` de Python, informan en su lugar de una conexión restablecida. |
 | 429 | `capacity_exceeded` | ambos | Demasiadas solicitudes a la vez: más de `CONNECTOR_MAX_INFLIGHT` turnos (64 por defecto) en el endpoint de eventos, o 16 consultas en la bandeja de salida. La cabecera `Retry-After` indica los segundos de espera: 3, o 5 para la bandeja de salida. |
 
 Una ruta incorrecta recibe `404 {"detail": "Not Found"}` y un método incorrecto, como `GET /v1/events`, recibe `405 {"detail": "Method Not Allowed"}`. Estas respuestas proceden del framework web y no llevan `code`.

@@ -293,6 +293,9 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
             "WARN", old,
             f"was renamed to {RENAMED[old]} in 1.0 and is no longer read"))
     for key in sorted(set(configured) & DROPPED.keys()):
+        if not str(configured.get(key) or "").strip():
+            # An empty line an earlier template wrote: nothing to act on.
+            continue
         findings.append(Finding(
             "WARN", key, f"is no longer read ({DROPPED[key]}); delete the line"))
 

@@ -619,10 +619,16 @@ def _remembered(agent, conv: str) -> dict:
     return {"core_at": float(agent.memory_state.core_at(conv) or 0.0),
             "thread": _thread_view(store.thread(conv)),
             "episodes": [_episode_view(e, evidence=True) for e in events[:LIST_LIMIT * 3]],
-            "removed": [_removed_view(r) for r in agent._removed_items(conv, now)][:REMOVED_LIMIT],
+            "removed": [_removed_view(r) for r in agent._removed_reaching(conv, now)][:REMOVED_LIMIT],
             "memory_status": _consolidation(agent, conv, now),
-            "log": {key: value for key, value in agent.chat_log.status(conv).items()
+            "log": {key: value for key, value in _log_status(agent, conv).items()
                     if key != "last_at"}}
+
+
+def _log_status(agent, conv: str) -> dict:
+    """The chat's log as it stands with the lines the window still holds written to it."""
+    agent._log_chat(conv)
+    return agent.chat_log.status(conv)
 
 
 def memory_listing(agent, conv: str = "") -> dict:
@@ -642,7 +648,7 @@ def memory_listing(agent, conv: str = "") -> dict:
                  "facts": [_note_view(key, item, evidence=True)
                            for item in agent.memories.get(key, [])],
                  "events": [_episode_view(e, evidence=True) for e in events],
-                 "log": agent.chat_log.status(key)}
+                 "log": _log_status(agent, key)}
         if entry["core"] or entry["thread"] or entry["facts"] or entry["events"]:
             chats.append(entry)
     return {"chats": chats,
@@ -955,6 +961,14 @@ async def dashboard_forget_chat(request: Request):
     if parsed.get("earlier_page") is True and channels.platform_of(conv) == access.PAGE_PLATFORM:
         # "New chat" on the page leaves the earlier chat's memory behind, still recalled.
         known = set(agent.memories) | set(agent.core_memory) | set(agent.episode_store.data)
+        # One that remembers nothing may still hold lines: in the window, in
+        # the log, or as the context of a reply awaiting a reaction.
+        known |= set(getattr(getattr(agent, "_recent", None), "convs", None) or ())
+        known |= {channels.dm_routing_key(uid) for uid in getattr(agent, "dm_history", {})}
+        known |= agent.chat_log.private_chats(access.PAGE_PLATFORM)
+        known |= {channels.DM_ROUTING_PREFIX + key[len(channels.DM_LEARNING_PREFIX):]
+                  for key in agent.pending_reactions.conversations()
+                  if key.startswith(channels.DM_LEARNING_PREFIX)}
         convs += sorted(key for key in known
                         if key != conv and channels.platform_of(key) == access.PAGE_PLATFORM)
     count = 0

@@ -471,6 +471,22 @@ def test_forgetting_the_page_chat_takes_its_earlier_chats_too(live) -> None:
           bool(live.memories.get("telegram:c2")))
 
 
+def test_forgetting_the_page_chat_reaches_an_earlier_one_that_holds_only_lines(live) -> None:
+    """New chat leaves a chat behind that may remember nothing and still hold lines."""
+    old, now = "private:browser:old", "private:browser:now"
+    live.chat_log.take(old, [{"seq": 1, "t": time.time(), "user_id": "browser:old",
+                              "name": "you", "text": "I live in Hangzhou"}])
+    live.pending_reactions.record("dm:browser:old", reply="noted", mode="dm",
+                                  ctx_lines=["you: I live in Hangzhou"], ts=time.time())
+    check("page forget (lines only): the earlier chat has a log", live.chat_log.read(old))
+    r = client().post("/api/dashboard/memory/forget_chat",
+                      json={"conv": now, "earlier_page": True}, headers=WRITE)
+    check("page forget (lines only): done", r.status_code == 200, r.text)
+    check("page forget (lines only): its log is gone", live.chat_log.read(old) == [])
+    check("page forget (lines only): and its replies awaiting a reaction",
+          "dm:browser:old" not in live.pending_reactions.conversations())
+
+
 def test_the_memory_list_is_what_the_terminal_reads(live) -> None:
     ids = _remember(live)
     live._forget_item("telegram:c1", "episode", ids["episode"], by="terminal")

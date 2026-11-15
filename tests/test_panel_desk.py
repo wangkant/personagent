@@ -448,9 +448,23 @@ def test_a_restore_that_fails_midway_puts_the_present_back(client, workspace, mo
     assert settled(workspace, calls) == ["close", "start agent"]
 
 
+def test_clearing_waits_for_the_stopped_service_to_let_go_of_the_home(client, workspace, monkeypatch):
+    """The service's interpreter outlives its launcher by a moment and still holds the lock."""
+    import threading
+    seed(workspace.home)
+    stopped_services(workspace, monkeypatch, running={"agent"})
+    lingering = desk.RuntimeInstanceLock(workspace.home)
+    lingering.acquire()
+    threading.Timer(0.6, lingering.release).start()
+    answer = post(client, "/forget")
+    assert answer.status_code == 200 and "error" not in answer.json(), answer.text
+    assert not (workspace.home / "runtime" / "memory.json").exists()
+
+
 def test_nothing_changes_while_a_service_from_elsewhere_holds_the_home(client, workspace, monkeypatch):
     seed(workspace.home)
     calls = stopped_services(workspace, monkeypatch, running={"agent"})
+    monkeypatch.setattr(desk, "HELD_WAIT_S", 0.3)
     with desk.RuntimeInstanceLock(workspace.home):
         assert post(client, "/forget").json() == {"error": "desk_service_elsewhere"}
         assert post(client, "/reset").json() == {"error": "desk_service_elsewhere"}

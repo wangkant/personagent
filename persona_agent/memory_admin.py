@@ -100,6 +100,7 @@ def _files_class():
             self.memory_file, self.core_memory_file, self.runtime = memory_file, core_file, runtime
             # The log's switch, so a forget here reaches the log as well.
             self.settings = settings
+            self.persona_name = settings.persona_name
             self.memory_max_per_conversation = settings.memory_max_per_conversation
             self.memory_share_rooms = settings.memory_share_rooms
             self.embedding_model = settings.embedding_model
@@ -362,7 +363,12 @@ def _pick(ids: list[str], wanted: str) -> list[int]:
 
 def cmd_forget(args, backend) -> int:
     wanted = args.item_id.strip()
-    items = _items(backend.listing(args.chat)) if wanted else []
+    listing = backend.listing(args.chat) if wanted else {"chats": []}
+    if wanted and args.chat and not listing["chats"]:
+        _say(f"No chat with the key {args.chat} holds anything remembered. "
+             f"Run `{_memory_command()}` to see the chats and their keys.")
+        return 1
+    items = _items(listing)
     found = _pick([item[2] for item in items], wanted) if wanted else []
     if not found:
         _no_such_id()

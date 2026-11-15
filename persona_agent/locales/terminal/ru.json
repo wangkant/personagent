@@ -442,7 +442,7 @@
 "Chat record: kept for {0} days; the oldest line is from {1}.": "Журнал чата: хранится {0} дн.; самая старая строка — от {1}.",
 "Chat record: kept for {0} days; nothing recorded yet.": "Журнал чата: хранится {0} дн.; пока ничего не записано.",
 "What is said in `personagent chat` is practice, kept apart, and does not show here.": "Сказанное в `personagent chat` — это практика: оно хранится отдельно и здесь не отображается.",
-"Each chat's messages are also kept in its chat record (runtime/log) for MEMORY_LOG_DAYS days; facts are checked against it, and forgetting reaches it.": "Сообщения каждого чата также хранятся в журнале чата (runtime/log) MEMORY_LOG_DAYS дн.; факты сверяются с ним, а удаление затрагивает и его.",
+"Each chat's messages are also kept in its chat record (runtime/log) for MEMORY_LOG_DAYS days; facts are checked against it, and forgetting reaches it.": "Сообщения каждого чата также хранятся в журнале чата (runtime/log) в течение MEMORY_LOG_DAYS дней; факты сверяются с ним, а удаление затрагивает и его.",
 "Directly connected platforms": "Платформы с прямым подключением",
 "The same problem as the row {0}.": "Та же проблема, что и в строке «{0}».",
 "{0}: not asked, because it is the same model as the row {1}, which failed": "{0}: не опрашивалась, так как это та же модель, что и в строке «{1}», которая не прошла проверку",
@@ -452,5 +452,7 @@
 "There is no personagent home at {0}. Run `{1}` to set one up there.": "В {0} нет домашней папки personagent. Выполните `{1}`, чтобы создать её там.",
 "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "для astrbot --platform lark или qq_official: ID приложения (для connect qq используйте --appid)",
 "with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "для astrbot --platform lark или qq_official: секрет приложения (для connect qq используйте --secret)",
-"language code: {0} (default: AGENT_LANG, else en)": "код языка: {0} (по умолчанию: AGENT_LANG, иначе en)"
+"language code: {0} (default: AGENT_LANG, else en)": "код языка: {0} (по умолчанию: AGENT_LANG, иначе en)",
+"take the API key from this environment variable and save a copy of its value in .env": "берёт API-ключ из этой переменной окружения и сохраняет копию его значения в .env",
+"why, in a few words; kept in the item's history": "причина в нескольких словах; сохраняется в истории элемента"
 }

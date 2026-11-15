@@ -2,6 +2,8 @@
 talks, backup models, learning, and the remaining user-facing settings."""
 from __future__ import annotations
 
+import re
+
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime
@@ -141,10 +143,23 @@ def _number(field: Field, value) -> str:
     return text
 
 
+_PLATFORM = re.compile(r"[A-Za-z][A-Za-z0-9_.-]*")
+
+
+def _odd_id(entry: str) -> bool:
+    """An entry that names no account: a bare one is a QQ number, so
+    "telegram-100" or "my QQ" would be saved as QQ ids and close every QQ
+    group; a prefixed one needs a platform's name before the colon."""
+    prefix, sep, rest = entry.partition(":")
+    if not sep:
+        return not entry.isascii() or not entry.isdigit()
+    return not _PLATFORM.fullmatch(prefix) or (prefix.lower() == "qq" and not rest.isdigit())
+
+
 def _ids(key: str, value, natives) -> str:
     entries = access.split_ids(str(value or "").replace("，", ","))
     if len(entries) > 500 or any(
-            len(e) > 160 or access.is_malformed(e) or "${" in e
+            len(e) > 160 or access.is_malformed(e) or _odd_id(e) or "${" in e
             or any(c.isspace() or not c.isprintable() or c in "#'\"" for c in e) for e in entries):
         raise _bad(key)
     return ",".join(access.canonical_ids(entries, native_platforms=natives))

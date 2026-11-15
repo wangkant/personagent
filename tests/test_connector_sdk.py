@@ -188,5 +188,12 @@ def test_a_refused_envelope_and_event_say_why_without_echoing_values() -> None:
     assert "tok-123" not in said and headers["x-personagent-signature"] not in said
     event = {"platform": "x", "conversation_type": "private", "message_id": "1", "sent_at": 1}
     assert main_module._event_problem(event, connector=True) == "missing required field: sender_id"
-    assert main_module._pull_problem({"kind": "outbox.pull"}) == "missing required field: connector_id"
-    assert main_module._pull_problem(None) == "the body is not JSON"
+    assert main_module.pull_problem({"kind": "outbox.pull"}) == "missing required field: connector_id"
+    pull = {"kind": "outbox.pull", "connector_id": "c1"}
+    assert main_module.pull_problem({**pull, "connector_id": "x" * 129}) \
+        == "connector_id is longer than 128 characters"
+    assert main_module.pull_problem({**pull, "wait_s": "soon"}) == "wait_s is not a number"
+    assert main_module.pull_problem({**pull, "max_deliveries": "many"}) == "max_deliveries is not a number"
+    assert main_module.pull_problem({**pull, "acks": "notalist"}) == "acks must be a list"
+    assert main_module.pull_problem({**pull, "acks": [{}] * 1001}) == "more than 1000 acks"
+    assert main_module.pull_problem(pull) == ""

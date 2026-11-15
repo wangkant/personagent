@@ -505,6 +505,9 @@ def test_preflight_reports_the_right_deployments(monkeypatch) -> None:
                       "ANTHROPIC_API_KEY": "y", "BENCH_EVAL_DELAY_S": "1"})
           == {("WARN", "REVIEWER_MODEL"), ("WARN", "ANTHROPIC_API_KEY"),
               ("WARN", "BENCH_EVAL_DELAY_S")})
+    check("dropped: an empty line an earlier template wrote is not worth a warning",
+          levels(env={"LLM_API_KEY": "sk-x", "REVIEWER_MODEL": "", "ANTHROPIC_API_KEY": "",
+                      "ANTHROPIC_BASE_URL": "", "BENCH_EVAL_DELAY_S": ""}) == set())
     check("preflight: proxy variables are not typos",
           not levels(env={"LLM_API_KEY": "sk-x", "HTTP_PROXY": "p",
                           "HTTPS_PROXY": "p", "NO_PROXY": "localhost"}))

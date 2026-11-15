@@ -37,6 +37,38 @@ def _is_question(content: str, spec: chatlangs.Spec) -> bool:
     return bool(re.search(spec.question_end, content.strip(), re.IGNORECASE))
 
 
+def _bare(text) -> str:
+    """Letters and digits only: a note read back loses its punctuation."""
+    return re.sub(r"[\W_]+", "", str(text or "").casefold())
+
+
+def _same_word(a: str, b: str) -> bool:
+    """Two forms of one word: "кота" and "кот", "cats" and "cat"; never "tea" and "steak"."""
+    n = min(len(a), len(b))
+    if n < 3 or abs(len(a) - len(b)) > 3:
+        return a == b
+    shared = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        shared += 1
+    return shared >= max(3, n - 1)
+
+
+def _loosely_names(query: str, text: str, stop: frozenset) -> bool:
+    """Whether `text` holds the query's words in some form: at least half of
+    its words of two or more characters, stopwords aside. Only ever used to
+    find the one note a forget can mean."""
+    if len(query) == 1 and _HAS_CJK.search(query):
+        return query in text
+    words = [w for w in re.findall(r"\w+", query.casefold()) if len(w) >= 2 and w not in stop]
+    if not words:
+        return False
+    there = re.findall(r"\w+", text.casefold())
+    found = sum(any(_same_word(w, x) for x in there) for w in words)
+    return found >= 1 and found * 2 >= len(words)
+
+
 def _forget_query(content: str, spec: chatlangs.Spec) -> str:
     query = content.strip()
     if spec.query_lead:
@@ -71,6 +103,7 @@ _CORE_CLOSE = re.compile(r"\[\s*/\s*CORE_UPDATE\s*\]", re.IGNORECASE)
 
 #: The newest lines a note written while replying may cite as its cause.
 _CAUSE_LINES = 30
+_CAUSE_SHARE = 0.6
 
 #: Events a recall lists after the facts.
 _RECALL_EVENTS = 3
@@ -284,9 +317,23 @@ class Memory:
         rows = [r for r in self._log_rows(conv) if not r.get("self")
                 and isinstance(r.get("text"), str)
                 and (not uids or str(r.get("user_id") or "") in uids)][-_CAUSE_LINES:]
+        # A shared name or two is not evidence: the line must carry most of the note.
+        need = max(1, round(len(tokens) * _CAUSE_SHARE))
         scored = sorted(((len(tokens & _focus_tokens(r["text"], "zh")), _num(r.get("seq"), int))
                          for r in rows), reverse=True)
-        return chatlog.merge_refs(seq for n, seq in scored[:2] if n > 0)
+        return chatlog.merge_refs(seq for n, seq in scored[:2] if n >= need)
+
+    def _log_command(self, conv: str, uid: str, name: str, text: str) -> list[int]:
+        """Write a memory command said one to one into the chat's log and
+        return its line: such a command is answered outside the turns, so
+        nothing else would record the words the note rests on."""
+        if not self.chat_log.on or not channels.dm_user(conv):
+            return []
+        seq = self._next_seq(conv)
+        self._log_chat(conv)
+        self.chat_log.take(conv, [{"seq": seq, "t": time.time(), "user_id": uid,
+                                   "name": name, "text": text}])
+        return [seq]
 
     def _log_chat(self, conv: str) -> int:
         """Append what the chat's log lacks; never raises, never waits long."""
@@ -565,7 +612,8 @@ class Memory:
                         item["said_by"] = caller
                         if user_name:
                             item["said_by_name"] = user_name
-            refs = self._cause_refs(group_id, content, caller)
+            refs = (self._cause_refs(group_id, content, caller)
+                    or self._log_command(group_id, caller, user_name, text))
             if refs:
                 item["refs"] = refs
             same = " ".join(content.split()).casefold()
@@ -588,17 +636,34 @@ class Memory:
             query = _forget_query(arg, spec)
             # Short queries over-delete: a spaced script needs 3+ characters
             # and whole words ("tea" not "steak"), CJK a 2+ character substring.
+            # A shorter one can only name the caller's one note that holds it.
             by_word = not _HAS_CJK.search(query)
-            if len(query) < (3 if by_word else 2) or query.lower() in spec.everything:
+            if not query or query.lower() in spec.everything:
                 return say("forget_what")
+            short = len(query) < (3 if by_word else 2)
             edge = "A-Za-z0-9_" if query.isascii() else r"\w"
             word = re.compile(rf"(?<![{edge}]){re.escape(query)}(?![{edge}])",
                               re.IGNORECASE)
 
             def hit(text: str) -> bool:
+                if short:
+                    return False
                 return bool(word.search(text)) if by_word else query in text
 
             items = self.memories.get(group_id, [])
+            if short or not any(hit(str(it.get("text") or "")) for it in items):
+                # Not said word for word ("forget about the cats" for "I have a
+                # cat", an inflected name): the caller's one note that holds
+                # the words in some form, and only when it is one.
+                loose = [it for it in items if owns(it) and _loosely_names(
+                    query, str(it.get("text") or ""), spec.stopwords)]
+                if len(loose) > 1 or (short and not loose):
+                    return say("forget_what")
+                if loose:
+                    exact = str(loose[0]["text"])
+
+                    def hit(text: str) -> bool:
+                        return exact in text
             elsewhere_about = self._about_elsewhere(forget_elsewhere, group_id)
 
             def note_gone(conv: str, it: dict) -> bool:
@@ -640,9 +705,11 @@ class Memory:
             # old chat lines from bringing it back.
             gone_events = self._forget_events(group_id, hit, event_mine)
             thread_cut = self._forget_in_thread(group_id, hit, mine)
+            # The command's own line names the thing too: it goes, but it is
+            # not something forgotten.
             lines_cut = self._purge_lines(group_id, hit, lambda row: bool(
                 is_admin or reader or (callers and str(row.get("user_id") or "")
-                                       in callers)))
+                                       in callers)), aside=self._asks_to_forget)
 
             def trash_gone(row: dict) -> bool:
                 # Older versions too: restore must not bring it back.
@@ -674,6 +741,8 @@ class Memory:
                 for row in removed + gone_events + [r.get("item") or {} for r in trashed]:
                     self._drop_vector(row.get("text", ""))
                 for room in rooms | {group_id}:
+                    self._purge_echoes(room, [row.get("text", "")
+                                              for row in removed + gone_events])
                     self._forgot(room)
                 self._final_copies(lambda conv, row: not note_gone(conv, row))
             return say("forgotten" if changed else "nothing_to_forget")
@@ -690,8 +759,16 @@ class Memory:
             return say("empty")
         # No brackets or list markers: the character policy refuses them.
         lines: list[str] = []
+        first = spec.first_person and re.compile(spec.first_person, re.IGNORECASE)
         for it in items:
-            if it.get("user_id") and it.get("user_name"):
+            owner = str(it.get("user_id") or "")
+            own_words = bool(first and first.search(it["text"]))
+            if own_words and (owner in callers or (reader and not owner)):
+                # "I'm allergic" read back bare would be the character's allergy.
+                tag = say("said")
+            elif own_words and it.get("user_name"):
+                tag = say("from").format(name=it["user_name"])
+            elif owner and it.get("user_name"):
                 tag = say("about").format(name=it["user_name"])
             elif it.get("saved_by_name"):
                 tag = say("from").format(name=it["saved_by_name"])
@@ -798,19 +875,98 @@ class Memory:
             self._save_episodes()
         return gone
 
+    def _purge_seqs(self, conv: str, seqs) -> int:
+        """Delete the lines with these sequence numbers from this chat's
+        window, spill, their copy on disk and the log. A line not yet written
+        to the log is dropped here, so the next write cannot put it there."""
+        seqs = {int(s) for s in seqs}
+        uid = channels.dm_user(conv)
+        removed = 0
+
+        def filtered(rows):
+            nonlocal removed
+            kept = [r for r in rows
+                    if not (isinstance(r, dict) and _num(r.get("seq"), int) in seqs)]
+            removed += len(rows) - len(kept)
+            return kept
+
+        buf = getattr(self, "buffers", {}).get(conv)
+        if buf is not None:
+            kept = filtered(list(buf))
+            if len(kept) != len(buf):
+                buf.clear()
+                buf.extend(kept)
+        history = getattr(self, "dm_history", {})
+        if uid and uid in history:
+            history[uid] = filtered(history[uid])
+        by_reader = {uid, conv} if uid else set()
+        for name, keys in (("_spill", {conv}), ("_dm_spill", by_reader)):
+            spill = getattr(self, name, None) or {}
+            for key in keys:
+                if key in spill:
+                    spill[key] = filtered(list(spill[key]))
+        recent = getattr(self, "_recent", None)
+        snap = recent.snapshot(conv) if recent is not None else None
+        if snap:
+            before = removed
+            for key in ("lines", "spill", "dm", "dm_spill"):
+                snap[key] = filtered(snap.get(key, []))
+            if removed != before:
+                recent.put(conv, snap)
+        removed += self._log_forget(conv, lambda row: row["seq"] in seqs)
+        if removed:
+            dirty = getattr(self, "_recent_dirty", None)
+            if isinstance(dirty, set):
+                dirty.add(conv)
+        return removed
+
+    def _asks_to_forget(self, text: str) -> bool:
+        parsed = self._parse_memory_command(text)
+        return bool(parsed) and parsed[0] == "forget"
+
+    def _own_line(self, row: dict) -> bool:
+        """A line the character wrote, in the window's, the DM turns' or the log's shape."""
+        if "role" in row:
+            return row["role"] != "user"
+        return bool(row.get("self")) or (
+            not row.get("user_id") and row.get("name") == self.persona_name)
+
+    def _purge_echoes(self, conv: str, texts) -> int:
+        """Delete the character's own lines that repeat a forgotten item (its
+        "here is what I remember" answers): they would keep the words in the
+        recent messages and the chat record."""
+        gone = [s for s in (_bare(t) for t in texts)
+                if len(s) >= (2 if _HAS_CJK.search(s) else 4)]
+        if not gone:
+            return 0
+
+        def hit(text: str) -> bool:
+            bare = _bare(text)
+            return any(s in bare for s in gone)
+
+        return self._purge_lines(conv, hit, self._own_line)
+
     def _purge_lines(self, conv: str, hit: Callable[[str], bool],
-                     mine: Optional[Callable[[dict], bool]] = None) -> int:
+                     mine: Optional[Callable[[dict], bool]] = None,
+                     aside: Optional[Callable[[str], bool]] = None) -> int:
         """Delete matching recent lines of this chat (the window, the DM turns,
         the spill and their copy on disk), so no later consolidation reads
-        them again. `mine(row)` limits it to lines the caller may delete."""
+        them again. `mine(row)` limits it to lines the caller may delete;
+        lines `aside(text)` names go too but are left out of the count."""
         mine = mine or (lambda row: True)
         uid = channels.dm_user(conv)
+        uncounted = 0
 
         def keep(row) -> bool:
+            nonlocal uncounted
             if not isinstance(row, dict):
                 return True
             text = row.get("text", row.get("content", ""))
-            return not (isinstance(text, str) and hit(text) and mine(row))
+            if not (isinstance(text, str) and hit(text) and mine(row)):
+                return True
+            if aside is not None and aside(text):
+                uncounted += 1
+            return False
 
         removed = 0
 
@@ -834,9 +990,9 @@ class Memory:
             history[uid] = filtered(history[uid])
         unanswered = getattr(self, "_dm_unanswered", {})
         if uid and uid in unanswered:
-            lines = unanswered[uid]
-            unanswered[uid] = [t for t in lines if not hit(t)]
-            removed += len(lines) - len(unanswered[uid])
+            unanswered[uid] = [t for t in filtered(
+                [{"role": "user", "user_id": uid, "content": t} for t in unanswered[uid]])
+                for t in [t["content"]]]
         by_reader = {uid, conv} if uid else set()
         for name, keys in (("_spill", {conv}), ("_dm_spill", by_reader)):
             spill = getattr(self, name, None) or {}
@@ -851,12 +1007,12 @@ class Memory:
                 snap[key] = filtered(snap.get(key, []))
             if removed != before:
                 recent.put(conv, snap)
-        removed += self._log_forget(conv, lambda row: hit(row["text"]) and mine(row))
+        removed += self._log_forget(conv, lambda row: not keep(row))
         if removed:
             dirty = getattr(self, "_recent_dirty", None)
             if isinstance(dirty, set):
                 dirty.add(conv)
-        return removed
+        return removed - uncounted
 
     def _log_forget(self, conv: str, gone: Callable[[dict], bool]) -> int:
         """Remove matching lines from the chat's log; how many went."""
@@ -933,8 +1089,13 @@ class Memory:
             self.memory_state.add_tombstone(conv, memstore.token_hashes(text))
             self._drop_vector(text)
         if refs:
-            # The lines it cites go with it, so a review cannot raise it again.
-            self._log_forget(conv, lambda row: row["seq"] in refs)
+            # The lines it cites go with it, so a review cannot raise it again;
+            # a line another note or event still rests on stays.
+            shared = {r for it in self.memories.get(conv, []) for r in chatlog.refs_of(it)}
+            shared |= {r for ep in self.episode_store.episodes(conv) for r in chatlog.refs_of(ep)}
+            self._purge_seqs(conv, refs - shared)
+        if kind in ("note", "episode"):
+            self._purge_echoes(conv, texts)
         self._forgot(conv)
         self._save_memory_state()
         return next((t for t in tids if t), "-")
@@ -969,6 +1130,18 @@ class Memory:
         rows = self.memory_trash.list(conv, now, live=self._trash_live)
         return [dict(row, text=str((row.get("item") or {}).get("text", "")),
                      until=memtrash.restorable_until(row)) for row in rows]
+
+    def _removed_reaching(self, conv: str, now: Optional[float] = None) -> list[dict]:
+        """What can be restored where `conv` is shown: its own removed items
+        and the removed notes of the other chats whose notes reach it."""
+        rows = self._removed_items(conv, now)
+        reader = channels.dm_user(conv)
+        if reader:
+            about = self._about_elsewhere(reader, conv)
+            rows += [r for r in self._removed_items(None, now) if r.get("kind") == "note"
+                     and about(str(r.get("conv") or ""), r.get("item") or {})]
+            rows.sort(key=lambda r: _num(r.get("at"), float) or 0.0, reverse=True)
+        return rows
 
     def _restore(self, tid: str, by: str = "page") -> str:
         """Bring a removed item back: "ok", "gone" (unknown, expired or already
@@ -1074,6 +1247,10 @@ class Memory:
         self._forgot(conv)
         self.memory_state.drop_conv(conv)
         self._save_memory_state()
+        # Replies awaiting a reaction hold the chat's own lines as context.
+        pending = getattr(self, "pending_reactions", None)
+        if pending is not None:
+            pending.drop_conversation(channels.learning_key(conv))
         uid = channels.dm_user(conv)
         # A bare reader id is also a QQ group's key: DM state only by reader.
         by_reader = {uid, conv} - {""} if uid else set()

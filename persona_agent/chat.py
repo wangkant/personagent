@@ -92,7 +92,7 @@ _TEXT = {
         "usage_reply": "usage: /reply your message",
         "usage_admin": "usage: /admin your message",
         "you": "you",
-        "unknown": "unknown command {cmd}; the commands are:",
+        "unknown": "unknown command {cmd}; /help lists the commands",
         "error": "[error: {error}]",
         "failures": {
             "auth": ("the model provider refused the key or the account{http}; "
@@ -207,7 +207,7 @@ _TEXT = {
         "usage_reply": "用法：/reply 消息内容",
         "usage_admin": "用法：/admin 消息内容",
         "you": "用户",
-        "unknown": "未知命令 {cmd}。可用命令如下：",
+        "unknown": "未知命令 {cmd}。输入 /help 查看可用命令。",
         "error": "[错误：{error}]",
         "failures": {
             "auth": "模型服务拒绝了该密钥或账号{http}；请检查 LLM_API_KEY，然后运行 {doctor}",
@@ -1198,7 +1198,6 @@ class ChatSession:
             quote, msg = True, rest
         elif command.startswith("/"):
             print("  " + self.t["unknown"].format(cmd=command))
-            self.commands()
             return True
         if not msg.strip():
             return True
@@ -1238,7 +1237,7 @@ async def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     from persona_agent.setup_wizard import lang_option
 
     p.add_argument("--lang", type=lang_option, default=None,
-                   help=langs.term("language code: " + ", ".join(langs.CODES) + " (default: en)"))
+                   help=langs.term("language code: " + ", ".join(langs.CODES) + " (default: AGENT_LANG, else en)"))
     p.add_argument("--admin", action="store_true",
                    help=langs.term("speak as the configured admin (closer relationship)"))
     p.add_argument("--name", default=None, help=langs.term("your display name in the chat"))
@@ -1279,6 +1278,9 @@ async def main(argv: list[str] | None = None, prog: str | None = None) -> int:
             except (EOFError, KeyboardInterrupt):
                 print()
                 break
+            if not sys.stdin.isatty():
+                # Piped input is not echoed by a terminal; the transcript should show it.
+                print(line)
             if not await session.handle(line):
                 break
         print(session.t["bye"])

@@ -37,7 +37,10 @@ async def deliver(delivery: dict) -> tuple[str, int]:
 
 async def chat(conn: Connector) -> None:
     while True:
-        text = await asyncio.to_thread(input, "> ")
+        try:
+            text = await asyncio.to_thread(input, "> ")
+        except EOFError:
+            return
         if not text.strip():
             continue
         answer = await conn.send_event({
@@ -62,13 +65,18 @@ async def chat(conn: Connector) -> None:
 
 async def main() -> None:
     conn = Connector(BASE_URL, TOKEN, connector_id="console-1")
+    outbox = asyncio.create_task(conn.run_outbox(deliver))
     try:
-        await asyncio.gather(chat(conn), conn.run_outbox(deliver))
+        await chat(conn)
     finally:
+        outbox.cancel()
         await conn.aclose()
 
 
-asyncio.run(main())
+try:
+    asyncio.run(main())
+except KeyboardInterrupt:
+    pass
 ```
 
 `deliver` 返回 `(status, sent_items)`，其中 status 为 `sent`、`partial`、`failed`、`refused` 或 `unsupported`，与协议中的确认表一致。只发出了部分条目时，返回 `("partial", n)`。循环在下一次拉取时确认每次投递，任何投递都不会发送两次；如果调用 `deliver` 之前投递已过期，则报告为 `expired`。

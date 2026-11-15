@@ -33,7 +33,7 @@ from persona_agent.config_env import env_bool, env_int, env_str
 from persona_agent.connector import CONVERSATION_TYPES, EVENT_KIND
 from persona_agent.health import run_checks, all_critical_ok
 from persona_agent.memstore import MemoryFileDamaged
-from persona_agent.outbox import parse_pull
+from persona_agent.outbox import parse_pull, pull_problem
 from persona_agent.paths import ROOT, runtime_dir
 from persona_agent.settings import AgentSettings
 from persona_agent.storage import (
@@ -123,9 +123,9 @@ def _host_header_name(host: str) -> str:
     return value.rsplit(":", 1)[0] if value.count(":") == 1 else value
 
 
-def _credentialless_request_is_local(request) -> bool:
-    """Whether a request to an endpoint with no credential set comes from a
-    local program.
+def _non_local_header(request) -> str:
+    """The header that makes a request to an endpoint with no credential set
+    count as not from a local program, named for the caller; '' when local.
 
     A loopback peer is not enough: any web page can POST a CORS "simple
     request" to 127.0.0.1, DNS rebinding lets it read the reply, and a tunnel
@@ -133,24 +133,37 @@ def _credentialless_request_is_local(request) -> bool:
     that NapCat and the connectors never send.
     """
     headers = request.headers
-    reason = ""
     if "origin" in headers:
-        reason = "origin"
-    elif headers.get("sec-fetch-site", "none").strip().lower() != "none":
-        reason = "sec-fetch-site"
-    elif "host" in headers and _host_header_name(
-            headers["host"]) not in _LOCAL_HOST_NAMES:
-        reason = "host"
-    elif any(name in headers for name in _PROXY_HEADERS):
-        reason = "forwarded"
+        return "the request carries an Origin header"
+    if headers.get("sec-fetch-site", "none").strip().lower() != "none":
+        return "its Sec-Fetch-Site header is not none"
+    if "host" in headers and _host_header_name(headers["host"]) not in _LOCAL_HOST_NAMES:
+        return "its Host header is not localhost, 127.0.0.1 or ::1"
+    proxy = next((name for name in _PROXY_HEADERS if name in headers), "")
+    if proxy:
+        return f"the request carries the proxy header {_HEADER_SPELLING.get(proxy, proxy)}"
+    return ""
+
+
+_HEADER_SPELLING = {"x-forwarded-for": "X-Forwarded-For", "forwarded": "Forwarded",
+                    "x-real-ip": "X-Real-IP", "cf-connecting-ip": "CF-Connecting-IP",
+                    "via": "Via", "x-forwarded-host": "X-Forwarded-Host",
+                    "x-forwarded-proto": "X-Forwarded-Proto", "x-forwarded-port": "X-Forwarded-Port",
+                    "true-client-ip": "True-Client-IP", "x-client-ip": "X-Client-IP",
+                    "x-original-forwarded-for": "X-Original-Forwarded-For"}
+
+
+def _credentialless_request_is_local(request) -> bool:
+    """Whether a request to an endpoint with no credential set comes from a local program."""
+    reason = _non_local_header(request)
     if not reason:
         return True
     if reason not in _NON_LOCAL_WARNED:
         _NON_LOCAL_WARNED.add(reason)
         logger.warning(
             "[main] refused a request to %s with no credential configured: "
-            "its %s header says it came from a browser, another host name or "
-            "a proxy. Local programs should call http://127.0.0.1; anything "
+            "%s, so it came from a browser, another host name or a proxy. "
+            "Local programs should call http://127.0.0.1; anything "
             "else needs QQ_ONEBOT_SECRET / CONNECTOR_TOKEN set",
             request.url.path, reason)
     return False
@@ -160,8 +173,10 @@ def _refuse_non_local(request, credential: str) -> JSONResponse | None:
     """The 403 for a credentialless endpoint reached by a non-local request."""
     if credential or _credentialless_request_is_local(request):
         return None
+    # The old sentence leads, so callers that match on it still do.
     return _error(403, "non_local_request",
-                  "no credential is configured; only local requests accepted")
+                  "no credential is configured; only local requests accepted: "
+                  + _non_local_header(request))
 
 
 def _refuse_caller(request, credential: str, *,
@@ -169,15 +184,19 @@ def _refuse_caller(request, credential: str, *,
     """The 403 for a caller refused before admission, so it holds no slot.
 
     `token` adds the connector token compare; the signature needs the body."""
+    # Headers first: uvicorn takes a local caller's X-Forwarded-For as the peer,
+    # which would read as a caller on another machine.
+    refused = _refuse_non_local(request, credential)
+    if refused is not None:
+        return refused
     peer = request.client.host if request.client is not None else ""
     if not _request_peer_is_allowed(peer, credential):
         return _error(403, "unauthenticated", "authentication required")
-    refused = _refuse_non_local(request, credential)
     supplied = request.headers.get("x-personagent-token", "")
-    if refused is None and token and credential and not _ct_equal(supplied, credential):
-        refused = _invalid_envelope("the X-Personagent-Token header is missing" if not supplied
-                                    else "X-Personagent-Token does not match CONNECTOR_TOKEN")
-    return refused
+    if token and credential and not _ct_equal(supplied, credential):
+        return _invalid_envelope("the X-Personagent-Token header is missing" if not supplied
+                                 else "X-Personagent-Token does not match CONNECTOR_TOKEN")
+    return None
 
 
 def _ct_equal(supplied: str, expected: str) -> bool:
@@ -468,6 +487,11 @@ def _event_problem(payload, *, connector: bool) -> str:
         missing = [key for key in required if payload.get(key) in (None, "")]
         if missing:
             return "missing required field: " + ", ".join(missing)
+        if not isinstance(payload.get("platform"), str):
+            return "platform must be a string"
+        if ":" in payload["platform"]:
+            # Ids are stored as <platform>:<id>; a colon in the name makes them ambiguous.
+            return "platform must not contain ':'"
         if payload.get("conversation_type") not in CONVERSATION_TYPES:
             return "conversation_type must be one of: " + ", ".join(sorted(CONVERSATION_TYPES))
         if payload.get("conversation_type") == "group" and payload.get(
@@ -502,12 +526,26 @@ def _event_is_fresh(
     now: int | None,
     max_age_seconds: int,
 ) -> bool:
+    return not _event_age_problem(payload, key, now=now, max_age_seconds=max_age_seconds)
+
+
+def _event_age_problem(payload: dict, key: str, *, now: int | None,
+                       max_age_seconds: int) -> str:
+    """Why `payload[key]` is not a fresh unix time, without its value; '' when it is."""
     try:
         event_time = int(payload.get(key))
     except (TypeError, ValueError, OverflowError):
-        return False
+        return f"{key} is not a number of unix seconds"
     current = int(time.time()) if now is None else int(now)
-    return abs(current - event_time) <= max(1, int(max_age_seconds))
+    limit = max(1, int(max_age_seconds))
+    if event_time - current > limit:
+        # Milliseconds are a thousand times the seconds: thirty years ahead and more.
+        if event_time > 1000 * 10**9:
+            return f"{key} is in the future; it looks like milliseconds, send seconds"
+        return f"{key} is more than {limit} seconds in the future; check both clocks"
+    if current - event_time > limit:
+        return f"{key} is more than {limit} seconds in the past"
+    return ""
 
 
 def _connector_event_is_fresh(
@@ -755,6 +793,10 @@ async def health():
 @app.get("/health/details")
 async def health_details(request: Request):
     """Authenticated/loopback-only diagnostics that may call paid services."""
+    # Before the peer check, as on the connector endpoints.
+    refused = _refuse_non_local(request, CONNECTOR_TOKEN)
+    if refused is not None:
+        return refused
     client_host = request.client.host if request.client else ""
     if CONNECTOR_TOKEN:
         authorized = _ct_equal(
@@ -762,13 +804,12 @@ async def health_details(request: Request):
     else:
         authorized = _is_loopback_host(client_host)
     if not authorized:
+        supplied = request.headers.get("X-Personagent-Token", "")
         return _error(403, "forbidden",
-                      "send the X-Personagent-Token header with CONNECTOR_TOKEN from .env"
+                      ("X-Personagent-Token does not match CONNECTOR_TOKEN" if supplied else
+                       "send the X-Personagent-Token header with CONNECTOR_TOKEN from .env")
                       if CONNECTOR_TOKEN else
                       "only this computer may ask while CONNECTOR_TOKEN in .env is blank")
-    refused = _refuse_non_local(request, CONNECTOR_TOKEN)
-    if refused is not None:
-        return refused
 
     now = time.time()
     if _health_cache["data"] is None or now - _health_cache["ts"] > 60:
@@ -907,6 +948,9 @@ def _agent_off_reason() -> str:
 
 def _agent_off_fix() -> str:
     if not AGENT_ENABLED:
+        if "AGENT_ENABLED" in os.environ and "AGENT_ENABLED" not in home.FROM_ENV_FILE:
+            return ("AGENT_ENABLED=false is set in the environment, which overrides .env: "
+                    "unset it or set it to true there, and restart")
         return f"set AGENT_ENABLED=true in {ROOT / '.env'} and restart"
     return f"run `{_command('init')}` (or set LLM_API_KEY) and restart"
 
@@ -975,6 +1019,8 @@ async def _connector_events_admitted(request: Request):
     body = await _read_signed_body(request)
     if isinstance(body, JSONResponse):
         return body
+    if not body.strip():
+        return _invalid_schema("the body is empty")
     event = _json_or_none(body)
     if event is None:
         return _invalid_schema("the body is not JSON")
@@ -987,8 +1033,11 @@ async def _connector_events_admitted(request: Request):
     problem = _event_problem(event, connector=True)
     if problem:
         return _invalid_schema(problem)
-    if not _connector_event_is_fresh(event):
-        return _error(403, "stale_event", "stale or invalid sent_at")
+    stale = _event_age_problem(event, "sent_at", now=None,
+                               max_age_seconds=CONNECTOR_MAX_EVENT_AGE_S)
+    if stale:
+        # The old sentence leads, so connectors that match on it still do.
+        return _error(403, "stale_event", "stale or invalid sent_at: " + stale)
     event["message_id"] = str(event["message_id"])
     if agent is None or not agent.enabled:
         _warn_agent_off_once()
@@ -1032,24 +1081,11 @@ async def _connector_outbox_admitted(request: Request):
     raw = _json_or_none(body)
     pull = parse_pull(raw) if raw is not None else None
     if pull is None:
-        return _error(400, "invalid_schema", "not an outbox pull: " + _pull_problem(raw))
+        problem = "the body is not JSON" if raw is None else pull_problem(raw)
+        return _error(400, "invalid_schema", "not an outbox pull: " + problem)
     if agent is None or not agent.connector_outbox_enabled:
         return _error(404, "outbox_disabled", "the outbox is turned off")
     return await agent.outbox.pull(**pull, disconnected=request.is_disconnected)
-
-
-def _pull_problem(raw) -> str:
-    """Why `parse_pull` refused a body, naming the field."""
-    from persona_agent.outbox import PULL_KIND
-    if raw is None:
-        return "the body is not JSON"
-    if not isinstance(raw, dict):
-        return "the body is not a JSON object"
-    if raw.get("kind") != PULL_KIND:
-        return f"kind must be {PULL_KIND}"
-    if not str(raw.get("connector_id") or "").strip():
-        return "missing required field: connector_id"
-    return "connector_id, wait_s, max_deliveries or acks is not valid"
 
 
 def _bind_problem(host: str, port: int) -> str | None:

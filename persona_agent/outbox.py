@@ -58,26 +58,41 @@ _RECORD_FIELDS = ("reply_handle", "connector_id", "capabilities", "platform",
                   "native", "conversation_type", "conversation_id", "prefiltered")
 
 
-def parse_pull(body) -> Optional[dict]:
-    """A pull body as `Outbox.pull` keywords, or None when it is not one."""
-    if not isinstance(body, dict) or body.get("kind") != PULL_KIND:
-        return None
-    connector_id = opaque_value(body.get("connector_id"),
-                                MAX_CONNECTOR_ID_CHARS)
-    if not connector_id:
-        return None
-    numbers = []
-    for name, default in (("wait_s", DEFAULT_WAIT_S), ("max_deliveries", 10)):
-        value = body.get(name, default)
+def pull_problem(body) -> str:
+    """Why `body` is not a pull, naming the field; '' when it is one."""
+    if not isinstance(body, dict):
+        return "the body is not a JSON object"
+    if body.get("kind") != PULL_KIND:
+        return f"kind must be {PULL_KIND}"
+    raw_id = body.get("connector_id")
+    if raw_id is None or (isinstance(raw_id, str) and not raw_id.strip()):
+        return "missing required field: connector_id"
+    if not isinstance(raw_id, str):
+        return "connector_id must be a string"
+    if not opaque_value(raw_id, MAX_CONNECTOR_ID_CHARS):
+        return (f"connector_id is longer than {MAX_CONNECTOR_ID_CHARS} characters"
+                if len(raw_id.strip()) > MAX_CONNECTOR_ID_CHARS
+                else "connector_id contains control characters")
+    for name in ("wait_s", "max_deliveries"):
+        value = body.get(name, 0)
         if (isinstance(value, bool) or not isinstance(value, (int, float))
                 or not math.isfinite(value)):
-            return None
-        numbers.append(value)
+            return f"{name} is not a number"
     acks = body.get("acks", [])
-    if not isinstance(acks, list) or len(acks) > MAX_ACKS_PER_PULL:
+    if not isinstance(acks, list):
+        return "acks must be a list"
+    if len(acks) > MAX_ACKS_PER_PULL:
+        return f"more than {MAX_ACKS_PER_PULL} acks"
+    return ""
+
+
+def parse_pull(body) -> Optional[dict]:
+    """A pull body as `Outbox.pull` keywords, or None when it is not one."""
+    if pull_problem(body):
         return None
-    return {"connector_id": connector_id, "wait_s": float(numbers[0]),
-            "max_deliveries": int(numbers[1]), "acks": acks}
+    return {"connector_id": opaque_value(body["connector_id"], MAX_CONNECTOR_ID_CHARS),
+            "wait_s": float(body.get("wait_s", DEFAULT_WAIT_S)),
+            "max_deliveries": int(body.get("max_deliveries", 10)), "acks": body.get("acks", [])}
 
 
 class HandleStore:
@@ -251,6 +266,7 @@ class Outbox:
         self._last_pull: dict[str, float] = {}
         self._seq = 0
         self._pulls = 0
+        self._bad_status_warned = False
         self._cond: Optional[asyncio.Condition] = None
         self._closed = False
 
@@ -415,6 +431,11 @@ class Outbox:
         else:
             sent = 0
             if status not in ACK_STATUSES:
+                # A misspelt status reads as unsent; say it once so the connector's author sees why.
+                if not self._bad_status_warned:
+                    self._bad_status_warned = True
+                    logger.warning("[Outbox] connector %s acked with an unknown status; it counts as "
+                                   "failed. Use one of: %s", connector_id, ", ".join(sorted(ACK_STATUSES)))
                 status = "failed"
         if status == "unsupported":
             self.handles.mark_unsupported(d.key, d.handle.get("reply_handle", ""))

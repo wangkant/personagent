@@ -37,7 +37,10 @@ async def deliver(delivery: dict) -> tuple[str, int]:
 
 async def chat(conn: Connector) -> None:
     while True:
-        text = await asyncio.to_thread(input, "> ")
+        try:
+            text = await asyncio.to_thread(input, "> ")
+        except EOFError:
+            return
         if not text.strip():
             continue
         answer = await conn.send_event({
@@ -62,13 +65,18 @@ async def chat(conn: Connector) -> None:
 
 async def main() -> None:
     conn = Connector(BASE_URL, TOKEN, connector_id="console-1")
+    outbox = asyncio.create_task(conn.run_outbox(deliver))
     try:
-        await asyncio.gather(chat(conn), conn.run_outbox(deliver))
+        await chat(conn)
     finally:
+        outbox.cancel()
         await conn.aclose()
 
 
-asyncio.run(main())
+try:
+    asyncio.run(main())
+except KeyboardInterrupt:
+    pass
 ```
 
 `deliver` renvoie `(status, sent_items)`, où status vaut `sent`, `partial`, `failed`, `refused` ou `unsupported`, comme dans le tableau des accusés du protocole. Lorsque seuls certains éléments sont partis, renvoyez `("partial", n)`. La boucle accuse chaque livraison lors de l'interrogation suivante, n'en envoie aucune deux fois et signale comme `expired` une livraison dont le délai a expiré avant l'appel à `deliver`.

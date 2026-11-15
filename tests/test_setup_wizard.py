@@ -198,7 +198,7 @@ def test_the_fan_made_characters_come_last_with_their_own_names(portraits) -> No
           [c.name_in("en") for c in sw.CHARACTERS if c.stem] == ["GPT-chan", "DeepSeek-chan", "Claude-chan"])
     check("name: by language",
           [sw.character_for("chatgpt").name_in(lang) for lang in ("zh", "zh-TW", "ja", "ko", "de")]
-          == ["GPT娘", "GPT娘", "GPTちゃん", "GPT짱", "GPT-chan"])
+          == ["GPT娘", "GPT娘", "GPTちゃん", "GPT쨩", "GPT-chan"])
     check("name: the default follows the character", sw.name_for("claude", "Nova", "en") == "Claude-chan")
     check("name: the language's default too", sw.name_for("deepseek", "小夏", "zh") == "DeepSeek娘")
     check("name: another character's own name follows", sw.name_for("claude", "GPT-chan", "en") == "Claude-chan")

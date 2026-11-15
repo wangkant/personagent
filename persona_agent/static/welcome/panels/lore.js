@@ -8,7 +8,7 @@ PA.strings({
     lore_own: "In use: your own lorebook, {count} entries, from {path}.",
     lore_own_skipped: "{skipped} entries in the file have no keywords or no text and are not used.",
     lore_copy_note: "The built-in lorebook cannot be changed in place. Your first saved change writes it, with your change, to {path}; that file then replaces the built-in lorebook as a whole.",
-    lore_lang: "Language of the file: {lang}, from the language the character speaks.",
+    lore_lang: "Language of the file: {lang}. Background entries come in Chinese and English only: a character that speaks Chinese uses the Chinese file, any other language the English one.",
     lore_broken_syntax: "The file {path} cannot be read: there is a JSON format error at line {line}, column {column}. Until it is corrected, the character uses none of its entries. Correct the file, save new entries here, or restore the built-in lorebook.",
     lore_broken_shape: "The file {path} cannot be read: its content is not in the lorebook format. Until it is corrected, the character uses none of its entries. Correct the file, save new entries here, or restore the built-in lorebook.",
     lore_broken_encoding: "The file {path} cannot be read: it is not saved as UTF-8. Until it is corrected, the character uses none of its entries. Save it again as UTF-8, save new entries here, or restore the built-in lorebook.",
@@ -81,7 +81,7 @@ PA.strings({
     lore_own: "当前使用：你自己的背景设定，共 {count} 条，文件为 {path}。",
     lore_own_skipped: "文件中有 {skipped} 条缺少关键词或内容，未被使用。",
     lore_copy_note: "内置背景设定不能直接修改。首次保存修改时，内置内容将连同你的修改一并写入 {path}，此后该文件将整体替换内置背景设定。",
-    lore_lang: "文件语言：{lang}，取决于角色使用的语言。",
+    lore_lang: "文件语言：{lang}。背景设定仅有中文和英文两套：角色使用中文时取中文文件，使用其他语言时取英文文件。",
     lore_broken_syntax: "文件 {path} 无法读取：第 {line} 行第 {column} 列存在 JSON 格式错误。修正之前，角色不会使用其中任何一条。请修正该文件、在此保存新的条目，或恢复内置背景设定。",
     lore_broken_shape: "文件 {path} 无法读取：其内容不符合背景设定的格式。修正之前，角色不会使用其中任何一条。请修正该文件、在此保存新的条目，或恢复内置背景设定。",
     lore_broken_encoding: "文件 {path} 无法读取：该文件不是以 UTF-8 编码保存的。修正之前，角色不会使用其中任何一条。请以 UTF-8 编码重新保存、在此保存新的条目，或恢复内置背景设定。",
@@ -408,6 +408,8 @@ PA.strings({
     errorCode = code;
     error.textContent = fields ? t(code, fields) : errorText(code);
     error.hidden = false;
+    // The entry at fault is in the list: a folded list would hide where.
+    fold.open = true;
     error.dataset.fields = fields ? JSON.stringify(fields) : "";
   }
   function clearError() {
@@ -485,6 +487,8 @@ PA.strings({
   }
 
   addButton.addEventListener("click", () => {
+    // The new entry's form opens in the list: a folded list would hide it.
+    fold.open = true;
     if (entries.length >= limits().entries) {
       showError("lore_too_many");
       return;

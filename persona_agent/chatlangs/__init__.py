@@ -20,7 +20,7 @@ CODES = ("en", "zh", "zh-TW", "ja", "ko", "es", "fr", "de", "pt-BR", "ru")
 #: Keys every `Spec.replies` carries, and the placeholders in each.
 REPLY_KEYS = ("remember_what", "not_instructions", "noted", "forget_what",
               "nothing_to_forget", "forgotten", "empty", "recall_head",
-              "about", "from")
+              "said", "about", "from")
 
 #: Keys of `Spec.learned_text` (the "what have you learned" summary) and the
 #: fields each must use. English builds its own, with plurals, in views.py.
@@ -156,7 +156,10 @@ def detect(text: str, default: str = "en") -> str:
         simplified = sum(ch in _SIMPLIFIED for ch in text)
         if traditional > simplified:
             return "zh-TW"
-        return "zh"
+        if simplified > traditional:
+            return "zh"
+        # Characters both scripts share: the language the chat is set to.
+        return default if default in ("zh", "zh-TW") else "zh"
     if _CYRILLIC.search(text):
         return "ru"
     lower = text.lower()

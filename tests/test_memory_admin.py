@@ -96,6 +96,13 @@ def test_an_ambiguous_prefix_is_refused(home, capsys) -> None:
     check("nothing was forgotten", len(stored(home)["telegram:c1"]) == 2)
 
 
+def test_forgetting_in_an_unknown_chat_names_the_chat(home, capsys) -> None:
+    check("refused", run("forget", "core", "--chat", "nosuch") == 1)
+    out = capsys.readouterr().out
+    check("says the chat is not known", "No chat with the key nosuch" in out
+          and "No item has that id." not in out, out)
+
+
 def test_the_terminal_speaks_the_install_language(home, monkeypatch, capsys) -> None:
     monkeypatch.setenv("AGENT_LANG", "zh")
     run()

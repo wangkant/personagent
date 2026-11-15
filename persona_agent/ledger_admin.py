@@ -544,6 +544,7 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     lst.add_argument("--limit", type=int, default=20,
                      help=langs.term("show at most this many, the newest (default 20; 0: no limit)"))
     id_help = langs.term("the id that `list` shows, or any unique start of it")
+    reason_help = langs.term("why, in a few words; kept in the item's history")
 
     show = sub.add_parser("show", help=langs.term("one candidate with its evidence"))
     show.add_argument("candidate_id", help=id_help)
@@ -554,12 +555,12 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
                            ("restore", "bring back an item the character or the time limit set aside")):
         sp = sub.add_parser(name, help=langs.term(helptext))
         sp.add_argument("candidate_id", help=id_help)
-        sp.add_argument("--reason", default="")
+        sp.add_argument("--reason", default="", help=reason_help)
 
     sup = sub.add_parser("supersede", help=langs.term("replace one candidate with another"))
     sup.add_argument("old_id")
     sup.add_argument("new_id")
-    sup.add_argument("--reason", default="")
+    sup.add_argument("--reason", default="", help=reason_help)
 
     sub.add_parser("rebuild", help=langs.term("rewrite the files the running agent reads from the "
                                               "learning record, after it was changed by hand"))

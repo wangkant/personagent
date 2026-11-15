@@ -64,6 +64,7 @@ SPEC = Spec(
         "forgotten": ("esqueci", "apagado", "já era", "foi"),
         "empty": ("cabeça vazia", "não tem nada aqui", "tudo em branco"),
         "recall_head": ("Olha o que eu lembro:",),
+        "said": ("você disse: ",),
         "about": ("sobre {name}: ",),
         "from": ("de {name}: ",),
     },

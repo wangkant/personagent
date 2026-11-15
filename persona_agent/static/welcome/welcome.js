@@ -242,6 +242,7 @@ const translations = {
     chatHint: "本机对话，你在此处的身份是管理员。",
     newChat: "新对话",
     newChatDone: "已开始新的对话，角色记住的内容仍然保留。",
+    chatWait: "上一条消息的回复尚未完成，请稍候再发送。",
     forgetChat: "清除本次对话的记忆",
     forgetChatAsk: "角色将清除在本次对话中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息、聊天记录，以及尚可恢复的已删除内容，随后开始新的对话。角色在本次对话中学到的内容此后不再使用，仍列在「角色学到的内容」的「已搁置」中。本页面此前对话中记住的内容也将一并清除；在已连接平台的聊天中记住的内容将予以保留。此操作无法撤销。",
     forget_needs_activity: "清除记忆需要先开启动态数据，可在「角色与设置」的高级设置中开启。",
@@ -652,6 +653,7 @@ const translations = {
     chatHint: "A chat on this computer. Here you are the admin.",
     newChat: "New chat",
     newChatDone: "A new chat has started. What the character remembers is kept.",
+    chatWait: "The reply to your last message is still coming. Send this one when it is done.",
     forgetChat: "Forget this chat",
     forgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages, the chat record and the removed items that could still be restored. A new chat then starts. What the character learned in this chat is no longer used from then on; it remains listed under Set aside in What the character has learned. What it remembers from earlier chats on this page is forgotten too; what it remembers from chats on connected apps is kept. This cannot be undone.",
     forget_needs_activity: "Forgetting a chat needs activity data, which is switched off. Turn it on in the advanced settings under Character & settings.",
@@ -2717,7 +2719,12 @@ function failedNotice(code, text, mine, retrySeq = null) {
   return node;
 }
 async function send(text, mine = null, retrySeq = null) {
-  if (chatting || !text.trim()) return;
+  if (!text.trim()) return;
+  if (chatting) {
+    // The text stays in the box: say why Enter did nothing.
+    toast(t("chatWait"));
+    return;
+  }
   chatting = true;
   $("chat-empty").hidden = true;
   $("message").value = "";
@@ -3079,17 +3086,18 @@ for (const button of document.querySelectorAll("[data-prompt]"))
 // The commands the character takes in a chat, in the language it reads them
 // in: its name first, then the words docs/guide.md lists.
 // Per character language: remember, forget, what do you remember, what have you learned.
+// Remember ends in a colon where "that" would store a subordinate clause ("Lena Vegetarierin ist").
 const MEMORY_COMMANDS = {
   en: ["{n}, remember ", "{n}, forget ", "{n}, what do you remember", "{n}, what have you learned"],
   zh: ["{n} 记住 ", "{n} 忘掉 ", "{n} 你都记得什么", "{n} 学到了什么"],
   "zh-TW": ["{n} 記住 ", "{n} 忘掉 ", "{n} 你都記得什麼", "{n} 你學到了什麼"],
   ja: ["{n}、覚えて：", "{n}、忘れて、", "{n}、何覚えてる？", "{n}、何を学んだ？"],
   ko: ["{n} 기억해: ", "{n} 잊어 줘: ", "{n} 뭐 기억해?", "{n} 너 뭐 배웠어?"],
-  es: ["{n}, recuerda que ", "{n}, olvídate de ", "{n}, ¿qué recuerdas?", "{n}, ¿qué has aprendido?"],
-  fr: ["{n}, retiens que ", "{n}, oublie ", "{n}, tu te souviens de quoi ?", "{n}, qu'est-ce que tu as appris ?"],
-  de: ["{n}, merk dir, dass ", "{n}, vergiss ", "{n}, was hast du dir gemerkt?", "{n}, was hast du gelernt?"],
-  "pt-BR": ["{n}, anota aí que ", "{n}, esquece ", "{n}, o que você lembra?", "{n}, o que você aprendeu?"],
-  ru: ["{n}, запомни, что ", "{n}, забудь про ", "{n}, что ты помнишь?", "{n}, чему ты научилась?"],
+  es: ["{n}, recuerda: ", "{n}, olvídate de ", "{n}, ¿qué recuerdas?", "{n}, ¿qué has aprendido?"],
+  fr: ["{n}, retiens : ", "{n}, oublie ", "{n}, tu te souviens de quoi ?", "{n}, qu'est-ce que tu as appris ?"],
+  de: ["{n}, merk dir: ", "{n}, vergiss ", "{n}, was hast du dir gemerkt?", "{n}, was hast du gelernt?"],
+  "pt-BR": ["{n}, anota aí: ", "{n}, esquece ", "{n}, o que você lembra?", "{n}, o que você aprendeu?"],
+  ru: ["{n}, запомни: ", "{n}, забудь про ", "{n}, что ты помнишь?", "{n}, чему ты научилась?"],
 };
 function memoryCommands() {
   const name = state.name || defaultName();

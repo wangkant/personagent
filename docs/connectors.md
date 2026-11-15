@@ -53,7 +53,9 @@ banner names; `--home DIR` picks another one.
   `owned: false`. `GET /health/details` also checks the model and the other
   services, which may cost a little. It takes the `X-Personagent-Token`
   header when a token is set, and otherwise only a request from the same
-  machine; anything else gets `403` with code `forbidden`.
+  machine; anything else gets `403` with code `forbidden`. Without a token, a
+  request from the same machine that carries a browser or proxy header gets
+  `non_local_request`, as on the other endpoints.
 
 ## Configuration
 
@@ -80,7 +82,10 @@ lists its remaining settings.
 
 personagent stores every id as `<platform>:<id>`, for example
 `telegram:-1001234` for a group or `discord:4242` for a user. `platform` is
-the connector's name for the platform, in lowercase and without `:`.
+the connector's name for the platform, in lowercase and without `:`. The
+name is case-sensitive: `Telegram` and `telegram` are two platforms with
+separate memories, so keep one spelling. A name with `:` is refused with
+`invalid_schema`.
 
 QQ is the one exception, kept for compatibility. Its ids are stored bare
 (`123456`), and `qq:123456` in any setting means the same thing. If a
@@ -138,8 +143,8 @@ Each request carries one message in and returns the replies to it.
 
 The required fields are `platform`, `conversation_type` (`group` or `dm`),
 `sender_id`, `message_id` and `sent_at`, plus `conversation_id` for groups.
-`sent_at` is when the platform stamped the message, in whole unix seconds (a
-string of digits is accepted too). The
+`sent_at` is when the platform stamped the message, in unix seconds (a
+string of digits is accepted too, and a fraction is dropped). The
 character sees each message with this time. A group message that is more
 than 10 minutes old when it arrives, within two minutes of the platform's
 first message since the agent started, is a backlog delivered after a
@@ -288,7 +293,9 @@ Request:
 ```
 
 The agent holds the request for up to `wait_s` seconds (at most 30) until
-something is queued, then answers:
+something is queued, then answers at once with what is queued at that
+moment. `max_deliveries` is an upper bound, not a batch the agent waits to
+fill:
 
 ```json
 {
@@ -339,6 +346,8 @@ Report each delivery in `acks` on the next pull:
 | `refused` | The connector no longer allows the conversation. |
 | `unsupported` | The platform cannot send unprompted to this conversation. |
 
+Any other `status` counts as `failed`, and the agent's log says so once.
+
 Rules:
 
 - **At most once.** The agent hands out a delivery once and never again,
@@ -376,15 +385,15 @@ wording may change.
 
 | Status | `code` | Endpoint | Cause |
 |---|---|---|---|
-| 400 | `invalid_schema` | both | The body is not a JSON object; a required field is missing or empty; `conversation_type` is neither `group` nor `dm`; `segments` is not a list; a body of the wrong kind (see "Body kinds"); a pull without a usable `connector_id` (at most 128 characters), with a `wait_s` or `max_deliveries` that is not a number, or with more than 1,000 acks. |
+| 400 | `invalid_schema` | both | The body is empty or not a JSON object; `platform` is not a string or contains `:`; a required field is missing or empty; `conversation_type` is neither `group` nor `dm`; `segments` is not a list; a body of the wrong kind (see "Body kinds"); a pull without a usable `connector_id` (at most 128 characters), with a `wait_s` or `max_deliveries` that is not a number, or with more than 1,000 acks. `error` names the field. |
 | 400 | `client_disconnected` | both | The caller hung up while sending the body. |
 | 403 | `unauthenticated` | both | No `CONNECTOR_TOKEN`, and the caller is not on the agent's machine. |
-| 403 | `non_local_request` | both | No `CONNECTOR_TOKEN`, and the request carries a header a local program does not send: `Origin`, a `Sec-Fetch-Site` other than `none`, a `Host` other than `localhost`, `127.0.0.1` or `::1`, or a proxy header such as `X-Forwarded-For`. |
+| 403 | `non_local_request` | both | No `CONNECTOR_TOKEN`, and the request carries a header a local program does not send: `Origin`, a `Sec-Fetch-Site` other than `none`, a `Host` other than `localhost`, `127.0.0.1` or `::1`, or a proxy header such as `X-Forwarded-For`. `error` names the header. |
 | 403 | `invalid_envelope` | both | `CONNECTOR_TOKEN` is set, and the token or a header is missing or wrong, the signature does not match, the timestamp is more than five minutes off, the nonce was used before, or the replay guard is full. |
-| 403 | `stale_event` | events | `sent_at` is not a whole number of seconds, or is more than `CONNECTOR_MAX_EVENT_AGE_S` (24 hours) away from the agent's clock in either direction. A value in milliseconds lies far in the future. |
+| 403 | `stale_event` | events | `sent_at` is not a number, or is more than `CONNECTOR_MAX_EVENT_AGE_S` (24 hours) away from the agent's clock in either direction. A value in milliseconds lies far in the future. `error` says which. |
 | 404 | `outbox_disabled` | outbox | `CONNECTOR_OUTBOX_ENABLED=false`, or the agent is off (`AGENT_ENABLED=false`). |
 | 408 | `body_timeout` | both | The body took more than 30 seconds to arrive. |
-| 413 | `body_too_large` | both | The body is larger than `SERVER_MAX_BODY_BYTES` (8,000,000 bytes), usually because of an inline image. |
+| 413 | `body_too_large` | both | The body is larger than `SERVER_MAX_BODY_BYTES` (8,000,000 bytes), usually because of an inline image. The agent answers once it reads `Content-Length` and closes the connection, so some clients, such as Python's `urllib`, report a reset connection instead. |
 | 429 | `capacity_exceeded` | both | Too many requests at once: more than `CONNECTOR_MAX_INFLIGHT` turns (64 by default) on the event endpoint, or 16 pulls on the outbox. The `Retry-After` header gives the seconds to wait: 3, or 5 for the outbox. |
 
 A wrong path gets `404 {"detail": "Not Found"}` and a wrong method, such as

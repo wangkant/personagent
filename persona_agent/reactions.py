@@ -215,6 +215,10 @@ class PendingReplies:
             fsync=False,
         )
 
+    def conversations(self) -> set[str]:
+        """Every conversation with a reply still awaiting a reaction."""
+        return set(self._by_conv) | set(self._awaiting_fix) | set(self._last_reply_to)
+
     def drop_conversation(self, conv_id: str, *, persist: bool = True) -> None:
         self._by_conv.pop(conv_id, None)
         self._awaiting_fix.pop(conv_id, None)

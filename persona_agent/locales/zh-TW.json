@@ -439,5 +439,6 @@
 "Memory commands work here as well, such as \"{name}, remember ...\" and \"{name}, what do you remember\". What is kept here stays in the trial: {memory} does not show it.": "記憶命令在此處同樣可用，例如「{name}，記住……」和「{name}，你記得什麼」。此處記下的內容僅保存在試用中，{memory} 不會顯示這些內容。",
 "Other platforms, such as Slack, KOOK or Feishu, are connected through AstrBot: `{cmd} astrbot --install` installs it here, and `{cmd} astrbot DATA_DIR` connects one you already run. Coding assistants: `{cmd} claude-code`, `codex` or `dsh`.": "其他平台（如 Slack、KOOK 或飛書）須透過 AstrBot 連接：`{cmd} astrbot --install` 可在此處安裝 AstrBot，`{cmd} astrbot DATA_DIR` 可連接已在執行的 AstrBot。程式設計助理：`{cmd} claude-code`、`codex` 或 `dsh`。",
 "personagent demo: short scenes played with scripted answers": "personagent 示範：以預設的回答示範幾個簡短場景",
-"personagent demo: the same scenes, played by your model ({model})": "personagent 示範：由你的模型（{model}）示範同樣的場景"
+"personagent demo: the same scenes, played by your model ({model})": "personagent 示範：由你的模型（{model}）示範同樣的場景",
+"unknown command {cmd}; /help lists the commands": "無法識別的指令 {cmd}。輸入 /help 查看可用的指令。"
 }

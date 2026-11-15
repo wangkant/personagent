@@ -302,7 +302,20 @@ async def test_main_runs_a_session(tmp: Path, monkeypatch, capsys) -> None:
     assert "/reply <text>" in out and "/why" in out
     assert "(Nova stays quiet: not addressed, 1 of 4 messages)" in out
     assert "Nova > hey Alex" in out
+    assert "\nanyone around?\n" in out, "piped input is echoed"
     assert out.rstrip().endswith("Goodbye.")
+
+
+async def test_typed_input_is_not_echoed(tmp: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setattr(chat.sys.stdin, "isatty", lambda: True, raising=False)
+    with demo.throwaway_home(str(tmp)) as root:
+        agent, _model = demo.build_agent("en", root, offline=True)
+        monkeypatch.setattr(chat, "build_agent",
+                            lambda lang, trigger: (agent, root / "runtime"))
+        _feed(monkeypatch, ["anyone around?", "/quit"])
+        assert await chat.main(["--name", "Alex"]) == 0
+    assert "\nanyone around?\n" not in capsys.readouterr().out
 
 
 # -- findings from the review of the trial ------------------------------------
@@ -450,7 +463,7 @@ async def test_unknown_commands_and_a_spent_reply_are_said(
                                    live_trigger=30)
         await session.handle("/me waves")
         out = capsys.readouterr().out
-        assert "unknown command /me; the commands are:" in out and "/quit" in out
+        assert out.strip() == "unknown command /me; /help lists the commands", out
         await session.handle("/help")
         out = capsys.readouterr().out
         assert "unknown command" not in out and "/quit" in out, out

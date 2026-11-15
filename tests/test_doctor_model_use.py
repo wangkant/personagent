@@ -71,3 +71,20 @@ def test_one_unreachable_model_reads_as_one_problem(tmp_path, monkeypatch, capsy
     doctor.main(["--json"])
     rows = json.loads(capsys.readouterr().out)["services"]
     assert [r["id"] for r in rows] == ["llm.dm", "llm.group", "llm.learning_decisions"]
+    dm, _, learning_row = rows
+    assert dm["status"] == "failed" and dm["ok"] is False
+    assert dm["detail"].startswith("Could not connect to 127.0.0.1:18998"), dm
+    assert "refused" in dm["error"], "the raw text is kept"
+    assert learning_row["status"] == "skipped" and learning_row["ok"] is None, learning_row
+
+
+def test_doctor_json_names_the_purposes_in_snake_case(tmp_path, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(paths, "runtime_dir", lambda: tmp_path)
+    monkeypatch.delenv("MEMORY_FILE", raising=False)
+    monkeypatch.setattr(doctor, "check_config", lambda: [])
+    monkeypatch.setattr(doctor, "run_checks", lambda: [])
+    monkeypatch.setattr(doctor, "update_notice", lambda: None)
+    _tally(tmp_path)
+    doctor.main(["--json"])
+    report = json.loads(capsys.readouterr().out)["model_use"]
+    assert report["today_purposes"] == report["todayPurposes"]

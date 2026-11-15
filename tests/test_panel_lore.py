@@ -147,6 +147,13 @@ def test_reset_keeps_a_bak_and_brings_back_the_built_in_set(client, workspace):
     assert workspace.restarts == [True, True]
     # Nothing of the person's own to remove: nothing happens.
     assert post(client, {"stamp": reset["stamp"]}, "/api/lore/reset").json()["changed"] is False
+    # A second book, saved twice and reset: the first one is still on disk under its dated name.
+    again = post(client, {"entries": [{"keywords": ["c"], "content": "d"}], "stamp": reset["stamp"]}).json()
+    again = post(client, {"entries": [{"keywords": ["e"], "content": "f"}], "stamp": again["stamp"]}).json()
+    post(client, {"stamp": again["stamp"]}, "/api/lore/reset")
+    kept = {json.loads(path.read_text(encoding="utf-8"))["entries"][0]["keywords"][0]
+            for path in own_file(workspace).parent.glob("lorebook.zh.json.*.bak")}
+    assert kept == {"a", "e"}
 
 
 def test_a_broken_file_is_reported_and_can_be_replaced_or_reset(client, workspace):

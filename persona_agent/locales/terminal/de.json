@@ -135,8 +135,8 @@
 "usage: ": "Verwendung: ",
 "positional arguments": "Positionsargumente",
 "options": "Optionen",
-"show this help message and exit": "zeigt diese Hilfe an und beendet",
-"show program's version number and exit": "zeigt die Versionsnummer an und beendet",
+"show this help message and exit": "zeigt diese Hilfe an und beendet das Programm",
+"show program's version number and exit": "zeigt die Versionsnummer an und beendet das Programm",
 "%(prog)s: error: %(message)s\n": "%(prog)s: Fehler: %(message)s\n",
 "the following arguments are required: %s": "diese Argumente fehlen: %s",
 "unrecognized arguments: %s": "unbekannte Argumente: %s",
@@ -449,8 +449,10 @@
 "{0} ({1}) did not call the search tool, so the character never searches the web. Set LLM_JUDGE_MODEL to a model that supports tool calls.": "{0} ({1}) hat das Suchwerkzeug nicht aufgerufen, daher sucht die Figur nie im Web. Setzen Sie LLM_JUDGE_MODEL auf ein Modell, das Werkzeugaufrufe unterstützt.",
 "Fix first: {0}": "Zuerst beheben: {0}",
 "Not critical, but failing: {0}": "Nicht kritisch, aber fehlgeschlagen: {0}",
-"There is no personagent home at {0}. Run `{1}` to set one up there.": "Unter {0} gibt es keinen personagent-Stammordner. Führen Sie `{1}` aus, um dort einen einzurichten.",
+"There is no personagent home at {0}. Run `{1}` to set one up there.": "Unter {0} gibt es keinen personagent-Home-Ordner. Führen Sie `{1}` aus, um dort einen einzurichten.",
 "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "mit astrbot --platform lark oder qq_official: die App-ID (für connect qq --appid verwenden)",
 "with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "mit astrbot --platform lark oder qq_official: das App-Secret (für connect qq --secret verwenden)",
-"language code: {0} (default: AGENT_LANG, else en)": "Sprachcode: {0} (Standard: AGENT_LANG, sonst en)"
+"language code: {0} (default: AGENT_LANG, else en)": "Sprachcode: {0} (Standard: AGENT_LANG, sonst en)",
+"take the API key from this environment variable and save a copy of its value in .env": "übernimmt den API-Schlüssel aus dieser Umgebungsvariable und speichert eine Kopie des Werts in .env",
+"why, in a few words; kept in the item's history": "der Grund in wenigen Worten; wird im Verlauf des Eintrags gespeichert"
 }

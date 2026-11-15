@@ -82,10 +82,10 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
                 for f in findings
             ],
             "retired_settings": [{"old": o, "new": n, "where": w} for o, n, w in retired],
-            "services": results,
+            "services": [json_row(r) for r in results],
             "direct_platforms": direct_platforms(home.find_home()),
             "update": update_notice(),
-            "model_use": model_use(),
+            "model_use": _snake_case_use(model_use()),
         }, ensure_ascii=False, indent=2))
         return 0 if ok else 1
     print("=" * 64)
@@ -113,9 +113,7 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     results = run_checks()
     first_with: dict[str, str] = {}
     for r in results:
-        # A row not asked because its model already failed above is not a failure of its own.
-        mark = ("  -  " if r["ok"] is None or (r.get("same_as") and r["ok"] is False)
-                else "  OK " if r["ok"] else " FAIL")
+        mark = {"skipped": "  -  ", "ok": "  OK ", "failed": " FAIL"}[row_status(r)]
         tag = langs.term(" [critical]") if r["critical"] else ""
         advice = r.get("advice") or ""
         text = (langs.term(f"The same problem as the row {first_with[advice]}.")
@@ -147,6 +145,32 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     if notice:
         print(langs.term(notice))
     return 0 if services_ok and not retired else 1
+
+
+def row_status(r: dict) -> str:
+    """ok, failed, or skipped: a row not asked because its model already failed is skipped."""
+    if r["ok"] is None or (r.get("same_as") and r["ok"] is False):
+        return "skipped"
+    return "ok" if r["ok"] else "failed"
+
+
+def json_row(r: dict) -> dict:
+    """A row for `doctor --json`: the table's readable sentence as `detail`, the raw text as `error`."""
+    out = dict(r)
+    out["status"] = row_status(r)
+    if out["status"] == "skipped":
+        out["ok"] = None
+    advice = r.get("advice") or ""
+    if advice and advice != r["detail"]:
+        out["detail"], out["error"] = advice, r["detail"]
+    return out
+
+
+def _snake_case_use(found: dict) -> dict:
+    # todayPurposes stays for readers of the old key.
+    if "todayPurposes" in found:
+        found = {**found, "today_purposes": found["todayPurposes"]}
+    return found
 
 
 def first_fix(findings, results) -> tuple[bool, str]:

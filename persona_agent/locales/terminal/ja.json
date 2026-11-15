@@ -125,7 +125,7 @@
 "replace one candidate with another": "候補を別の候補で置き換えます",
 "with adopt: a pre-lineage hash to fold into the current character": "adopt と併用：現在のキャラクターに統合する系統記録前のハッシュ",
 "PERSONA_VERSION the hash belongs to (default: current)": "そのハッシュの PERSONA_VERSION（既定：現在）",
-"commands:": "コマンド：",
+"commands:": "コマンド:",
 "take the shortcuts away again": "ショートカットを削除します",
 "Shortcuts are made on Windows only. Elsewhere, add `personagent` to your launcher yourself.": "ショートカットを作れるのは Windows だけです。ほかの環境では `personagent` をご自身でランチャーに登録してください。",
 "uvx runs personagent from a temporary copy, which a shortcut cannot point at. Install it first: uv tool install personagent": "uvx は一時的なコピーから personagent を実行するため、ショートカットの指す先にできません。先にインストールしてください：uv tool install personagent",
@@ -452,5 +452,7 @@
 "There is no personagent home at {0}. Run `{1}` to set one up there.": "{0} に personagent のホームがありません。そこに作成するには `{1}` を実行してください。",
 "with astrbot --platform lark or qq_official: the app id (for connect qq, use --appid)": "astrbot --platform lark または qq_official で使用：アプリ ID（connect qq では --appid を使用）",
 "with astrbot --platform lark or qq_official: the app secret (for connect qq, use --secret)": "astrbot --platform lark または qq_official で使用：アプリシークレット（connect qq では --secret を使用）",
-"language code: {0} (default: AGENT_LANG, else en)": "言語コード：{0}（既定：AGENT_LANG、未設定なら en）"
+"language code: {0} (default: AGENT_LANG, else en)": "言語コード：{0}（既定：AGENT_LANG、未設定なら en）",
+"take the API key from this environment variable and save a copy of its value in .env": "この環境変数から API キーを読み取り、その値を .env にコピーして保存します",
+"why, in a few words; kept in the item's history": "理由（簡潔に）。項目の履歴に残ります"
 }

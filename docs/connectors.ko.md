@@ -28,7 +28,7 @@ curl http://127.0.0.1:8080/health
 
 - `CONNECTOR_TOKEN`이 비어 있으면 에이전트는 같은 컴퓨터에서 `127.0.0.1`이나 `localhost`를 호출하는 프로그램만 받으며, 이 프로그램들은 인증 헤더를 보내지 않습니다. `personagent init`은 이 값을 설정하지 않습니다. 로컬 페이지, `personagent up`, `personagent connect astrbot`은 값이 비어 있으면 무작위 값을 씁니다.
 - 직접 설정하려면 충분히 긴 무작위 값을 `.env`에 쓰십시오. 예를 들어 `python -c "import secrets; print(secrets.token_urlsafe(32))"`의 출력을 쓸 수 있습니다. 커넥터에도 같은 값을 주고 에이전트를 다시 시작하십시오.
-- `GET /health`는 `{"status": "ok", "agent_enabled": true}`를 돌려주며 비용이 들지 않습니다. `"agent_enabled": false`는 에이전트가 답할 수 없다는 뜻이고(`LLM_API_KEY`가 없거나 `AGENT_ENABLED=false`), 이때 모든 이벤트는 `owned: false`를 받습니다. `GET /health/details`는 모델과 다른 서비스도 점검하므로 비용이 조금 들 수 있습니다. 토큰이 설정되어 있으면 `X-Personagent-Token` 헤더가, 없으면 같은 컴퓨터에서 온 요청이어야 하며, 그 밖의 요청은 `403`과 코드 `forbidden`을 받습니다.
+- `GET /health`는 `{"status": "ok", "agent_enabled": true}`를 돌려주며 비용이 들지 않습니다. `"agent_enabled": false`는 에이전트가 답할 수 없다는 뜻이고(`LLM_API_KEY`가 없거나 `AGENT_ENABLED=false`), 이때 모든 이벤트는 `owned: false`를 받습니다. `GET /health/details`는 모델과 다른 서비스도 점검하므로 비용이 조금 들 수 있습니다. 토큰이 설정되어 있으면 `X-Personagent-Token` 헤더가, 없으면 같은 컴퓨터에서 온 요청이어야 하며, 그 밖의 요청은 `403`과 코드 `forbidden`을 받습니다. 토큰이 없을 때 같은 컴퓨터에서 온 요청이라도 브라우저나 프록시 헤더가 있으면 다른 엔드포인트와 마찬가지로 `non_local_request`를 받습니다.
 
 ## 설정
 
@@ -49,7 +49,7 @@ curl http://127.0.0.1:8080/health
 
 ## 주소
 
-personagent는 모든 ID를 `<platform>:<id>`로 저장합니다. 예를 들어 그룹은 `telegram:-1001234`, 사용자는 `discord:4242`입니다. `platform`은 커넥터가 플랫폼에 붙인 이름으로, 소문자이고 `:`이 없습니다.
+personagent는 모든 ID를 `<platform>:<id>`로 저장합니다. 예를 들어 그룹은 `telegram:-1001234`, 사용자는 `discord:4242`입니다. `platform`은 커넥터가 플랫폼에 붙인 이름으로, 소문자이고 `:`이 없습니다. 이름은 대소문자를 구분합니다. `Telegram`과 `telegram`은 기억이 따로 저장되는 두 플랫폼이므로 표기를 하나로 유지하십시오. `:`이 들어간 이름은 `invalid_schema`로 거부됩니다.
 
 QQ는 유일한 예외로, 호환성을 위해 남겨 두었습니다. ID는 그대로(`123456`) 저장되고, 어떤 설정에서든 `qq:123456`은 같은 뜻입니다. 커넥터가 QQ를 다루고 학습 상태를 기존 QQ 배포와 맞추고 싶다면, 그 플랫폼 이름을 `CONNECTOR_QQ_PLATFORMS`에 적으십시오. AstrBot 플러그인의 QQ 어댑터는 `aiocqhttp`입니다. 거기 적힌 플랫폼의 ID도 그대로 저장됩니다.
 
@@ -91,7 +91,7 @@ QQ는 유일한 예외로, 호환성을 위해 남겨 두었습니다. ID는 그
 }
 ```
 
-필수 필드는 `platform`, `conversation_type`(`group` 또는 `dm`), `sender_id`, `message_id`, `sent_at`이고, 그룹에는 `conversation_id`도 필요합니다. `sent_at`은 플랫폼이 메시지에 찍은 시각으로 정수 unix 초입니다(숫자로만 된 문자열도 받습니다). 캐릭터는 각 메시지를 이 시각과 함께 봅니다. 에이전트가 시작된 뒤 해당 플랫폼의 첫 메시지로부터 2분 이내에 도착한 그룹 메시지 가운데 도착 시점에 10분이 넘은 것은 재시작 후 전달된 밀린 메시지로 취급됩니다. 이런 메시지는 맥락으로 보관되며 답장 대상이 되지 않습니다. 그 2분이 지나면 오래된 `sent_at` 때문에 메시지가 보류되지 않으므로, 시계가 늦은 커넥터의 메시지에도 답합니다. 플랫폼의 원래 ID를 보내십시오. 접두사는 에이전트가 붙입니다.
+필수 필드는 `platform`, `conversation_type`(`group` 또는 `dm`), `sender_id`, `message_id`, `sent_at`이고, 그룹에는 `conversation_id`도 필요합니다. `sent_at`은 플랫폼이 메시지에 찍은 시각으로 unix 초입니다(숫자로만 된 문자열도 받으며, 소수 부분은 버립니다). 캐릭터는 각 메시지를 이 시각과 함께 봅니다. 에이전트가 시작된 뒤 해당 플랫폼의 첫 메시지로부터 2분 이내에 도착한 그룹 메시지 가운데 도착 시점에 10분이 넘은 것은 재시작 후 전달된 밀린 메시지로 취급됩니다. 이런 메시지는 맥락으로 보관되며 답장 대상이 되지 않습니다. 그 2분이 지나면 오래된 `sent_at` 때문에 메시지가 보류되지 않으므로, 시계가 늦은 커넥터의 메시지에도 답합니다. 플랫폼의 원래 ID를 보내십시오. 접두사는 에이전트가 붙입니다.
 
 `addressed`는 커넥터가 설정합니다. 메시지가 봇을 멘션하거나, 봇의 메시지에 답하거나, 플랫폼 자체 규칙으로 봇에게 한 말이면 true입니다. 에이전트는 텍스트 속 자기 이름도 스스로 알아차립니다. 자기 메시지 인용이나 봇 @는 배울 수 있는 반응으로 읽으니, 봇에게 답하는 메시지에는 `addressed`를 설정하십시오. 다른 구성원 메시지의 인용은 봇에 대한 반응이 아닙니다. 전달된 메시지 안의 봇 멘션은 봇에게 한 말이 아니므로, 이 경우에는 `addressed`를 설정하지 마십시오.
 
@@ -168,7 +168,7 @@ QQ는 유일한 예외로, 호환성을 위해 남겨 두었습니다. ID는 그
 }
 ```
 
-에이전트는 대기열에 무언가 들어올 때까지 요청을 최대 `wait_s`초(상한 30) 붙잡고 있다가 답합니다.
+에이전트는 대기열에 무언가 들어올 때까지 요청을 최대 `wait_s`초(상한 30) 붙잡고 있다가, 무언가 들어오면 그 시점에 대기열에 있는 것을 바로 돌려줍니다. `max_deliveries`는 상한일 뿐이며, 에이전트가 그 수가 찰 때까지 기다리지는 않습니다.
 
 ```json
 {
@@ -204,6 +204,8 @@ QQ는 유일한 예외로, 호환성을 위해 남겨 두었습니다. ID는 그
 | `refused` | 커넥터가 이 대화를 더 이상 허용하지 않습니다. |
 | `unsupported` | 플랫폼이 이 대화에 먼저 보낼 수 없습니다. |
 
+그 밖의 `status`는 `failed`로 처리되며, 에이전트의 로그에 한 번 기록됩니다.
+
 규칙:
 
 - **많아야 한 번.** ack가 어떻게 되든 에이전트는 배달을 한 번만 건네고 다시는 건네지 않습니다. 최근 수백 개의 `delivery_id`를 보관하고 같은 것을 두 번 보내지 마십시오.
@@ -221,15 +223,15 @@ QQ는 유일한 예외로, 호환성을 위해 남겨 두었습니다. ID는 그
 
 | 상태 | `code` | 엔드포인트 | 원인 |
 |---|---|---|---|
-| 400 | `invalid_schema` | 둘 다 | 본문이 JSON 객체가 아님. 필수 필드가 없거나 비어 있음. `conversation_type`이 `group`도 `dm`도 아님. `segments`가 리스트가 아님. 본문 종류가 맞지 않음("본문 종류" 참고). 가져오기 요청에 쓸 수 있는 `connector_id`(최대 128자)가 없거나, `wait_s`나 `max_deliveries`가 숫자가 아니거나, ack가 1,000개를 넘음. |
+| 400 | `invalid_schema` | 둘 다 | 본문이 비어 있거나 JSON 객체가 아님. `platform`이 문자열이 아니거나 `:`을 포함함. 필수 필드가 없거나 비어 있음. `conversation_type`이 `group`도 `dm`도 아님. `segments`가 리스트가 아님. 본문 종류가 맞지 않음("본문 종류" 참고). 가져오기 요청에 쓸 수 있는 `connector_id`(최대 128자)가 없거나, `wait_s`나 `max_deliveries`가 숫자가 아니거나, ack가 1,000개를 넘음. `error`가 해당 필드를 알려 줍니다. |
 | 400 | `client_disconnected` | 둘 다 | 호출한 쪽이 본문을 보내는 도중 연결을 끊었음. |
 | 403 | `unauthenticated` | 둘 다 | `CONNECTOR_TOKEN`이 없고, 호출한 쪽이 에이전트와 같은 컴퓨터에 있지 않음. |
-| 403 | `non_local_request` | 둘 다 | `CONNECTOR_TOKEN`이 없고, 로컬 프로그램이 보내지 않는 헤더가 요청에 있음. `Origin`, `none`이 아닌 `Sec-Fetch-Site`, `localhost`·`127.0.0.1`·`::1`이 아닌 `Host`, `X-Forwarded-For` 같은 프록시 헤더입니다. |
+| 403 | `non_local_request` | 둘 다 | `CONNECTOR_TOKEN`이 없고, 로컬 프로그램이 보내지 않는 헤더가 요청에 있음. `Origin`, `none`이 아닌 `Sec-Fetch-Site`, `localhost`·`127.0.0.1`·`::1`이 아닌 `Host`, `X-Forwarded-For` 같은 프록시 헤더입니다. `error`가 해당 헤더를 알려 줍니다. |
 | 403 | `invalid_envelope` | 둘 다 | `CONNECTOR_TOKEN`이 설정되어 있는데, 토큰이나 헤더가 없거나 틀림, 서명이 맞지 않음, 타임스탬프가 5분 넘게 어긋남, 이미 쓴 nonce, 또는 재전송 방지 기록이 가득 참. |
-| 403 | `stale_event` | events | `sent_at`이 정수 초가 아니거나, 에이전트의 시계와 앞뒤 어느 쪽으로든 `CONNECTOR_MAX_EVENT_AGE_S`(24시간)보다 더 어긋남. 밀리초 값은 먼 미래가 됩니다. |
+| 403 | `stale_event` | events | `sent_at`이 숫자가 아니거나, 에이전트의 시계와 앞뒤 어느 쪽으로든 `CONNECTOR_MAX_EVENT_AGE_S`(24시간)보다 더 어긋남. 밀리초 값은 먼 미래가 됩니다. `error`가 이유를 알려 줍니다. |
 | 404 | `outbox_disabled` | outbox | `CONNECTOR_OUTBOX_ENABLED=false`이거나 에이전트가 꺼져 있음(`AGENT_ENABLED=false`). |
 | 408 | `body_timeout` | 둘 다 | 본문이 도착하는 데 30초를 넘겼음. |
-| 413 | `body_too_large` | 둘 다 | 본문이 `SERVER_MAX_BODY_BYTES`(8,000,000바이트)보다 큼. 대개 인라인 이미지 때문입니다. |
+| 413 | `body_too_large` | 둘 다 | 본문이 `SERVER_MAX_BODY_BYTES`(8,000,000바이트)보다 큼. 대개 인라인 이미지 때문입니다. 에이전트는 `Content-Length`를 읽는 즉시 답하고 연결을 닫으므로, Python의 `urllib` 같은 일부 클라이언트는 대신 연결 재설정으로 보고합니다. |
 | 429 | `capacity_exceeded` | 둘 다 | 동시 요청이 너무 많음. 이벤트 엔드포인트에서 `CONNECTOR_MAX_INFLIGHT`(기본값 64)를 넘는 턴, 또는 아웃박스에서 16개를 넘는 가져오기. `Retry-After` 헤더가 기다릴 초를 알려 줍니다. 3초, 아웃박스는 5초입니다. |
 
 경로가 틀리면 `404 {"detail": "Not Found"}`를, `GET /v1/events`처럼 메서드가 틀리면 `405 {"detail": "Method Not Allowed"}`를 받습니다. 이 응답은 웹 프레임워크가 보내며 `code`가 없습니다.
