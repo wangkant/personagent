@@ -438,8 +438,42 @@ def check_ledger_sizes():
     return healthy, "; ".join(parts) or "no ledgers yet"
 
 
+def check_data_files():
+    """The home's own lorebook, word filter and example files: in use with their
+    counts, or which could not be read. Local and free; never critical."""
+    from .paths import ROOT
+    from .settings import content_lang
+    from .views import data_file_status
+
+    lang = content_lang(os.getenv("AGENT_LANG", ""))
+    parts, broken, own = [], [], False
+    for kind, label in (("lorebook", "lorebook"), ("filters", "word filters"),
+                        ("examples", "example dialogues")):
+        found = data_file_status(ROOT, lang, kind)
+        name = os.path.basename(found["path"])
+        if found["error"]:
+            broken.append(found["path"])
+            state = f"{name} could not be read"
+            if found["error"].get("reason") == "syntax":
+                state = (f"{name} could not be read (JSON error at line {found['error']['line']}, "
+                         f"column {found['error']['column']})")
+        elif not found["own"]:
+            state = "built-in"
+        else:
+            state = f"{found['count']} entries from {name}"
+            if found["skipped"]:
+                state = f"{found['count']} entries from {name}, {found['skipped']} skipped"
+        own = own or found["own"]
+        parts.append(f"{label}: {state}")
+    detail = "; ".join(parts)
+    if broken:
+        return False, detail, (f"Correct or remove {', '.join(broken)}: until then the character "
+                               "uses none of its entries.")
+    return (True if own else None), detail
+
+
 #: A stable key per row for scripts; the name is display text.
-IDS = {"Ledger sizes": "ledger", "DM chat": "llm.dm", "Group replies": "llm.group",
+IDS = {"Custom data files": "data", "Ledger sizes": "ledger", "DM chat": "llm.dm", "Group replies": "llm.group",
        "Web search decision": "llm.search_decision", "Reaction judge": "llm.reaction_judge",
        "Learning decisions": "llm.learning_decisions", "Reviewing its own replies": "llm.evolve",
        "Vision": "vision", "Eval": "llm.eval", "Embeddings": "embeddings",
@@ -448,7 +482,8 @@ IDS = {"Ledger sizes": "ledger", "DM chat": "llm.dm", "Group replies": "llm.grou
 # (name, probe, is_critical)
 CHECKS = [
     ("Ledger sizes",            check_ledger_sizes,     False),
-    ("DM chat",                 check_dm_chat,            True),
+    ("Custom data files",       check_data_files,       False),
+    ("DM chat",                check_dm_chat,            True),
     ("Group replies",           check_group_replies,      True),
     ("Web search decision",     check_search_decision,    False),
     ("Reaction judge",          check_reaction_judge,     False),
@@ -479,7 +514,9 @@ def run_checks() -> list:
         t0 = time.time()
         advice = ""
         try:
-            ok, detail = fn()
+            # A probe may add its own advice as a third value.
+            ok, detail, *said = fn()
+            advice = said[0] if said else ""
         except Exception as e:
             ok, detail = False, f"{type(e).__name__}: {str(e)[:90]}"
             advice = failure_sentence(e)

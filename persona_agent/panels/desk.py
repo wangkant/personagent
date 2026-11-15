@@ -17,7 +17,7 @@ from pathlib import Path
 from dotenv import dotenv_values
 from fastapi import Request
 
-from .. import __version__, langs, shortcut
+from .. import __version__, langs, shortcut, usage
 from .. import connections as conn
 from .. import setup_wizard as sw
 from ..astrbot_install import AstrBotInstallation
@@ -44,8 +44,9 @@ SINGLE_FILES = (".env", "persona.txt", "persona.card.json", "platforms/direct.js
 # Rebuilt by the service, or only meaningful to the process that wrote it.
 SKIP_NAMES = {"dashboard.token", "gateway_nonces.json", "__pycache__"}
 SKIP_SUFFIXES = (".lock", ".tmp", ".pyc", ".part")
-# What "forget" leaves in the runtime folder: the sticker library is not memory.
-KEEP_ON_FORGET = {"stickers.json", "unknown_stickers.jsonl", "dashboard.token"}
+# What "forget" leaves in the runtime folder: the sticker library and the
+# record of model use (the person's check on their bill) are not memory.
+KEEP_ON_FORGET = {"stickers.json", "unknown_stickers.jsonl", "dashboard.token", usage.USAGE_FILE}
 SERVICES = ("agent", "astrbot", "direct")
 MAX_MEMBERS = 50_000
 MAX_UNPACKED = 4 * 1024 ** 3

@@ -93,9 +93,9 @@ personagent 将 id 存储为 `<platform>:<id>`，平台即 Satori 登录账号�
 | 群聊和私聊 | 支持。私聊是 `DIRECT` 频道，或没有服务器的消息。 |
 | 点名判断（`addressed`） | 对机器人的 `<at>`（按 id；服务器未提供 id 时按机器人的名字），以及回复机器人的消息。`@all` 视为文本，不视为提及。 |
 | 引用消息 | 引用的文本、发送者和 id，取自 `<quote>` 元素或 `message.quote`。 |
-| 收到的图片 | `data:` 和 `internal:` 图片以及 Satori 服务器上的图片会内联。公开 URL 传给 agent 自行获取。内网 URL 描述为 `(sent an image)`。每条消息最多下载 4 张，每张 4 MB。 |
+| 收到的图片 | `data:` 和 `internal:` 图片以及 Satori 服务器上的图片会内联。公开 URL 传给 agent 自行获取。内网图片或下载失败的图片以 `photo` 类型的 `media` 片段发送，不附 URL。每条消息最多下载 4 张，每张 4 MB。 |
 | 贴纸和表情 | `<emoji>` 和 QQ 的 `<face>` 作为表情到达，角色知道自己无法看到它们。 |
-| 语音、视频、文件 | 以文字描述：`(sent a voice message)`、`(sent a video)`、`(sent a file: deck.pdf)`。 |
+| 语音、视频、文件 | 以 `media` 片段发送（`voice`、`video`，`file` 附文件名），由 agent 决定如何告知角色。 |
 | 回复 | 文本，以及作为 `data:` URI 的图片，分别作为单独消息发出，中间有短暂间隔。在群中，agent 要求的提及会转换为 `<at>`。 |
 | 被动回复的平台 | 回复带有事件的 `referrer`，QQ 官方机器人 API 回复消息时需要该字段。 |
 | 发件箱 | 定时开场、追问和致歉通过收到该会话的登录账号发到频道。连接器使用由 `SATORI_TOKEN` 和 `CONNECTOR_TOKEN` 派生的密钥为每个回复句柄签名，只发送给自己签过名的句柄。修改其中任何一个令牌后，会话须再发送一条消息才能重新送达。设置了 `CONNECTOR_OUTBOX_ENABLED=false` 的 agent 会返回 404，连接器每 10 分钟重试一次。 |

@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 
+from .llm import purpose
 from .textproc import (
     _SEARCH_HINT_RE,
     _UNTRUSTED_INPUT_RULES,
@@ -171,7 +172,8 @@ class WebSearch:
             # Thinking off: with it on, this endpoint rarely emits tool_calls at
             # all. Spelled for the judge's endpoint, often another vendor's.
             self._thinking_off(payload, url)
-            resp = await self._post_chat(url, key, payload, timeout=20)
+            with purpose("search"):
+                resp = await self._post_chat(url, key, payload, timeout=20)
             if resp.status_code != 200:
                 logger.warning("[Agent] search-decide HTTP %d: %s", resp.status_code, resp.text[:200])
                 return ""

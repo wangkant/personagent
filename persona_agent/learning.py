@@ -21,6 +21,7 @@ from . import (access, adoption, candidates, channels, chatlangs, evidence,
 from .textproc import (TextProcessing, _fence_user_data, _truncate_framed,
                        salvage_json_object)
 from .storage import append_jsonl_rotating
+from .llm import purpose
 
 logger = logging.getLogger("agent")
 
@@ -490,7 +491,8 @@ class Learning:
             # A short answer: hidden reasoning off, as for a reply, and K2 at
             # the one temperature it takes that way.
             self._thinking_off(eval_payload, eval_url, k2_temperature=True)
-            r = await self._post_chat(eval_url, eval_auth, eval_payload, timeout=15)
+            with purpose("learning"):
+                r = await self._post_chat(eval_url, eval_auth, eval_payload, timeout=15)
             r.raise_for_status()
             # Some reasoning models route output into `reasoning_content`.
             _msg = r.json()["choices"][0]["message"]
@@ -640,10 +642,11 @@ class Learning:
             # Once more on unusable output: a model now and then garbles a key
             # ("reaction correction"), and a lost verdict loses the reaction.
             for attempt in range(2):
-                raw = await self._call_llm(
-                    "", [{"role": "user", "content": prompt}],
-                    model=self.react_model, max_tokens=1000, enable_search=False,
-                    json_object=True)
+                with purpose("learning"):
+                    raw = await self._call_llm(
+                        "", [{"role": "user", "content": prompt}],
+                        model=self.react_model, max_tokens=1000, enable_search=False,
+                        json_object=True)
                 adj = reactions.parse_adjudication(raw)
                 if adj:
                     break
@@ -655,11 +658,13 @@ class Learning:
             # A lesson reaches every later prompt of this chat: only an
             # accepted correction from the person the reply was for (or the
             # admin) keeps one, and only past the core-memory filter.
+            # REACT_LEARN_ADMIN_ONLY: anyone else's reaction is evidence, never a change.
+            teaches = is_admin or not self.promotion_policy.admin_only
             adj["lesson"] = (
                 self._validate_memory_candidate(
                     adj.get("lesson", ""), max_chars=reactions.LESSON_MAX_CHARS)
                 if adj["reaction"] == "correction" and adj["accept"]
-                and (is_recipient or is_admin) else "")
+                and (is_recipient or is_admin) and teaches else "")
             now = datetime.now().isoformat(timespec="seconds")
             mode = entry.get("mode", "called")
             outcomes: list[str] = []
@@ -769,7 +774,7 @@ class Learning:
 
                 # The recipient or the admin retracts; a bystander only disputes,
                 # since one person must not undo what took two events to grant.
-                if adj["reaction"] in ("rejection", "correction"):
+                if adj["reaction"] in ("rejection", "correction") and teaches:
                     recipient = bool(reaction_ev["recipient_id"]) and (
                         reaction_ev["recipient_id"] == reaction_ev["speaker_id"])
                     if recipient or is_admin:
@@ -789,7 +794,9 @@ class Learning:
                         complainant_uid=str(reactor_uid or ""),
                         lesson=adj.get("lesson", ""))
                 if adj["reaction"] == "rejection" and conv_id:
-                    if self.react_elicit_enabled and adj.get("ask"):
+                    # A delayed ask is unprompted speech in a group.
+                    if (self.react_elicit_enabled and adj.get("ask")
+                            and (is_dm or not self._only_when_called())):
                         self._spawn(self._maybe_elicit(
                             conv_id, entry, adj.get("ask", ""),
                             reactor_uid, is_dm,
@@ -1081,10 +1088,11 @@ class Learning:
         """The reaction judge's call path: once more on unusable output, then
         None. Raises what _call_llm raises."""
         for attempt in range(2):
-            raw = await self._call_llm(
-                "", [{"role": "user", "content": prompt}],
-                model=self.promote_judge_model, max_tokens=1000,
-                enable_search=False, json_object=True)
+            with purpose("learning"):
+                raw = await self._call_llm(
+                    "", [{"role": "user", "content": prompt}],
+                    model=self.promote_judge_model, max_tokens=1000,
+                    enable_search=False, json_object=True)
             verdict = adoption.parse_adoption(raw, options, allow_adopt=allow_adopt)
             if verdict:
                 return verdict
@@ -1444,11 +1452,12 @@ class Learning:
         proposed = 0
         for ev in pending:
             prompt = evolution.build_review_prompt(ev, self.agent_lang)
-            raw = await self._call_llm(
-                "", [{"role": "user", "content": prompt}],
-                model=self.evolve_model, max_tokens=2000, enable_search=False,
-                json_object=True,
-            )
+            with purpose("learning"):
+                raw = await self._call_llm(
+                    "", [{"role": "user", "content": prompt}],
+                    model=self.evolve_model, max_tokens=2000, enable_search=False,
+                    json_object=True,
+                )
             diag = evolution.parse_review(raw)
             if not diag:
                 # Audited anyway: the audit row is the dedup key.

@@ -78,12 +78,12 @@ PyPI 上有新版本時，「開始聊天」頁面會顯示提示，並提供適
 
 | 分組 | 設定 |
 |---|---|
-| 「管理員與回覆範圍」 | 角色對你的稱呼，以及你與角色的關係（`ADMIN_NAME`、`ADMIN_RELATIONSHIP`）；「你的帳號」（`ADMIN_IDS`）；「僅在以下群組中回覆」（`ACCESS_GROUPS`）；「允許私訊的其他使用者」（`ACCESS_DM_USERS`）。「從最近的聊天中選擇」會列出「動態」中的使用者與群組，讓你無須手動輸入即可加入其 ID。 |
-| 「發言與回覆風格」 | 「角色所在時區」（`PERSONA_TZ_OFFSET_HOURS`）；「主動加入討論前的訊息數」（`CHAT_TRIGGER_COUNT`）；「主動發起對話的頻率」，可一次設定七項 `PROACTIVE_*` 時間參數；「回覆風格」：emoji、三組符號與回覆的最大長度，寫入 `persona.card.json`。 |
+| 「回覆、管理員與回覆範圍」 | 「回覆訊息」（`AGENT_ENABLED`）；「在以下群組中暫停回覆」（`ACCESS_PAUSED_GROUPS`）；角色對你的稱呼，以及你與角色的關係（`ADMIN_NAME`、`ADMIN_RELATIONSHIP`）；「你的帳號」（`ADMIN_IDS`）；「僅在以下群組中回覆」（`ACCESS_GROUPS`）；「允許私訊的其他使用者」（`ACCESS_DM_USERS`）。「從最近的聊天中選擇」會列出「動態」中的使用者與群組，讓你無須手動輸入即可加入其 ID。 |
+| 「發言與回覆風格」 | 「角色所在時區」（`PERSONA_TZ_OFFSET_HOURS`）；「群組中僅在被呼叫時回覆」（`CHAT_ONLY_WHEN_CALLED`）；「主動加入討論前的訊息數」（`CHAT_TRIGGER_COUNT`）；「主動發起對話的頻率」，可一次設定七項 `PROACTIVE_*` 時間參數；「回覆風格」：emoji、三組符號與回覆的最大長度，寫入 `persona.card.json`。 |
 | 「模型」 | 備用模型及其專屬的服務位址與金鑰（`LLM_FALLBACK_MODEL`、`LLM_FALLBACK_BASE_URL`、`LLM_FALLBACK_API_KEY`）、用於快速判斷的模型（`LLM_JUDGE_MODEL`），以及用於私訊的模型（`LLM_DM_MODEL`）。備用模型會先經過測試才儲存。 |
-| 「學習」 | `REACT_LEARN_ENABLED`、`REACT_ELICIT_ENABLED`、`PROMOTE_AUTO_ENABLED`、`PROMOTE_MIN_SPEAKERS`（1 或 2）、`PROMOTE_JUDGE_ENABLED`（由角色自行判斷反應無法確定的內容）與 `PROMOTE_OBSERVE_MAX_DAYS`（觀察中的內容在多少天內沒有新的反應即被擱置）。「重新開始學習」會寫入新的 `PERSONA_VERSION`，使角色此前學到的內容不再被使用，但不會刪除任何資料。 |
+| 「學習」 | `REACT_LEARN_ENABLED`、`REACT_LEARN_ADMIN_ONLY`、`REACT_ELICIT_ENABLED`、`PROMOTE_AUTO_ENABLED`、`PROMOTE_MIN_SPEAKERS`（1 或 2）、`PROMOTE_JUDGE_ENABLED`（由角色自行判斷反應無法確定的內容）與 `PROMOTE_OBSERVE_MAX_DAYS`（觀察中的內容在多少天內沒有新的反應即被擱置）。「重新開始學習」會寫入新的 `PERSONA_VERSION`，使角色此前學到的內容不再被使用，但不會刪除任何資料。 |
 | 「記憶」 | `MEMORY_CALLS_PER_DAY`、`MEMORY_TIDY_EVERY`、`CHAT_CONTEXT_MESSAGES`、`MEMORY_PROMPT_CHARS`、`MEMORY_EPISODES_MAX` 與 `MEMORY_KEEP_RECENT`，請參閱[記憶](#記憶)。 |
-| 「其他設定」 | `AGENT_ENABLED`、`DASHBOARD_ENABLED`、`UPDATE_CHECK_ENABLED`、七項 `PROACTIVE_*` 時間參數、`CHAT_FOLLOWUP_WINDOW_S`、`REACT_*` 與 `PROMOTE_*` 的各項上限、`REACT_MODEL`、角色自行判斷所用的模型、間隔與每輪數量（`PROMOTE_JUDGE_MODEL`、`PROMOTE_JUDGE_INTERVAL_S`、`PROMOTE_JUDGE_BATCH`），以及 `PERSONA_VERSION`。 |
+| 「其他設定」 | `DASHBOARD_ENABLED`、`UPDATE_CHECK_ENABLED`、七項 `PROACTIVE_*` 時間參數、`CHAT_FOLLOWUP_WINDOW_S`、`REACT_*` 與 `PROMOTE_*` 的各項上限、`REACT_MODEL`、角色自行判斷所用的模型、間隔與每輪數量（`PROMOTE_JUDGE_MODEL`、`PROMOTE_JUDGE_INTERVAL_S`、`PROMOTE_JUDGE_BATCH`），以及 `PERSONA_VERSION`。 |
 
 「儲存」只寫入有變更的設定，`.env` 的其餘內容維持不變；接著會重新啟動角色，但僅變更 `UPDATE_CHECK_ENABLED` 時除外。關閉「回覆訊息」（`AGENT_ENABLED`）前會先詢問；在「角色名稱」中為角色改名前也會先詢問，因為新名稱代表一個新的角色。
 
@@ -188,7 +188,7 @@ PyPI 上有新版本時，「開始聊天」頁面會顯示提示，並提供適
 
 - **AI 服務。** 預設值與頁面一致，為 OpenRouter 的 `openrouter/free`，每次請求會交由其中某個免費模型處理。此金鑰不需付費。限額為每分鐘 20 次、每天 50 次，累計購買至少 10 credits 後為每天 1000 次。所有模型呼叫都會計入，不限於回覆，每日額度於 UTC 零時重設。額度用盡後，角色會表示暫時無法回覆，原因記錄在 `runtime/desktop/agent.log` 中。每次使用的模型可能不同，因此角色的語氣不如固定模型穩定，部分免費服務商也會保留收到的內容。如需更穩定的角色，可以使用同一個金鑰改用付費模型。如果無法連線至 OpenRouter，智譜的 `glm-4.7-flash` 也是免費的。使用 Ollama 時，請填入已下載的模型，不需要金鑰。
 - **API 金鑰。** 預設隱藏輸入內容，也可以選擇顯示；重新設定時選擇顯示，還可以核對已儲存的金鑰。填寫完成後，會以一個很小的請求進行測試。測試失敗時，會顯示請求的位址、HTTP 狀態碼和可能的解決方式。
-- **角色。** 首先命名（中文預設為小夏），再從七種現成個性中擇一：冷面損友、溫和的傾聽者、遊戲夥伴、愛書人，以及社群中已有人繪製的三位角色：DeepSeek 鯨魚娘、GPT 娘（白龍）和 Claude 娘（豪門聖女）；也可以先使用一個基本角色，之後再自行撰寫。選擇後三者之一且未自行命名時，角色即沿用該角色的名稱；本機頁面會顯示其動態立繪。
+- **角色。** 首先命名（中文預設為小夏），再從七種現成個性中擇一：冷面損友、溫和的傾聽者、遊戲夥伴、愛書人，以及社群中已有人繪製的三位角色：DeepSeek 鯨魚娘、GPT 娘（白龍）和 Claude 娘（豪門聖女）；也可以先使用一個基本角色，之後再自行撰寫。選擇後三者之一且未自行命名時，角色即使用該形象的名稱：GPT娘、DeepSeek娘或 Claude娘（英文等語言為 GPT-chan 等，日文為 GPTちゃん 等，韓文為 GPT짱 等）；本機頁面會顯示其動態立繪。自行撰寫人設後，在「角色與設定」中點選立繪只會更換頭像。該處的「使用自己的圖片」可選擇不超過 2 MB 的 PNG、JPEG 或 WebP 圖片，儲存在主目錄的 `avatar.png`（或 `.jpg`、`.webp`）中，僅在本機頁面顯示。
 - **聊天平台。** 選用項目，首次設定時可以略過此步驟。設定過程會列出 personagent 直接連線的十個平台，設定完成後可使用 [`personagent connect <平台>`](#在終端機中連接平台) 連接。其他平台可在此步驟中連接 AstrBot；如果尚未安裝，也可以先自動下載並安裝。請參閱[你自己執行的橋接](#你自己執行的橋接)。
 
 如需不經問答直接完成設定（例如在腳本中），請執行 `personagent init --no-input` 並加上下列參數：
@@ -301,7 +301,7 @@ personagent 執行期間，該連線保持有效。`personagent up` 會啟動 pe
   ]}
   ```
 
-  SillyTavern 匯出的 World Info 檔案無法直接使用：其中的 `entries` 是以編號為鍵的物件，關鍵字位於 `key` 中。請將 `entries` 改為清單，並將 `key` 改名為 `keywords`；`content` 維持不變。
+  在「角色與設定」的「背景設定」部分，可以查看目前使用的條目，並新增、編輯和刪除條目。「匯入檔案」支援上述格式的檔案和 SillyTavern 匯出的 World Info 檔案，已停用的條目以及缺少關鍵詞或內容的條目將被略過。首次儲存修改時，內建背景設定會複製到 `data/lorebook.<lang>.json`；「恢復內建背景設定」會將該檔案更名為 `.bak`。該部分和 `personagent doctor` 也會顯示你自己的屏蔽詞與範例對話檔案是否正在使用，或哪個檔案無法讀取。
 - 屏蔽詞（`output_filter.<lang>.json`）：每個 `pattern` 是一個 Python 正規表示式，比對時不區分大小寫。`"action": "reject"` 會捨棄整則回覆，不傳送任何內容；`"replace"` 會以 `replacement` 取代比對到的部分，再傳送其餘內容。
 
   ```json

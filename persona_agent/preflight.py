@@ -334,6 +334,14 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
     qq_ids = {i for i in identity.admins | identity.groups | identity.dm_users
               if i.isdigit()}
 
+    admin_only = str(configured.get("REACT_LEARN_ADMIN_ONLY") or "").strip().lower()
+    if admin_only in ("1", "true", "yes", "on") and not identity.admins:
+        findings.append(Finding(
+            "WARN", "REACT_LEARN_ADMIN_ONLY",
+            "is on while ADMIN_IDS is empty, so no reaction on a chat platform"
+            " teaches the character; only corrections in the page's own chat do."
+            " Add your accounts to ADMIN_IDS"))
+
     qq_bot_id = str(configured.get("QQ_BOT_ID") or "").strip()
     if qq_bot_id and "ACCESS_GROUPS" not in configured:
         findings.append(Finding(

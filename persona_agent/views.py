@@ -13,7 +13,8 @@ from . import channels
 from . import chatlangs
 from . import evidence as evidence_mod
 from . import promotion as promotion_mod
-from .paths import parse_jsonl, read_jsonl
+from .home import resource
+from .paths import parse_jsonl, read_jsonl, resolve_seed_lang_file
 from .ranking import row_fields
 from .storage import atomic_write_text
 from .textproc import _TYPOGRAPHY_MAP, TextProcessing
@@ -361,7 +362,7 @@ class DataViews:
         if stamp == getattr(self, attr + "_stamp"):
             return
         try:
-            entries = parse(json.loads(path.read_text(encoding="utf-8")))
+            entries = parse(json.loads(path.read_text(encoding="utf-8-sig")))
             setattr(self, attr + "_cache", entries)
             setattr(self, attr + "_stamp", stamp)
             logger.info("[Agent] %s loaded %d %s", name, len(entries), unit)
@@ -369,27 +370,7 @@ class DataViews:
             logger.warning("[Agent] %s.json load failed: %s", name, e)
 
     def _reload_filters_if_stale(self) -> None:
-        def parse(data) -> list:
-            raw = data.get("filters", []) if isinstance(data, dict) else data
-            compiled = []
-            for f in raw:
-                pat = f.get("pattern")
-                if not pat:
-                    continue
-                try:
-                    compiled.append({
-                        "name": f.get("name", "?"),
-                        "regex": re.compile(pat, re.IGNORECASE | re.DOTALL),
-                        "action": f.get("action", "reject"),
-                        "replacement": f.get("replacement", ""),
-                        "reason": f.get("reason", ""),
-                    })
-                except re.error as e:
-                    logger.warning("[Agent] output_filter '%s' regex compile failed: %s",
-                                   f.get("name"), e)
-            return compiled
-
-        self._reload_json_if_stale(self.output_filter_file, "_filters", parse,
+        self._reload_json_if_stale(self.output_filter_file, "_filters", parse_filters,
                                    "output_filter", "rules")
 
     def _apply_output_filter(self, reply: str) -> tuple[str, str]:
@@ -409,21 +390,90 @@ class DataViews:
         return reply.strip(), ""
 
     def _reload_lorebook_if_stale(self) -> None:
-        def parse(data) -> list:
-            raw = data.get("entries", []) if isinstance(data, dict) else data
-            entries = []
-            for e in raw:
-                kws = e.get("keywords", [])
-                if not kws or not e.get("content"):
-                    continue
-                entries.append({
-                    "name": e.get("name", "?"),
-                    "keywords": [str(k).lower() for k in kws],
-                    "content": e["content"],
-                    "priority": int(e.get("priority", 100)),
-                })
-            entries.sort(key=lambda x: -x["priority"])
-            return entries
-
-        self._reload_json_if_stale(self.lorebook_file, "_lorebook", parse,
+        self._reload_json_if_stale(self.lorebook_file, "_lorebook", parse_lorebook,
                                    "lorebook", "entries")
+
+
+def parse_filters(data) -> list:
+    """The output filter rules the agent applies; a rule whose pattern does
+    not compile is left out. A file of the wrong shape raises."""
+    raw = data.get("filters", []) if isinstance(data, dict) else data
+    compiled = []
+    for f in raw:
+        pat = f.get("pattern")
+        if not pat:
+            continue
+        try:
+            compiled.append({
+                "name": f.get("name", "?"),
+                "regex": re.compile(pat, re.IGNORECASE | re.DOTALL),
+                "action": f.get("action", "reject"),
+                "replacement": f.get("replacement", ""),
+                "reason": f.get("reason", ""),
+            })
+        except re.error as e:
+            logger.warning("[Agent] output_filter '%s' regex compile failed: %s",
+                           f.get("name"), e)
+    return compiled
+
+
+def parse_lorebook(data) -> list:
+    """The lorebook entries the agent uses, highest priority first; an entry
+    without keywords or content is left out. A file of the wrong shape raises."""
+    raw = data.get("entries", []) if isinstance(data, dict) else data
+    entries = []
+    for e in raw:
+        kws = e.get("keywords", [])
+        if not kws or not e.get("content"):
+            continue
+        entries.append({
+            "name": e.get("name", "?"),
+            "keywords": [str(k).lower() for k in kws],
+            "content": e["content"],
+            "priority": int(e.get("priority", 100)),
+        })
+    entries.sort(key=lambda x: -x["priority"])
+    return entries
+
+
+# (stem, extension) of the data files a home may replace, as the page names them.
+DATA_FILES = {"lorebook": ("lorebook", "json"), "filters": ("output_filter", "json"),
+              "examples": ("examples", "jsonl")}
+
+
+def data_file_status(root: Path, lang: str, kind: str) -> dict:
+    """Where one kind of data file comes from and how much of it the agent can
+    use: {path, own, count, skipped, error}; `error` is {} or {reason, line, column}."""
+    stem, ext = DATA_FILES[kind]
+    path = resolve_seed_lang_file(stem, ext, lang, root)
+    own_dir = (Path(root) / "data").resolve()
+    own = path.parent.resolve() == own_dir and own_dir != resource("data").resolve()
+    found = {"path": str(path), "own": own, "count": 0, "skipped": 0, "error": {}}
+    try:
+        blob = path.read_bytes()
+    except OSError:
+        found["error"] = {"reason": "unreadable"}
+        return found
+    if kind == "examples":
+        lines = [line for line in blob.decode("utf-8", "replace").splitlines() if line.strip()]
+        found["count"] = len(parse_jsonl(blob))
+        found["skipped"] = len(lines) - found["count"]
+        return found
+    try:
+        data = json.loads(blob.decode("utf-8-sig"))
+    except UnicodeDecodeError:
+        found["error"] = {"reason": "encoding"}
+        return found
+    except json.JSONDecodeError as exc:
+        found["error"] = {"reason": "syntax", "line": exc.lineno, "column": exc.colno}
+        return found
+    try:
+        used = (parse_lorebook if kind == "lorebook" else parse_filters)(data)
+        raw = data.get("entries" if kind == "lorebook" else "filters", []) \
+            if isinstance(data, dict) else data
+    except Exception:
+        found["error"] = {"reason": "shape"}
+        return found
+    found["count"] = len(used)
+    found["skipped"] = max(0, len(raw) - len(used))
+    return found

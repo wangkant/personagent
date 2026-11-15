@@ -309,15 +309,30 @@ async def test_images_media_and_emoji() -> None:
     check("internal: is fetched through the server", segs[1] == {"type": "image", "b64": b64})
     check("a public URL is passed on", segs[2] == {"type": "image",
                                                    "url": "https://cdn.example.com/a.png"})
-    check("a private URL the agent cannot fetch is described",
-          segs[3] == {"type": "text", "text": "(sent an image)"}, str(segs[3]))
+    check("a private URL the agent cannot fetch is a photo it cannot see, URL withheld",
+          segs[3] == {"type": "media", "kind": "photo"}, str(segs[3]))
     check("the Satori server's own URL is fetched", segs[4] == {"type": "image", "b64": b64})
-    check("a failed fetch is described, and media in words", segs[5] == {
-        "type": "text", "text": "(sent an image)(sent a voice message)(sent a video)"
-                                "(sent a file: deck.pdf)"}, str(segs[5]))
-    check("emoji and QQ faces", segs[6:] == [{"type": "emoji", "name": "party", "id": "123"},
+    check("a failed fetch is a photo it cannot see", segs[5] == {"type": "media", "kind": "photo"},
+          str(segs[5]))
+    check("voice, video and a named file are media segments, never words", segs[6:9] == [
+        {"type": "media", "kind": "voice"}, {"type": "media", "kind": "video"},
+        {"type": "media", "kind": "file", "name": "deck.pdf"}], str(segs[6:9]))
+    check("emoji and QQ faces", segs[9:] == [{"type": "emoji", "name": "party", "id": "123"},
                                              {"type": "emoji", "name": "", "id": "14"}],
-          str(segs[6:]))
+          str(segs[9:]))
+
+    unnamed = await bridge().build_event(
+        account(), message_event([T("look "), El("file", src="z")]))
+    check("a file without a title has no name, and the text keeps only the words",
+          unnamed["segments"] == [{"type": "text", "text": "look "},
+                                  {"type": "media", "kind": "file"}]
+          and unnamed["text"] == "look", str(unnamed))
+
+    quote = El("quote", El("user", id="55"), El("audio", src="x"), El("file", src="z",
+                                                                       title="a.pdf"), id="9")
+    quoted = await bridge().build_event(account(), message_event([quote, T("?")]))
+    check("quoted media reads as the agent's own placeholders",
+          quoted["segments"][0].get("text") == "[voice][file: a.pdf]", str(quoted["segments"]))
 
     inline = await bridge(config(inline_images_enabled=True)).build_event(
         account(images={"https://cdn.example.com/a.png": png}),

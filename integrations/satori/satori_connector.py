@@ -64,7 +64,7 @@ DIRECT_CHANNEL = 1  # Satori Channel.Type.DIRECT
 # An adapter that stamps seconds where Satori says milliseconds reaches us as a
 # January 1970 date; below this it is scaled back, and never sent as stale.
 _MIN_PLAUSIBLE_TS = 1_000_000_000
-_MEDIA_NOTES = {"audio": "(sent a voice message)", "video": "(sent a video)"}
+_MEDIA_KINDS = {"audio": "voice", "video": "video"}
 # personagent reads "qq" as QQ numbers; Koishi's "qq" login is the official
 # bot API, whose ids are openids, so it gets a name of its own.
 DEFAULT_PLATFORM_NAMES = {"qq": "qqbot"}
@@ -197,7 +197,15 @@ def _text_of(segments: list, *, media: bool = False) -> str:
             out.append("@" + (seg.get("name") or seg.get("user_id") or ""))
         elif media and kind == "image":
             out.append("[image]")
+        elif media and kind == "media":
+            out.append(_media_placeholder(seg))
     return "".join(out).strip()
+
+
+def _media_placeholder(seg: dict) -> str:
+    # A quote's text is a string; this mirrors how the agent renders the segment.
+    kind = "image" if seg.get("kind") == "photo" else seg.get("kind")
+    return f"[{kind}: {seg['name']}]" if seg.get("name") else f"[{kind}]"
 
 
 class _Walker:
@@ -243,11 +251,13 @@ class _Walker:
                 # <face> is how Koishi's QQ adapters send a built-in QQ face.
                 self.segments.append({"type": "emoji", "name": _attr(el, "name"),
                                       "id": _attr(el, "id")})
-            elif tag in _MEDIA_NOTES:
-                self.text(_MEDIA_NOTES[tag])
+            elif tag in _MEDIA_KINDS:
+                self.segments.append({"type": "media", "kind": _MEDIA_KINDS[tag]})
             elif tag == "file":
-                title = _attr(el, "title")
-                self.text(f"(sent a file: {title})" if title else "(sent a file)")
+                media = {"type": "media", "kind": "file"}
+                if _attr(el, "title"):
+                    media["name"] = _attr(el, "title")
+                self.segments.append(media)
             elif tag == "quote":
                 if self.quote is None:
                     self.quote = self.quote_of(el)
@@ -575,14 +585,9 @@ class SatoriBridge:
             elif route == "url":
                 out.append({"type": "image", "url": value})
             else:
-                out.append({"type": "text", "text": "(sent an image)"})
-        merged: list = []
-        for seg in out:
-            if seg["type"] == "text" and merged and merged[-1]["type"] == "text":
-                merged[-1] = {"type": "text", "text": merged[-1]["text"] + seg["text"]}
-            else:
-                merged.append(seg)
-        return merged
+                # The source stays here: it may be private, or fetchable only by us.
+                out.append({"type": "media", "kind": "photo"})
+        return out
 
     async def _download(self, account: Any, src: str) -> Optional[str]:
         try:

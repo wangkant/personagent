@@ -328,6 +328,7 @@ def test_restore_refusals(client, workspace, tmp_path, monkeypatch):
 def test_forget_keeps_settings_persona_and_stickers(client, workspace, monkeypatch):
     seed(workspace.home)
     home = workspace.home
+    (home / "runtime" / "model_usage.json").write_text('{"days": {}}', encoding="utf-8")
     calls = stopped_services(workspace, monkeypatch, running=True)
     answer = post(client, "/forget")
     assert answer.status_code == 200
@@ -337,6 +338,7 @@ def test_forget_keeps_settings_persona_and_stickers(client, workspace, monkeypat
     assert not (home / "runtime" / "trial").exists()
     assert (home / "runtime" / "stickers.json").exists() and (home / "stickers" / "cat.png").exists()
     assert (home / ".env").exists() and (home / "persona.txt").exists()
+    assert (home / "runtime" / "model_usage.json").exists(), "the bill record is not memory"
     assert (home / "platforms" / "direct.json").exists()
     assert (home / "runtime" / "desktop" / "app.log").exists()
     safety = zipfile.ZipFile(answer.json()["safety"])

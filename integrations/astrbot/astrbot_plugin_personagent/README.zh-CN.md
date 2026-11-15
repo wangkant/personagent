@@ -91,7 +91,7 @@ personagent connect astrbot <AstrBot data dir>        # add --qq to route QQ (Na
 | `block_default` | bool | `true` | personagent 接管会话时停止 AstrBot 的流水线。 |
 | `forward_quoted_text` | bool | `true` | 平台提供时，将被引用消息的文字和作者连同其 id 一起发送。开启且 `quote_max_chars` 大于 0 时，每个事件都声明 `quote_text` 能力。 |
 | `quote_max_chars` | int | `200` | 发送的被引用文字的最大长度。更长的引用会被截断。 |
-| `max_inline_image_bytes` | int | `4000000` | 内嵌发送图片的最大字节数。personagent 无法自行获取的图片（Telegram、本地文件、私有地址）会内嵌发送。更大的图片只以提示 `(sent an image)` 到达。应小于 personagent 的 `VISION_MAX_IMAGE_BYTES`。 |
+| `max_inline_image_bytes` | int | `4000000` | 内嵌发送图片的最大字节数。personagent 无法自行获取的图片（Telegram、本地文件、私有地址）会内嵌发送。更大的图片以 `photo` 类型的 `media` 片段到达：角色知道收到了图片，但看不到内容。应小于 personagent 的 `VISION_MAX_IMAGE_BYTES`。 |
 | `outbox_enabled` | bool | `true` | 拉取并发送 personagent 的 outbox。见 [Outbox](#outbox)。 |
 | `outbox_wait_s` | int | `25` | 一次 outbox 拉取在 personagent 处最多等待多久，上限 30。 |
 | `connector_id` | string | `""` | 该 AstrBot 在 personagent 中的名称。留空时生成一次并保存。两台 AstrBot 主机需要不同的名称。 |
@@ -151,7 +151,7 @@ personagent 只使用一种中立格式，插件在边界处用各平台自身�
 在所有平台上：
 
 - 只转发真人发送的消息。QQ 通知（戳一戳、撤回、入群）和请求，以及 Slack 的入群和话题变更，都不算回合。
-- 视频、文件和语音消息以角色可以反应的提示到达，例如 `(sent a video)`、`(sent a file: deck.pdf)` 或 `(sent a voice message)`，平台有转写时附上转写。
+- 视频、文件和语音消息以 `media` 片段到达：文件附文件名，语音消息在平台有转写时附上转写。由 agent 告知角色收到了什么，角色据此作出反应。
 - 平台提供时，被引用的消息带有文字和作者（`forward_quoted_text`）。
 - 只要适配器保留，消息时间即为平台自身的时间，而不是 AstrBot 收到的时间。
 - 回复按低于平台长度上限的长度拆分，@ 和转义按平台的算法计数。回复绝不会变成文字转图片，并按平台的方式称呼他人。
@@ -162,7 +162,7 @@ personagent 只使用一种中立格式，插件在边界处用各平台自身�
 | QQ 经 OneBot（`aiocqhttp`） | 群和私聊。@ 和回复机器人，包括适配器查不到被 @ 者时。表情名称、商城表情（`mface`）和标记为表情的图片。真正的 QQ @，后跟一个空格。长回复按 AstrBot 的 `forward_threshold` 以下拆分，不会变成合并转发卡片。Outbox。 | Markdown 按原样显示。 |
 | QQ 官方（`qq_official`、`qq_official_webhook`） | @ 机器人的群消息和私聊。表情显示为 `[表情:name]`。回复请求纯文本，而不是适配器的 markdown。 | 群里只投递 @ 机器人的消息，所以角色无法跟上对话。没有引用、没有名字（只有 openid），回复中不能 @。只能在消息后 5 分钟内回复，所以没有 outbox。 |
 | Telegram（`telegram`） | 群、话题（`<chat>#<thread>`）和私聊。回复机器人的任意类型消息，并去掉适配器的 `/@bot` 唤醒前缀。贴纸表情，静态贴纸还带图片。图片经适配器的机器人获取，所以 bot token 不会离开 AstrBot。被提及的用户名在此人发过言后变成数字 id。回复用用户名提及，没有用户名的人用 `tg://user` 链接，`*`、`_` 等字符按原样显示。Outbox。 | BotFather 的隐私模式开启时（默认），群里只投递命令、@ 和回复机器人的消息。关闭它，角色才能跟上对话。动画和视频贴纸无法查看。 |
-| Discord（`discord`） | 频道和子区算群，还有私聊。开头的 `@bot`（适配器会去掉）、提及机器人的某个身份组、回复机器人，都算对它说话。带文字的引用。贴纸。语音和视频附件以提示到达。提及为 `<@id>`，`@everyone` 和 `@here` 保持无效。回复按 2000 字符拆分。Outbox，包括私聊。 | 需要 Message Content intent。 |
+| Discord（`discord`） | 频道和子区算群，还有私聊。开头的 `@bot`（适配器会去掉）、提及机器人的某个身份组、回复机器人，都算对它说话。带文字的引用。贴纸。语音和视频附件以 `media` 片段到达。提及为 `<@id>`，`@everyone` 和 `@here` 保持无效。回复按 2000 字符拆分。Outbox，包括私聊。 | 需要 Message Content intent。 |
 | Slack（`slack`） | 频道和私聊。在机器人消息下的 thread 回复视为对机器人发言。链接展开。消息 id 是 Slack 的 `ts`。提及为 `<@id>`。`&`、`<` 和 `>` 转义，文字无法提及频道。回复按 3000 字符拆分。Outbox。 | thread 回复不带父消息文字。机器人没有输入提示。回答落在频道里，不在 thread 里（适配器）。 |
 | KOOK（`kook`） | 频道和私聊。@，以及提及机器人持有的角色。KOOK 附带时的引用。`(emj)` 表情和真实发送时间。提及写在文字中，角色文字里 `(met)` 式的标记保持无效。图片作为文件发送，因为适配器只上传 JPEG base64。Outbox。 | AstrBot 的适配器在任何插件看到之前就丢弃纯图片、文件、语音和视频消息（卡片除外）。没有输入提示。 |
 | Lark / 飞书（`lark`） | 群和私聊。@ 和回复机器人（Lark 把应用标为发送者）。带文字的引用。表情以 emoji 到达。Outbox。 | 没有「读取群内所有消息」权限时，只收到 @ 消息。每条回复都引用它回答的消息，markdown 会渲染（适配器）。名字是 id 前缀。 |
@@ -173,7 +173,7 @@ personagent 只使用一种中立格式，插件在边界处用各平台自身�
 | Satori（`satori`） | Satori 后端桥接的内容：群、私聊、@、回复机器人、带文字的引用。毫秒时间戳按秒读取。Outbox。 | 群 id 是 guild，所以一个 guild 的频道共用一个会话。被桥接平台的限制同样适用。 |
 | WebChat（`webchat`） | 仪表盘聊天，算私聊。引用和图片。Outbox，实时显示或保存到会话。 | 只有一对一。 |
 | 企业微信应用（`wecom`） | 私聊、图片，以及带转写的语音。客服模式只转发客户的消息，带真实发送时间。回复按字节拆分。应用模式的 Outbox，要求 AstrBot 启动后有人写过信。 | 只有私聊，没有引用。客服模式不能主动发送。Markdown 按原样显示。 |
-| 企业微信智能机器人（`wecom_ai_bot`） | 群（企业微信只在 @ 机器人时投递群消息）和私聊。语音、文件和视频提示。一个回合以一条流式回答发送。 | 只能在回答某条消息时回复，所以没有 outbox，也不能提及。回答按 markdown 渲染。在 AstrBot 中设置 `wecom_ai_bot_name`，这样 "@bot" 会从文字中去掉。 |
+| 企业微信智能机器人（`wecom_ai_bot`） | 群（企业微信只在 @ 机器人时投递群消息）和私聊。语音、文件和视频以 `media` 片段到达。一个回合以一条流式回答发送。 | 只能在回答某条消息时回复，所以没有 outbox，也不能提及。回答按 markdown 渲染。在 AstrBot 中设置 `wecom_ai_bot_name`，这样 "@bot" 会从文字中去掉。 |
 | 微信公众号（`weixin_official_account`） | 私聊，以及带转写的语音。一个回合以一条消息发送。 | 被动模式每条用户消息只能回复一条，且在微信的 5 秒窗口内。其余的等用户下一条消息，角色不开口的回合会让用户一直等（适配器）。只有主动模式能发图片。没有 outbox。 |
 | 个人微信（`weixin_oc`） | 私聊。带文字的引用。图片内嵌。带转写的语音。输入提示。Outbox。 | 没有群。重新登录后，对方再次写信之前都联系不到。 |
 | 其他适配器 | 按 AstrBot 的交付转发。提及为 At。 | 不声明 outbox。 |

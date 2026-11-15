@@ -810,6 +810,18 @@ async def dashboard_conversations(request: Request):
     return _json(conversations_payload(agent), agent)
 
 
+@router.get("/api/dashboard/model", include_in_schema=False)
+async def dashboard_model(request: Request):
+    """What the agent already knows of the model (the start-up probe, the last
+    answer or failure); never a call of its own."""
+    refused = _check(request)
+    if refused is not None:
+        return refused
+    agent = _server().agent
+    unreachable = bool(agent is not None and agent.__dict__.get("model_unreachable"))
+    return _json({"model_unreachable": unreachable}, agent)
+
+
 @router.get("/api/dashboard/conversation", include_in_schema=False)
 async def dashboard_conversation(request: Request, id: str = ""):
     refused = _check(request)

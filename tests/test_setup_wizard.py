@@ -194,15 +194,22 @@ def test_the_fan_made_characters_come_last_with_their_own_names(portraits) -> No
     check("menu: the three after the original four, the template last",
           sw.PERSONA_KEYS == ("dry-wit", "warm-listener", "gamer", "bookworm", *FAN_MADE, sw.TEMPLATE),
           repr(sw.PERSONA_KEYS))
-    check("menu: only they have names of their own",
-          [c.name for c in sw.CHARACTERS if c.name] == ["ChatGPT", "DeepSeek", "Claude"])
-    check("name: the default follows the character", sw.name_for("claude", "Nova", "en") == "Claude")
-    check("name: the language's default too", sw.name_for("deepseek", "小夏", "zh") == "DeepSeek")
-    check("name: another character's own name follows", sw.name_for("claude", "ChatGPT", "en") == "Claude")
+    check("menu: only they have names of their own, the personification's",
+          [c.name_in("en") for c in sw.CHARACTERS if c.stem] == ["GPT-chan", "DeepSeek-chan", "Claude-chan"])
+    check("name: by language",
+          [sw.character_for("chatgpt").name_in(lang) for lang in ("zh", "zh-TW", "ja", "ko", "de")]
+          == ["GPT娘", "GPT娘", "GPTちゃん", "GPT짱", "GPT-chan"])
+    check("name: the default follows the character", sw.name_for("claude", "Nova", "en") == "Claude-chan")
+    check("name: the language's default too", sw.name_for("deepseek", "小夏", "zh") == "DeepSeek娘")
+    check("name: another character's own name follows", sw.name_for("claude", "GPT-chan", "en") == "Claude-chan")
+    check("name: another character's old name follows too",
+          sw.name_for("claude", "ChatGPT", "en") == "Claude-chan")
+    check("name: a home still called by the old name keeps it",
+          sw.name_for("chatgpt", "ChatGPT", "en") == "ChatGPT" and sw.name_for("claude", "Claude", "zh") == "Claude")
     check("name: a chosen name stays", sw.name_for("claude", "Mira", "en") == "Mira")
     check("name: a character without one keeps the name", sw.name_for("gamer", "Nova", "en") == "Nova")
     check("name: leaving a fan-made character goes back to the default, as on the page",
-          sw.name_for("gamer", "Claude", "en") == "Nova")
+          sw.name_for("gamer", "Claude", "en") == "Nova" and sw.name_for("gamer", "Claude娘", "en") == "Nova")
     check("portrait: the fan-made ones", [k for k in sw.PERSONA_KEYS if sw.portrait(k)] == list(FAN_MADE))
     check("portrait: none for a name that is not a character",
           sw.portrait("../portraits/claude") is None and sw.avatar_for("gamer") == "")
@@ -571,10 +578,10 @@ def test_the_wizard_names_a_fan_made_character_after_itself(monkeypatch, tmp_pat
     _wire(monkeypatch, Script([("Character", claude), *answers]))
     sw.run_wizard(tmp_path, _launcher(tmp_path))
     check("wizard: Enter on the default name takes the character's own",
-          _name_and_avatar(tmp_path) == ("Claude", "claude"), repr(_name_and_avatar(tmp_path)))
+          _name_and_avatar(tmp_path) == ("Claude-chan", "claude"), repr(_name_and_avatar(tmp_path)))
     check("wizard: the persona carries it",
-          (tmp_path / "persona.txt").read_text(encoding="utf-8").startswith("Your name is Claude."))
-    check("wizard: says why the name changed", "the name follows the character: Claude"
+          (tmp_path / "persona.txt").read_text(encoding="utf-8").startswith("Your name is Claude-chan."))
+    check("wizard: says why the name changed", "the name follows the character: Claude-chan"
           in capsys.readouterr().out)
 
     _wire(monkeypatch, Script([("Bot name", "Mira"), ("Character", claude), *answers]))
@@ -596,12 +603,12 @@ def test_no_input_names_a_fan_made_character_unless_a_name_is_given(monkeypatch,
     monkeypatch.setenv("AGENT_HOME", str(first))
     sw.main(["--no-input", "--lang", "en", "--persona", "deepseek"])
     check("no-input: no name given or saved takes the character's own",
-          _name_and_avatar(first) == ("DeepSeek", "deepseek"), repr(_name_and_avatar(first)))
+          _name_and_avatar(first) == ("DeepSeek-chan", "deepseek"), repr(_name_and_avatar(first)))
     check("no-input: the persona carries it",
-          (first / "persona.txt").read_text(encoding="utf-8").startswith("Your name is DeepSeek."))
+          (first / "persona.txt").read_text(encoding="utf-8").startswith("Your name is DeepSeek-chan."))
     sw.main(["--no-input", "--persona", "claude"])
     check("no-input: a name that was only the last character's own follows the new one",
-          _name_and_avatar(first) == ("Claude", "claude"), repr(_name_and_avatar(first)))
+          _name_and_avatar(first) == ("Claude-chan", "claude"), repr(_name_and_avatar(first)))
     sw.main(["--no-input", "--persona", "gamer"])
     check("no-input: and goes back to the default for one without a name",
           _name_and_avatar(first) == ("Nova", ""), repr(_name_and_avatar(first)))
@@ -616,6 +623,40 @@ def test_no_input_names_a_fan_made_character_unless_a_name_is_given(monkeypatch,
     (second / "persona.txt").write_text("Mine.\n", encoding="utf-8")
     sw.main(["--no-input", "--persona", "gamer"])
     check("no-input: an edited persona keeps its portrait", _name_and_avatar(second)[1] == "claude")
+
+
+def test_a_home_set_up_with_the_old_names_keeps_them(monkeypatch, tmp_path, portraits) -> None:
+    monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("asked a question"))
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setenv("AGENT_HOME", str(tmp_path))
+    sw.main(["--no-input", "--lang", "en", "--persona", "chatgpt", "--name", "ChatGPT"])
+    written = (tmp_path / "persona.txt").read_text(encoding="utf-8")
+    check("old name: a persona written with it is still the shipped one",
+          sw.shipped_persona(written) == ("chatgpt", "en", "ChatGPT"), repr(sw.shipped_persona(written)))
+    sw.main(["--no-input", "--persona", "chatgpt"])
+    check("old name: a later setup does not rename it", _name_and_avatar(tmp_path) == ("ChatGPT", "chatgpt"))
+    sw.main(["--no-input", "--persona", "deepseek"])
+    check("old name: another character still takes its own", _name_and_avatar(tmp_path)[0] == "DeepSeek-chan")
+    check("new name: recognised as shipped",
+          sw.shipped_persona((tmp_path / "persona.txt").read_text(encoding="utf-8"))
+          == ("deepseek", "en", "DeepSeek-chan"))
+
+
+def test_a_picture_of_ones_own_outlasts_a_later_setup(monkeypatch, tmp_path, portraits) -> None:
+    monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("asked a question"))
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setenv("AGENT_HOME", str(tmp_path))
+    sw.main(["--no-input", "--lang", "en", "--persona", "claude"])
+    sw.write_env(tmp_path / ".env", {"PERSONA_AVATAR": sw.OWN_AVATAR})
+    (tmp_path / "avatar.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\0" * 16)
+    sw.main(["--no-input", "--persona", "chatgpt"])
+    check("own picture: kept", _name_and_avatar(tmp_path)[1] == sw.OWN_AVATAR)
+    (tmp_path / "avatar.png").unlink()
+    sw.main(["--no-input", "--persona", "chatgpt"])
+    check("own picture: gone, the portrait returns", _name_and_avatar(tmp_path)[1] == "chatgpt")
+    check("own picture: the type is read from the bytes",
+          [sw.own_avatar_kind(b) for b in (b"\x89PNG\r\n\x1a\nxx", b"\xff\xd8\xffxx", b"RIFF\0\0\0\0WEBPxx",
+                                           b"GIF89axx", b"hello.png")] == ["png", "jpg", "webp", "", ""])
 
 
 def test_a_piped_stdin_says_the_questions_were_skipped(monkeypatch, tmp_path, capsys) -> None:

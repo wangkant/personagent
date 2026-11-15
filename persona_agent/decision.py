@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .access import ADMIN_MODE
+from .llm import purpose
 from .search import SEARCH_CONTEXT_LINES, SearchHint
 from .textproc import (
     SLEEP_PASS_PROB,
@@ -30,6 +31,7 @@ _CORE_TAG_LEFT = re.compile(r"\[\s*/?\s*CORE_UPDATE", re.IGNORECASE)
 #: Reasons the callers act on.
 STICKY_CALL = "sticky call"
 SLEEP_WINDOW = "sleep window"
+ONLY_WHEN_CALLED = "only when called"
 
 #: Verdicts of `_final_reply`.
 SEND, PASS, BLOCKED = "send", "pass", "blocked"
@@ -59,15 +61,19 @@ class FinalReply:
 def choose_group_mode(*, addressed: bool, is_admin: bool,
                       sticky_admin: Optional[bool], in_followup: bool,
                       counter: int, trigger_count: int,
-                      never_replied: bool) -> tuple[str, str]:
+                      never_replied: bool,
+                      only_when_called: bool = False) -> tuple[str, str]:
     """A group turn's mode and why, or ("", why not). `sticky_admin` is None
-    without a recent call still pending, else whether its caller is the admin."""
+    without a recent call still pending, else whether its caller is the admin.
+    `only_when_called` (CHAT_ONLY_WHEN_CALLED) leaves only the called turns."""
     if addressed:
         # Un-addressed admin chatter takes the same gates as anyone's.
         return (ADMIN_MODE if is_admin else "called"), "addressed"
     if sticky_admin is not None:
         # A call that lost the debounce race ("BOT" then an image) keeps the turn.
         return (ADMIN_MODE if sticky_admin else "called"), STICKY_CALL
+    if only_when_called:
+        return "", ONLY_WHEN_CALLED
     if in_followup:
         return "followup", "followup window"
     if counter >= trigger_count:
@@ -115,22 +121,23 @@ class ReplyDecision:
         self.model_calls.append(time.time())
         # A retry fixes the draft's form; a second search would be a second call.
         enable_search = mode in ("called", ADMIN_MODE, "followup") and not retry_note
-        raw = await self._call_llm(
-            system=system,
-            messages=[{"role": "user", "content": prompt.user}],
-            model=model_to_use,
-            # An endpoint that insists on reasoning spends it against this cap.
-            max_tokens=3000,
-            enable_search=enable_search,
-            # No hidden reasoning: the protocol carries its own `reasoning`
-            # field, and thinking on opens a different prompt than the gate's.
-            disable_thinking=True,
-            json_object=True,
-            # Never on the gate: recovered prose would read as "decided to speak".
-            plain_text_fallback=True,
-            # Search gates on the trigger text, not the whole prompt.
-            search_hint=self._search_hint(group_id, latest_text),
-        )
+        with purpose("reply"):
+            raw = await self._call_llm(
+                system=system,
+                messages=[{"role": "user", "content": prompt.user}],
+                model=model_to_use,
+                # An endpoint that insists on reasoning spends it against this cap.
+                max_tokens=3000,
+                enable_search=enable_search,
+                # No hidden reasoning: the protocol carries its own `reasoning`
+                # field, and thinking on opens a different prompt than the gate's.
+                disable_thinking=True,
+                json_object=True,
+                # Never on the gate: recovered prose would read as "decided to speak".
+                plain_text_fallback=True,
+                # Search gates on the trigger text, not the whole prompt.
+                search_hint=self._search_hint(group_id, latest_text),
+            )
         reply, reasoning, intent, mem = TextProcessing._parse_model_output(
             raw, model_to_use)
         if reasoning:
@@ -191,17 +198,18 @@ class ReplyDecision:
 
     async def _gate(self, prompt) -> tuple[bool, str]:
         """The cheap gate: would a person speak here. Returns (speak, intent)."""
-        gate_raw = await self._call_llm(
-            system=prompt.gate_system,
-            messages=[{"role": "user", "content": prompt.user}],
-            model=self.llm_judge_model,
-            max_tokens=1500,
-            enable_search=False,
-            disable_thinking=True,
-            json_object=True,
-            # Low, so whether to speak does not drift at random.
-            temperature=0.3,
-        )
+        with purpose("gate"):
+            gate_raw = await self._call_llm(
+                system=prompt.gate_system,
+                messages=[{"role": "user", "content": prompt.user}],
+                model=self.llm_judge_model,
+                max_tokens=1500,
+                enable_search=False,
+                disable_thinking=True,
+                json_object=True,
+                # Low, so whether to speak does not drift at random.
+                temperature=0.3,
+            )
         gate_reply, _gr, gate_intent, _gm = TextProcessing._parse_model_output(
             gate_raw, self.llm_judge_model)
         speak = bool(gate_reply) and not is_pass_sentinel(gate_reply)

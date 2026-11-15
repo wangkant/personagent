@@ -75,12 +75,12 @@ PyPI에 새 personagent가 있으면 채팅 보기에 pip, uvx, uv tool, pipx, G
 
 | 섹션 | 설정 |
 |---|---|
-| **관리자 및 응답 범위** | 캐릭터가 사용자를 부르는 호칭과 캐릭터와의 관계(`ADMIN_NAME`, `ADMIN_RELATIONSHIP`), **사용자 계정**(`ADMIN_IDS`), **다음 그룹 채팅에서만 답장**(`ACCESS_GROUPS`), **개인 메시지를 허용할 다른 사용자**(`ACCESS_DM_USERS`). **최근 채팅에서 선택**은 활동에 표시된 사람과 그룹을 나열하므로, ID를 직접 입력하지 않고 추가할 수 있습니다. |
-| **발언 및 답장 스타일** | **시간대**(`PERSONA_TZ_OFFSET_HOURS`), **대화 참여 전 메시지 수**(`CHAT_TRIGGER_COUNT`), 일곱 가지 `PROACTIVE_*` 시간 설정을 한 번에 정하는 **먼저 대화를 시작하는 빈도**, 이모지와 세 가지 기호 세트, 최대 답장 길이를 정하고 `persona.card.json`에 기록되는 **답장 스타일**. |
+| **답장, 관리자 및 응답 범위** | **메시지에 답장**(`AGENT_ENABLED`), **다음 그룹 채팅에서 답장 중지**(`ACCESS_PAUSED_GROUPS`), 캐릭터가 사용자를 부르는 호칭과 캐릭터와의 관계(`ADMIN_NAME`, `ADMIN_RELATIONSHIP`), **사용자 계정**(`ADMIN_IDS`), **다음 그룹 채팅에서만 답장**(`ACCESS_GROUPS`), **개인 메시지를 허용할 다른 사용자**(`ACCESS_DM_USERS`). **최근 채팅에서 선택**은 활동에 표시된 사람과 그룹을 나열하므로, ID를 직접 입력하지 않고 추가할 수 있습니다. |
+| **발언 및 답장 스타일** | **시간대**(`PERSONA_TZ_OFFSET_HOURS`), **그룹 채팅에서는 호출될 때만 답장**(`CHAT_ONLY_WHEN_CALLED`), **대화 참여 전 메시지 수**(`CHAT_TRIGGER_COUNT`), 일곱 가지 `PROACTIVE_*` 시간 설정을 한 번에 정하는 **먼저 대화를 시작하는 빈도**, 이모지와 세 가지 기호 세트, 최대 답장 길이를 정하고 `persona.card.json`에 기록되는 **답장 스타일**. |
 | **모델** | 별도의 서비스 주소와 키를 사용하는 대체 모델(`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_API_KEY`), 빠른 판단에 사용하는 모델(`LLM_JUDGE_MODEL`), 개인 채팅에 사용하는 모델(`LLM_DM_MODEL`). 대체 모델은 저장하기 전에 시험합니다. |
-| **학습** | `REACT_LEARN_ENABLED`, `REACT_ELICIT_ENABLED`, `PROMOTE_AUTO_ENABLED`, `PROMOTE_MIN_SPEAKERS`(1 또는 2), `PROMOTE_JUDGE_ENABLED`(반응으로 결정할 수 없는 항목을 캐릭터가 결정), `PROMOTE_OBSERVE_MAX_DAYS`(관찰 중인 항목이 새 반응 없이 이 일수가 지나면 제외됨). **학습 다시 시작**은 새 `PERSONA_VERSION`을 기록하여 캐릭터가 지금까지 학습한 내용을 더 이상 사용하지 않게 합니다. 삭제되는 데이터는 없습니다. |
+| **학습** | `REACT_LEARN_ENABLED`, `REACT_LEARN_ADMIN_ONLY`, `REACT_ELICIT_ENABLED`, `PROMOTE_AUTO_ENABLED`, `PROMOTE_MIN_SPEAKERS`(1 또는 2), `PROMOTE_JUDGE_ENABLED`(반응으로 결정할 수 없는 항목을 캐릭터가 결정), `PROMOTE_OBSERVE_MAX_DAYS`(관찰 중인 항목이 새 반응 없이 이 일수가 지나면 제외됨). **학습 다시 시작**은 새 `PERSONA_VERSION`을 기록하여 캐릭터가 지금까지 학습한 내용을 더 이상 사용하지 않게 합니다. 삭제되는 데이터는 없습니다. |
 | **기억** | `MEMORY_CALLS_PER_DAY`, `MEMORY_TIDY_EVERY`, `CHAT_CONTEXT_MESSAGES`, `MEMORY_PROMPT_CHARS`, `MEMORY_EPISODES_MAX`, `MEMORY_KEEP_RECENT`. [기억](#기억)을 참고하십시오. |
-| **기타 설정** | `AGENT_ENABLED`, `DASHBOARD_ENABLED`, `UPDATE_CHECK_ENABLED`, 일곱 가지 `PROACTIVE_*` 시간 설정, `CHAT_FOLLOWUP_WINDOW_S`, `REACT_*` 및 `PROMOTE_*` 한도, `REACT_MODEL`, 캐릭터가 스스로 내리는 결정의 모델, 간격, 일괄 처리 수(`PROMOTE_JUDGE_MODEL`, `PROMOTE_JUDGE_INTERVAL_S`, `PROMOTE_JUDGE_BATCH`), `PERSONA_VERSION`. |
+| **기타 설정** | `DASHBOARD_ENABLED`, `UPDATE_CHECK_ENABLED`, 일곱 가지 `PROACTIVE_*` 시간 설정, `CHAT_FOLLOWUP_WINDOW_S`, `REACT_*` 및 `PROMOTE_*` 한도, `REACT_MODEL`, 캐릭터가 스스로 내리는 결정의 모델, 간격, 일괄 처리 수(`PROMOTE_JUDGE_MODEL`, `PROMOTE_JUDGE_INTERVAL_S`, `PROMOTE_JUDGE_BATCH`), `PERSONA_VERSION`. |
 
 **저장**은 변경된 설정만 기록하고 `.env`의 나머지 내용은 그대로 둡니다. 그런 다음 캐릭터를 다시 시작합니다. 단, `UPDATE_CHECK_ENABLED`만 변경한 경우에는 다시 시작하지 않습니다. 답장 끄기(`AGENT_ENABLED`)는 먼저 확인을 요청합니다. **캐릭터 이름**에서 캐릭터 이름을 바꾸는 경우에도 확인을 요청하는데, 새 이름은 새 캐릭터를 시작하기 때문입니다.
 
@@ -183,7 +183,7 @@ PyPI에 새 personagent가 있으면 채팅 보기에 pip, uvx, uv tool, pipx, G
 
 - **AI 서비스.** 프리셋은 페이지와 같습니다. 기본값은 OpenRouter의 `openrouter/free`로, 각 요청을 무료 모델 중 하나에 넘깁니다. 키는 무료입니다. 한도는 분당 20회, 하루 50회이고, 크레딧을 10개 이상 구매하면 하루 1000회입니다. 답장뿐 아니라 모든 모델 호출이 계산되고, 하루는 UTC 자정에 초기화됩니다. 한도를 다 쓰면 캐릭터가 지금은 답할 수 없다고 말하고, `runtime/desktop/agent.log`에 OpenRouter의 이유가 남습니다. 요청마다 모델이 바뀌므로 하나를 골랐을 때보다 캐릭터의 말투가 더 흔들리고, 일부 무료 제공업체는 받은 내용을 보관합니다. 캐릭터의 말투를 더 안정적으로 유지하려면 같은 키로 유료 모델을 쓰십시오. 사용자의 지역에서 OpenRouter에 접속하기 어렵다면 Zhipu의 `glm-4.7-flash`도 무료입니다. Ollama는 이미 받아 둔 모델 이름을 적으십시오. Ollama에는 키가 필요 없습니다.
 - **키.** 입력은 기본적으로 가려집니다. 보이게 선택할 수 있으며, 그러면 재설정할 때 저장된 키도 표시됩니다. 마법사는 작은 요청 한 번으로 키를 시험합니다. 실패하면 호출한 주소, HTTP 상태, 가능한 해결책을 보여 줍니다.
-- **캐릭터.** 이름과, 준비된 캐릭터 일곱(재치 있는 친구, 다정한 경청자, 게이머, 책벌레, 그리고 커뮤니티에서 이미 그리고 있는 셋인 DeepSeek 고래 소녀, GPT 드래곤 소녀, Claude 아가씨) 중 하나 또는 직접 쓰는 기본 캐릭터. 마지막 셋 중 하나를 고르고 이름을 정하지 않으면 캐릭터가 그 이름을 씁니다. 로컬 페이지에는 움직이는 초상화가 나옵니다.
+- **캐릭터.** 이름과, 준비된 캐릭터 일곱(재치 있는 친구, 다정한 경청자, 게이머, 책벌레, 그리고 커뮤니티에서 이미 그리고 있는 셋인 DeepSeek 고래 소녀, GPT 드래곤 소녀, Claude 아가씨) 중 하나 또는 직접 쓰는 기본 캐릭터. 마지막 셋 중 하나를 고르고 이름을 정하지 않으면 캐릭터가 의인화된 이름(GPT짱, DeepSeek짱, Claude짱)을 씁니다. 로컬 페이지에는 움직이는 초상화가 나옵니다. 페르소나를 직접 쓴 뒤에는 **캐릭터 및 설정**에서 초상화를 눌러도 그림만 바뀝니다. 같은 곳의 **내 그림 사용**으로 2 MB 이하의 PNG, JPEG, WebP 파일을 고를 수 있으며, 홈의 `avatar.png`(또는 `.jpg`, `.webp`)에 저장되고 로컬 페이지에만 표시됩니다.
 - **채팅 플랫폼.** 선택 사항이며 처음에는 이 단계를 건너뛸 수 있습니다. 설정 과정에서 personagent가 직접 연결하는 플랫폼 열 개를 안내하며, 이 플랫폼들은 설정을 마친 뒤 [`personagent connect <platform>`](#터미널에서-플랫폼-연결하기)으로 연결합니다. 그 밖의 플랫폼을 위해서는 이 단계에서 AstrBot을 연결할 수 있으며, AstrBot이 없으면 먼저 내려받아 설치합니다. [직접 실행하는 브리지](#직접-실행하는-브리지)를 참고하십시오.
 
 스크립트 등에서 질문 없이 설정하려면 `personagent init --no-input`을 `--provider`, `--model`, `--key-env VAR`, `--name`, `--lang`, `--persona`와 함께 실행하십시오. 새 홈에서는 `--key-env`나 셸의 `LLM_API_KEY`에서 온 키가 어디 것인지 알리기 위해 `--provider`나 `--base-url`이 필요합니다. `--provider other`에는 `--base-url`도 필요합니다. `personagent init --help`가 모든 플래그를 나열합니다. `personagent init`을 터미널 없이 이 플래그들도 없이 실행하면 질문을 건너뛰고 그렇다고 알린 뒤 코드 2로 종료합니다.
@@ -281,7 +281,7 @@ If you have not seen a film, say so instead of inventing an opinion.
   ]}
   ```
 
-  SillyTavern World Info 내보내기 파일은 그대로 쓸 수 없습니다. `entries`가 번호를 키로 하는 객체이고 키워드가 `key`에 들어 있기 때문입니다. `entries`를 목록으로 바꾸고 `key`를 `keywords`로 이름을 바꾸십시오. `content`는 그대로 둡니다.
+  '캐릭터 및 설정'의 '로어북'에서 사용 중인 항목을 확인하고 추가, 편집, 삭제할 수 있습니다. '파일 가져오기'는 이 형식의 파일과 SillyTavern의 World Info 내보내기 파일을 읽으며, 비활성화된 항목과 키워드나 본문이 없는 항목은 건너뜁니다. 처음 변경 사항을 저장하면 기본 제공 로어북이 `data/lorebook.<lang>.json`에 복사되고, '기본 제공 로어북으로 되돌리기'는 그 파일의 이름을 `.bak`으로 바꿉니다. 같은 곳과 `personagent doctor`에는 사용자 단어 필터와 예시 대화 파일이 사용 중인지, 또는 어떤 파일을 읽을 수 없는지 표시됩니다.
 - 단어 필터(`output_filter.<lang>.json`): 각 `pattern`은 Python 정규식이며 대소문자를 구분하지 않고 비교합니다. `"action": "reject"`는 답장 전체를 버리므로 아무것도 보내지 않고, `"replace"`는 일치한 부분을 `replacement`로 바꾼 뒤 나머지를 보냅니다.
 
   ```json

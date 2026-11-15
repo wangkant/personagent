@@ -1,0 +1,156 @@
+/* The lorebook panel: entries as rows on the page, an entry's editor in place. */
+.lore-card h2 {
+  margin-bottom: 4px;
+}
+.lore-card .field-note,
+.lore-card .error,
+.lore-entry,
+.lore-unsaved {
+  overflow-wrap: anywhere;
+}
+.lore-copy {
+  color: var(--warn-text);
+}
+.lore-card > .error {
+  margin: 0 0 12px;
+}
+.lore-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+}
+.lore-entry {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.lore-entry:first-child {
+  border-top: 0;
+}
+.lore-entry-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.lore-entry-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+  min-width: 0;
+}
+.lore-entry-priority {
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.lore-entry-buttons {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+.lore-entry-keywords {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.lore-entry-content {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--ink);
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.lore-entry.is-editing {
+  max-width: 620px;
+}
+.lore-field > label {
+  margin-top: 10px;
+}
+.lore-field textarea {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  resize: vertical;
+}
+.lore-field .field-note {
+  margin: 6px 0 4px;
+}
+.lore-bad input,
+.lore-bad textarea {
+  box-shadow: inset 0 -2px 0 var(--error);
+}
+.lore-entry-error {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--error);
+}
+.lore-entry-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.lore-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 12px 0 0 -10px;
+}
+.lore-tools + .field-note {
+  margin: 6px 0 0;
+}
+.lore-imported {
+  color: var(--ink);
+}
+.lore-actions {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lore-actions #lore-reset {
+  margin-right: auto;
+  margin-left: -9px;
+}
+.lore-unsaved {
+  font-size: 12.5px;
+  color: var(--warn-text);
+}
+.lore-unsaved:empty {
+  display: none;
+}
+.lore-subtitle {
+  margin: 28px 0 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.lore-other-line {
+  margin: 4px 0;
+}
+.lore-other-bad {
+  color: var(--error);
+}
+@media (max-width: 760px) {
+  .lore-entry-buttons {
+    margin-left: -9px;
+    width: 100%;
+  }
+}
+.lore-fold > summary {
+  cursor: pointer;
+  padding: 6px 0;
+  color: var(--muted, inherit);
+}
+.lore-fold > summary:hover {
+  color: inherit;
+}

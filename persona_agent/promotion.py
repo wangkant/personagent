@@ -50,6 +50,8 @@ class Policy:
     auto_promote: bool = AUTO_PROMOTE
     # A lone correction waits this long for its retry before the character judges it.
     fix_window_s: float = FIX_WINDOW_S
+    # REACT_LEARN_ADMIN_ONLY: nothing comes into use without the admin's own reaction.
+    admin_only: bool = False
 
     @classmethod
     def from_env(cls, env=None) -> "Policy":
@@ -73,6 +75,7 @@ class Policy:
             auto_promote=env_bool("PROMOTE_AUTO_ENABLED", AUTO_PROMOTE, env=env),
             fix_window_s=env_float("REACT_FIX_WINDOW_S", FIX_WINDOW_S,
                                    minimum=0.0, env=env),
+            admin_only=env_bool("REACT_LEARN_ADMIN_ONLY", False, env=env),
         )
 
 
@@ -88,9 +91,10 @@ GATE_PERSON = "person"
 GATE_STRONG = "strong"
 GATE_EVENTS = "events"
 GATE_SPEAKERS = "speakers"
+GATE_ADMIN = "admin"
 GATE_OK = "ok"
-GATES = (GATE_OFF, GATE_STATE, GATE_AGAINST, GATE_CONFLICT, GATE_PERSON,
-         GATE_STRONG, GATE_EVENTS, GATE_SPEAKERS, GATE_OK)
+GATES = (GATE_OFF, GATE_STATE, GATE_ADMIN, GATE_AGAINST, GATE_CONFLICT,
+         GATE_PERSON, GATE_STRONG, GATE_EVENTS, GATE_SPEAKERS, GATE_OK)
 # The holds no further reaction clears: the character judges these.
 CHARACTER_GATES = frozenset({GATE_AGAINST, GATE_CONFLICT, GATE_PERSON})
 
@@ -454,6 +458,10 @@ def decide(cand: dict, *, linked_events, related_events=(), peers=(),
         and e.get("reaction_type") == "positive")
     counts = dict(supporting=len(supporting), strong=len(strong),
                   person_support=person_support)
+    # First, so neither the policy nor the character's judgement adopts it.
+    if policy.admin_only and not admin_spoke:
+        return Decision(False, "only the admin's reactions teach (REACT_LEARN_ADMIN_ONLY)",
+                        gate=GATE_ADMIN, **counts)
 
     against = counter_evidence(cand, related_events, now=now, policy=policy)
     conflicting = find_conflicts(cand, peers, policy=policy,

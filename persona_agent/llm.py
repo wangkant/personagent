@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 import random
 import re
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -20,6 +22,21 @@ from .textproc import (
 )
 
 logger = logging.getLogger("agent")
+
+# What the calls in this task are for, as counted in the usage tally
+# (usage.PURPOSES); a context, so no fake `_call_llm` needs a new argument.
+_call_purpose: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "model_call_purpose", default="other")
+
+
+@contextmanager
+def purpose(label: str):
+    token = _call_purpose.set(label)
+    try:
+        yield
+    finally:
+        _call_purpose.reset(token)
+
 
 # Hosts known to take or refuse DeepSeek's `thinking` switch; any other is
 # asked by its first thinking-off call and the answer remembered.
@@ -273,6 +290,8 @@ class ModelCalls:
             reported = self._fatal_reported_hosts()
             for item in [k for k in reported if k[0] == _host(url)]:
                 reported.discard(item)
+            if model == getattr(self, "model", None):
+                self.__dict__["model_unreachable"] = False
         return resp
 
     def _count_usage(self, model: str, resp) -> None:
@@ -292,7 +311,7 @@ class ModelCalls:
             book = self.__dict__["_usage_book"] = UsageBook(
                 Path(memory_file).with_name(USAGE_FILE))
         now = time.time()
-        book.add(model, body.get("usage"), now)
+        book.add(model, body.get("usage"), now, _call_purpose.get())
         wait = book.due(now)
         try:
             if not wait:
@@ -508,6 +527,8 @@ class ModelCalls:
                             continue
                     if kind == "fatal_auth":
                         self._report_fatal(e, cur_model)
+                    if kind == "transient" and cur_model == self.model:
+                        self.__dict__["model_unreachable"] = True
                     # A 429's body says which limit it was; httpx's message does not.
                     logger.warning("[Agent] LLM call failed (model=%s, %s): %s %s",
                                    cur_model, kind, e,
@@ -658,7 +679,8 @@ class ModelCalls:
             if self._thinking_verdict(url, model) is None:
                 payload["thinking"] = {"type": "disabled"}
             try:
-                r = await self._post_chat(url, key, payload, timeout=15)
+                with purpose("check"):
+                    r = await self._post_chat(url, key, payload, timeout=15)
                 r.raise_for_status()
                 actual = r.json().get("model", "?")
                 logger.info("[Agent] %s model probe OK: configured=%s actual=%s",
@@ -667,6 +689,9 @@ class ModelCalls:
                 if self._classify_api_error(e) == "fatal_auth":
                     self._report_fatal(e, model)
                 logger.warning("[Agent] %s model probe failed: %s", label, e)
+                # What the page's status shows, until an answer from the model clears it.
+                if label == "group":
+                    self.__dict__["model_unreachable"] = True
         await self._probe_embeddings()
 
     async def _probe_embeddings(self) -> None:

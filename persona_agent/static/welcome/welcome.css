@@ -636,6 +636,21 @@ details[open] summary {
   width: 144%;
   height: 144%;
 }
+/* A picture of one's own: one frame, cropped to the circle, never animated. */
+.avatar.still .sprite,
+.avatar.still.thinking .sprite,
+.avatar.still.talking .sprite,
+#chat-avatar.still .sprite,
+.trio-pick.still .sprite {
+  inset: 0;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  animation: none;
+}
 .avatar.thinking .sprite {
   background-position-x: 100%;
   animation: breathe 4.8s ease-in-out var(--blink-delay, 0s) infinite;
@@ -761,6 +776,20 @@ details[open] summary {
   box-shadow:
     0 0 0 2px var(--side),
     0 0 0 4px var(--accent);
+}
+.own-avatar {
+  margin-top: 14px;
+}
+.own-avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+.own-avatar .field-note,
+.own-avatar .error {
+  margin: 6px 0 0;
+  white-space: normal;
 }
 .small-note {
   margin: 16px 4px;
@@ -1081,6 +1110,12 @@ label.check input:checked {
   background: var(--field);
   color: var(--text);
   border-radius: 18px 18px 18px 5px;
+}
+.bubble.unanswered .bubble-via {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  opacity: 0.75;
 }
 .bubble.user + .bubble.bot,
 .bubble.bot + .bubble.user {
@@ -1944,6 +1979,35 @@ label.check input:checked {
   margin: 0 auto 14px;
   max-width: 460px;
 }
+.activity-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+.activity-empty .activity-start-error {
+  margin: 14px auto 0;
+  text-align: left;
+}
+.chat-trimmed {
+  margin: 8px 0 14px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--faint);
+}
+.status-pill.warn {
+  color: var(--warn-text);
+}
+.status-pill.warn::before {
+  background: var(--warn);
+}
+.status-pill.stopped::before {
+  background: var(--faint);
+}
+#app-dot.model-attention {
+  background: var(--warn);
+}
 .chat-commands {
   display: flex;
   flex-wrap: wrap;
@@ -2066,7 +2130,11 @@ button:active:not(:disabled) {
     margin-left: 56px;
     width: calc(100% - 56px);
   }
+  /* Below the form, not gone: the portraits and one's own picture are chosen here. */
   .preview-column {
+    margin-top: 24px;
+  }
+  .preview-column .small-note {
     display: none;
   }
   .setup-grid {

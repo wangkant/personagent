@@ -8,8 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Ten people's worth of first use, simulated: a newcomer, a group owner, someone who writes their own character, a person who wants to see and manage what is remembered, a sysadmin without a display, a connector author, a reader of the Japanese pages, and others. What follows is what they ran into.
 
+### Added
+
+- **A picture of your own for the character.** Character & settings takes a PNG, JPEG or WebP of up to 2 MB as the character's picture on the page; it is kept in the home and shown only there. With a persona you wrote, one of the three portraits can be chosen on its own, without its personality.
+- **A lorebook panel.** Character & settings lists the background entries in use, says whether they are built in or your own, and lets you add, edit, delete and import them, a SillyTavern World Info export included. The word filter and the examples show where they come from, and `doctor` has a row for custom data files.
+- **Three settings for a group's owner**, all off by default: reply only when called (`CHAT_ONLY_WHEN_CALLED`), stay silent in chosen groups (`ACCESS_PAUSED_GROUPS`) and let only the admin's corrections teach (`REACT_LEARN_ADMIN_ONLY`). "Reply to messages" now leads the first group of Advanced settings.
+- **Start the character from Activity**, without sending it a message first.
+- **Model usage by purpose**: the App view lists today's requests as replies, the decision to speak, learning, memory, search and checks.
+
 ### Changed
 
+- **The three community characters answer to names of their own**: GPT-chan, DeepSeek-chan and Claude-chan (GPT娘 and the like in Chinese, GPTちゃん in Japanese, GPT짱 in Korean) instead of the products' names. A character already called ChatGPT, DeepSeek or Claude keeps its name and what it learned.
+- **The Satori and Matrix connectors and the AstrBot plugin send voice messages, videos, files and images they cannot fetch as media segments**, as the connector protocol asks, instead of words such as "(sent a voice message)" that the character read as typed by the sender.
+- **The page chat says when it shows only the most recent messages**, starts at one of your own messages, and keeps a message that was never answered, marked as such, with Send again.
+- **The top bar tells a model that cannot be reached from a running one**, and reads Stopped after Quit. Clear memory keeps the usage record.
 - **Forget this chat on the page also forgets the page's earlier chats.** New chat starts the conversation over and keeps what the character remembers, so a fact noted before New chat was still recalled afterwards, while Forget this chat answered that nothing had been noted. It now clears every chat of the page, and New chat says that memory is kept.
 - **Choosing a personality or a portrait over a persona you wrote asks first** and keeps your text as `persona.txt.bak` in the home. An emptied name box keeps the name instead of renaming the character.
 - **The memory command menu under the chat box follows the character's language** in all ten languages; it used to offer the English commands to every language but Chinese. A note is acknowledged with words that say it was saved, and asking to remember the same thing twice keeps one copy.

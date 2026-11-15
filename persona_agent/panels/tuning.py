@@ -40,12 +40,16 @@ class Field:
 
 # Bounds follow settings.py / promotion.py floors; the ceilings only refuse nonsense.
 FIELDS: tuple[Field, ...] = (
+    # The two switches a group owner reaches for first.
+    Field("AGENT_ENABLED", "who", "bool", True),
+    Field("ACCESS_PAUSED_GROUPS", "who", "ids"),
     Field("ADMIN_NAME", "who", "text", "", high=64),
     Field("ADMIN_RELATIONSHIP", "who", "text", "", high=64),
     Field("ADMIN_IDS", "who", "ids"),
     Field("ACCESS_GROUPS", "who", "ids"),
     Field("ACCESS_DM_USERS", "who", "ids"),
     Field("PERSONA_TZ_OFFSET_HOURS", "talk", "tz"),
+    Field("CHAT_ONLY_WHEN_CALLED", "talk", "bool", False),
     Field("CHAT_TRIGGER_COUNT", "talk", "int", 30, 1, 10_000),
     Field("LLM_FALLBACK_MODEL", "models", "model"),
     Field("LLM_FALLBACK_BASE_URL", "models", "url"),
@@ -53,6 +57,7 @@ FIELDS: tuple[Field, ...] = (
     Field("LLM_JUDGE_MODEL", "models", "model"),
     Field("LLM_DM_MODEL", "models", "model"),
     Field("REACT_LEARN_ENABLED", "learning", "bool", True),
+    Field("REACT_LEARN_ADMIN_ONLY", "learning", "bool", False),
     Field("REACT_ELICIT_ENABLED", "learning", "bool", True),
     Field("PROMOTE_AUTO_ENABLED", "learning", "bool", True),
     Field("PROMOTE_MIN_SPEAKERS", "learning", "choice", "1", options=("1", "2")),
@@ -65,7 +70,6 @@ FIELDS: tuple[Field, ...] = (
     Field("MEMORY_PROMPT_CHARS", "memory", "int", 2400, 200, 100_000),
     Field("MEMORY_EPISODES_MAX", "memory", "int", 120, 1, 10_000),
     Field("MEMORY_KEEP_RECENT", "memory", "bool", True),
-    Field("AGENT_ENABLED", "more", "bool", True),
     Field("DASHBOARD_ENABLED", "more", "bool", True),
     Field("UPDATE_CHECK_ENABLED", "more", "bool", True, live=True),
     Field("PROACTIVE_INTERVAL_S", "more", "int", 1500, 60, DAY),

@@ -75,12 +75,12 @@ PyPI に新しい personagent があると、チャットビューに、pip、uv
 
 | セクション | 設定 |
 |---|---|
-| **管理者とアクセス** | キャラクターがあなたを呼ぶ名前と、あなたとキャラクターの関係（`ADMIN_NAME`、`ADMIN_RELATIONSHIP`）、**あなたのアカウント**（`ADMIN_IDS`）、**返信するグループを限定**（`ACCESS_GROUPS`）、**ダイレクトメッセージを許可する他のユーザー**（`ACCESS_DM_USERS`）。**最近のチャットから選択** はアクティビティに表示される人とグループを一覧にするので、ID を入力せずに追加できます。 |
-| **発言と返信のスタイル** | **タイムゾーン**（`PERSONA_TZ_OFFSET_HOURS`）、**会話に加わるまでのメッセージ数**（`CHAT_TRIGGER_COUNT`）、7 つの `PROACTIVE_*` のタイミングをまとめて設定する **自分から会話を始める頻度**、**返信のスタイル**（絵文字、3 組の記号、返信の最大長。`persona.card.json` に書き込まれます）。 |
+| **返信、管理者とアクセス** | **メッセージに返信**（`AGENT_ENABLED`）、**返信を停止するグループ**（`ACCESS_PAUSED_GROUPS`）、キャラクターがあなたを呼ぶ名前と、あなたとキャラクターの関係（`ADMIN_NAME`、`ADMIN_RELATIONSHIP`）、**あなたのアカウント**（`ADMIN_IDS`）、**返信するグループを限定**（`ACCESS_GROUPS`）、**ダイレクトメッセージを許可する他のユーザー**（`ACCESS_DM_USERS`）。**最近のチャットから選択** はアクティビティに表示される人とグループを一覧にするので、ID を入力せずに追加できます。 |
+| **発言と返信のスタイル** | **タイムゾーン**（`PERSONA_TZ_OFFSET_HOURS`）、**グループでは呼びかけられたときのみ返信**（`CHAT_ONLY_WHEN_CALLED`）、**会話に加わるまでのメッセージ数**（`CHAT_TRIGGER_COUNT`）、7 つの `PROACTIVE_*` のタイミングをまとめて設定する **自分から会話を始める頻度**、**返信のスタイル**（絵文字、3 組の記号、返信の最大長。`persona.card.json` に書き込まれます）。 |
 | **モデル** | 専用のサービスアドレスとキーを持つ予備モデル（`LLM_FALLBACK_MODEL`、`LLM_FALLBACK_BASE_URL`、`LLM_FALLBACK_API_KEY`）、短い判断に使うモデル（`LLM_JUDGE_MODEL`）、プライベートチャット用のモデル（`LLM_DM_MODEL`）。予備モデルは保存前にテストされます。 |
-| **学習** | `REACT_LEARN_ENABLED`、`REACT_ELICIT_ENABLED`、`PROMOTE_AUTO_ENABLED`、`PROMOTE_MIN_SPEAKERS`（1 または 2）、`PROMOTE_JUDGE_ENABLED`（リアクションでは決まらない項目をキャラクター自身が判断します）、`PROMOTE_OBSERVE_MAX_DAYS`（観察中の項目が、新しいリアクションのないまま除外されるまでの日数）。**学習をやり直す** は新しい `PERSONA_VERSION` を書き込み、それまでに学習した内容が使われないようにします。削除されるものはありません。 |
+| **学習** | `REACT_LEARN_ENABLED`、`REACT_LEARN_ADMIN_ONLY`、`REACT_ELICIT_ENABLED`、`PROMOTE_AUTO_ENABLED`、`PROMOTE_MIN_SPEAKERS`（1 または 2）、`PROMOTE_JUDGE_ENABLED`（リアクションでは決まらない項目をキャラクター自身が判断します）、`PROMOTE_OBSERVE_MAX_DAYS`（観察中の項目が、新しいリアクションのないまま除外されるまでの日数）。**学習をやり直す** は新しい `PERSONA_VERSION` を書き込み、それまでに学習した内容が使われないようにします。削除されるものはありません。 |
 | **記憶** | `MEMORY_CALLS_PER_DAY`、`MEMORY_TIDY_EVERY`、`CHAT_CONTEXT_MESSAGES`、`MEMORY_PROMPT_CHARS`、`MEMORY_EPISODES_MAX`、`MEMORY_KEEP_RECENT`。[記憶](#記憶)を参照してください。 |
-| **その他の設定** | `AGENT_ENABLED`、`DASHBOARD_ENABLED`、`UPDATE_CHECK_ENABLED`、7 つの `PROACTIVE_*` のタイミング、`CHAT_FOLLOWUP_WINDOW_S`、`REACT_*` と `PROMOTE_*` の上限、`REACT_MODEL`、キャラクター自身の判断に使うモデル、間隔、1 回あたりの件数（`PROMOTE_JUDGE_MODEL`、`PROMOTE_JUDGE_INTERVAL_S`、`PROMOTE_JUDGE_BATCH`）、`PERSONA_VERSION`。 |
+| **その他の設定** | `DASHBOARD_ENABLED`、`UPDATE_CHECK_ENABLED`、7 つの `PROACTIVE_*` のタイミング、`CHAT_FOLLOWUP_WINDOW_S`、`REACT_*` と `PROMOTE_*` の上限、`REACT_MODEL`、キャラクター自身の判断に使うモデル、間隔、1 回あたりの件数（`PROMOTE_JUDGE_MODEL`、`PROMOTE_JUDGE_INTERVAL_S`、`PROMOTE_JUDGE_BATCH`）、`PERSONA_VERSION`。 |
 
 **保存** は変更された設定だけを書き込み、`.env` のほかの部分はそのまま残します。その後キャラクターを再起動します。ただし、変更が `UPDATE_CHECK_ENABLED` だけの場合は再起動しません。返信をオフにする（`AGENT_ENABLED`）場合は、事前に確認があります。**キャラクター名** でキャラクターの名前を変更する場合も同様です。新しい名前は新しいキャラクターとして扱われるためです。
 
@@ -183,7 +183,7 @@ PyPI に新しい personagent があると、チャットビューに、pip、uv
 
 - **AI サービス。** プリセットはページと同じです。既定は OpenRouter の `openrouter/free` で、各リクエストを無料モデルのどれかに渡します。キーは無料です。上限は 1 分あたり 20 リクエストと 1 日 50 リクエストで、10 クレジット以上購入すると 1 日 1000 になります。返信だけでなくすべてのモデル呼び出しが数えられ、日付は UTC の午前 0 時に切り替わります。上限に達するとキャラクターは今は答えられないと言い、`runtime/desktop/agent.log` に OpenRouter の理由が残ります。リクエストごとにモデルが変わるので、1 つのモデルを選んだときよりキャラクターの声はぶれやすく、無料プロバイダーの中には受け取った内容を保存するものもあります。キャラクターを安定させるには、同じキーで有料モデルを使ってください。OpenRouter につながりにくい地域では、Zhipu の `glm-4.7-flash` も無料です。Ollama では、すでに取得済みのモデルを指定してください。Ollama にキーは要りません。
 - **キー。** 入力は既定で隠されます。表示を選ぶこともでき、その場合は再設定時に保存済みのキーも見えます。ウィザードは小さなリクエスト 1 回でキーを試します。失敗すると、呼び出したアドレス、HTTP ステータス、考えられる対処を表示します。
-- **キャラクター。** 名前と、7 つの既成キャラクター（辛口の友人、温かな聞き手、ゲーム仲間、読書家、そしてコミュニティですでに描かれている 3 人：DeepSeek クジラ娘、GPT ドラゴン娘、Claude お嬢様）のいずれか、または後で自分で作成するための基本的なキャラクターを選びます。コミュニティの 3 人のいずれかを選んで名前を決めなければ、キャラクターはその名前になります。ローカルページにはその動く立ち絵が表示されます。
+- **キャラクター。** 名前と、7 つの既成キャラクター（辛口の友人、温かな聞き手、ゲーム仲間、読書家、そしてコミュニティですでに描かれている 3 人：DeepSeek クジラ娘、GPT ドラゴン娘、Claude お嬢様）のいずれか、または後で自分で作成するための基本的なキャラクターを選びます。コミュニティの 3 人のいずれかを選んで名前を決めなければ、キャラクターは擬人化された名前（GPTちゃん、DeepSeekちゃん、Claudeちゃん）になります。ローカルページにはその動く立ち絵が表示されます。ペルソナを自分で書いた後は、「キャラクターと設定」で立ち絵をクリックしても画像だけが変わります。同じ場所の「自分の画像を使う」では 2 MB までの PNG、JPEG、WebP ファイルを選べます。画像はホームの `avatar.png`（または `.jpg`、`.webp`）に保存され、ローカルページにのみ表示されます。
 - **チャットプラットフォーム。** 任意で、初回はこの手順を飛ばせます。セットアップでは personagent が自らつなぐ 10 個のプラットフォームが示されます。これらはセットアップの後で [`personagent connect <platform>`](#ターミナルでプラットフォームを接続する) を使って接続します。その他のプラットフォームについては、この手順で AstrBot を接続でき、AstrBot がなければ先にダウンロードしてインストールします。[自分で動かすブリッジ](#自分で動かすブリッジ)を参照してください。
 
 スクリプトなどで質問なしにセットアップするには、`personagent init --no-input` を `--provider`、`--model`、`--key-env VAR`、`--name`、`--lang`、`--persona` と一緒に実行します。新しいホームでは、`--key-env` やシェルの `LLM_API_KEY` のキーがどこのものかを示すために `--provider` か `--base-url` が必要です。`--provider other` には `--base-url` も必要です。`personagent init --help` がすべてのフラグを一覧にします。`personagent init` をターミナルなしで、これらのフラグも付けずに実行すると、質問を飛ばしてその旨を伝え、コード 2 で終了します。
@@ -281,7 +281,7 @@ If you have not seen a film, say so instead of inventing an opinion.
   ]}
   ```
 
-  SillyTavern の World Info をエクスポートしたファイルは、そのままでは使えません。`entries` が番号をキーとするオブジェクトで、キーワードが `key` に入っているためです。`entries` をリストにし、`key` を `keywords` に書き換えてください。`content` はそのままで構いません。
+  「キャラクターと設定」の「ロアブック」では、使用中の項目を確認し、追加・編集・削除できます。「ファイルをインポート」は、この形式のファイルと SillyTavern の World Info エクスポートを読み込み、無効にされた項目と、キーワードまたは本文のない項目をスキップします。最初に変更を保存すると内蔵のロアブックが `data/lorebook.<lang>.json` にコピーされ、「内蔵のロアブックに戻す」はそのファイルの名前を `.bak` に変更します。同じ欄と `personagent doctor` には、独自の禁止語フィルターと会話例のファイルが使用中かどうか、または読み込めないファイルが表示されます。
 - 禁止語フィルター（`output_filter.<lang>.json`）：`pattern` はそれぞれ Python の正規表現で、大文字と小文字を区別せずに照合します。`"action": "reject"` は返信全体を破棄するので、何も送信されません。`"replace"` は一致した部分を `replacement` に置き換えて残りを送信します。
 
   ```json

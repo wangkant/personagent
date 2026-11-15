@@ -635,17 +635,42 @@ def test_slack_links_are_unfolded_and_mentions_go_out_as_mrkdwn():
     assert chain[1].text == " hi"
 
 
-def test_media_components_become_notes_the_agent_can_read():
+def test_media_components_become_media_segments_never_words():
     module = _import_plugin()
     plugin = _plugin_instance(module, {})
     event = _Event(module, private=False)
     event.message_obj.message = [
         module.Comp.Video(file="v.mp4"), module.Comp.File(name="deck.pdf"),
-        module.Comp.Record(file="a.ogg"), module.Comp.Plain("thoughts?"),
+        module.Comp.File(name=""), module.Comp.Record(file="a.ogg"),
+        module.Comp.Plain("thoughts?"),
     ]
     segments, _ = _map(plugin, event, "telegram")
-    assert [s["text"] for s in segments] == [
-        "(sent a video)", "(sent a file: deck.pdf)", "(sent a voice message)", "thoughts?"], segments
+    assert segments == [
+        {"type": "media", "kind": "video"},
+        {"type": "media", "kind": "file", "name": "deck.pdf"},
+        {"type": "media", "kind": "file"},
+        {"type": "media", "kind": "voice"},
+        {"type": "text", "text": "thoughts?"}], segments
+
+
+def test_line_media_it_could_not_fetch_is_a_media_segment():
+    module = _import_plugin()
+    for kind, expected in (("audio", "voice"), ("video", "video"), ("file", "file"),
+                           ("image", "photo")):
+        raw = {"message": {"type": kind}}
+        sent = _group_addressing(module, "line", [module.Comp.Plain(f"[{kind}]")], raw=raw,
+                                 message_str=f"[{kind}]")
+        assert sent["segments"] == [{"type": "media", "kind": expected}], (kind, sent)
+    sent = _group_addressing(module, "dingtalk", [], raw={"message_type": "video"},
+                             message_str="")
+    assert sent["segments"] == [{"type": "media", "kind": "video"}], sent
+    sent = _group_addressing(module, "satori", [], raw={"message": {"content": '<video src="x"/>'}},
+                             message_str="")
+    assert sent["segments"] == [{"type": "media", "kind": "video"}], sent
+    raw = {"message": {"type": "location"}}
+    sent = _group_addressing(module, "line", [module.Comp.Plain("[location]")], raw=raw,
+                             message_str="[location]")
+    assert sent["segments"] == [{"type": "text", "text": "(sent a location)"}], sent
 
 
 def test_missing_sent_at_is_not_forwarded_or_blocked():
@@ -888,7 +913,7 @@ def test_a_quoted_photo_without_caption_is_outlined():
                                chain=[module.Comp.Image(file="https://x/y.jpg")])
     sent = _group_addressing(module, "aiocqhttp", [quoted, module.Comp.Plain("lol")],
                              raw=_onebot([]))
-    assert sent["segments"][0]["text"] == "(image)"
+    assert sent["segments"][0]["text"] == "[image]"
 
 
 def _tg_update(*, text="hi", sticker=None, reply_from=None, date=1_700_000_500):
@@ -1024,7 +1049,7 @@ def test_discord_stickers_and_voice_attachments_are_not_lost():
         module.Comp.File(name="voice-message.ogg", url="https://cdn/voice.ogg"),
     ], raw=_discord_message(stickers=[sticker], attachments=[voice]), message_str="")
     assert sent["segments"] == [
-        {"type": "text", "text": "(sent a voice message)"},
+        {"type": "media", "kind": "voice"},
         {"type": "emoji", "name": "Wumpus wave", "id": "5"},
         {"type": "image", "url": "https://media.discordapp.net/stickers/5.png", "sticker": True},
     ], sent["segments"]
@@ -1094,7 +1119,7 @@ def test_a_wecom_smart_bot_group_is_a_group_that_addressed_the_bot():
     assert captured["conversation_type"] == "group" and captured["conversation_id"] == "chat-9"
     assert captured["addressed"] is True
     assert captured["message_id"] == "m-7"
-    assert captured["segments"] == [{"type": "text", "text": "(sent a voice message)"}]
+    assert captured["segments"] == [{"type": "media", "kind": "voice"}]
     assert "outbox" not in captured["capabilities"]
 
 
@@ -1168,7 +1193,7 @@ def test_local_and_private_images_are_inlined_and_oversized_ones_described(tmp):
     segments, _ = _map(plugin, event, "dingtalk")
     assert segments == [
         {"type": "image", "b64": base64.b64encode(b"\xff\xd8local").decode()},
-        {"type": "text", "text": "(sent an image)"},
+        {"type": "media", "kind": "photo"},
         {"type": "image", "b64": "iVBORw0K"},
         {"type": "image", "url": "https://cdn.example.com/public.png"},
     ], segments
@@ -1181,7 +1206,7 @@ def test_voice_transcripts_ride_along_where_the_platform_has_one():
     event.message_obj.raw_message = types.SimpleNamespace(recognition="call me later")
     event.message_obj.message = [module.Comp.Record(file="a.wav")]
     segments, _ = _map(plugin, event, "wecom")
-    assert segments == [{"type": "text", "text": "(sent a voice message: call me later)"}]
+    assert segments == [{"type": "media", "kind": "voice", "transcript": "call me later"}]
 
 
 def test_wecom_customer_service_hears_only_the_customer():

@@ -436,6 +436,16 @@ class Turns:
         return access.parse_ids(
             self.access_groups, native_platforms=self.connector_qq_platforms)
 
+    def _paused_groups(self) -> frozenset[str]:
+        """ACCESS_PAUSED_GROUPS, canonical."""
+        return access.parse_ids(
+            getattr(self.settings, "access_paused_groups", ()),
+            native_platforms=self.connector_qq_platforms)
+
+    def _only_when_called(self) -> bool:
+        """CHAT_ONLY_WHEN_CALLED: in groups, nothing unprompted."""
+        return bool(getattr(self.settings, "chat_only_when_called", False))
+
     def _log_refusal(self, conv_key: str, reason: str) -> None:
         """Say once per conversation why it is not answered."""
         key = f"{conv_key}\x00{reason}"
@@ -593,6 +603,10 @@ class Turns:
             self._log_refusal(group_id, refusal)
             return False
         self._claim_connector_turn()
+        if group_id in self._paused_groups():
+            # Claimed first, so a connector's own bot stays quiet too; nothing is kept.
+            self._log_refusal(group_id, "listed in ACCESS_PAUSED_GROUPS")
+            return False
         if mid is not None:
             self._remember_msg_id(mid)
         # A group turn would buffer the cue as the sender's line; claimed and dropped.
@@ -797,7 +811,8 @@ class Turns:
                 in_followup=self._followup_open(group_id, user_id),
                 counter=self.counters[group_id],
                 trigger_count=self.chat_trigger_count,
-                never_replied=never_replied)
+                never_replied=never_replied,
+                only_when_called=self._only_when_called())
             if mode == "followup" and is_noise:
                 # A "lol" in the window takes no turn and no gate call.
                 mode, why = "", "below the trigger count"

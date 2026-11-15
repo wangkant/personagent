@@ -3,7 +3,7 @@ PA.strings({
   en: {
     tuning_title: "Advanced settings",
     tuning_lead: "These settings are optional and all have defaults. Change only what you need.",
-    tuning_sec_who: "Admin and access",
+    tuning_sec_who: "Replies, admin and access",
     tuning_sec_talk: "Speaking and reply style",
     tuning_sec_models: "Models",
     tuning_sec_learning: "Learning",
@@ -28,8 +28,12 @@ PA.strings({
     tuning_not_me: "This is not me",
     tuning_may_dm: "Allow private messages",
     tuning_answer_here: "Reply in this group",
+    tuning_pause_here: "Stay silent here",
     tuning_restricted: "On {platforms}, the character replies only to the entries listed and ignores all others.",
     tuning_unrestricted: "Empty: no restriction.",
+    tuning_paused: "Paused groups: {n}. The character replies as usual everywhere else.",
+    tuning_paused_none: "Empty: no group is paused.",
+    tuning_admin_only_empty: "No accounts are listed under “{accounts}”, so at present only corrections made under “{chat}” teach the character.",
     tuning_tz_auto: "Automatic ({offset})",
     tuning_preset: "How often it starts conversations",
     tuning_preset_hint: "Applies only when “{feature}” is turned on above. A higher frequency uses more model calls.",
@@ -72,6 +76,10 @@ PA.strings({
     tuning_card_outside: "The reply style file must be inside the personagent folder. Correct PERSONA_CARD_FILE in .env.",
     tuning_not_configured: "Connect a model at the top of this page first.",
     tuning_unknown: "This page is out of date. Close personagent and open it again.",
+    tuning_f_agent_enabled: "Reply to messages",
+    tuning_h_agent_enabled: "Off: the character stays connected but does not reply to any message. To silence it in some groups only, use the next setting.",
+    tuning_f_access_paused_groups: "Stay silent in these groups",
+    tuning_h_access_paused_groups: "Group ids, as platform:id, separated by commas. The character keeps running and replies everywhere else; in these groups it replies to nothing, not even when addressed, and a platform's own bot stays quiet too. Messages there are not kept as context and nothing is learned from them. The easiest way is “{pick}” below, then “{pause}”. Remove a group to resume.",
     tuning_f_admin_name: "Your name",
     tuning_h_admin_name: "The name the character uses for you, its admin.",
     tuning_f_admin_relationship: "Your relationship to the character",
@@ -84,6 +92,8 @@ PA.strings({
     tuning_h_access_dm_users: "You do not need to list yourself. Once one person of a platform is listed, no one else on that platform can message the character privately.",
     tuning_f_persona_tz_offset_hours: "Time zone",
     tuning_h_persona_tz_offset_hours: "Sets the character's clock and its quiet hours, 02:00 to 07:00 in this time zone, during which it neither starts conversations nor joins in unprompted.",
+    tuning_f_chat_only_when_called: "In groups, reply only when addressed",
+    tuning_h_chat_only_when_called: "In group chats the character replies only when someone uses its name, mentions it or replies to its message. It never joins in, follows up or starts a conversation by itself, so the next setting and “{feature}” no longer apply to groups. Private chats are not affected.",
     tuning_f_chat_trigger_count: "Messages before joining in",
     tuning_h_chat_trigger_count: "How many messages others send in a group before the character considers joining in unprompted. A lower number makes it more active and uses more model calls.",
     tuning_f_llm_fallback_model: "Backup model",
@@ -98,6 +108,8 @@ PA.strings({
     tuning_h_llm_dm_model: "Another model on the main model's service, used for one-to-one chats. Empty: the main model.",
     tuning_f_react_learn_enabled: "Learn from reactions",
     tuning_h_react_learn_enabled: "The character reads replies to its messages to learn which ones were well received. Each reading uses a small model call.",
+    tuning_f_react_learn_admin_only: "Learn only from the admin's corrections",
+    tuning_h_react_learn_admin_only: "Only reactions from the accounts under “{accounts}” change what the character says. Reactions from others are still recorded, but nothing they suggest is put into use, neither automatically nor by the character's own decision. With no accounts listed, only corrections made under “{chat}” teach the character.",
     tuning_f_react_elicit_enabled: "Ask for clarification after a complaint",
     tuning_h_react_elicit_enabled: "When someone says a reply was wrong without saying why, the character may later ask once what was expected.",
     tuning_f_promote_auto_enabled: "Put learned items into use automatically",
@@ -108,8 +120,6 @@ PA.strings({
     tuning_h_promote_judge_enabled: "When reactions disagree, two revisions compete, or an item has only approval behind it, the character decides by itself whether to use it, set it aside or keep observing it. Each decision uses one model call; an answer that cannot be used is requested once more. Off: such items remain under observation.",
     tuning_f_promote_observe_max_days: "Days under observation before an item is set aside",
     tuning_h_promote_observe_max_days: "An item that receives no new reaction for this many days is set aside. 0: never.",
-    tuning_f_agent_enabled: "Reply to messages",
-    tuning_h_agent_enabled: "Off: the character stays connected but does not reply to any message.",
     tuning_f_dashboard_enabled: "Keep activity data",
     tuning_h_dashboard_enabled: "Supplies the {activity} view: why the character spoke or stayed silent, and what it learned. Off: the {activity} view stays empty, and a chat can no longer be forgotten from the {chat} view or the {activity} view.",
     tuning_f_update_check_enabled: "Check for updates",
@@ -178,7 +188,7 @@ PA.strings({
   zh: {
     tuning_title: "高级设置",
     tuning_lead: "以下设置均为可选项，且都有默认值。只需修改需要调整的项目。",
-    tuning_sec_who: "管理员与回复范围",
+    tuning_sec_who: "回复、管理员与回复范围",
     tuning_sec_talk: "发言与回复风格",
     tuning_sec_models: "模型",
     tuning_sec_learning: "学习",
@@ -203,8 +213,12 @@ PA.strings({
     tuning_not_me: "这不是我",
     tuning_may_dm: "允许私聊",
     tuning_answer_here: "在此群聊中回复",
+    tuning_pause_here: "在此群聊中暂停回复",
     tuning_restricted: "在 {platforms} 上，角色仅回复列出的对象，不回复其他对象。",
     tuning_unrestricted: "留空即不限制。",
+    tuning_paused: "已暂停的群聊：{n} 个。角色在其他地方照常回复。",
+    tuning_paused_none: "留空即不暂停任何群聊。",
+    tuning_admin_only_empty: "「{accounts}」中尚未填写账号，因此目前仅在「{chat}」中作出的纠正会使角色学习。",
     tuning_tz_auto: "自动（{offset}）",
     tuning_preset: "主动发起对话的频率",
     tuning_preset_hint: "仅在上方开启「{feature}」后生效。频率越高，调用模型的次数越多。",
@@ -247,6 +261,10 @@ PA.strings({
     tuning_card_outside: "回复风格文件必须位于 personagent 文件夹内。请修改 .env 中的 PERSONA_CARD_FILE。",
     tuning_not_configured: "请先在本页上方连接模型。",
     tuning_unknown: "此页面已过期，请关闭 personagent 后重新打开。",
+    tuning_f_agent_enabled: "回复消息",
+    tuning_h_agent_enabled: "关闭后，角色仍保持与平台的连接，但不回复任何消息。如只需在部分群聊中保持沉默，请使用下一项设置。",
+    tuning_f_access_paused_groups: "在以下群聊中暂停回复",
+    tuning_h_access_paused_groups: "填写群聊编号，格式为 平台:编号，多个以逗号分隔。角色继续运行，并在其他地方照常回复；在这些群聊中，即使被呼叫也不回复，平台自带的机器人同样保持沉默。这些群聊中的消息不作为上下文保留，也不会从中学习。使用下方的「{pick}」并勾选「{pause}」最为简便。将群聊移出列表即可恢复回复。",
     tuning_f_admin_name: "角色对你的称呼",
     tuning_h_admin_name: "角色以此名称称呼你，即它的管理员。",
     tuning_f_admin_relationship: "你与角色的关系",
@@ -259,6 +277,8 @@ PA.strings({
     tuning_h_access_dm_users: "无需填写你自己。某个平台一旦填写了任一用户，该平台的其他用户将无法私聊角色。",
     tuning_f_persona_tz_offset_hours: "角色所在时区",
     tuning_h_persona_tz_offset_hours: "决定角色使用的时间和休息时段：按此时区 02:00 至 07:00，角色既不主动发起对话，也不主动加入群聊讨论。",
+    tuning_f_chat_only_when_called: "群聊中仅在被呼叫时回复",
+    tuning_h_chat_only_when_called: "在群聊中，角色仅在有人提及其名字、@它或回复它的消息时才回复，不会主动加入、接续或发起对话，因此下一项设置和「{feature}」对群聊不再生效。私聊不受影响。",
     tuning_f_chat_trigger_count: "主动加入讨论前的消息数",
     tuning_h_chat_trigger_count: "群聊中其他人的消息达到此数量后，角色才会考虑主动加入讨论。数值越小，角色越活跃，调用模型的次数也越多。",
     tuning_f_llm_fallback_model: "备用模型",
@@ -273,6 +293,8 @@ PA.strings({
     tuning_h_llm_dm_model: "主模型所在模型服务上的另一个模型，专用于一对一私聊。留空即使用主模型。",
     tuning_f_react_learn_enabled: "从他人的反应中学习",
     tuning_h_react_learn_enabled: "角色读取他人对其消息的回应，以了解哪些回复效果较好。每次读取会额外调用一次模型。",
+    tuning_f_react_learn_admin_only: "仅从管理员的纠正中学习",
+    tuning_h_react_learn_admin_only: "仅「{accounts}」中的账号作出的反应会改变角色的说话方式。其他人的反应仍会记录，但其中的建议不会投入使用，无论是自动投入还是由角色自行判断。未填写任何账号时，仅在「{chat}」中作出的纠正会使角色学习。",
     tuning_f_react_elicit_enabled: "回复被否定后询问原因",
     tuning_h_react_elicit_enabled: "有人指出回复不当但未说明原因时，角色可能在稍后主动询问一次。",
     tuning_f_promote_auto_enabled: "自动将学到的内容投入使用",
@@ -283,8 +305,6 @@ PA.strings({
     tuning_h_promote_judge_enabled: "当反应相互矛盾、两种改法并存，或某条内容仅有认可作为依据时，角色会自行决定采用、搁置或继续观察。每次判断调用一次模型；若回答无法使用，会再请求一次。关闭后，这类内容将保持观察状态。",
     tuning_f_promote_observe_max_days: "观察内容的搁置期限（天）",
     tuning_h_promote_observe_max_days: "超过此天数仍未收到新反应的内容将被搁置。0 表示永不搁置。",
-    tuning_f_agent_enabled: "回复消息",
-    tuning_h_agent_enabled: "关闭后，角色仍保持与平台的连接，但不回复任何消息。",
     tuning_f_dashboard_enabled: "保留动态数据",
     tuning_h_dashboard_enabled: "为「{activity}」页提供数据：角色发言或保持沉默的原因，以及学到的内容。关闭后，「{activity}」页将为空，且无法在「{chat}」页或「{activity}」页中忘掉对话。",
     tuning_f_update_check_enabled: "检查更新",
@@ -384,6 +404,8 @@ PA.strings({
     more: t("tuning_sec_more"),
     pick: t("tuning_pick"),
     me: t("tuning_me"),
+    pause: t("tuning_pause_here"),
+    accounts: t("tuning_f_admin_ids"),
   });
   const tell = (key, fields = {}) => t(key, { ...names(), ...fields });
   const say = (node, key, fields = () => ({})) => {
@@ -518,6 +540,26 @@ PA.strings({
     };
     item.input.addEventListener("input", item.refresh);
   }
+  function pausedNote(item) {
+    const line = el("p", "field-note tuning-limit", item.wrap);
+    line.id = "tuning-paused-note";
+    item.refresh = () => {
+      const n = idList(item.input.value).length;
+      line.textContent = n ? t("tuning_paused", { n: String(n) }) : t("tuning_paused_none");
+    };
+    item.input.addEventListener("input", item.refresh);
+  }
+  // Admin-only learning with no admin accounts teaches only through the page's chat.
+  function adminOnlyNote(item) {
+    const line = el("p", "field-note tuning-limit", item.wrap);
+    line.id = "tuning-admin-only-note";
+    line.setAttribute("role", "status");
+    item.refresh = () => {
+      line.hidden = !(item.input.checked && inputs.ADMIN_IDS && !idList(inputs.ADMIN_IDS.input.value).length);
+      line.textContent = tell("tuning_admin_only_empty");
+    };
+    item.input.addEventListener("change", item.refresh);
+  }
   const pickBox = el("div", "tuning-pick", sections.who);
   const pickButton = el("button", "secondary", pickBox);
   pickButton.type = "button";
@@ -539,14 +581,13 @@ PA.strings({
     for (const row of pickList.querySelectorAll(".tuning-pick-row")) {
       const me = row.querySelector(".tuning-me");
       if (me) me.textContent = t(has("ADMIN_IDS", row.dataset.id) ? "tuning_not_me" : "tuning_me");
-      row.querySelector("input[type=checkbox]").checked = has(row.dataset.list, row.dataset.id);
+      for (const box of row.querySelectorAll("input[type=checkbox]"))
+        box.checked = has(box.dataset.list, row.dataset.id);
     }
   }
   function pickRow(chat, person, n) {
     const row = el("div", "tuning-pick-row", pickList);
-    const key = person ? "ACCESS_DM_USERS" : "ACCESS_GROUPS";
     row.dataset.id = chat.id;
-    row.dataset.list = key;
     el("span", "tuning-pick-id", row).textContent = chat.id;
     if (person) {
       const me = el("button", "quiet tuning-me", row);
@@ -554,12 +595,21 @@ PA.strings({
       me.id = "tuning-pick-me-" + n;
       me.addEventListener("click", () => toggleId("ADMIN_IDS", chat.id, !has("ADMIN_IDS", chat.id)));
     }
-    const line = el("label", "check", row);
-    const box = el("input", "", line);
-    box.type = "checkbox";
-    box.id = "tuning-pick-allow-" + n;
-    say(el("span", "", line), person ? "tuning_may_dm" : "tuning_answer_here");
-    box.addEventListener("change", () => toggleId(key, chat.id, box.checked));
+    const choices = person
+      ? [["ACCESS_DM_USERS", "tuning_may_dm", "tuning-pick-allow-" + n]]
+      : [
+          ["ACCESS_GROUPS", "tuning_answer_here", "tuning-pick-allow-" + n],
+          ["ACCESS_PAUSED_GROUPS", "tuning_pause_here", "tuning-pick-pause-" + n],
+        ];
+    for (const [key, label, id] of choices) {
+      const line = el("label", "check", row);
+      const box = el("input", "", line);
+      box.type = "checkbox";
+      box.id = id;
+      box.dataset.list = key;
+      say(el("span", "", line), label);
+      box.addEventListener("change", () => toggleId(key, chat.id, box.checked));
+    }
   }
   pickButton.addEventListener("click", async () => {
     pickButton.disabled = true;
@@ -702,11 +752,14 @@ PA.strings({
     for (const field of fields) {
       const item = addField(field, sections[field.section]);
       if (field.key === "ACCESS_GROUPS" || field.key === "ACCESS_DM_USERS") restrictionNote(item);
+      if (field.key === "ACCESS_PAUSED_GROUPS") pausedNote(item);
+      if (field.key === "REACT_LEARN_ADMIN_ONLY") adminOnlyNote(item);
     }
-    // Names, your accounts, the picker, then the allowlists it fills.
+    // The switches, names, your accounts, the picker, then the allowlists it fills.
     sections.who.append(inputs.ADMIN_IDS.wrap, pickBox, inputs.ACCESS_GROUPS.wrap, inputs.ACCESS_DM_USERS.wrap);
-    for (const key of ["ADMIN_IDS", "ACCESS_DM_USERS", "ACCESS_GROUPS"])
+    for (const key of ["ADMIN_IDS", "ACCESS_DM_USERS", "ACCESS_GROUPS", "ACCESS_PAUSED_GROUPS"])
       inputs[key].input.addEventListener("input", syncPick);
+    inputs.ADMIN_IDS.input.addEventListener("input", inputs.REACT_LEARN_ADMIN_ONLY.refresh);
     buildTalkExtras();
     buildFresh();
   }

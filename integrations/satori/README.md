@@ -156,9 +156,9 @@ line from step 4 shows it. Two cases are special:
 | Group chats and DMs | Yes. A DM is a `DIRECT` channel, or a message without a guild. |
 | Addressed detection (`addressed`) | An `<at>` of the bot (by id, or by the bot's name when the server gives no id), and a reply to one of the bot's messages. `@all` counts as text, not a mention. |
 | Quoted messages | The quoted text, sender and id, taken from a `<quote>` element or from `message.quote`. |
-| Images in | `data:` and `internal:` images, and images on the Satori server, are inlined. Public URLs are passed on for the agent to fetch. Private-network URLs are described as `(sent an image)`. At most 4 downloads per message, 4 MB each. |
+| Images in | `data:` and `internal:` images, and images on the Satori server, are inlined. Public URLs are passed on for the agent to fetch. An image from a private network, or one that cannot be downloaded, is sent as a `photo` media segment, without its URL. At most 4 downloads per message, 4 MB each. |
 | Stickers and emoji | `<emoji>` and QQ `<face>` arrive as emoji, and the persona knows it cannot see them. |
-| Voice, video, files | Described in words: `(sent a voice message)`, `(sent a video)`, `(sent a file: deck.pdf)`. |
+| Voice, video, files | Sent as `media` segments (`voice`, `video`, and `file` with its name); the agent decides how the character is told. |
 | Replies | Text, and images as `data:` URIs, each sent as a separate message with a short gap. In groups, a mention the agent asks for becomes an `<at>`. |
 | Passive-reply platforms | Replies carry the event's `referrer`, which the official QQ bot API needs to answer a message. |
 | Outbox | Scheduled openers, follow-ups and excuses go to the channel through the login that received the conversation. The connector signs each reply handle with a key derived from `SATORI_TOKEN` and `CONNECTOR_TOKEN`, and sends only to handles it signed. After you change either token, a conversation becomes reachable again once it has sent a message. An agent with `CONNECTOR_OUTBOX_ENABLED=false` answers 404, and the connector retries every 10 minutes. |

@@ -78,12 +78,12 @@ PyPI 上发布新版本时，「开始聊天」视图会显示提示，并给出
 
 | 分组 | 设置 |
 |---|---|
-| 「管理员与回复范围」 | 角色对你的称呼和你与角色的关系（`ADMIN_NAME`、`ADMIN_RELATIONSHIP`）；「你的账号」（`ADMIN_IDS`）；「仅在以下群聊中回复」（`ACCESS_GROUPS`）；「允许私聊的其他用户」（`ACCESS_DM_USERS`）。「从最近的聊天中选择」会列出「动态」中的用户和群聊，无需手动输入 ID。 |
-| 「发言与回复风格」 | 「角色所在时区」（`PERSONA_TZ_OFFSET_HOURS`）；「主动加入讨论前的消息数」（`CHAT_TRIGGER_COUNT`）；「主动发起对话的频率」，一次设定七项 `PROACTIVE_*` 时间参数；「回复风格」：emoji、三组符号和回复的最大长度，写入 `persona.card.json`。 |
+| 「回复、管理员与回复范围」 | 「回复消息」（`AGENT_ENABLED`）；「在以下群聊中暂停回复」（`ACCESS_PAUSED_GROUPS`）；角色对你的称呼和你与角色的关系（`ADMIN_NAME`、`ADMIN_RELATIONSHIP`）；「你的账号」（`ADMIN_IDS`）；「仅在以下群聊中回复」（`ACCESS_GROUPS`）；「允许私聊的其他用户」（`ACCESS_DM_USERS`）。「从最近的聊天中选择」会列出「动态」中的用户和群聊，无需手动输入 ID。 |
+| 「发言与回复风格」 | 「角色所在时区」（`PERSONA_TZ_OFFSET_HOURS`）；「群聊中仅在被呼叫时回复」（`CHAT_ONLY_WHEN_CALLED`）；「主动加入讨论前的消息数」（`CHAT_TRIGGER_COUNT`）；「主动发起对话的频率」，一次设定七项 `PROACTIVE_*` 时间参数；「回复风格」：emoji、三组符号和回复的最大长度，写入 `persona.card.json`。 |
 | 「模型」 | 备用模型及其服务地址和密钥（`LLM_FALLBACK_MODEL`、`LLM_FALLBACK_BASE_URL`、`LLM_FALLBACK_API_KEY`）、「快速判断模型」（`LLM_JUDGE_MODEL`）和「私聊模型」（`LLM_DM_MODEL`）。备用模型在保存前会先经过测试。 |
-| 「学习」 | `REACT_LEARN_ENABLED`、`REACT_ELICIT_ENABLED`、`PROMOTE_AUTO_ENABLED`、`PROMOTE_MIN_SPEAKERS`（1 或 2）、`PROMOTE_JUDGE_ENABLED`（由角色自行判断反应无法确定的内容）和 `PROMOTE_OBSERVE_MAX_DAYS`（观察中的内容在多少天内没有新的反应即被搁置）。「重新开始学习」会写入新的 `PERSONA_VERSION`，此前学到的内容不再使用，但不会被删除。 |
+| 「学习」 | `REACT_LEARN_ENABLED`、`REACT_LEARN_ADMIN_ONLY`、`REACT_ELICIT_ENABLED`、`PROMOTE_AUTO_ENABLED`、`PROMOTE_MIN_SPEAKERS`（1 或 2）、`PROMOTE_JUDGE_ENABLED`（由角色自行判断反应无法确定的内容）和 `PROMOTE_OBSERVE_MAX_DAYS`（观察中的内容在多少天内没有新的反应即被搁置）。「重新开始学习」会写入新的 `PERSONA_VERSION`，此前学到的内容不再使用，但不会被删除。 |
 | 「记忆」 | `MEMORY_CALLS_PER_DAY`、`MEMORY_TIDY_EVERY`、`CHAT_CONTEXT_MESSAGES`、`MEMORY_PROMPT_CHARS`、`MEMORY_EPISODES_MAX` 和 `MEMORY_KEEP_RECENT`，见[记忆](#记忆)。 |
-| 「其他设置」 | `AGENT_ENABLED`、`DASHBOARD_ENABLED`、`UPDATE_CHECK_ENABLED`、七项 `PROACTIVE_*` 时间参数、`CHAT_FOLLOWUP_WINDOW_S`、`REACT_*` 和 `PROMOTE_*` 的各项限值、`REACT_MODEL`、角色自行判断所用的模型、间隔和每轮数量（`PROMOTE_JUDGE_MODEL`、`PROMOTE_JUDGE_INTERVAL_S`、`PROMOTE_JUDGE_BATCH`）以及 `PERSONA_VERSION`。 |
+| 「其他设置」 | `DASHBOARD_ENABLED`、`UPDATE_CHECK_ENABLED`、七项 `PROACTIVE_*` 时间参数、`CHAT_FOLLOWUP_WINDOW_S`、`REACT_*` 和 `PROMOTE_*` 的各项限值、`REACT_MODEL`、角色自行判断所用的模型、间隔和每轮数量（`PROMOTE_JUDGE_MODEL`、`PROMOTE_JUDGE_INTERVAL_S`、`PROMOTE_JUDGE_BATCH`）以及 `PERSONA_VERSION`。 |
 
 「保存」只写入有改动的设置，`.env` 的其余内容保持不变；随后角色会重新启动，只改动 `UPDATE_CHECK_ENABLED` 时除外。关闭「回复消息」（`AGENT_ENABLED`）前会先询问。在「角色名称」中改名前也会先询问，因为新名称意味着新角色。
 
@@ -188,7 +188,7 @@ PyPI 上发布新版本时，「开始聊天」视图会显示提示，并给出
 
 - **AI 服务。** 预设与页面一致，默认为 OpenRouter 的 `openrouter/free`，每次请求会交由其某个免费模型处理。该密钥不收费。限额为每分钟 20 次、每天 50 次，累计购买至少 10 credits 后为每天 1000 次。所有模型调用均计入限额，不仅限于回复，每日额度在 UTC 零点重置。额度用完后，角色会说明暂时无法回答，原因记录在 `runtime/desktop/agent.log` 中。每次使用的模型可能不同，因此角色的语气不如固定模型稳定，部分免费服务商也会保留收到的内容。如需更稳定的角色，可使用同一个密钥改用付费模型。如果无法连接 OpenRouter，可使用同样免费的智谱 `glm-4.7-flash`。使用 Ollama 时，请填写一个已下载的模型，无需密钥。
 - **API 密钥。** 默认隐藏输入，也可选择显示；重新配置时选择显示，还可核对已保存的密钥。填写后会发送一个很小的请求进行测试。测试失败时，会显示请求的地址、HTTP 状态码和可能的解决办法。
-- **角色。** 先设定名字（中文默认为小夏），再从七个现成性格中选择一个：冷面损友、温和的倾听者、游戏伙伴、爱书人，以及社区中已流行的三个形象：DeepSeek 鲸鱼娘、GPT 娘（白龙）和 Claude 娘（豪门圣女）；也可以先使用一个朴素的角色，以后自行编写。选择后三者之一且未自行命名时，角色即使用该形象的名字；本地页面会显示其动态立绘。
+- **角色。** 先设定名字（中文默认为小夏），再从七个现成性格中选择一个：冷面损友、温和的倾听者、游戏伙伴、爱书人，以及社区中已流行的三个形象：DeepSeek 鲸鱼娘、GPT 娘（白龙）和 Claude 娘（豪门圣女）；也可以先使用一个朴素的角色，以后自行编写。选择后三者之一且未自行命名时，角色即使用该形象的名字：GPT娘、DeepSeek娘或 Claude娘（英文等语言为 GPT-chan 等，日文为 GPTちゃん 等，韩文为 GPT짱 等）；本地页面会显示其动态立绘。自行编写人设后，在「角色与设置」中点击立绘只更换头像。该处的「使用自己的图片」可选择不超过 2 MB 的 PNG、JPEG 或 WebP 图片，保存在主目录的 `avatar.png`（或 `.jpg`、`.webp`）中，仅在本地页面显示。
 - **聊天平台。** 可选，首次设置时可以跳过此步骤。设置过程会列出 personagent 直接连接的十个平台，设置完成后可使用 [`personagent connect <平台>`](#在终端中连接平台) 连接。其他平台可在此步骤中连接 AstrBot；如尚未安装，也可先自动下载并安装。见[你自己运行的桥接](#你自己运行的桥接)。
 
 如需跳过问答直接完成配置（例如在脚本中），运行 `personagent init --no-input` 并带上以下参数：
@@ -301,7 +301,7 @@ personagent 运行期间，该连接保持有效。`personagent up` 会启动 pe
   ]}
   ```
 
-  SillyTavern 导出的 World Info 文件不能直接使用：其中的 `entries` 是以编号为键的对象，关键词位于 `key` 中。请把 `entries` 改为列表，并把 `key` 改名为 `keywords`；`content` 保持不变。
+  在「角色与设置」的「背景设定」部分，可以查看正在使用的条目，并添加、编辑和删除条目。「导入文件」支持上述格式的文件和 SillyTavern 导出的 World Info 文件，已停用的条目以及缺少关键词或内容的条目将被跳过。首次保存修改时，内置背景设定会复制到 `data/lorebook.<lang>.json`；「恢复内置背景设定」会将该文件改名为 `.bak`。该部分和 `personagent doctor` 还会显示你自己的屏蔽词和示例对话文件是否正在使用，或哪个文件无法读取。
 - 屏蔽词（`output_filter.<lang>.json`）：每个 `pattern` 是一个 Python 正则表达式，匹配时不区分大小写。`"action": "reject"` 会丢弃整条回复，不发送任何内容；`"replace"` 会用 `replacement` 替换匹配到的部分，再发送其余内容。
 
   ```json

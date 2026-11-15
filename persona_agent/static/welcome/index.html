@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="/assets/panels/learned.css" />
     <link rel="stylesheet" href="/assets/panels/agents.css" />
     <link rel="stylesheet" href="/assets/panels/practice.css" />
+    <link rel="stylesheet" href="/assets/panels/lore.css" />
     <script src="/assets/welcome.js" defer></script>
     <script src="/assets/panels/health.js" defer></script>
     <script src="/assets/panels/runtime.js" defer></script>
@@ -22,6 +23,7 @@
     <script src="/assets/panels/learned.js" defer></script>
     <script src="/assets/panels/agents.js" defer></script>
     <script src="/assets/panels/practice.js" defer></script>
+    <script src="/assets/panels/lore.js" defer></script>
   </head>
   <body>
     <div class="shell">
@@ -160,9 +162,17 @@
                   class="field-note"
                   id="custom-note"
                   hidden
-                  data-t="customKept"
+                  data-t="customKeepsText"
                 >
-                  选择其他性格或立绘并保存后，你编写的人设将被替换。
+                  选择其他性格并保存后，你编写的人设将被替换；选择立绘只更换头像。
+                </p>
+                <p
+                  class="field-note"
+                  id="template-note"
+                  hidden
+                  data-t="templateNote"
+                >
+                  设置完成后，可在「角色与设置」页下方的「人设」中编写角色。
                 </p>
               </details>
               <div id="form-error" class="error" role="alert" hidden></div>
@@ -183,9 +193,7 @@
                 <div class="avatar big" id="preview-avatar" aria-hidden="true"></div>
                 <div class="eyebrow" data-t="yourCharacter">预览</div>
                 <h2 id="preview-name">小夏</h2>
-                <p data-t="previewText">
-                  性格决定角色说话的语气。
-                </p>
+                <p id="preview-text">性格决定角色说话的语气。</p>
                 <div class="sample-bubble" data-t="sample">
                   今天过得怎么样？有什么想聊的吗？
                 </div>
@@ -194,6 +202,24 @@
                     也可以选择 GPT 娘、鲸鱼娘或 Claude 娘
                   </div>
                   <div class="trio-row" id="trio-row"></div>
+                </div>
+                <div class="own-avatar" id="own-avatar" hidden>
+                  <input
+                    type="file"
+                    id="own-avatar-file"
+                    accept="image/png,image/jpeg,image/webp"
+                    hidden
+                  />
+                  <div class="own-avatar-actions">
+                    <button type="button" class="quiet" id="own-avatar-pick" data-t="ownAvatarPick">
+                      使用自己的图片
+                    </button
+                    ><button type="button" class="quiet" id="own-avatar-remove" data-t="ownAvatarRemove" hidden>
+                      移除图片
+                    </button>
+                  </div>
+                  <p class="field-note" id="own-avatar-note"></p>
+                  <div id="own-avatar-error" class="error" role="alert" hidden></div>
                 </div>
                 <div class="preview-caption" data-t="changeLater">
                   名称和性格可随时更改。
@@ -243,6 +269,7 @@
               </button>
             </div>
           </div>
+          <div id="lore-root" class="panel-root side-card" hidden></div>
           <div id="features-card" class="card side-card" hidden>
             <h2 data-t="featuresTitle">更多功能</h2>
             <div class="feature">
@@ -407,9 +434,15 @@
           </p>
           <div id="activity-empty" class="activity-empty" hidden>
             <p id="activity-empty-text"></p>
-            <button type="button" class="secondary" id="activity-connect" data-t="activityConnect">
-              连接平台
-            </button>
+            <div class="activity-empty-actions">
+              <button type="button" class="primary" id="activity-start" data-t="activityStart" hidden>
+                启动角色
+              </button>
+              <button type="button" class="secondary" id="activity-connect" data-t="activityConnect">
+                连接平台
+              </button>
+            </div>
+            <p id="activity-start-error" class="error activity-start-error" role="alert" hidden></p>
           </div>
           <div id="activity-body" class="activity" hidden>
             <ul id="activity-chats" class="activity-chats" aria-label="Chats" data-t-aria="ariaChats"></ul>

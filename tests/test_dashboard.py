@@ -174,6 +174,13 @@ def test_the_status_route_is_gone(live) -> None:
     check("nothing builds a status payload", not hasattr(dashboard, "status_payload"))
 
 
+def test_the_model_route_says_what_the_agent_already_knows(live) -> None:
+    check("nothing known: reachable", client().get("/api/dashboard/model").json() == {"model_unreachable": False})
+    live.__dict__["model_unreachable"] = True
+    check("a failed probe shows", client().get("/api/dashboard/model").json() == {"model_unreachable": True})
+    check("only with the token", client(signed_in=False).get("/api/dashboard/model").status_code in (401, 403))
+
+
 def test_the_root_only_points_at_the_local_page(live) -> None:
     c = client(signed_in=False)
     c.follow_redirects = False

@@ -1860,14 +1860,84 @@ async def test_each_answers_usage_is_counted_per_model_and_day(tmp: Path) -> Non
     today = usage.load(path)[usage.day_of(time.time())]
     check("two answers with usage are summed for their model", today["primary"] == {
         "calls": 2, "prompt_tokens": 200, "completion_tokens": 40, "cached_tokens": 120,
-        "cost": 0.004, "costed": 2}, repr(today["primary"]))
+        "cost": 0.004, "costed": 2, "purposes": {"other": 2}}, repr(today["primary"]))
     check("an answer without usage is a call with no tokens", today["fallback"] == {
-        "calls": 1, "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0},
-        repr(today["fallback"]))
+        "calls": 1, "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0,
+        "purposes": {"other": 1}}, repr(today["fallback"]))
     shown = usage.read_summary(path)
     check("the summary adds today's models up",
           shown["today"]["calls"] == 3 and shown["today"]["tokens"] == 240
           and abs(shown["today"]["cost"] - 0.004) < 1e-9 and shown["week"]["calls"] == 3,
+          repr(shown))
+
+
+async def test_each_request_is_counted_under_what_it_was_for(tmp: Path) -> None:
+    """Ten messages showed as 21 requests with no way to tell why."""
+    from persona_agent import llm, usage
+
+    agent = _two_model_agent(tmp)
+    agent._http = _ByModel(primary=_ok("a"), fallback=_ok("b"))
+    for label in ("reply", "reply", "gate", "made-up"):
+        with llm.purpose(label):
+            await agent._call_llm("sys", [{"role": "user", "content": "hi"}], model="primary",
+                                  max_tokens=50, enable_search=False)
+    await agent._call_llm("sys", [{"role": "user", "content": "hi"}], model="fallback",
+                          max_tokens=50, enable_search=False)
+    book = agent.__dict__["_usage_book"]
+    book.flush(time.time())
+    shown = usage.read_summary(tmp / usage.USAGE_FILE)
+    check("today's requests are split by purpose, unknown and unlabeled as other",
+          shown["todayPurposes"] == {"reply": 2, "gate": 1, "other": 2}, repr(shown))
+
+
+async def test_the_gate_and_the_start_up_check_name_their_purpose(tmp: Path) -> None:
+    import types
+
+    from persona_agent import llm
+
+    agent = _two_model_agent(tmp)
+    seen = []
+
+    async def fake_llm(*_a, **_kw):
+        seen.append(llm._call_purpose.get())
+        return '{"reply": "[PASS]"}'
+
+    agent._call_llm = fake_llm
+    await agent._gate(types.SimpleNamespace(gate_system="s", user="u"))
+
+    async def fake_post(*_a, **_kw):
+        seen.append(llm._call_purpose.get())
+        raise httpx.ConnectError("down")
+
+    agent._post_chat = fake_post
+    agent.embedding_model = ""
+    await agent.probe_models()
+    check("the gate counts as gate and the probe as the check",
+          seen[0] == "gate" and set(seen[1:]) == {"check"}, repr(seen))
+    check("outside any call the purpose is other", llm._call_purpose.get() == "other")
+    check("a failed start-up probe marks the model unreachable",
+          agent.__dict__.get("model_unreachable") is True)
+    del agent._post_chat, agent._call_llm
+    agent._http = _ByModel(primary=_ok("a"), fallback=_ok("b"))
+    await agent._call_llm("sys", [{"role": "user", "content": "hi"}], model="primary",
+                          max_tokens=50, enable_search=False)
+    check("an answer from the model clears it", agent.__dict__.get("model_unreachable") is False)
+
+
+def test_a_usage_file_from_before_purposes_still_loads(tmp: Path) -> None:
+    import json
+
+    from persona_agent import usage
+
+    now = time.time()
+    path = tmp / usage.USAGE_FILE
+    path.write_text(json.dumps({"days": {usage.day_of(now): {"m": {"calls": 4, "prompt_tokens": 9}}}}),
+                    encoding="utf-8")
+    book = usage.UsageBook(path)
+    book.add("m", {}, now, "reply")
+    shown = usage.summary(book.days, now)
+    check("old calls count as other beside the new split",
+          shown["today"]["calls"] == 5 and shown["todayPurposes"] == {"reply": 1, "other": 4},
           repr(shown))
 
 

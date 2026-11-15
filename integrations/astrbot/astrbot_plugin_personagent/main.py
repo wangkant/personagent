@@ -40,15 +40,15 @@ from astrbot.core.platform.message_session import MessageSession
 
 from . import personagent_connector as sdk
 from .platforms import (
-    LINE_PLACEHOLDERS,
-    WECOM_AI_PLACEHOLDERS,
+    LINE_MEDIA_KINDS,
+    WECOM_AI_MEDIA_KINDS,
     Rules,
     _get,
     escape,
     image_suffix,
     is_private_url,
     kook_segments,
-    media_note,
+    media_kind,
     native_message_id,
     rules_for,
     seconds,
@@ -89,9 +89,11 @@ _DISCORD_ROLE = re.compile(r"<@&(\d+)>")
 _DISCORD_CHANNEL = re.compile(r"<#(\d+)>")
 _DISCORD_EMOJI = re.compile(r"<a?:(\w+):\d+>")
 _SLACK_LINK = re.compile(r"<(https?://[^|>]+)(?:\|([^>]*))?>")
-_VOICE_NOTE = "(sent a voice message)"
-_VIDEO_NOTE = "(sent a video)"
-_IMAGE_NOTE = "(sent an image)"
+
+
+def _media(kind: str, **fields: str) -> dict:
+    """A `media` segment: the agent, not the plugin, words what it cannot see."""
+    return {"type": "media", "kind": kind, **{k: v for k, v in fields.items() if v}}
 
 
 class _Prefixed(logging.LoggerAdapter):
@@ -184,21 +186,22 @@ def _slack_text(text: str) -> str:
 
 
 def _outline(chain) -> str:
-    """What a quoted message showed, when the adapter gives only its parts."""
+    """What a quoted message showed, when the adapter gives only its parts.
+    Media reads as the placeholders the agent renders media segments as."""
     parts = []
     for comp in chain or []:
         if isinstance(comp, Comp.Plain):
             parts.append(comp.text or "")
         elif isinstance(comp, Comp.Image):
-            parts.append("(image)")
+            parts.append("[image]")
         elif _comp_is(comp, "Record"):
-            parts.append("(voice message)")
+            parts.append("[voice]")
         elif _comp_is(comp, "Video"):
-            parts.append("(video)")
+            parts.append("[video]")
         elif _comp_is(comp, "File"):
-            parts.append("(file)")
+            parts.append("[file]")
         elif isinstance(comp, Comp.Face):
-            parts.append("(emoji)")
+            parts.append("[emoji]")
     return " ".join(p for p in parts if p).strip()
 
 
@@ -670,18 +673,16 @@ class PersonagentConnector(Star):
             appid = getattr(self._event_inst(event), "appid", None)
         for comp in components:
             if _comp_is(comp, "File"):
-                name = str(getattr(comp, "name", "") or "")
-                note = self._file_note(platform, raw, comp)
-                segments.append({"type": "text", "text": note or (
-                    f"(sent a file: {name})" if name else "(sent a file)")})
+                kind = self._file_kind(platform, raw, comp)
+                segments.append(_media(kind) if kind else _media(
+                    "file", name=str(getattr(comp, "name", "") or "").strip()))
                 continue
             if _comp_is(comp, "Video"):
-                segments.append({"type": "text", "text": _VIDEO_NOTE})
+                segments.append(_media("video"))
                 continue
             if _comp_is(comp, "Record"):
                 said = self._voice_transcript(platform, event, raw, components)
-                segments.append({"type": "text", "text": (
-                    f"(sent a voice message: {said})" if said else _VOICE_NOTE)})
+                segments.append(_media("voice", transcript=said))
                 continue
             if isinstance(comp, Comp.Plain):
                 text = comp.text or ""
@@ -771,8 +772,8 @@ class PersonagentConnector(Star):
                 return [{"type": "emoji", "name": str(emoji)}]
         elif platform == "wecom_ai_bot":
             kind = str(_get(raw, "message_data", "msgtype") or "")
-            if text == f"[{kind}消息]" and text in WECOM_AI_PLACEHOLDERS:
-                return [{"type": "text", "text": WECOM_AI_PLACEHOLDERS[text]}]
+            if text == f"[{kind}消息]" and text in WECOM_AI_MEDIA_KINDS:
+                return [_media(WECOM_AI_MEDIA_KINDS[text])]
         elif platform == "line":
             message = _get(raw, "message") or {}
             kind = str(_get(message, "type") or "")
@@ -782,22 +783,25 @@ class PersonagentConnector(Star):
                 name = str(keywords[0]) if keywords else (sticker_id or "sticker")
                 return [{"type": "emoji", "name": name, "id": sticker_id}]
             if kind and kind != "text" and text == f"[{kind}]":
-                return [{"type": "text", "text": LINE_PLACEHOLDERS.get(kind, f"(sent a {kind})")}]
+                if kind in LINE_MEDIA_KINDS:
+                    return [_media(LINE_MEDIA_KINDS[kind])]
+                # A location, say: the protocol has no media kind for it.
+                return [{"type": "text", "text": f"(sent a {kind})"}]
         return None
 
     @staticmethod
-    def _file_note(platform: str, raw, comp) -> str | None:
-        """Voice and video an adapter hands over as a generic File."""
+    def _file_kind(platform: str, raw, comp) -> str | None:
+        """The media kind of voice or video an adapter hands over as a generic File."""
         name = str(getattr(comp, "name", "") or "")
         url = str(getattr(comp, "url", "") or "")
         if platform == "discord":
             for att in _get(raw, "attachments") or []:
                 if (url and str(_get(att, "url")) == url) or str(_get(att, "filename")) == name:
-                    return media_note(str(_get(att, "content_type") or ""))
+                    return media_kind(str(_get(att, "content_type") or ""))
         elif platform == "slack" and isinstance(raw, dict):
             for f in raw.get("files") or []:
                 if isinstance(f, dict) and f.get("name") == name:
-                    return media_note(str(f.get("mimetype") or ""))
+                    return media_kind(str(f.get("mimetype") or ""))
         return None
 
     @staticmethod
@@ -840,11 +844,12 @@ class PersonagentConnector(Star):
                         b64 = await comp.convert_to_base64()
                     except Exception as e:
                         logger.debug(f"personagent: could not read an image: {e}")
+        # The source stays here: the agent could not fetch it either.
         if not b64:
-            return {"type": "text", "text": _IMAGE_NOTE}
+            return _media("photo")
         cap = int(self.config.get("max_inline_image_bytes", DEFAULT_MAX_INLINE_IMAGE_BYTES))
         if len(b64) * 3 // 4 > cap or len(b64) > budget[0]:
-            return {"type": "text", "text": _IMAGE_NOTE}
+            return _media("photo")
         budget[0] -= len(b64)
         return {"type": "image", "b64": b64}
 
@@ -875,11 +880,11 @@ class PersonagentConnector(Star):
         elif platform == "lark" and _get(raw, "message_type") == "sticker":
             out.append({"type": "emoji", "name": "sticker"})
         elif platform == "dingtalk" and _get(raw, "message_type") == "video":
-            out.append({"type": "text", "text": _VIDEO_NOTE})
+            out.append(_media("video"))
         elif platform == "satori":
             content = str(_get(raw, "message", "content") or "")
             if "<video" in content:
-                out.append({"type": "text", "text": _VIDEO_NOTE})
+                out.append(_media("video"))
         return out
 
     def _raw_reply(self, platform: str, raw):
@@ -892,7 +897,7 @@ class PersonagentConnector(Star):
             content = _get(resolved, "content")
             text = _flatten(_discord_text(content, resolved)) if content else ""
             if not text and _get(resolved, "attachments"):
-                text = "(attachment)"
+                text = "[attachment]"
             return self._reply_segment(
                 _get(ref, "message_id"), text, _get(resolved, "author", "id"),
                 _get(resolved, "author", "display_name"))

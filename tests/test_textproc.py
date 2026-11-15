@@ -2117,6 +2117,10 @@ def test_a_character_named_after_a_vendor_may_say_its_own_name() -> None:
               TP._sanitize_reply(raw, "zh", style) == "", repr(raw))
     check("a name that is not a vendor sets nothing aside",
           TP._sanitize_reply("I'm DeepSeek", "en", ReplyStyle(own_names=("Mira",))) == "")
+    # The personification's name, with no portrait key beside it (a picture of one's own).
+    whale = ReplyStyle(own_names=("DeepSeek娘", "own"))
+    check("a name built on a vendor's passes", TP._sanitize_reply("我是DeepSeek娘哦", "zh", whale) != "")
+    check("but the bare vendor name still drops", TP._sanitize_reply("我是DeepSeek哦", "zh", whale) == "")
     # A model id's tail used to run on into the Chinese after it and hide this.
     check("a customer of a vendor with an id tail keeps flowing",
           TP._sanitize_reply("作为DeepSeek的老用户我觉得还行", "zh") != "")

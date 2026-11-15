@@ -22,6 +22,7 @@ PA.strings({
     health_verdict_bridge: "The QQ bridge (NapCat) is not responding. The character requires it to send and receive messages.",
     health_open_settings: "Open Character & settings",
     health_probe_ledger: "Learning records",
+    health_probe_data: "Lorebook, example dialogues and word filters",
     health_probe_dm: "Private chat replies",
     health_probe_chat: "Group chat replies",
     health_probe_searchdecide: "Web search decision",
@@ -41,6 +42,7 @@ PA.strings({
     health_ms: "{ms} ms",
     health_details: "Technical details",
     health_ledger_note: "Some records could not be read and were skipped, or the record files are large. No action is needed unless this continues to grow.",
+    health_data_note: "One of your own files in the data folder cannot be read, so the character uses none of its entries. Correct or remove the file named under the technical details; the lorebook can also be edited under Character & settings.",
     health_show_skipped: "Show {count} services not set up",
     health_hide_skipped: "Hide services not set up",
     health_fail_agent: "The character is not running. It failed to start or stopped unexpectedly.",
@@ -127,6 +129,7 @@ PA.strings({
     health_verdict_bridge: "QQ 桥接（NapCat）未响应。角色需要通过它收发消息。",
     health_open_settings: "打开「角色与设置」",
     health_probe_ledger: "学习记录",
+    health_probe_data: "背景设定、示例对话和屏蔽词",
     health_probe_dm: "私聊回复",
     health_probe_chat: "群聊回复",
     health_probe_searchdecide: "联网搜索判断",
@@ -146,6 +149,7 @@ PA.strings({
     health_ms: "{ms} 毫秒",
     health_details: "技术详情",
     health_ledger_note: "部分记录无法读取，已跳过；或记录文件较大。如数量未持续增加，则无需处理。",
+    health_data_note: "data 文件夹中你自己的某个文件无法读取，角色不会使用其中任何一条。请修正或移除技术详情中列出的文件；背景设定也可在「角色与设置」中编辑。",
     health_show_skipped: "显示 {count} 项未设置的服务",
     health_hide_skipped: "隐藏未设置的服务",
     health_fail_agent: "角色未在运行：启动失败或已意外停止。",
@@ -424,6 +428,7 @@ PA.strings({
         main.append(tech);
       }
       if (s.id === "ledger" && s.ok === false) main.append(el("p", "field-note", PA.t("health_ledger_note")));
+      if (s.id === "data" && s.ok === false) main.append(el("p", "field-note", PA.t("health_data_note")));
       row.append(mark, main);
       rows.append(row);
     }

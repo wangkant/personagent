@@ -133,6 +133,29 @@ def test_the_memory_settings_save_and_read_back_as_the_character_reads_them(clie
         assert field.default == default, key
 
 
+def test_the_group_owners_controls_save_and_read_back_as_the_character_reads_them(client, workspace):
+    from persona_agent.settings import AgentSettings
+
+    body = post(client, {"values": {"CHAT_ONLY_WHEN_CALLED": True, "REACT_LEARN_ADMIN_ONLY": True,
+                                    "ACCESS_PAUSED_GROUPS": "qq:555，telegram:-1001"}}).json()
+    assert body["changed"] and workspace.restarts == [True]
+    values = workspace.config()
+    assert (values["CHAT_ONLY_WHEN_CALLED"], values["REACT_LEARN_ADMIN_ONLY"],
+            values["ACCESS_PAUSED_GROUPS"]) == ("true", "true", "555,telegram:-1001")
+    read = AgentSettings.from_env(env=values)
+    assert read.chat_only_when_called and read.promotion_policy.admin_only
+    assert read.access_paused_groups == ("555", "telegram:-1001")
+    response = post(client, {"values": {"ACCESS_PAUSED_GROUPS": "telegram:"}})
+    assert response.status_code == 400 and response.json()["error"] == "tuning_invalid:ACCESS_PAUSED_GROUPS"
+    # The switches a group owner looks for first open the "who" section.
+    who = [f.key for f in tuning.FIELDS if f.section == "who"]
+    assert who[:2] == ["AGENT_ENABLED", "ACCESS_PAUSED_GROUPS"]
+    assert tuning.BY_KEY["CHAT_ONLY_WHEN_CALLED"].section == "talk"
+    assert tuning.BY_KEY["REACT_LEARN_ADMIN_ONLY"].section == "learning"
+    for key in ("CHAT_ONLY_WHEN_CALLED", "REACT_LEARN_ADMIN_ONLY", "AGENT_ENABLED"):
+        assert not tuning.BY_KEY[key].live
+
+
 def test_the_two_renamed_meanings_are_explained_anew():
     found = tables()
     assert found["en"]["tuning_f_chat_context_messages"] == "Recent messages kept per chat"

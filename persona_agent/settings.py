@@ -117,6 +117,10 @@ class AgentSettings:
     #: reply reads at most the last 60, and fewer when this is below 30.
     chat_context_messages: int = 120
     chat_followup_window_s: int = 120
+    #: In groups, speak only when named, mentioned or quoted: no trigger
+    #: count, no follow-up window, no openers.
+    chat_only_when_called: bool = _env(
+        lambda env: env_bool("CHAT_ONLY_WHEN_CALLED", False, env=env))
     memory_file: str = "memory.json"
     #: Notes per chat; past it, the least useful note the character wrote goes.
     memory_max_per_conversation: int = 50
@@ -157,6 +161,10 @@ class AgentSettings:
     #: these take the "ordinary friend" branch rather than the admin's.
     access_dm_users: tuple[str, ...] = _env(
         lambda env: access.identity_from_env(env).written["ACCESS_DM_USERS"])
+    #: Admitted groups where it stays silent (``ACCESS_PAUSED_GROUPS``): their
+    #: messages are claimed for the connector, then neither kept nor learned from.
+    access_paused_groups: tuple[str, ...] = _env(
+        lambda env: access.identity_from_env(env).written["ACCESS_PAUSED_GROUPS"])
     #: Connector platforms whose ids are minted bare, on NapCat's keys. The
     #: operator's call, never the connector's: a bare id carries QQ authority.
     connector_qq_platforms: tuple[str, ...] = ()
@@ -329,7 +337,8 @@ class AgentSettings:
         # Canonical ids: "qq:1" and a native "aiocqhttp:1" both read as "1".
         natives = self.connector_qq_platforms = access.split_ids(
             self.connector_qq_platforms)
-        for name in ("admin_ids", "access_groups", "access_dm_users"):
+        for name in ("admin_ids", "access_groups", "access_dm_users",
+                     "access_paused_groups"):
             setattr(self, name, access.canonical_ids(
                 getattr(self, name), native_platforms=natives))
         self.proactive_platforms = tuple(dict.fromkeys(

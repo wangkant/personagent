@@ -226,6 +226,22 @@ def test_the_panel_shows_what_the_models_used_today_and_this_week(page) -> None:
     assert (seen["today"]["calls"], seen["today"]["tokens"], seen["today"]["cost"]) == (2, 1050, 0.01)
     assert (seen["week"]["calls"], seen["week"]["tokens"]) == (3, 1060)
     assert [m["model"] for m in seen["models"]] == ["main", "judge"]
+    assert seen["todayPurposes"] == {"other": 2}
+
+
+def test_the_panel_splits_todays_requests_by_purpose(page) -> None:
+    from persona_agent import usage
+
+    now = time.time()
+    book = usage.UsageBook(page.home / "runtime" / usage.USAGE_FILE)
+    for label in ("reply", "reply", "gate", "check"):
+        book.add("main", {}, now, label)
+    book.flush(now)
+    seen = page.client.get("/api/runtime", headers=HEADERS).json()["usage"]
+    assert seen["todayPurposes"] == {"reply": 2, "gate": 1, "check": 1}
+    source = (welcome.ASSETS / "panels" / "runtime.js").read_text(encoding="utf-8")
+    for label in usage.PURPOSES:
+        assert source.count(f"    runtime_use_{label}: ") == 2, label
 
 
 def test_the_use_line_is_in_every_page_language() -> None:

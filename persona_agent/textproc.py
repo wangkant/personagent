@@ -1246,7 +1246,8 @@ def _names_its_own_vendor(text: str, own_names: Sequence[str] = ()) -> bool:
     may introduce itself by that name, unless the same sentence makes it the
     product: a version, a maker or what it runs on."""
     mine = [_own_name_re(name.strip()) for name in own_names
-            if name and _vendor_name_re().fullmatch(name.strip())]
+            # match, not fullmatch: DeepSeek娘 is a name built on a vendor's too.
+            if name and _vendor_name_re().match(name.strip())]
     if mine:
         kept = []
         for sentence in _SENTENCE_RE.findall(text):

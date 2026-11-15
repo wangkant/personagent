@@ -172,10 +172,14 @@ def test_the_catalog_names_each_character_and_its_portrait(client, portraits):
     (portraits / "deepseek.webp").unlink()
     characters = {c["id"]: c for c in client.get("/api/catalog", headers=HEADERS).json()["characters"]}
     assert list(characters) == list(sw.PERSONA_KEYS)
-    assert characters["claude"]["defaultName"] == "Claude"
+    assert characters["claude"]["defaultNames"]["en"] == "Claude-chan"
+    assert characters["claude"]["defaultNames"]["zh"] == "Claude娘"
+    assert set(characters["claude"]["ownNames"]) >= {"Claude", "Claude-chan", "Claude娘", "Claudeちゃん", "Claude짱"}
     assert characters["claude"]["avatar"] == "/assets/characters/claude.webp"
-    assert characters["deepseek"]["defaultName"] == "DeepSeek" and characters["deepseek"]["avatar"] is None
-    assert characters["gamer"]["defaultName"] is None and characters["gamer"]["avatar"] is None
+    assert characters["deepseek"]["defaultNames"]["ja"] == "DeepSeekちゃん" and characters["deepseek"]["avatar"] is None
+    assert "ChatGPT" in characters["chatgpt"]["ownNames"]
+    assert characters["gamer"]["defaultNames"] is None and characters["gamer"]["avatar"] is None
+    assert characters["gamer"]["ownNames"] == []
 
 
 def test_portraits_are_served_for_characters_and_nothing_else(client, portraits):
@@ -196,7 +200,7 @@ def test_choosing_a_character_sets_its_portrait_and_editing_keeps_it(client, wor
     url = "/api/config"
     state = client.post(url, headers=HEADERS, json={"apiKey": "k", "character": "claude", "lang": "en"}).json()
     assert workspace.config()["PERSONA_AVATAR"] == "claude"
-    assert (state["avatar"], state["character"], state["name"]) == ("claude", "claude", "Claude")
+    assert (state["avatar"], state["character"], state["name"]) == ("claude", "claude", "Claude-chan")
     state = client.post("/api/persona", headers=HEADERS, json={"text": "Your name is Claude. Tea only."}).json()
     assert (state["avatar"], state["character"]) == ("claude", "custom")
     state = client.post(url, headers=HEADERS, json={"apiKey": "k", "character": "custom", "name": "Claude"}).json()
@@ -205,6 +209,61 @@ def test_choosing_a_character_sets_its_portrait_and_editing_keeps_it(client, wor
     assert workspace.config()["PERSONA_AVATAR"] == "" and state["avatar"] == ""
     state = client.post(url, headers=HEADERS, json={"apiKey": "k", "character": "deepseek", "name": "Mira"}).json()
     assert (state["avatar"], state["name"]) == ("deepseek", "Mira")
+
+
+def test_a_written_character_takes_a_portrait_without_losing_its_persona(client, workspace, portraits,
+                                                                       monkeypatch):
+    monkeypatch.setattr(workspace, "_restart_agent", lambda: None)
+    client.post("/api/config", headers=HEADERS, json={"apiKey": "k", "character": "claude", "lang": "en"})
+    client.post("/api/persona", headers=HEADERS, json={"text": "My own words."})
+    state = client.post("/api/config", headers=HEADERS,
+                        json={"apiKey": "k", "character": "custom", "name": "Mira", "avatar": "deepseek"}).json()
+    assert (state["avatar"], state["character"]) == ("deepseek", "custom")
+    assert (workspace.home / "persona.txt").read_text(encoding="utf-8") == "My own words.\n"
+    state = client.post("/api/config", headers=HEADERS,
+                        json={"apiKey": "k", "character": "custom", "name": "Mira", "avatar": ""}).json()
+    assert state["avatar"] == ""
+    for bad in ("../claude", "gamer", "own"):
+        response = client.post("/api/config", headers=HEADERS,
+                               json={"apiKey": "k", "character": "custom", "name": "Mira", "avatar": bad})
+        assert response.json()["error"] == "invalid_character", bad
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
+JPEG = b"\xff\xd8\xff\xe0" + b"\0" * 32
+
+
+def test_a_picture_of_ones_own_is_kept_checked_served_and_removed(client, workspace, portraits,
+                                                                  monkeypatch):
+    monkeypatch.setattr(workspace, "_restart_agent", lambda: None)
+    client.post("/api/config", headers=HEADERS, json={"apiKey": "k", "character": "claude", "lang": "en"})
+    assert client.get("/api/avatar", headers=HEADERS).status_code == 404
+    assert client.post("/api/avatar", content=PNG).status_code == 403
+    state = client.post("/api/avatar", headers=HEADERS, content=PNG).json()
+    assert state["avatar"] == "own" and state["ownAvatar"]
+    assert workspace.config()["PERSONA_AVATAR"] == "own"
+    response = client.get("/api/avatar", headers=HEADERS)
+    assert response.content == PNG and response.headers["content-type"] == "image/png"
+    assert client.get("/api/avatar").status_code == 403
+    # A JPEG replaces it: one file, never two.
+    client.post("/api/avatar", headers=HEADERS, content=JPEG)
+    assert sorted(p.name for p in workspace.home.glob("avatar.*")) == ["avatar.jpg"]
+    assert client.get("/api/avatar", headers=HEADERS).headers["content-type"] == "image/jpeg"
+    for data, error in ((b"just text, named .png", "avatar_type"), (b"GIF89a" + b"\0" * 8, "avatar_type"),
+                        (PNG + b"\0" * sw.MAX_OWN_AVATAR, "avatar_too_large")):
+        response = client.post("/api/avatar", headers=HEADERS, content=data)
+        assert response.status_code == 400 and response.json()["error"] == error
+    assert sorted(p.name for p in workspace.home.glob("avatar.*")) == ["avatar.jpg"]
+    state = client.post("/api/config", headers=HEADERS,
+                        json={"apiKey": "k", "character": "claude", "name": "Claude-chan", "avatar": "own"}).json()
+    assert state["avatar"] == "own"
+    state = client.post("/api/avatar/remove", headers=HEADERS, json={}).json()
+    assert state["avatar"] == "claude" and state["ownAvatar"] == ""
+    assert not list(workspace.home.glob("avatar.*"))
+    assert client.get("/api/avatar", headers=HEADERS).status_code == 404
+    # A setting left pointing at a deleted picture shows the portrait instead.
+    sw.write_env(workspace.env, {"PERSONA_AVATAR": "own"})
+    assert workspace.summary()["avatar"] == "claude"
 
 
 def test_state_shows_the_portrait_of_an_unedited_shipped_character(workspace, portraits):
@@ -970,6 +1029,37 @@ def test_activity_says_when_the_service_is_not_running_or_turned_off(client, wor
     assert client.get("/api/activity").status_code == 403
 
 
+def test_the_state_says_when_the_running_character_cannot_reach_its_model(client, workspace, monkeypatch):
+    monkeypatch.setattr(workspace.services, "running", lambda name: False)
+    assert client.get("/api/state", headers=HEADERS).json()["modelUnreachable"] is False
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.path)
+        return httpx.Response(200, json={"model_unreachable": True})
+    _activity_service(workspace, monkeypatch, handler)
+    assert client.get("/api/state", headers=HEADERS).json()["modelUnreachable"] is True
+    assert seen == ["/api/dashboard/model"]
+    # Activity switched off: nothing to say, so no warning.
+    _activity_service(workspace, monkeypatch, lambda request: httpx.Response(404, json={"detail": "Not Found"}))
+    assert client.get("/api/state", headers=HEADERS).json()["modelUnreachable"] is False
+
+
+def test_activity_can_start_the_character_without_a_message(client, workspace, monkeypatch):
+    sw.write_env(workspace.env, {"LLM_API_KEY": "k"})
+    started = []
+    monkeypatch.setattr(workspace.services, "start_agent", lambda: started.append(1))
+    assert client.post("/api/activity/start", headers=HEADERS, json={}).json() == {"ok": True}
+    assert started == [1]
+
+    def broken():
+        raise RuntimeError("agent exited")
+    monkeypatch.setattr(workspace.services, "start_agent", broken)
+    response = client.post("/api/activity/start", headers=HEADERS, json={})
+    assert (response.status_code, response.json()) == (502, {"error": "agent_failed"})
+    assert client.post("/api/activity/start", json={}).status_code == 403
+
+
 def test_activity_reads_the_token_where_the_service_keeps_it(workspace, monkeypatch):
     def token_in(folder, text):
         path = workspace.home / folder
@@ -1439,3 +1529,14 @@ def test_the_page_chat_names_its_person_and_an_earlier_page_chat_says_its_learni
 def test_the_state_carries_the_admins_name(client, workspace):
     sw.write_env(workspace.env, {"ADMIN_NAME": "Kai"})
     assert client.get("/api/state", headers=HEADERS).json()["adminName"] == "Kai"
+
+
+def test_the_page_wires_the_start_button_the_cut_line_and_unanswered_messages() -> None:
+    source = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
+    html = (welcome.ASSETS / "index.html").read_text(encoding="utf-8")
+    assert 'id="activity-start"' in html and 'id="activity-start-error"' in html
+    assert 'api("activity/start", {})' in source
+    assert "retry: retrySeq" in source and "item.failed" in source
+    for key in ("activityStart", "activityStarting", "runningNoModel", "modelUnreachable",
+                "serviceStopped", "chatUnanswered", "chatTrimmed"):
+        assert source.count(f"    {key}: ") == 2, key

@@ -46,7 +46,7 @@ Inbound, for each message in an allowed room:
   (`> <@alex:example.org> ...`), so the agent never reads someone else's
   words as the sender's.
 - Images and stickers up to 4 MB are downloaded, decrypted in encrypted
-  rooms, and sent to the agent as bytes. Voice messages, videos and files are described in words.
+  rooms, and sent to the agent as bytes. Voice messages, videos, files and images it cannot download are sent as `media` segments; a file keeps its name.
 - A room's messages reach the agent in the order they were sent. A message
   sent after an image waits until the image has been downloaded. The agent
   can still work on several turns at once.

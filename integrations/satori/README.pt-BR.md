@@ -93,9 +93,9 @@ O personagent armazena ids como `<platform>:<id>`, em que a plataforma é a do l
 | Chats em grupo e conversas privadas | Sim. Uma conversa privada é um canal `DIRECT`, ou uma mensagem sem servidor. |
 | Detecção de chamada (`addressed`) | Um `<at>` do bot (por id, ou pelo nome do bot quando o servidor não dá id) e uma resposta a uma mensagem do bot. `@all` conta como texto, não como menção. |
 | Mensagens citadas | O texto citado, o remetente e o id, de um elemento `<quote>` ou de `message.quote`. |
-| Imagens recebidas | Imagens `data:` e `internal:` e imagens no servidor Satori são embutidas. URLs públicas são passadas para o agente buscar. URLs de rede privada são descritas como `(sent an image)`. No máximo 4 downloads por mensagem, de 4 MB cada. |
+| Imagens recebidas | Imagens `data:` e `internal:` e imagens no servidor Satori são embutidas. URLs públicas são passadas para o agente buscar. Uma imagem de rede privada, ou que não pode ser baixada, é enviada sem a URL como segmento `media` do tipo `photo`. No máximo 4 downloads por mensagem, de 4 MB cada. |
 | Figurinhas e emoji | `<emoji>` e o `<face>` do QQ chegam como emoji, e a persona sabe que não consegue vê-los. |
-| Voz, vídeo, arquivos | Descritos em palavras: `(sent a voice message)`, `(sent a video)`, `(sent a file: deck.pdf)`. |
+| Voz, vídeo, arquivos | Enviados como segmentos `media` (`voice`, `video` e `file` com o nome); o agente decide como o personagem é informado. |
 | Respostas | Texto, e imagens como URIs `data:`, cada um enviado como mensagem separada com um pequeno intervalo. Em grupos, uma menção solicitada pelo agente é convertida em um `<at>`. |
 | Plataformas de resposta passiva | As respostas levam o `referrer` do evento, de que a API oficial de bots do QQ precisa para responder a uma mensagem. |
 | Caixa de saída | Mensagens programadas, acompanhamentos e desculpas vão ao canal pelo login que recebeu a conversa. O conector assina cada identificador de resposta com uma chave derivada de `SATORI_TOKEN` e `CONNECTOR_TOKEN` e só envia a identificadores que ele assinou. Depois de mudar qualquer um dos tokens, uma conversa volta a ser alcançável quando envia uma mensagem. Um agente com `CONNECTOR_OUTBOX_ENABLED=false` responde 404, e o conector tenta de novo a cada 10 minutos. |

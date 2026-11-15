@@ -16,6 +16,12 @@ KEEP_DAYS = 8
 WEEK_DAYS = 7
 WRITE_EVERY_S = 60.0
 TOKENS = ("prompt_tokens", "completion_tokens", "cached_tokens")
+# What a call was for; anything else counts as "other".
+PURPOSES = ("reply", "gate", "search", "learning", "memory", "check", "other")
+
+
+def purpose_of(label) -> str:
+    return label if label in PURPOSES else "other"
 
 
 def day_of(now: float) -> str:
@@ -60,10 +66,15 @@ class UsageBook:
         self._pool: ThreadPoolExecutor | None = None
         self._pending: Future | None = None
 
-    def add(self, model: str, usage, now: float) -> None:
+    def add(self, model: str, usage, now: float, purpose: str = "other") -> None:
         usage = usage if isinstance(usage, dict) else {}
         row = self.days.setdefault(day_of(now), {}).setdefault(model or "?", {})
         row["calls"] = _count(row.get("calls")) + 1
+        purposes = row.get("purposes")
+        if not isinstance(purposes, dict):
+            purposes = row["purposes"] = {}
+        label = purpose_of(purpose)
+        purposes[label] = _count(purposes.get(label)) + 1
         row["prompt_tokens"] = _count(row.get("prompt_tokens")) + _count(usage.get("prompt_tokens"))
         row["completion_tokens"] = (_count(row.get("completion_tokens"))
                                     + _count(usage.get("completion_tokens")))
@@ -134,6 +145,22 @@ def _total(rows) -> dict:
     return out
 
 
+def _purposes(rows) -> dict:
+    """Requests per purpose; calls from before purposes were kept count as "other"."""
+    out: dict = {}
+    for row in rows:
+        calls = int(_count(row.get("calls")))
+        split = row.get("purposes") if isinstance(row.get("purposes"), dict) else {}
+        named = 0
+        for label, n in split.items():
+            n = int(_count(n))
+            out[purpose_of(label)] = out.get(purpose_of(label), 0) + n
+            named += n
+        if calls > named:
+            out["other"] = out.get("other", 0) + calls - named
+    return {label: out[label] for label in PURPOSES if out.get(label)}
+
+
 def summary(days: dict, now: float | None = None) -> dict:
     """Today's and the last seven days' totals, and each model's for the week."""
     now = time.time() if now is None else now
@@ -145,6 +172,7 @@ def summary(days: dict, now: float | None = None) -> dict:
     for model, row in recent:
         models.setdefault(model, []).append(row)
     return {"today": _total(today.values()), "week": _total(row for _, row in recent),
+            "todayPurposes": _purposes(today.values()),
             "models": sorted(({"model": m, **_total(rows)} for m, rows in models.items()),
                              key=lambda r: (-r["calls"], r["model"]))}
 

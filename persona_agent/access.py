@@ -9,6 +9,7 @@ as "qq:<id>", and a CONNECTOR_QQ_PLATFORMS id as "<that platform>:<id>".
   platform with no entries is not restricted here: every QQ group is
   answered, a QQ DM still needs the admin or an entry, and a forwarded
   platform is left to the connector unless it sent ``prefiltered: false``.
+* ACCESS_PAUSED_GROUPS: admitted groups where the agent stays silent for now.
 
 Imports only channels, so settings, preflight and the tools share it without
 an import cycle.
@@ -27,7 +28,7 @@ ADMIN_MODE = "owner"
 
 #: The identity settings, each a comma list of ids.
 IDENTITY_SETTINGS: tuple[str, ...] = ("ADMIN_IDS", "ACCESS_GROUPS",
-                                      "ACCESS_DM_USERS")
+                                      "ACCESS_DM_USERS", "ACCESS_PAUSED_GROUPS")
 
 #: Why /v1/onebot never admits a namespaced id: NapCat only sends QQ numbers,
 #: so one arriving there was written by someone else.
@@ -201,6 +202,10 @@ class Identity:
     @property
     def dm_users(self) -> frozenset[str]:
         return self.ids("ACCESS_DM_USERS")
+
+    @property
+    def paused_groups(self) -> frozenset[str]:
+        return self.ids("ACCESS_PAUSED_GROUPS")
 
 
 def identity_from_env(env: Mapping[str, str] | None = None) -> Identity:

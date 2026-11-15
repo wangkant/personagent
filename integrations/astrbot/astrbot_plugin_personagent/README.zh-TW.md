@@ -91,7 +91,7 @@ personagent connect astrbot <AstrBot data dir>        # add --qq to route QQ (Na
 | `block_default` | bool | `true` | personagent 接管對話時，停止 AstrBot 的處理流程。 |
 | `forward_quoted_text` | bool | `true` | 平台有提供時，將被引用訊息的文字和作者連同其 id 一併傳送。開啟且 `quote_max_chars` 大於 0 時，每個事件都會宣告 `quote_text` 功能。 |
 | `quote_max_chars` | int | `200` | 傳送的被引用文字的最大長度。更長的引用會被截斷。 |
-| `max_inline_image_bytes` | int | `4000000` | 內嵌傳送之圖片的最大位元組數。personagent 無法自行取得的圖片（Telegram、本機檔案、私人位址）會以內嵌方式傳送。更大的圖片只會以提示 `(sent an image)` 送達。此值應小於 personagent 的 `VISION_MAX_IMAGE_BYTES`。 |
+| `max_inline_image_bytes` | int | `4000000` | 內嵌傳送之圖片的最大位元組數。personagent 無法自行取得的圖片（Telegram、本機檔案、私人位址）會以內嵌方式傳送。更大的圖片會以 `photo` 類型的 `media` 片段送達：角色知道收到了圖片，但看不到內容。此值應小於 personagent 的 `VISION_MAX_IMAGE_BYTES`。 |
 | `outbox_enabled` | bool | `true` | 拉取並傳送 personagent 的 outbox。請參閱 [Outbox](#outbox)。 |
 | `outbox_wait_s` | int | `25` | 每次拉取 outbox 時在 personagent 端最多等待的秒數，上限為 30。 |
 | `connector_id` | string | `""` | 此 AstrBot 在 personagent 中的名稱。留空時會產生一次並儲存。兩台 AstrBot 主機須使用不同的名稱。 |
@@ -151,7 +151,7 @@ personagent 只使用一種中立格式，外掛程式在邊界處以各平台�
 在所有平台上：
 
 - 只轉送真人撰寫的訊息。QQ 通知（戳一戳、收回、入群）和請求，以及 Slack 的入群和主題變更，均不計為回合。
-- 影片、檔案和語音訊息會以角色可以回應的提示送達，例如 `(sent a video)`、`(sent a file: deck.pdf)` 或 `(sent a voice message)`，平台提供轉寫時會一併附上。
+- 影片、檔案和語音訊息以 `media` 片段送達：檔案附檔名，語音訊息在平台提供轉寫時一併附上。由 agent 告知角色收到了什麼，角色可據此回應。
 - 平台有提供時，被引用的訊息會附帶文字和作者（`forward_quoted_text`）。
 - 只要配接器有保留，訊息時間即為平台本身記錄的時間，而非 AstrBot 收到的時間。
 - 回覆會依低於平台長度上限的長度拆分，@ 和跳脫字元依平台的演算法計數。回覆絕不會轉為文字圖片，並依平台的方式提及他人。
@@ -162,7 +162,7 @@ personagent 只使用一種中立格式，外掛程式在邊界處以各平台�
 | QQ 經由 OneBot（`aiocqhttp`） | 群組和私訊。@ 和回覆機器人，包括配接器查不到被 @ 者時。表情名稱、商城表情（`mface`）和標記為表情的圖片。真正的 QQ @，後接一個空格。長回覆依 AstrBot 的 `forward_threshold` 以下的長度拆分，不會轉為合併轉發卡片。Outbox。 | Markdown 會按原樣顯示。 |
 | QQ 官方（`qq_official`、`qq_official_webhook`） | @ 機器人的群組訊息和私訊。表情顯示為 `[表情:name]`。回覆要求純文字，而非配接器的 markdown。 | 群組中只會傳遞 @ 機器人的訊息，因此角色無法掌握對話脈絡。沒有引用、沒有名稱（只有 openid），回覆中無法 @。只能在訊息後 5 分鐘內回覆，因此沒有 outbox。 |
 | Telegram（`telegram`） | 群組、主題（`<chat>#<thread>`）和私訊。回覆機器人的任何類型訊息，並移除配接器的 `/@bot` 喚醒前綴。貼圖表情，靜態貼圖還會附上圖片。圖片經由配接器的機器人取得，因此 bot token 不會離開 AstrBot。被提及的使用者名稱在該使用者發言後會轉為數字 id。回覆以使用者名稱提及，沒有使用者名稱的人則使用 `tg://user` 連結，`*`、`_` 等字元按原樣顯示。Outbox。 | BotFather 的隱私模式開啟時（預設），群組中只會傳遞指令、@ 和回覆機器人的訊息。須關閉此模式，角色才能掌握對話脈絡。動態貼圖和影片貼圖無法檢視。 |
-| Discord（`discord`） | 頻道和討論串視為群組，另有私訊。開頭的 `@bot`（配接器會移除）、提及機器人所屬的某個身分組、回覆機器人，都視為對它說話。附帶文字的引用。貼圖。語音和影片附件以提示送達。提及格式為 `<@id>`，`@everyone` 和 `@here` 維持無效。回覆依 2000 字元拆分。Outbox，包括私訊。 | 須開啟 Message Content intent。 |
+| Discord（`discord`） | 頻道和討論串視為群組，另有私訊。開頭的 `@bot`（配接器會移除）、提及機器人所屬的某個身分組、回覆機器人，都視為對它說話。附帶文字的引用。貼圖。語音和影片附件以 `media` 片段送達。提及格式為 `<@id>`，`@everyone` 和 `@here` 維持無效。回覆依 2000 字元拆分。Outbox，包括私訊。 | 須開啟 Message Content intent。 |
 | Slack（`slack`） | 頻道和私訊。在機器人訊息下的 thread 回覆視為對它說話。連結會展開。訊息 id 為 Slack 的 `ts`。提及格式為 `<@id>`。`&`、`<` 和 `>` 會跳脫，文字無法提及頻道。回覆依 3000 字元拆分。Outbox。 | thread 回覆不附帶上層訊息的文字。機器人沒有輸入中提示。回答會出現在頻道中，而非 thread 中（配接器限制）。 |
 | KOOK（`kook`） | 頻道和私訊。@，以及提及機器人所擁有的角色。KOOK 有附帶時的引用。`(emj)` 表情和實際傳送時間。提及寫在文字中，角色文字中的 `(met)` 式標記維持無效。圖片以檔案形式傳送，因為配接器只上傳 JPEG base64。Outbox。 | AstrBot 的配接器會在任何外掛程式處理之前，捨棄純圖片、檔案、語音和影片訊息（卡片除外）。沒有輸入中提示。 |
 | Lark / 飛書（`lark`） | 群組和私訊。@ 和回覆機器人（Lark 將應用程式標示為傳送者）。附帶文字的引用。表情以 emoji 送達。Outbox。 | 沒有「讀取群組內所有訊息」權限時，只會收到 @ 訊息。每則回覆都會引用其所回答的訊息，markdown 會被轉譯（配接器限制）。名稱為 id 前綴。 |
@@ -173,7 +173,7 @@ personagent 只使用一種中立格式，外掛程式在邊界處以各平台�
 | Satori（`satori`） | Satori 後端所橋接的內容：群組、私訊、@、回覆機器人、附帶文字的引用。毫秒時間戳記依秒讀取。Outbox。 | 群組 id 為 guild，因此同一 guild 的各頻道共用一個對話。被橋接平台的限制同樣適用。 |
 | WebChat（`webchat`） | 儀表板聊天，視為私訊。引用和圖片。Outbox，即時顯示或儲存至對話。 | 僅限一對一。 |
 | 企業微信應用（`wecom`） | 私訊、圖片，以及附帶轉寫的語音。客服模式只轉送客戶的訊息，並附帶實際傳送時間。回覆依位元組拆分。應用模式的 Outbox，要求 AstrBot 啟動後曾有人傳訊息過來。 | 僅限私訊，沒有引用。客服模式無法主動傳送。Markdown 會按原樣顯示。 |
-| 企業微信智慧機器人（`wecom_ai_bot`） | 群組（企業微信只在 @ 機器人時傳遞群組訊息）和私訊。語音、檔案和影片提示。一個回合以一則串流回答傳送。 | 只能在回答某則訊息時回覆，因此沒有 outbox，也無法提及。回答會以 markdown 轉譯。請在 AstrBot 中設定 `wecom_ai_bot_name`，使 "@bot" 從文字中移除。 |
+| 企業微信智慧機器人（`wecom_ai_bot`） | 群組（企業微信只在 @ 機器人時傳遞群組訊息）和私訊。語音、檔案和影片以 `media` 片段送達。一個回合以一則串流回答傳送。 | 只能在回答某則訊息時回覆，因此沒有 outbox，也無法提及。回答會以 markdown 轉譯。請在 AstrBot 中設定 `wecom_ai_bot_name`，使 "@bot" 從文字中移除。 |
 | 微信公眾號（`weixin_official_account`） | 私訊，以及附帶轉寫的語音。一個回合以一則訊息傳送。 | 被動模式下，每則使用者訊息只能回覆一則，且須在微信的 5 秒時限內。其餘內容須等待使用者的下一則訊息，角色不發言的回合會讓使用者持續等待（配接器限制）。只有主動模式能傳送圖片。沒有 outbox。 |
 | 個人微信（`weixin_oc`） | 私訊。附帶文字的引用。圖片內嵌。附帶轉寫的語音。輸入中提示。Outbox。 | 沒有群組。重新登入後，在對方再次傳訊息之前都無法聯絡對方。 |
 | 其他配接器 | 依 AstrBot 的交付方式轉送。提及以 At 表示。 | 不宣告 outbox。 |

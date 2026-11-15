@@ -29,7 +29,7 @@ ERRORS: frozenset[str] = frozenset({"health_busy", "health_failed", "health_inva
 # The logs under <home>/runtime/desktop the page may read; never a client path.
 LOGS = ("agent", "astrbot", "direct", "install", "app", "practice", "update")
 SERVICES = ("agent", "astrbot", "direct")
-PROBES = {"Ledger sizes": "ledger", "DM chat": "dm", "Group replies": "chat",
+PROBES = {"Ledger sizes": "ledger", "Custom data files": "data", "DM chat": "dm", "Group replies": "chat",
           "Web search decision": "searchdecide", "Reaction judge": "react",
           "Learning decisions": "decide", "Reviewing its own replies": "evolve", "Vision": "vision", "Eval": "eval", "Embeddings": "embeddings",
           "Web search (Tavily)": "search", "OneBot bridge": "onebot"}

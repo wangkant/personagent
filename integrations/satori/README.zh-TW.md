@@ -93,9 +93,9 @@ personagent 將 id 儲存為 `<platform>:<id>`，平台即為 Satori 登入帳�
 | 群組聊天和私訊 | 支援。私訊是指 `DIRECT` 頻道，或沒有伺服器的訊息。 |
 | 是否被點名的判斷（`addressed`） | 對機器人的 `<at>`（依 id 判斷，伺服器未提供 id 時依機器人的名稱），以及回覆機器人的訊息。`@all` 視為文字，不視為提及。 |
 | 引用訊息 | 被引用的文字、傳送者和 id，取自 `<quote>` 元素或 `message.quote`。 |
-| 收到的圖片 | `data:` 和 `internal:` 圖片，以及 Satori 伺服器上的圖片會以內嵌方式傳送。公開 URL 會傳給 agent 自行取得。內部網路的 URL 會描述為 `(sent an image)`。每則訊息最多下載 4 張，每張最大 4 MB。 |
+| 收到的圖片 | `data:` 和 `internal:` 圖片，以及 Satori 伺服器上的圖片會以內嵌方式傳送。公開 URL 會傳給 agent 自行取得。內部網路的圖片或無法下載的圖片，會以 `photo` 類型的 `media` 片段傳送，不附 URL。每則訊息最多下載 4 張，每張最大 4 MB。 |
 | 貼圖和表情 | `<emoji>` 和 QQ 的 `<face>` 會以表情的形式送達，角色知道自己無法看見它們。 |
-| 語音、影片、檔案 | 以文字描述：`(sent a voice message)`、`(sent a video)`、`(sent a file: deck.pdf)`。 |
+| 語音、影片、檔案 | 以 `media` 片段傳送（`voice`、`video`，`file` 附檔名），由 agent 決定如何告知角色。 |
 | 回覆 | 文字，以及以 `data:` URI 表示的圖片，會分別以獨立的訊息傳送，其間有短暫間隔。在群組中，agent 要求的提及會轉為 `<at>`。 |
 | 被動回覆的平台 | 回覆會附帶事件的 `referrer`，QQ 官方機器人 API 回覆訊息時需要此項。 |
 | Outbox | 定時開場、追問和致歉會透過收到該對話的登入帳號傳送至頻道。聯結器以由 `SATORI_TOKEN` 和 `CONNECTOR_TOKEN` 衍生的金鑰為每個回覆控制代碼簽章，且只傳送至自己簽章過的控制代碼。變更其中任何一個權杖後，該對話須再傳來一則訊息，才能重新送達。設定了 `CONNECTOR_OUTBOX_ENABLED=false` 的 agent 會傳回 404，聯結器每 10 分鐘重試一次。 |

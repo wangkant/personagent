@@ -46,7 +46,7 @@
   },
   "max_inline_image_bytes": {
     "type": "int",
-    "description": "Largest image, in bytes, sent to the agent inline. Images the agent cannot fetch itself (Telegram, local files, private addresses) are inlined; a bigger one reaches the agent as the note '(sent an image)'. Keep it under the agent's VISION_MAX_IMAGE_BYTES.",
+    "description": "Largest image, in bytes, sent to the agent inline. Images the agent cannot fetch itself (Telegram, local files, private addresses) are inlined; a bigger one reaches the agent as an image it cannot see (a 'photo' media segment). Keep it under the agent's VISION_MAX_IMAGE_BYTES.",
     "default": 4000000
   },
   "outbox_enabled": {

@@ -880,16 +880,35 @@ def warn_if_agent_home_diverges(env_path: Path, home: Path) -> None:
 # Persona
 # ---------------------------------------------------------------------------
 
+# A personification's name in each language: the product name plus this.
+_NAME_SUFFIX = {"zh": "娘", "zh-TW": "娘", "ja": "ちゃん", "ko": "짱"}
+
+
 @dataclass(frozen=True)
 class Character:
     key: str
     title: tuple[str, str]
-    # The character's own name, which a name nobody chose follows.
-    name: str = ""
+    # What the character's own name is built on; "" = it has none.
+    stem: str = ""
+    # The name it had before 1.5, which homes set up then still carry.
+    old_name: str = ""
 
     @property
     def label(self) -> str:
         return langs.say(*self.title, _lang)
+
+    def name_in(self, lang: str) -> str:
+        """The character's own name in `lang`, which a name nobody chose follows."""
+        if not self.stem:
+            return ""
+        return self.stem + _NAME_SUFFIX.get(lang, "-chan")
+
+    @property
+    def own_names(self) -> frozenset:
+        """Every name this character has had in any language."""
+        if not self.stem:
+            return frozenset()
+        return frozenset({self.old_name, *(self.name_in(lang) for lang in LANGS)})
 
 
 TEMPLATE = "template"
@@ -903,11 +922,14 @@ CHARACTERS: tuple[Character, ...] = (
     Character("bookworm", ("Bookworm: careful words, recommends books when asked",
                            "爱书人：措辞考究，仅在被问及时推荐书籍")),
     Character("chatgpt", ("The GPT dragon girl: proud, well-read, fond of treasure",
-                          "GPT 娘（白龙）：骄傲自信，学识广博，喜爱财宝"), name="ChatGPT"),
-    Character("deepseek", ("The DeepSeek whale girl: clever, a bit lazy, lives on white rice",
-                           "DeepSeek 鲸鱼娘：聪明而略显懒散，言语讨喜，以白米饭为主食"), name="DeepSeek"),
-    Character("claude", ("The Claude lady: well-bred, gentle and candid, strict house rules",
-                         "Claude 娘（豪门圣女）：温柔端庄，坦诚直率，家规严格"), name="Claude"),
+                          "GPT 娘（白龙）：骄傲自信，学识广博，喜爱财宝"),
+              stem="GPT", old_name="ChatGPT"),
+    Character("deepseek", ("The DeepSeek whale girl: clever, a little lazy, happy with a bowl of plain rice",
+                           "DeepSeek 鲸鱼娘：聪明而略显懒散，言语讨喜，以白米饭为主食"),
+              stem="DeepSeek", old_name="DeepSeek"),
+    Character("claude", ("The Claude lady: well-bred, gentle and candid, raised under strict house rules",
+                         "Claude 娘（豪门圣女）：温柔端庄，坦诚直率，家规严格"),
+              stem="Claude", old_name="Claude"),
     Character(TEMPLATE, ("Write my own later: a plain starting character to edit",
                          "稍后自行编写：先使用一个基础角色，之后再修改")),
 )
@@ -931,14 +953,51 @@ def avatar_for(key: str) -> str:
     return key if portrait(key) else ""
 
 
-OWN_NAMES = frozenset(c.name for c in CHARACTERS if c.name)
+# PERSONA_AVATAR for the picture the person chose, kept in the home as avatar.<ext>.
+OWN_AVATAR = "own"
+OWN_AVATAR_TYPES = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}
+MAX_OWN_AVATAR = 2 * 1024 * 1024
+
+
+def own_avatar_kind(data: bytes) -> str:
+    """The extension a picture's bytes say it is (PNG, JPEG or WebP), or ""."""
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return ""
+
+
+def own_avatar(home: Path) -> Path | None:
+    """The home's own picture, when it holds one that is a plain file."""
+    for kind in OWN_AVATAR_TYPES:
+        path = home / f"avatar.{kind}"
+        if path.is_file() and not path.is_symlink():
+            return path
+    return None
+
+
+def kept_avatar(env_path: Path, key: str) -> str:
+    """PERSONA_AVATAR after writing character `key`: a picture the person chose stays."""
+    if env_get(env_path, "PERSONA_AVATAR") == OWN_AVATAR and own_avatar(env_path.parent):
+        return OWN_AVATAR
+    return avatar_for(key)
+
+
+OWN_NAMES = frozenset().union(*(c.own_names for c in CHARACTERS))
 
 
 def name_for(key: str, name: str, lang: str) -> str:
-    """`name`, unless nobody chose it (the default, or a character's own):
-    then character `key`'s own name, or the default when it has none."""
+    """`name`, unless nobody chose it (the default, or another character's
+    own): then character `key`'s own name, or the default when it has none.
+    A name this character already has stays, so no home is renamed."""
+    character = character_for(key)
+    if name in character.own_names:
+        return name
     if name == DEFAULT_NAMES[lang] or name in OWN_NAMES:
-        return character_for(key).name or DEFAULT_NAMES[lang]
+        return character.name_in(lang) or DEFAULT_NAMES[lang]
     return name
 
 NAME_LINE = {"en": "Your name is {name}.", "zh": "你叫{name}。", "zh-TW": "你叫{name}。",
@@ -1952,7 +2011,7 @@ def run_wizard(home: Path, launcher: Launcher, *,
         admin_name = answers.get("ADMIN_NAME", current["ADMIN_NAME"])
         write_persona(home, persona, name=name, lang=lang, admin_name=admin_name,
                       admin_relationship=current["ADMIN_RELATIONSHIP"])
-        write_env(env_path, {"PERSONA_AVATAR": avatar_for(persona)})
+        write_env(env_path, {"PERSONA_AVATAR": kept_avatar(env_path, persona)})
         _say(t("persona_written", what=short_label(character_for(persona))))
     finish(launcher, home, name=name, has_key=True, astrbot=astrbot, offer_chat=True)
 
@@ -2010,7 +2069,7 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
     key = ""
     if origin is not None:
         key = args.persona or (default_character(origin) if origin[0] else TEMPLATE)
-        values["PERSONA_AVATAR"] = avatar_for(key)
+        values["PERSONA_AVATAR"] = kept_avatar(env_path, key)
     saved = env_get(env_path, "PERSONA_NAME")
     if args.name:
         name = args.name
@@ -2018,7 +2077,7 @@ def apply_flags(home: Path, args: argparse.Namespace) -> str:
         # A saved name stays, unless it is only the last character's own.
         name = name_for(key, saved, lang) if key and saved in OWN_NAMES else saved
     else:
-        name = (character_for(key).name if key else "") or DEFAULT_NAMES[lang]
+        name = (character_for(key).name_in(lang) if key else "") or DEFAULT_NAMES[lang]
     values["PERSONA_NAME"] = name
     write_env(env_path, values)
     if key:

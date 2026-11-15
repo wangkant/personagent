@@ -19,8 +19,10 @@ const translations = {
     appLead: "运行检查、后台运行、版本更新，以及数据的存放位置。",
     activityLead: "角色所在的群聊和私聊、近期的发言，以及学到的内容。",
     activityConnect: "连接平台",
-    activityNotRunning: "角色尚未运行。在「开始聊天」中发送一条消息，或连接一个平台，角色即会启动。",
-    activityNone: "暂无聊天记录。连接平台后，将角色添加到群聊或向它发送私信，记录即会显示在此处。",
+    activityStart: "启动角色",
+    activityStarting: "正在启动…",
+    activityNotRunning: "角色尚未运行。启动角色后即可查看它记住和学到的内容；在「开始聊天」中发送消息或连接平台也会启动角色。",
+    activityNone: "暂无聊天记录。本页面的聊天在角色记下内容后会显示在此处。连接平台后，将角色添加到群聊或向它发送私信，相应记录也会显示在此处。",
     activityOff: "动态已关闭（.env 中 DASHBOARD_ENABLED=false）。",
     activity_unavailable: "暂时无法读取角色的动态，页面稍后将自动重试。",
     activity_changed: "该项已被处理，列表已刷新。",
@@ -108,6 +110,7 @@ const translations = {
     minutesAgo: "{n} 分钟前",
     hoursAgo: "{n} 小时前",
     r_below: "未被点名，且累计消息数未达到主动发言的条件",
+    r_only_called: "未被点名；已设置为群聊中仅在被呼叫时回复",
     r_sleep: "处于夜间休息时段，按作息规律跳过",
     r_skip: "为保持自然的发言节奏而随机跳过",
     r_passed: "判断此处无需发言",
@@ -132,6 +135,9 @@ const translations = {
     welcome: "欢迎使用 personagent",
     localReady: "本地应用已就绪",
     running: "正在运行",
+    runningNoModel: "正在运行，无法连接模型",
+    modelUnreachable: "角色无法连接模型，暂时不会回复。请在「应用」中执行运行检查以查看原因。",
+    serviceStopped: "已停止",
     exit: "退出",
     winMin: "最小化",
     winMax: "最大化",
@@ -152,7 +158,8 @@ const translations = {
     characterOptions: "更改角色名称、性格或语言",
     name: "角色名称",
     character: "性格",
-    customKept: "选择其他性格或立绘并保存后，你编写的人设将被替换。",
+    customKeepsText: "选择其他性格并保存后，你编写的人设将被替换；选择立绘只更换头像。",
+    templateNote: "设置完成后，可在「角色与设置」页下方的「人设」中编写角色。",
     personaReplaceAsk:
       "确定用所选性格替换你编写的人设吗？原人设将另存为 personagent 文件夹中的 persona.txt.bak。",
     personaReplaceYes: "替换",
@@ -164,6 +171,8 @@ const translations = {
     personaUndo: "撤销修改",
     personaSaved: "人设已保存，角色已按新人设重新启动。",
     invalid_persona: "人设不能为空，且不能超过 4000 字。",
+    avatar_type: "仅支持 PNG、JPEG 或 WebP 格式的图片，请重新选择文件。",
+    avatar_too_large: "图片超过 {size} MB，请选择较小的文件。",
     save: "保存",
     featuresTitle: "更多功能",
     searchTitle: "联网搜索",
@@ -205,6 +214,16 @@ const translations = {
     sample: "今天过得怎么样？有什么想聊的吗？",
     changeLater: "名称和性格可随时更改。",
     trioLabel: "也可以选择 GPT 娘、鲸鱼娘或 Claude 娘",
+    previewCustom: "使用你自己编写的人设。",
+    ownAvatarPick: "使用自己的图片",
+    ownAvatarRemove: "移除图片",
+    ownAvatarUploading: "正在上传…",
+    ownAvatarRemoving: "正在移除…",
+    ownAvatarNote: "支持 PNG、JPEG 或 WebP 格式，不超过 {size} MB。图片保存在本机，仅在本页面显示。",
+    ownAvatarSaved: "图片已设为角色头像。",
+    ownAvatarRemoved: "图片已移除。",
+    ownAvatarRemoveAsk: "确定移除这张图片吗？文件将从 personagent 文件夹中删除。",
+    ownAvatarLabel: "自己的图片",
     qqLater: "也可以将角色接入 QQ、微信、Telegram…",
     qqLaterHint: "如需接入其他平台，请在「连接平台」中选择，扫码或填写几项即可完成。",
     chatHint: "本机对话，你在此处的身份是管理员。",
@@ -367,6 +386,8 @@ const translations = {
     vision_unsupported: "此模型无法读取图片。请选择支持视觉的模型，或关闭图片识别。",
     stopped: "聊天平台已暂停。",
     retryChat: "重新发送",
+    chatUnanswered: "未获回复",
+    chatTrimmed: "此处仅显示最近的消息，角色记住的内容不受影响。",
     chatPicture: "{name} 发送的图片",
     chatPictureGone: "该图片已不存在。",
     chatViaCoding: "经由编程助手",
@@ -383,8 +404,10 @@ const translations = {
     appLead: "The health check, running in the background, updates, and where the data is stored.",
     activityLead: "Where it is, what it said lately, and what it learned.",
     activityConnect: "Connect an app",
-    activityNotRunning: "The character is not running. Send a message in Chat or connect an app to start it.",
-    activityNone: "There are no chats yet. Connect an app, then add the character to a group or send it a direct message; the chat appears here.",
+    activityStart: "Start the character",
+    activityStarting: "Starting…",
+    activityNotRunning: "The character is not running. Start it to see what it remembers and has learned; sending a message in Chat or connecting an app also starts it.",
+    activityNone: "There are no chats yet. Chats on this page appear here once the character has noted something from them. Connect an app, then add the character to a group or send it a direct message, and those chats appear here as well.",
     activityOff: "Activity is turned off (DASHBOARD_ENABLED=false in .env).",
     activity_unavailable: "The character's activity could not be read. The page will try again shortly.",
     activity_changed: "This item has already been handled. The list has been refreshed.",
@@ -475,6 +498,7 @@ const translations = {
     minutesAgo: "{n} min ago",
     hoursAgo: "{n} h ago",
     r_below: "not addressed, below the message count for joining in",
+    r_only_called: "not addressed; set to reply in groups only when addressed",
     r_sleep: "night hours, skipped to keep a natural rhythm",
     r_skip: "skipped at random to keep a natural rhythm",
     r_passed: "judged it had nothing to add",
@@ -499,6 +523,9 @@ const translations = {
     welcome: "Welcome to personagent",
     localReady: "Local app ready",
     running: "Running",
+    runningNoModel: "Running, model unreachable",
+    modelUnreachable: "The character cannot reach its model and will not reply for now. Run the health check under App to see the cause.",
+    serviceStopped: "Stopped",
     exit: "Quit",
     winMin: "Minimize",
     winMax: "Maximize",
@@ -522,8 +549,10 @@ const translations = {
     characterOptions: "Choose a name, personality or language",
     name: "Character name",
     character: "Personality",
-    customKept:
-      "Choosing another personality or portrait and saving replaces the character you wrote.",
+    customKeepsText:
+      "Choosing another personality and saving replaces the character you wrote. Choosing a portrait changes only the picture.",
+    templateNote:
+      "After setup, write the character under Persona at the bottom of Character & settings.",
     personaReplaceAsk:
       "Replace the character you wrote with the chosen personality? Your text is kept as persona.txt.bak in the personagent folder.",
     personaReplaceYes: "Replace",
@@ -536,6 +565,8 @@ const translations = {
     personaUndo: "Undo changes",
     personaSaved: "Persona saved. The character restarted with it.",
     invalid_persona: "The persona cannot be empty or longer than 4,000 characters.",
+    avatar_type: "Only PNG, JPEG or WebP pictures can be used. Choose another file.",
+    avatar_too_large: "The picture is larger than {size} MB. Choose a smaller file.",
     save: "Save",
     featuresTitle: "More features",
     searchTitle: "Web search",
@@ -578,6 +609,17 @@ const translations = {
     sample: "How was your day? Anything you want to talk about?",
     changeLater: "You can change the name and personality anytime.",
     trioLabel: "Or pick the GPT dragon girl, the DeepSeek whale girl or the Claude lady",
+    previewCustom: "Uses the persona you wrote.",
+    ownAvatarPick: "Use my own picture",
+    ownAvatarRemove: "Remove picture",
+    ownAvatarUploading: "Uploading…",
+    ownAvatarRemoving: "Removing…",
+    ownAvatarNote:
+      "PNG, JPEG or WebP, up to {size} MB. The picture stays on this computer and is shown only on this page.",
+    ownAvatarSaved: "The picture is now the character's avatar.",
+    ownAvatarRemoved: "Picture removed.",
+    ownAvatarRemoveAsk: "Remove this picture? The file is deleted from the personagent folder.",
+    ownAvatarLabel: "My own picture",
     qqLater: "Bring your character to QQ, WeChat, Telegram…",
     qqLaterHint:
       "To connect another app, choose it under Connect apps. Most need only a QR code scan or one or two values.",
@@ -758,6 +800,8 @@ const translations = {
     vision_unsupported: "This model cannot read images. Choose a vision model or turn image reading off.",
     stopped: "Chat platform paused.",
     retryChat: "Send again",
+    chatUnanswered: "Not answered",
+    chatTrimmed: "Only the most recent messages are shown here. What the character remembers is not affected.",
     chatPicture: "Picture sent by {name}",
     chatPictureGone: "This picture is no longer available.",
     chatViaCoding: "via a coding assistant",
@@ -934,7 +978,43 @@ function renderLanguage() {
   for (const retold of panelHooks.language) retold();
 }
 const characterSpec = (id) => catalog.characters.find((c) => c.id === id);
-const portraitOf = (id) => characterSpec(id)?.avatar || "";
+const OWN_AVATAR = "own";
+// The home's own picture as a blob URL: its route needs the token an <img> cannot send.
+let ownAvatarUrl = "";
+let ownAvatarLoaded = "";
+let ownAvatarBusy = false;
+// The picture the form saves; a portrait click on a written character changes only this.
+let avatarChoice = "";
+const portraitOf = (id) =>
+  id === OWN_AVATAR ? ownAvatarUrl : characterSpec(id)?.avatar || "";
+const characterLang = () => $("character-lang").value || lang;
+// The character's own name in the language it speaks, or "".
+const ownNameOf = (spec) =>
+  spec?.defaultNames ? spec.defaultNames[characterLang()] || spec.defaultNames.en : "";
+async function syncOwnAvatar() {
+  const version = state.ownAvatar || "";
+  if (version === ownAvatarLoaded || ownAvatarBusy) return;
+  ownAvatarBusy = true;
+  // Set first: a failed fetch is not retried on every repaint.
+  ownAvatarLoaded = version;
+  try {
+    let url = "";
+    if (version) {
+      const response = await fetch("/api/avatar", {
+        headers: { "X-Personagent-Setup-Token": token },
+        credentials: "omit",
+      });
+      if (response.ok) url = URL.createObjectURL(await response.blob());
+    }
+    if (ownAvatarUrl) URL.revokeObjectURL(ownAvatarUrl);
+    ownAvatarUrl = url;
+  } catch {
+    // Shown as the initial until the next state brings it again.
+  } finally {
+    ownAvatarBusy = false;
+  }
+  updateNames();
+}
 // An avatar is a letter, or a portrait sprite of four square frames side by
 // side (idle, blink, talk, think) that the stylesheet animates.
 function avatarParts(node) {
@@ -952,69 +1032,126 @@ function avatarParts(node) {
   node.style.setProperty("--blink-delay", `${(-Math.random() * 5).toFixed(2)}s`);
   return node;
 }
-function paintAvatar(node, src, name) {
+function paintAvatar(node, src, name, still = false) {
   avatarParts(node);
   node.classList.toggle("portrait", Boolean(src));
+  // A picture of one's own is one still frame, not a sprite sheet.
+  node.classList.toggle("still", Boolean(src) && still);
   node.querySelector(".letter").textContent = src ? "" : Array.from(name)[0] || "";
   node.querySelector(".sprite").style.backgroundImage = src ? `url("${src}")` : "";
 }
-function previewPortrait() {
-  const id = $("character").value || state.character;
-  return portraitOf(id === "custom" ? state.avatar : id);
+const paintAvatarOf = (node, id, name) => paintAvatar(node, portraitOf(id), name, id === OWN_AVATAR);
+// The part of a menu label after its colon: what the character is like.
+function characterLine(id) {
+  if (id === "custom") return t("previewCustom");
+  const label = characterSpec(id) ? pick(characterSpec(id).name) : "";
+  const line = label.split(/[:：]/).slice(1).join(":").trim();
+  return line ? line[0].toUpperCase() + line.slice(1) : t("previewText");
 }
 function updateNames() {
   const name =
     $("character-name").value.trim() || state.name || defaultName();
+  const id = $("character").value || state.character;
   $("preview-name").textContent = name;
+  $("preview-text").textContent = characterLine(id);
+  $("template-note").hidden = id !== "template";
   $("chat-name").textContent = state.name || name;
-  const preview = previewPortrait();
-  paintAvatar($("preview-avatar"), preview, name);
-  for (const id of ["chat-avatar", "empty-avatar"])
-    paintAvatar($(id), portraitOf(state.avatar), state.name || name);
+  paintAvatarOf($("preview-avatar"), avatarChoice, name);
+  for (const node of [$("chat-avatar"), $("empty-avatar")])
+    paintAvatarOf(node, state.avatar, state.name || name);
   $("chat-greeting").textContent = t("greeting", { name: state.name || name });
   $("platforms-title").textContent = t("platformsTitle", {
     name: state.name || name,
   });
   syncTrio();
+  syncOwnAvatar();
 }
-// The characters with a portrait, as round buttons under the sample.
+function trioButton(id, src) {
+  const button = avatarParts(document.createElement("button"));
+  button.type = "button";
+  button.className = "avatar portrait trio-pick";
+  button.dataset.character = id;
+  button.querySelector(".sprite").style.backgroundImage = `url("${src}")`;
+  return button;
+}
+// The characters with a portrait, as round buttons under the sample, and the
+// home's own picture after them once there is one.
 function buildTrio() {
   const row = $("trio-row");
   row.replaceChildren();
   for (const item of catalog.characters.filter((c) => c.avatar)) {
-    const button = avatarParts(document.createElement("button"));
-    button.type = "button";
-    button.className = "avatar portrait trio-pick";
-    button.dataset.character = item.id;
-    button.querySelector(".sprite").style.backgroundImage = `url("${item.avatar}")`;
+    const button = trioButton(item.id, item.avatar);
     button.addEventListener("click", () => {
+      if ($("character").value === "custom") {
+        // A written character keeps its persona: only the picture changes.
+        avatarChoice = item.id;
+        updateNames();
+        return;
+      }
       $("character").value = item.id;
       $("character").dispatchEvent(new Event("change"));
+      avatarChoice = item.id;
+      // The personality changed too; the fold that shows it opens.
+      $("character-details").open = true;
+      updateNames();
     });
     row.append(button);
   }
-  $("trio").hidden = !row.children.length;
+  const own = trioButton(OWN_AVATAR, "");
+  own.classList.add("still");
+  own.hidden = true;
+  own.addEventListener("click", () => {
+    avatarChoice = OWN_AVATAR;
+    updateNames();
+  });
+  row.append(own);
+  $("trio").hidden = row.children.length < 2;
 }
 function syncTrio() {
   for (const button of $("trio-row").children) {
-    const item = characterSpec(button.dataset.character);
-    button.setAttribute("aria-label", pick(item.name).split(/[:：]/)[0].trim());
-    button.setAttribute("aria-pressed", String($("character").value === item.id));
+    const id = button.dataset.character;
+    const name =
+      id === OWN_AVATAR ? t("ownAvatarLabel") : pick(characterSpec(id).name).split(/[:：]/)[0].trim();
+    button.setAttribute("aria-label", name);
+    button.title = name;
+    button.setAttribute("aria-pressed", String(avatarChoice === id));
+    if (id === OWN_AVATAR) {
+      button.hidden = !ownAvatarUrl;
+      button.querySelector(".sprite").style.backgroundImage = ownAvatarUrl ? `url("${ownAvatarUrl}")` : "";
+    }
   }
+  $("own-avatar").hidden = !state.configured;
+  $("own-avatar-remove").hidden = !state.ownAvatar;
+  $("own-avatar-note").textContent = t("ownAvatarNote", { size: ownAvatarMb() });
 }
-// A name nobody chose (empty, the default, or a character's own) follows
-// the character; a typed one stays.
+const ownAvatarMb = () => Math.round((catalog.ownAvatarLimit || 2097152) / 1048576);
+// A name nobody chose (empty, the default, or any character's own) follows
+// the character; a typed one, or one this character already has, stays.
+function nobodyChose(name) {
+  return (
+    !name ||
+    name === defaultName() ||
+    catalog.characters.some((c) => (c.ownNames || []).includes(name))
+  );
+}
 function characterChanged() {
   const field = $("character-name");
   const current = field.value.trim();
+  const id = $("character").value;
+  const chosen = characterSpec(id);
+  if (chosen && !(chosen.ownNames || []).includes(current) && nobodyChose(current))
+    field.value = ownNameOf(chosen) || defaultName();
+  // A picture of one's own stays until a portrait is clicked or it is removed.
+  if (id === "custom") avatarChoice = state.avatar;
+  else if (avatarChoice !== OWN_AVATAR) avatarChoice = chosen?.avatar ? id : "";
+  updateNames();
+}
+// GPT-chan becomes GPT娘 when the character speaks Chinese; a name it was given stays.
+function characterLangChanged() {
+  const field = $("character-name");
   const chosen = characterSpec($("character").value);
-  if (
-    chosen &&
-    (!current ||
-      current === defaultName() ||
-      catalog.characters.some((c) => c.defaultName === current))
-  )
-    field.value = chosen.defaultName || defaultName();
+  if (chosen?.defaultNames && Object.values(chosen.defaultNames).includes(field.value.trim()))
+    field.value = ownNameOf(chosen);
   updateNames();
 }
 function characterOptions() {
@@ -1027,20 +1164,21 @@ function characterOptions() {
 function populate() {
   options($("provider"), catalog.providers, state.provider);
   characterOptions();
-  $("character-name").value =
-    state.name || characterSpec(state.character)?.defaultName || defaultName();
-  $("api-key").value = "";
-  $("api-key").type = "password";
-  $("show-key").textContent = t("show");
-  $("api-key").placeholder = state.configured ? t("keySaved") : "sk-…";
-  providerChanged(false);
-  updateNames();
+  avatarChoice = state.avatar || "";
   // The character's language is a setting; the page's own language is the reader's.
   const speaks = $("character-lang");
   if (!speaks.options.length)
     speaks.append(...[...$("language").options].map((o) => new Option(o.textContent, o.value)));
   speaks.value = (state.configured && state.lang) || lang;
   if (!speaks.value) speaks.value = lang;
+  $("character-name").value =
+    state.name || ownNameOf(characterSpec(state.character)) || defaultName();
+  $("api-key").value = "";
+  $("api-key").type = "password";
+  $("show-key").textContent = t("show");
+  $("api-key").placeholder = state.configured ? t("keySaved") : "sk-…";
+  providerChanged(false);
+  updateNames();
 }
 function freeNoteChanged() {
   $("free-note").hidden = $("model").value.trim() !== "openrouter/free";
@@ -1482,9 +1620,29 @@ function renderStatus() {
   $("version").textContent = `v${state.version}`;
   renderGettingStarted();
   renderUpdate();
-  $("service-status").textContent = t(
-    state.agentRunning ? "running" : "localReady",
+  const unreachable = Boolean(state.agentRunning && state.modelUnreachable);
+  const pill = $("service-status");
+  pill.textContent = t(
+    unreachable ? "runningNoModel" : state.agentRunning ? "running" : "localReady",
   );
+  pill.classList.toggle("warn", unreachable);
+  pill.title = unreachable ? t("modelUnreachable") : "";
+  const appDot = $("app-dot");
+  appDot.classList.toggle("model-attention", unreachable);
+  if (unreachable) {
+    appDot.hidden = false;
+    appDot.dataset.model = "1";
+    appDot.setAttribute("role", "img");
+    appDot.setAttribute("aria-label", t("modelUnreachable"));
+  } else if (appDot.dataset.model === "1") {
+    delete appDot.dataset.model;
+    // The health check's own finding keeps the dot.
+    if (appDot.dataset.health !== "1") {
+      appDot.hidden = true;
+      appDot.removeAttribute("role");
+      appDot.removeAttribute("aria-label");
+    }
+  }
   const job = state.job,
     working = job.state === "working",
     // A platform being connected is saved before it is checked; it counts
@@ -1579,6 +1737,8 @@ let activity = null,
   activityError = "",
   activityTimer = null,
   activityBusy = false,
+  activityStarting = false,
+  activityStartError = "",
   // Bumped by every load and decision, so an older answer never wins.
   activitySeq = 0,
   // What the view last drew; a poll that brings nothing new leaves the
@@ -1589,6 +1749,7 @@ const ACTIVITY_IDLE_MS = 30000;
 // Why it spoke or stayed quiet, as the service records it.
 const REASONS = {
   "below the trigger count": "r_below",
+  "only when called": "r_only_called",
   "sleep window": "r_sleep",
   "spontaneous skip": "r_skip",
   passed: "r_passed",
@@ -1691,6 +1852,8 @@ function renderActivity() {
     activitySelected,
     activityBusy,
     activityError,
+    activityStarting,
+    activityStartError,
     activity,
     activityChat,
     // "3 min ago" moves on even when nothing else does.
@@ -1712,6 +1875,11 @@ function renderActivity() {
   $("activity-empty").hidden = !empty;
   $("activity-empty-text").textContent = empty ? t(empty) : "";
   $("activity-connect").hidden = !["activityNone", "activityNotRunning"].includes(empty);
+  $("activity-start").hidden = empty !== "activityNotRunning";
+  label($("activity-start"), t(activityStarting ? "activityStarting" : "activityStart"));
+  $("activity-start").disabled = activityStarting;
+  $("activity-start-error").hidden = !activityStartError || empty !== "activityNotRunning";
+  $("activity-start-error").textContent = activityStartError ? t(activityStartError) : "";
   $("activity-body").hidden = !activity || Boolean(empty);
   if (!activity || empty) return;
   $("activity-chats").replaceChildren(
@@ -2215,6 +2383,7 @@ function bubble(text, kind) {
   // A window left open for days holds no more than the chat keeps.
   const shown = $("messages").querySelectorAll(".bubble");
   for (let i = 0; i < shown.length - chatKept; i++) dropBubble(shown[i]);
+  if (shown.length > chatKept) showTrimmed(true);
   $("messages").scrollTop = $("messages").scrollHeight;
   return node;
 }
@@ -2280,6 +2449,13 @@ function showMessage(item, arrived = false) {
   }
   if (arrived) node.classList.add("arrived");
   chatSeen = Math.max(chatSeen, item.seq || 0);
+  if (item.role === "user" && item.failed) {
+    node.classList.add("unanswered");
+    const mark = el("small", "bubble-via", t("chatUnanswered"));
+    mark.dataset.t = "chatUnanswered";
+    node.append(mark);
+    failedNotice(item.failed, item.text, node, item.seq);
+  }
   $("chat-empty").hidden = true;
   return node;
 }
@@ -2337,10 +2513,22 @@ function stopReveal() {
   for (const node of $("messages").querySelectorAll(".bubble.typing")) node.remove();
   avatarMood("");
 }
+// Older messages were dropped: said once, quietly, above the chat.
+function showTrimmed(on) {
+  let line = $("chat-trimmed");
+  if (!on) return line?.remove();
+  if (!line) {
+    line = el("p", "chat-trimmed", t("chatTrimmed"));
+    line.id = "chat-trimmed";
+    line.dataset.t = "chatTrimmed";
+  }
+  if (line !== $("messages").querySelector(".chat-trimmed, .bubble")) $("messages").prepend(line);
+}
 function showHistory(history) {
   stopReveal();
   for (const node of $("messages").querySelectorAll(".bubble")) dropBubble(node);
   if (history.kept) chatKept = history.kept;
+  showTrimmed(Boolean(history.trimmed));
   chatSeen = 0;
   chatTag = history.chat || "";
   $("chat-empty").hidden = history.messages.length > 0;
@@ -2396,7 +2584,24 @@ function avatarMood(mood, length = 0) {
       Math.min(3200, Math.max(900, 45 * length)),
     );
 }
-async function send(text, mine = null) {
+// Under a message that went unanswered: why, and a way to send it again.
+function failedNotice(code, text, mine, retrySeq = null) {
+  const node = bubble(t(code), "bot failed");
+  const retry = document.createElement("button");
+  retry.className = "quiet";
+  retry.textContent = t("retryChat");
+  retry.addEventListener("click", () => {
+    // send() ignores a call while another reply is on its way.
+    if (chatting) return;
+    node.remove();
+    mine.querySelector(".bubble-via")?.remove();
+    mine.classList.remove("unanswered");
+    send(text, mine, retrySeq);
+  });
+  node.append(document.createElement("br"), retry);
+  return node;
+}
+async function send(text, mine = null, retrySeq = null) {
   if (chatting || !text.trim()) return;
   chatting = true;
   $("chat-empty").hidden = true;
@@ -2409,7 +2614,7 @@ async function send(text, mine = null) {
   const asked = performance.now();
   avatarMood("thinking");
   try {
-    const value = await api("chat", { text, after: chatSeen });
+    const value = await api("chat", { text, after: chatSeen, retry: retrySeq });
     if (value.kept) chatKept = value.kept;
     // The chat as recorded, in order: anything the character sent on its own
     // meanwhile, this message and the reply.
@@ -2427,22 +2632,19 @@ async function send(text, mine = null) {
     }
   } catch (error) {
     avatarMood("");
-    pending.replaceChildren();
-    pending.removeAttribute("role");
-    pending.removeAttribute("aria-label");
-    delete pending.dataset.tAria;
-    pending.textContent = t(error.message);
-    pending.className = "bubble failed";
-    const retry = document.createElement("button");
-    retry.className = "quiet";
-    retry.textContent = t("retryChat");
-    retry.addEventListener("click", () => {
-      // send() ignores a call while another reply is on its way.
-      if (chatting) return;
-      pending.remove();
-      send(text, mine);
-    });
-    pending.append(document.createElement("br"), retry);
+    pending.remove();
+    // The chat keeps an unanswered message: shown as kept, it can be sent again after a reload too.
+    let kept = null;
+    try {
+      kept = await api("chat/history");
+    } catch {
+      // Not reachable: the notice below still offers to send it again.
+    }
+    const last = kept?.messages.at(-1);
+    if (last && last.role === "user" && last.failed && last.text === text) {
+      mine.remove();
+      showHistory(kept);
+    } else failedNotice(error.message, text, mine, retrySeq);
   } finally {
     chatting = false;
     syncSend();
@@ -2481,6 +2683,62 @@ $("provider").addEventListener("change", () => providerChanged());
 $("model").addEventListener("input", freeNoteChanged);
 $("character-name").addEventListener("input", updateNames);
 $("character").addEventListener("change", characterChanged);
+$("character-lang").addEventListener("change", characterLangChanged);
+$("own-avatar-pick").addEventListener("click", () => $("own-avatar-file").click());
+$("own-avatar-file").addEventListener("change", async () => {
+  const input = $("own-avatar-file");
+  const file = input.files[0];
+  input.value = "";
+  if (!file) return;
+  const error = $("own-avatar-error");
+  error.hidden = true;
+  const fail = (code) => {
+    error.textContent = t(code, { size: ownAvatarMb() });
+    error.hidden = false;
+  };
+  if (file.size > (catalog.ownAvatarLimit || 2097152)) return fail("avatar_too_large");
+  const button = $("own-avatar-pick");
+  button.disabled = true;
+  button.textContent = t("ownAvatarUploading");
+  try {
+    const response = await fetch("/api/avatar", {
+      method: "POST",
+      headers: { "X-Personagent-Setup-Token": token, "Content-Type": "application/octet-stream" },
+      body: file,
+      credentials: "omit",
+    });
+    const value = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(value.error || value.detail || "generic");
+    state = value;
+    avatarChoice = OWN_AVATAR;
+    updateNames();
+    toast(t("ownAvatarSaved"));
+  } catch (caught) {
+    fail(caught.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = t("ownAvatarPick");
+  }
+});
+$("own-avatar-remove").addEventListener("click", async () => {
+  if (!(await ask(t("ownAvatarRemoveAsk"), t("ownAvatarRemove")))) return;
+  const button = $("own-avatar-remove");
+  $("own-avatar-error").hidden = true;
+  button.disabled = true;
+  button.textContent = t("ownAvatarRemoving");
+  try {
+    state = await api("avatar/remove", {});
+    if (avatarChoice === OWN_AVATAR) avatarChoice = state.avatar || "";
+    updateNames();
+    toast(t("ownAvatarRemoved"));
+  } catch (caught) {
+    $("own-avatar-error").textContent = t(caught.message);
+    $("own-avatar-error").hidden = false;
+  } finally {
+    button.disabled = false;
+    button.textContent = t("ownAvatarRemove");
+  }
+});
 $("show-key").addEventListener("click", async () => {
   try {
     if ($("api-key").type === "password") {
@@ -2547,6 +2805,22 @@ $("features-save").addEventListener("click", async () => {
 });
 $("gs-platform").addEventListener("click", () => showView("platforms"));
 $("activity-connect").addEventListener("click", () => showView("platforms"));
+$("activity-start").addEventListener("click", async () => {
+  if (activityStarting) return;
+  activityStarting = true;
+  activityStartError = "";
+  renderActivity();
+  try {
+    await api("activity/start", {});
+    await loadActivity(true);
+    refresh().catch(() => {});
+  } catch (error) {
+    activityStartError = error.message;
+  } finally {
+    activityStarting = false;
+    renderActivity();
+  }
+});
 $("gs-close").addEventListener("click", () => {
   try {
     localStorage.setItem(GS_KEY, "1");
@@ -2638,6 +2912,7 @@ $("settings-form").addEventListener("submit", async (event) => {
       model: $("model").value,
       name: $("character-name").value,
       character: $("character").value,
+      avatar: avatarChoice,
       lang: $("character-lang").value || lang,
     });
     // A chosen personality rewrote persona.txt: drop the box's old text.
@@ -2842,6 +3117,12 @@ $("exit").addEventListener("click", async () => {
     await api("exit", {});
     ended = true;
     $("closed").hidden = false;
+    const pill = $("service-status");
+    pill.textContent = t("serviceStopped");
+    pill.classList.remove("warn");
+    pill.classList.add("stopped");
+    pill.title = "";
+    $("exit").textContent = t("exit");
   } catch (error) {
     toast(t(error.message));
     $("exit").disabled = false;

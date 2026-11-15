@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import json
 import os
 import time
 
@@ -155,7 +156,7 @@ def test_pictures_leave_with_the_messages_that_showed_them(monkeypatch, workspac
     assert not list(workspace._pictures.iterdir())
 
 
-def test_a_failed_reply_leaves_no_message_behind(monkeypatch, workspace):
+def test_a_failed_message_is_kept_unanswered_and_can_be_sent_again(monkeypatch, workspace, tmp_path):
     monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
 
     class Connector:
@@ -168,8 +169,64 @@ def test_a_failed_reply_leaves_no_message_behind(monkeypatch, workspace):
     monkeypatch.setattr(welcome, "_connector_type", lambda: Connector)
     with pytest.raises(ConnectionError):
         asyncio.run(workspace.chat("hi"))
-    assert workspace.history()["messages"] == []
-    assert welcome.Workspace(workspace.home).history()["messages"] == []
+    expected = [{"role": "user", "text": "hi", "seq": 1, "failed": "chat_failed"}]
+    assert workspace.history()["messages"] == expected
+    again = welcome.Workspace(workspace.home)
+    try:
+        assert again.history()["messages"] == expected, "a restart keeps it"
+    finally:
+        again.close()
+    # The character never had that turn.
+    from persona_agent import dm
+    assert dm._page_turns(workspace._history_path, workspace._conversation) == []
+    _replying(monkeypatch, workspace, [{"type": "text", "text": "here"}])
+    answer = asyncio.run(workspace.chat("hi", retry=1))
+    assert [(m["text"], m.get("failed")) for m in workspace.history()["messages"]] == [
+        ("hi", None), ("here", None)]
+    assert [m["text"] for m in answer["messages"]] == ["hi", "here"]
+
+
+def test_a_character_that_does_not_start_keeps_the_message(monkeypatch, workspace):
+    def broken():
+        raise RuntimeError("agent exited")
+
+    monkeypatch.setattr(workspace.services, "start_agent", broken)
+    with pytest.raises(RuntimeError):
+        asyncio.run(workspace.chat("hello"))
+    assert workspace.history()["messages"][-1]["failed"] == "agent_failed"
+
+
+def test_the_kept_chat_starts_at_a_turn_and_says_it_was_cut(monkeypatch, workspace):
+    replies = [{"type": "text", "text": "one"}, {"type": "text", "text": "two"},
+               {"type": "text", "text": "three"}]
+    _replying(monkeypatch, workspace, replies)
+    for n in range(13):
+        asyncio.run(workspace.chat(f"m{n}"))
+    seen = workspace.history()
+    assert seen["trimmed"] is True
+    assert seen["messages"][0]["role"] == "user", "never the tail of a reply"
+    assert len(seen["messages"]) <= welcome.CHAT_KEPT
+    again = welcome.Workspace(workspace.home)
+    try:
+        assert again.history()["trimmed"] is True and again.history()["messages"] == seen["messages"]
+    finally:
+        again.close()
+    workspace.reset_chat()
+    assert workspace.history()["trimmed"] is False
+
+
+def test_a_full_chat_from_an_earlier_release_is_read_from_its_first_turn(workspace):
+    messages = [{"role": "assistant" if n % 3 else "user", "text": str(n), "seq": n + 1}
+                for n in range(1, welcome.CHAT_KEPT + 1)]
+    workspace._history_path.parent.mkdir(parents=True, exist_ok=True)
+    workspace._history_path.write_text(json.dumps({"conversation": "c", "seq": 60, "messages": messages}),
+                                       encoding="utf-8")
+    old = welcome.Workspace(workspace.home)
+    try:
+        seen = old.history()
+        assert seen["trimmed"] is True and seen["messages"][0]["text"] == "3"
+    finally:
+        old.close()
 
 
 def test_the_service_can_reach_the_page_chat_after_a_message(monkeypatch, workspace, tmp_path):
@@ -507,11 +564,13 @@ def test_a_model_failure_is_reported_in_the_page_and_never_stored(monkeypatch, w
         for _ in range(2):
             answer = client.post("/api/chat", headers=HEADERS, json={"text": "hi"})
             assert answer.status_code == 502 and answer.json() == {"error": "chat_failed"}
-            assert workspace.history()["messages"] == []
+            assert workspace.history()["messages"][-1]["failed"] == "chat_failed"
         fail[0] = False
         answer = client.post("/api/chat", headers=HEADERS, json={"text": "hi"}).json()
     assert answer["reply"] == "hi back"
-    assert [m["text"] for m in workspace.history()["messages"]] == ["hi", "hi back"]
+    # The excuse never becomes a message; the unanswered ones stay marked.
+    assert [(m["text"], m.get("failed")) for m in workspace.history()["messages"]] == [
+        ("hi", "chat_failed"), ("hi", "chat_failed"), ("hi", None), ("hi back", None)]
 
 
 def test_a_chat_platform_keeps_its_marked_excuse(tmp_path):

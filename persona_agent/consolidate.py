@@ -19,6 +19,7 @@ from . import memstore
 from . import people
 from . import ranking
 from . import timewords
+from .llm import purpose
 from .memory import _SENTENCE_END
 from .textproc import _clean_prompt_source, _fence_user_data, _focus_tokens, strip_json_fences
 
@@ -413,11 +414,12 @@ class Consolidation:
             prompt = _FOLD_PROMPT + _fence_user_data(
                 json.dumps(inp.payload, ensure_ascii=False))
             try:
-                raw = await asyncio.wait_for(self._call_llm(
-                    "", [{"role": "user", "content": prompt}],
-                    model=self.llm_judge_model, max_tokens=MAX_TOKENS,
-                    enable_search=False, json_object=True),
-                    max(1.0, float(self.llm_timeout_s) * 2))
+                with purpose("memory"):
+                    raw = await asyncio.wait_for(self._call_llm(
+                        "", [{"role": "user", "content": prompt}],
+                        model=self.llm_judge_model, max_tokens=MAX_TOKENS,
+                        enable_search=False, json_object=True),
+                        max(1.0, float(self.llm_timeout_s) * 2))
                 plan = json.loads(strip_json_fences(raw))
                 if not self._usable_plan(plan):
                     raise ValueError("not a consolidation answer")

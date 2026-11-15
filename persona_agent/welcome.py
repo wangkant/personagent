@@ -45,6 +45,7 @@ from . import window as appwindow
 from .astrbot_install import AstrBotInstallation, install_astrbot
 from .services import Services, stop_leftovers
 from .storage import FileLock, LockUnavailable, atomic_write_text
+from .storage import replace as storage_replace
 
 ASSETS = Path(__file__).with_name("static") / "welcome"
 # The page's languages besides English and Chinese, each a translation in
@@ -53,7 +54,7 @@ PAGE_LANGUAGES = ("zh-TW", "ja", "ko", "es", "fr", "de", "pt-BR", "ru")
 # Parts of the page beyond its four first views. Each is a module in
 # persona_agent/panels with `mount(app, workspace, body)`, and a script and a
 # stylesheet of the same name under ASSETS/panels.
-PANELS = ("health", "runtime", "desk", "tuning", "learned", "agents", "practice")
+PANELS = ("health", "runtime", "desk", "tuning", "learned", "agents", "practice", "lore")
 TOKEN_HEADER = "x-personagent-setup-token"
 # Bytes; a chat message may be 8000 characters, three bytes each in Chinese.
 MAX_BODY = 32_768
@@ -116,6 +117,21 @@ async def send_chat_items(url: str, token: str, conversation: str, text: str, *,
     return [item for item in response.get("replies") or [] if isinstance(item, dict)]
 
 
+def keep_recent(messages: list[dict]) -> tuple[list[dict], bool]:
+    """The last CHAT_KEPT messages, starting at one the person sent so that no
+    reply is cut in half, and whether any were dropped."""
+    if len(messages) <= CHAT_KEPT:
+        return messages, False
+    kept = messages[-CHAT_KEPT:]
+    first = next((i for i, m in enumerate(kept) if m.get("role") == "user"), 0)
+    return kept[first:], True
+
+
+def chat_failure(error: BaseException) -> str:
+    # The character itself did not start: a different thing to fix than a reply that failed.
+    return "agent_failed" if str(error).startswith("agent ") else "chat_failed"
+
+
 def append_saved_chat(home: Path, conversation: str, entries: list[dict]) -> None:
     """Add messages to the page's saved chat while no page holds it, numbered
     as `Workspace._append` numbers them; nothing if a new chat has started."""
@@ -130,8 +146,9 @@ def append_saved_chat(home: Path, conversation: str, entries: list[dict]) -> Non
         for entry in entries:
             seq += 1
             entry["seq"] = seq
-        atomic_write_text(path, json.dumps({"conversation": conversation, "seq": seq,
-                                            "messages": (messages + entries)[-CHAT_KEPT:]},
+        kept, dropped = keep_recent(messages + entries)
+        atomic_write_text(path, json.dumps({"conversation": conversation, "seq": seq, "messages": kept,
+                                            "trimmed": bool(saved.get("trimmed")) or dropped},
                                            ensure_ascii=False))
 
 
@@ -168,7 +185,12 @@ class Workspace:
         self._pictures = self._history_path.with_name("chat-pictures")
         saved = sw._read_json(self._history_path)
         self._conversation = str(saved.get("conversation") or secrets.token_hex(12))[:64]
-        self._history = [m for m in saved.get("messages", []) if isinstance(m, dict)][-CHAT_KEPT:]
+        messages = [m for m in saved.get("messages", []) if isinstance(m, dict)]
+        self._history, dropped = keep_recent(messages)
+        # An earlier release dropped silently, mid-reply too: a full chat had dropped some.
+        if "trimmed" not in saved and len(messages) >= CHAT_KEPT:
+            self._history, dropped = keep_recent([{}] + messages)
+        self._trimmed = bool(saved.get("trimmed")) or dropped
         self._seq = int(saved.get("seq") or 0) if str(saved.get("seq") or 0).isdigit() else 0
         for message in self._history:
             # An earlier release kept no numbers; each message needs one to be fetched after.
@@ -210,7 +232,10 @@ class Workspace:
                     status[kind] = "running" if self.services.running("astrbot") else "paused"
             updates.refresh_soon(self.home)
             avatar = values.get("PERSONA_AVATAR", "").strip()
-            if not sw.portrait(avatar):
+            own_picture = sw.own_avatar(self.home)
+            if avatar == sw.OWN_AVATAR and not own_picture:
+                avatar = ""
+            if avatar != sw.OWN_AVATAR and not sw.portrait(avatar):
                 avatar = origin[0] if origin and sw.portrait(origin[0]) else ""
             return {"version": __version__, "update": updates.notice(self.home),
                     "configured": bool(values.get("LLM_API_KEY")),
@@ -224,10 +249,19 @@ class Workspace:
                     # An earlier release's template is on no menu: it maps to the plain one.
                     "character": sw.default_character(origin) if origin else ("custom" if card.is_file() else "warm-listener"),
                     "avatar": avatar,
+                    # Changes with the file, so the page fetches a replaced picture again.
+                    "ownAvatar": self._own_avatar_version(own_picture),
                     "platforms": platforms, "platformStatus": status,
                     "agentRunning": self.services.running("agent"),
                     "platformRunning": self.services.running("astrbot") or direct_on, "job": job,
                     "features": self._features(values)}
+
+    @staticmethod
+    def _own_avatar_version(path: Path | None) -> str:
+        try:
+            return str(path.stat().st_mtime_ns) if path else ""
+        except OSError:
+            return ""
 
     @staticmethod
     def _features(values: dict) -> dict:
@@ -277,7 +311,13 @@ class Workspace:
             character = str(payload.get("character") or "warm-listener")
             if character not in (*sw.PERSONA_KEYS, "custom"):
                 raise ValueError("invalid_character")
-            own = sw.character_for(character).name if character != "custom" else ""
+            own = sw.character_for(character).name_in(lang) if character != "custom" else ""
+            avatar = payload.get("avatar")
+            if avatar is not None:
+                avatar = str(avatar)
+                if not (avatar == "" or sw.portrait(avatar)
+                        or (avatar == sw.OWN_AVATAR and sw.own_avatar(self.home))):
+                    raise ValueError("invalid_character")
             name = str(payload.get("name") or own or old.get("PERSONA_NAME")
                        or sw.DEFAULT_NAMES[lang]).strip()
             if not name or len(name) > 64 or _expands(name):
@@ -299,9 +339,11 @@ class Workspace:
             values = {"LLM_BASE_URL": base, "LLM_MODEL": model, "LLM_API_KEY": key,
                       "PERSONA_NAME": name, "AGENT_LANG": lang,
                       "CONNECTOR_TOKEN": old.get("CONNECTOR_TOKEN") or secrets.token_urlsafe(32)}
-            # Kept for "custom", so an edited character keeps its portrait.
-            if character != "custom":
-                values["PERSONA_AVATAR"] = sw.avatar_for(character)
+            # The page names the picture; without it, a written character keeps its own.
+            if avatar is not None:
+                values["PERSONA_AVATAR"] = avatar
+            elif character != "custom":
+                values["PERSONA_AVATAR"] = sw.kept_avatar(self.env, character)
             sw.write_env(self.env, values)
             if character != "custom":
                 self._keep_written_persona()
@@ -407,11 +449,47 @@ class Workspace:
             self._restart_agent()
             return self.summary()
 
+    def save_own_avatar(self, data: bytes) -> dict:
+        """Keep `data` as the character's picture on this page and show it."""
+        if len(data) > sw.MAX_OWN_AVATAR:
+            raise ValueError("avatar_too_large")
+        kind = sw.own_avatar_kind(data)
+        if not kind:
+            raise ValueError("avatar_type")
+        with self._lock:
+            target = self.home / f"avatar.{kind}"
+            if target.is_symlink():
+                raise ValueError("avatar_type")
+            tmp = target.with_name(f"avatar.{secrets.token_hex(4)}.tmp")
+            tmp.write_bytes(data)
+            storage_replace(tmp, target)
+            # One picture: one left by an earlier choice of another type goes.
+            for other in sw.OWN_AVATAR_TYPES:
+                if other != kind:
+                    (self.home / f"avatar.{other}").unlink(missing_ok=True)
+            sw.copy_env_template(self.home)
+            sw.write_env(self.env, {"PERSONA_AVATAR": sw.OWN_AVATAR})
+            return self.summary()
+
+    def remove_own_avatar(self) -> dict:
+        """Delete the picture; the character goes back to its portrait or initial."""
+        with self._lock:
+            for kind in sw.OWN_AVATAR_TYPES:
+                path = self.home / f"avatar.{kind}"
+                if path.is_file() and not path.is_symlink():
+                    path.unlink(missing_ok=True)
+            if self.config().get("PERSONA_AVATAR", "").strip() == sw.OWN_AVATAR:
+                card = self.home / "persona.txt"
+                origin = sw.shipped_persona(card.read_text(encoding="utf-8")) if card.is_file() else None
+                sw.write_env(self.env, {"PERSONA_AVATAR": sw.avatar_for(origin[0]) if origin else ""})
+            return self.summary()
+
     def history(self, after: int | None = None) -> dict:
         """The chat as the page shows it; with `after`, only what came since that number.
         `chat` changes when a new chat starts, so the page knows to start over."""
         messages = [dict(m) for m in self._history if after is None or m["seq"] > after]
-        return {"messages": messages, "chat": self._chat_tag(), "last": self._seq, "kept": CHAT_KEPT}
+        return {"messages": messages, "chat": self._chat_tag(), "last": self._seq, "kept": CHAT_KEPT,
+                "trimmed": self._trimmed}
 
     def _chat_tag(self) -> str:
         return hashlib.sha256(self._conversation.encode()).hexdigest()[:12]
@@ -422,13 +500,15 @@ class Workspace:
     def reset_chat(self) -> None:
         self._conversation = secrets.token_hex(12)
         self._history = []
+        self._trimmed = False
         self._save_chat()
 
     def _append(self, entries: list[dict]) -> list[dict]:
         for entry in entries:
             self._seq += 1
             entry["seq"] = self._seq
-        self._history = (self._history + entries)[-CHAT_KEPT:]
+        self._history, dropped = keep_recent(self._history + entries)
+        self._trimmed = self._trimmed or dropped
         return entries
 
     def _entry(self, item: dict) -> dict | None:
@@ -513,7 +593,8 @@ class Workspace:
 
     def _save_chat(self) -> None:
         atomic_write_text(self._history_path, json.dumps({"conversation": self._conversation, "seq": self._seq,
-                                                        "messages": self._history}, ensure_ascii=False))
+                                                        "messages": self._history, "trimmed": self._trimmed},
+                                                       ensure_ascii=False))
         self._prune_pictures()
         self._name_owner()
 
@@ -835,9 +916,10 @@ class Workspace:
     def cancel(self) -> None:
         self._cancelled = True
 
-    async def chat(self, text: str, after: int | None = None) -> dict:
+    async def chat(self, text: str, after: int | None = None, retry: int | None = None) -> dict:
         """Send `text`; the reply, and every message since `after` in order,
-        including what the character sent on its own meanwhile."""
+        including what the character sent on its own meanwhile. `retry` names
+        the unanswered message this one sends again, which then goes."""
         if not self.config().get("LLM_API_KEY"):
             raise ValueError("key_required")
         if not text.strip():
@@ -846,30 +928,35 @@ class Workspace:
             raise ValueError("invalid_message")
         async with self._chat_lock:
             self._name_owner()
-            await asyncio.to_thread(self.services.start_agent)
+            if retry is not None:
+                self._history = [m for m in self._history
+                                 if not (m.get("seq") == retry and m.get("failed"))]
             # Recorded first, so a message sent on its own during the reply comes after it.
             (said,) = self._append([{"role": "user", "text": text}])
             try:
+                await asyncio.to_thread(self.services.start_agent)
                 items = await send_chat_items(self.services.agent_url, self.config().get("CONNECTOR_TOKEN", ""),
                                               self._conversation, text, capabilities=["outbox"],
                                               # The outbox reaches only a conversation with a handle.
                                               reply_handle=self._conversation)
-            except BaseException:
-                self._history = [m for m in self._history if m is not said]
-                with contextlib.suppress(OSError):
-                    self._save_chat()
+            except BaseException as error:
+                self._unanswered(said, chat_failure(error))
                 raise
             if any(item.get("reason") == "excuse" for item in items):
                 # The model failed: here the admin checks the setup, so it is reported, not chatted about.
-                self._history = [m for m in self._history if m is not said]
-                with contextlib.suppress(OSError):
-                    self._save_chat()
+                self._unanswered(said, "chat_failed")
                 raise RuntimeError("the model did not answer")
             self._append(self._entries(items))
             self._save_chat()
             reply = "\n".join(str(i.get("text", "")) for i in items if i.get("type") == "text")
             since = said["seq"] - 1 if after is None else after
             return {"reply": reply, **self.history(since)}
+
+    def _unanswered(self, said: dict, code: str) -> None:
+        """Kept, marked, so the person can see which message went unanswered and send it again."""
+        said["failed"] = code
+        with contextlib.suppress(OSError):
+            self._save_chat()
 
     def _activity_token(self) -> str:
         try:
@@ -901,6 +988,22 @@ class Workspace:
         if response.status_code != 200:
             raise ValueError("activity_unavailable")
         return value
+
+    async def model_unreachable(self) -> bool:
+        """Whether the running character found its model unreachable; False when it cannot say."""
+        try:
+            raw = await self._activity_call("GET", "/api/dashboard/model")
+        except ValueError:
+            return False
+        return bool(raw and raw.get("model_unreachable"))
+
+    async def start_character(self) -> dict:
+        """Start the character as a sent message does, without sending one."""
+        if not self.config().get("LLM_API_KEY"):
+            raise ValueError("key_required")
+        async with self._chat_lock:
+            await asyncio.to_thread(self.services.start_agent)
+        return {"ok": True}
 
     async def activity(self) -> dict:
         raw = await self._activity_call("GET", "/api/dashboard/conversations")
@@ -1193,7 +1296,8 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
                    "permission_required", "invalid_message", "invalid_platform",
                    "field_required", "invalid_field", "invalid_persona", "invalid_feature",
                    "invalid_chat", "activity_unavailable", "activity_changed", "forget_needs_activity",
-                   "activity_restore_gone", "activity_restore_exists"}
+                   "activity_restore_gone", "activity_restore_exists",
+                   "avatar_type", "avatar_too_large"}
         error = str(exc)
         known = error in allowed or any(
             error in importlib.import_module(f"{__package__}.panels.{name}").ERRORS for name in PANELS)
@@ -1233,15 +1337,21 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
 
     @app.get("/api/state")
     async def state():
-        return await asyncio.to_thread(workspace.summary)
+        summary = await asyncio.to_thread(workspace.summary)
+        summary["modelUnreachable"] = summary["agentRunning"] and await workspace.model_unreachable()
+        return summary
 
     @app.get("/api/catalog")
     async def catalog():
         return {"providers": [{"id": p.key, "name": list(p.name), "baseUrl": p.base_url,
                                "model": p.model, "keyUrl": p.key_url} for p in sw.PROVIDERS],
-                "characters": [{"id": c.key, "name": list(c.title), "defaultName": c.name or None,
+                "characters": [{"id": c.key, "name": list(c.title),
+                                # By the character's language; ownNames adds the names it had before.
+                                "defaultNames": {lang: c.name_in(lang) for lang in sw.LANGS} if c.stem else None,
+                                "ownNames": sorted(c.own_names),
                                 "avatar": f"/assets/characters/{c.key}.webp" if sw.portrait(c.key) else None}
                                for c in sw.CHARACTERS],
+                "ownAvatarLimit": sw.MAX_OWN_AVATAR,
                 "platforms": conn.catalog()}
 
     @app.post("/api/config")
@@ -1260,6 +1370,30 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     async def save_persona(request: Request):
         payload = await body(request)
         return await asyncio.to_thread(workspace.save_persona, str(payload.get("text") or ""))
+
+    @app.get("/api/avatar")
+    async def own_avatar():
+        path = sw.own_avatar(workspace.home)
+        if path is None:
+            raise HTTPException(404)
+        return FileResponse(path, media_type=sw.OWN_AVATAR_TYPES[path.suffix[1:]])
+
+    @app.post("/api/avatar")
+    async def save_own_avatar(request: Request):
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > sw.MAX_OWN_AVATAR:
+            raise ValueError("avatar_too_large")
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > sw.MAX_OWN_AVATAR:
+                raise ValueError("avatar_too_large")
+        return await asyncio.to_thread(workspace.save_own_avatar, bytes(raw))
+
+    @app.post("/api/avatar/remove")
+    async def remove_own_avatar(request: Request):
+        await body(request)
+        return await asyncio.to_thread(workspace.remove_own_avatar)
 
     @app.post("/api/key")
     async def reveal(request: Request):
@@ -1306,16 +1440,17 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     @app.post("/api/chat")
     async def chat(request: Request):
         payload = await body(request)
-        after = payload.get("after")
+
+        def number(value):
+            return value if isinstance(value, int) and not isinstance(value, bool) else None
+
         try:
-            return await workspace.chat(str(payload.get("text") or ""),
-                                        after if isinstance(after, int) and not isinstance(after, bool) else None)
+            return await workspace.chat(str(payload.get("text") or ""), number(payload.get("after")),
+                                        number(payload.get("retry")))
         except ValueError:
             raise
         except Exception as error:
-            # The character itself did not start: a different thing to fix than a reply that failed.
-            code = "agent_failed" if str(error).startswith("agent ") else "chat_failed"
-            return JSONResponse({"error": code}, status_code=502)
+            return JSONResponse({"error": chat_failure(error)}, status_code=502)
 
     @app.post("/api/chat/reset")
     async def reset(request: Request):
@@ -1344,6 +1479,16 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     @app.get("/api/activity")
     async def activity():
         return await workspace.activity()
+
+    @app.post("/api/activity/start")
+    async def activity_start(request: Request):
+        await body(request)
+        try:
+            return await workspace.start_character()
+        except ValueError:
+            raise
+        except Exception:
+            return JSONResponse({"error": "agent_failed"}, status_code=502)
 
     @app.get("/api/activity/chat")
     async def activity_chat(id: str = ""):

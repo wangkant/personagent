@@ -78,8 +78,6 @@ HTML_FORMAT = "org.matrix.custom.html"
 _BLOCK_TAGS = frozenset({"p", "div", "li", "blockquote", "pre", "tr", "ul", "ol", "table",
                          "h1", "h2", "h3", "h4", "h5", "h6"})
 _FALLBACK_SENDER = re.compile(r"^\*?\s*<[^>]*>\s?")
-_MEDIA_NOTES = {"m.image": "(sent an image)", "m.video": "(sent a video)",
-                "m.location": "(shared a location)"}
 
 
 def _csv(value: Optional[str]) -> tuple[str, ...]:
@@ -360,22 +358,38 @@ def _caption(content: Mapping) -> str:
     return body if filename and body and body != filename else ""
 
 
+def media_segment(msgtype: str, content: Mapping) -> Optional[dict]:
+    """The protocol's `media` segment for an attachment the agent cannot look
+    into, or None when the protocol has no kind for it."""
+    if msgtype == "m.image":
+        return {"type": "media", "kind": "photo"}
+    if msgtype == "m.video":
+        return {"type": "media", "kind": "video"}
+    if msgtype == "m.audio" and "org.matrix.msc3245.voice" in content:
+        return {"type": "media", "kind": "voice"}
+    if msgtype in ("m.audio", "m.file"):
+        name = _file_name(content)
+        return {"type": "media", "kind": "file", **({"name": name} if name else {})}
+    return None
+
+
 def media_note(msgtype: str, content: Mapping) -> str:
-    if msgtype in _MEDIA_NOTES:
-        return _MEDIA_NOTES[msgtype]
-    if msgtype == "m.audio":
-        if "org.matrix.msc3245.voice" in content:
-            return "(sent a voice message)"
-        return f"(sent an audio file: {_file_name(content)})"
-    if msgtype == "m.file":
-        return f"(sent a file: {_file_name(content)})"
+    """An attachment in a quote's text, in the placeholders the agent renders
+    media segments as; words only where the protocol has no kind."""
+    media = media_segment(msgtype, content)
+    if media:
+        kind = "image" if media["kind"] == "photo" else media["kind"]
+        return f"[{kind}: {media['name']}]" if media.get("name") else f"[{kind}]"
+    if msgtype == "m.location":
+        return "(shared a location)"
     return f"(sent a {msgtype or 'message'})"
 
 
 def plain_text(event_type: str, content: Mapping) -> str:
-    """What a person would read in a message, for quotes and the event's text."""
+    """What a person would read in a message, for quotes."""
     if event_type == "m.sticker":
-        return f"(sent a sticker: {str(content.get('body') or '').strip()})"
+        body = str(content.get("body") or "").strip()
+        return f"[sticker: {body}]" if body else "[sticker]"
     msgtype = str(content.get("msgtype") or "")
     if msgtype in ("m.text", "m.notice", "m.emote"):
         return strip_reply_fallback(str(content.get("body") or ""))[0].strip()
@@ -710,7 +724,7 @@ class MatrixConnector:
             image = await self._image(content, sticker=True)
             segments.append(image or {"type": "emoji",
                                       "name": str(content.get("body") or "sticker")})
-            text = plain_text(etype, content)
+            text = ""
         elif msgtype in ("m.text", "m.emote"):
             formatted = str(content.get("formatted_body") or "")
             if content.get("format") == HTML_FORMAT and formatted:
@@ -722,13 +736,14 @@ class MatrixConnector:
             addressed = addressed or any(p.get("type") == "mention" for p in parts)
             segments.extend(parts)
             text = body.strip()
-        elif msgtype == "m.image":
-            image = await self._image(content)
-            segments.append(image or {"type": "text", "text": media_note(msgtype, content)})
-            if _caption(content):
-                segments.append({"type": "text", "text": _caption(content)})
-            text = plain_text(etype, content)
+        elif media_segment(msgtype, content):
+            image = await self._image(content) if msgtype == "m.image" else None
+            segments.append(image or media_segment(msgtype, content))
+            text = _caption(content)
+            if text:
+                segments.append({"type": "text", "text": text})
         else:
+            # m.location and unknown types: the protocol has no media kind for them.
             text = plain_text(etype, content)
             segments.append({"type": "text", "text": text})
 
@@ -877,7 +892,7 @@ class MatrixConnector:
             remembered = text
         elif kind == "image":
             content = await self._image_content(target, item, mention)
-            remembered = "(sent an image)"
+            remembered = "[image]"
         else:
             return
         relation = self._relation(target, item)

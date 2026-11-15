@@ -198,30 +198,31 @@ def kook_segments(text: str) -> list[dict]:
     return out
 
 
-# Long-connection WeCom smart bots turn media into these texts.
-WECOM_AI_PLACEHOLDERS = {
-    "[voice消息]": "(sent a voice message)",
-    "[video消息]": "(sent a video)",
-    "[file消息]": "(sent a file)",
-    "[image消息]": "(sent an image)",
+# Long-connection WeCom smart bots turn media into these texts; the values
+# are the protocol's media kinds.
+WECOM_AI_MEDIA_KINDS = {
+    "[voice消息]": "voice",
+    "[video消息]": "video",
+    "[file消息]": "file",
+    "[image消息]": "photo",
 }
 
 # LINE writes "[<type>]" when it cannot fetch a message's content.
-LINE_PLACEHOLDERS = {
-    "audio": "(sent a voice message)",
-    "video": "(sent a video)",
-    "file": "(sent a file)",
-    "image": "(sent an image)",
+LINE_MEDIA_KINDS = {
+    "audio": "voice",
+    "video": "video",
+    "file": "file",
+    "image": "photo",
 }
 
 
-def media_note(mime: str) -> str | None:
+def media_kind(mime: str) -> str | None:
     """Voice and video that an adapter hands over as a generic File."""
     mime = (mime or "").lower()
     if mime.startswith("audio/"):
-        return "(sent a voice message)"
+        return "voice"
     if mime.startswith("video/"):
-        return "(sent a video)"
+        return "video"
     return None
 
 

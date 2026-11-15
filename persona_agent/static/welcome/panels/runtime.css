@@ -6,6 +6,15 @@
   margin: 0 0 4px;
   font-size: 14px;
 }
+.runtime-parts {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.runtime-parts li {
+  margin: 0 0 2px;
+}
 .runtime-new {
   color: var(--accent);
 }

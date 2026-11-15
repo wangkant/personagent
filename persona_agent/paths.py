@@ -27,14 +27,16 @@ def seed_file(*parts: str) -> Path:
     return resource("data", *parts)
 
 
-def resolve_seed_lang_file(stem: str, ext: str, lang: str) -> Path:
-    """Resolve a read-only seed file, preferring the language suffix."""
+def resolve_seed_lang_file(stem: str, ext: str, lang: str, root: Path | None = None) -> Path:
+    """Resolve a read-only seed file, preferring the language suffix; `root`
+    stands for ROOT when another process's home is asked about."""
+    home = ROOT if root is None else Path(root)
     names = (f"{stem}.{lang}.{ext}", f"{stem}.{ext}")
-    for base in (ROOT / "data", resource("data")):
+    for base in (home / "data", resource("data")):
         for name in names:
             if (base / name).is_file():
                 return base / name
-    return ROOT / "data" / names[-1]
+    return home / "data" / names[-1]
 
 
 def runtime_dir() -> Path:

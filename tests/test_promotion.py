@@ -105,15 +105,46 @@ def test_every_hold_names_its_gate_and_keeps_its_reason() -> None:
     check("gate: speakers", alone.gate == promotion.GATE_SPEAKERS
           and alone.reason.startswith("1/2 distinct speakers"), repr(alone))
 
+    admin = decide(pair(), STRONG_PAIR, admin_only=True)
+    check("gate: admin", admin.gate == promotion.GATE_ADMIN
+          and "REACT_LEARN_ADMIN_ONLY" in admin.reason, repr(admin))
+
     ok = decide(pair(), STRONG_PAIR)
     check("gate: ok", ok.promote and ok.gate == promotion.GATE_OK
           and ok.reason == "2 compatible events, 2 strong", repr(ok))
     check("gate: every code is listed",
-          {off.gate, state.gate, against.gate, conflict.gate, person.gate,
+          {off.gate, state.gate, admin.gate, against.gate, conflict.gate, person.gate,
            weak.gate, one.gate, alone.gate, ok.gate} == set(promotion.GATES))
     check("a Decision built by position still works",
           promotion.Decision(False, "x", 1, 0).gate == ""
           and not promotion.Decision(False, "x", 1, 0).otherwise_ready)
+
+
+def test_admin_only_lets_nothing_in_without_the_admin() -> None:
+    def judged(cand, linked, related=(), peers=(), admins=("admin",)):
+        return promotion.decide(cand, linked_events=linked,
+                                related_events=list(linked) + list(related), peers=peers,
+                                now=NOW, policy=promotion.Policy(admin_only=True),
+                                admin_ids=admins)
+
+    others = judged(pair(), STRONG_PAIR)
+    check("two strangers' corrections stay observations", not others.promote
+          and others.gate == promotion.GATE_ADMIN, repr(others))
+    check("and are never the character's to adopt",
+          not promotion.needs_character(others, pair()))
+    rival = pair("restart the service instead")
+    rival_ev = event("carol", "correction", better="restart the service instead")
+    held = judged(pair(), STRONG_PAIR, related=[rival_ev], peers=[rival])
+    check("a conflict does not hand a stranger's rewrite to the character",
+          held.gate == promotion.GATE_ADMIN and not promotion.needs_character(held, pair()))
+    taught = judged(pair(), [event("admin", "correction", better=FIX),
+                             event("bob", "correction", better=FIX)])
+    check("the admin's correction is what lets it in", taught.promote, repr(taught))
+    nobody = judged(pair(), STRONG_PAIR + [event("admin", "correction", better=FIX)], admins=())
+    check("with no admin listed nothing teaches", nobody.gate == promotion.GATE_ADMIN, repr(nobody))
+    check("off by default, as before", promotion.Policy().admin_only is False
+          and promotion.Policy.from_env({}).admin_only is False
+          and promotion.Policy.from_env({"REACT_LEARN_ADMIN_ONLY": "true"}).admin_only is True)
 
 
 def test_only_holds_no_reaction_clears_go_to_the_character() -> None:

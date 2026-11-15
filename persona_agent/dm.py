@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from .access import ADMIN_MODE, PAGE_PLATFORM
 from . import channels
 from . import decision_log
+from .llm import purpose
 from .connector import current_sink
 from .messages import message_time
 # An emoji-only draft the sanitizer eats would come back identical from an
@@ -78,7 +79,8 @@ def _page_turns(path, conversation: str) -> list[dict]:
         return []
     turns: list[dict] = []
     for message in saved.get("messages") or []:
-        if not isinstance(message, dict):
+        # A message that was never answered is shown to the person, not a turn the character had.
+        if not isinstance(message, dict) or message.get("failed"):
             continue
         role, text = message.get("role"), message.get("text")
         if role not in ("user", "assistant") or not isinstance(text, str) or not text.strip():
@@ -436,18 +438,19 @@ class DirectMessages:
         messages = prompt.messages_with_context(messages)
 
         async def draft(system_text: str) -> tuple[str, str]:
-            raw = await self._call_llm(
-                system=system_text,
-                messages=messages,
-                model=self.llm_dm_model,
-                max_tokens=4096,
-                enable_search=False,
-                # No hidden reasoning: the protocol carries its own `reasoning` field.
-                disable_thinking=True,
-                json_object=True,
-                # `reply` is the whole schema, so recovered prose is unambiguous.
-                plain_text_fallback=True,
-            )
+            with purpose("reply"):
+                raw = await self._call_llm(
+                    system=system_text,
+                    messages=messages,
+                    model=self.llm_dm_model,
+                    max_tokens=4096,
+                    enable_search=False,
+                    # No hidden reasoning: the protocol carries its own `reasoning` field.
+                    disable_thinking=True,
+                    json_object=True,
+                    # `reply` is the whole schema, so recovered prose is unambiguous.
+                    plain_text_fallback=True,
+                )
             reply, reasoning, intent, mem = TextProcessing._parse_model_output(
                 raw, self.llm_dm_model)
             if reasoning:

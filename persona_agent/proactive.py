@@ -55,12 +55,16 @@ class Proactive:
 
     async def _maybe_proactive_groups(self) -> bool:
         """At most one proactive group message per tick. Returns True if sent."""
+        if self._only_when_called():
+            return False
         now = time.time()
         groups = list(self.buffers.keys()) or list(self._group_allowlist())
         random.shuffle(groups)
+        paused = self._paused_groups()
         for gid in groups:
             # DMs are the DM pass's; an unreachable room costs no model call.
-            if (channels.is_dm(gid) or not self._proactive_platform_ok(gid)
+            if (channels.is_dm(gid) or gid in paused
+                    or not self._proactive_platform_ok(gid)
                     or self._background_route(gid) is None):
                 continue
             last_act = self.last_activity_at.get(gid, 0.0)

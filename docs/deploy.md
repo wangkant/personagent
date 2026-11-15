@@ -220,16 +220,32 @@ Everything below is done on the local page. The settings are under
 **Save**.
 
 - **Make yourself the admin.** Send the character one private message, then
-  under **Admin and access** click **Choose from recent chats** and click
+  under **Replies, admin and access** click **Choose from recent chats** and click
   **This is me** next to your account. This is the way on the official QQ
   bot, which sees an openid instead of your QQ number.
 - **Reply only in some groups.** In the same list, tick **Reply in this
   group** for each group to keep, or enter the ids under **Reply only in
   these groups**. Once one group of a platform is listed, the character no
   longer replies in that platform's other groups.
-- **Pause all replies.** Turn off **Reply to messages** under **Other
-  settings**. The character stays connected and replies to nothing until you
-  turn it back on.
+- **Pause all replies.** Turn off **Reply to messages**, the first setting
+  under **Replies, admin and access**. The character stays connected and
+  replies to nothing until you turn it back on. Saving asks first.
+- **Pause some groups only.** Tick **Stay silent here** next to a group in
+  the same list, or enter its id under **Stay silent in these groups**. The
+  character replies to nothing there, not even when addressed, and a
+  platform's own bot stays quiet too; it keeps replying everywhere else.
+  Messages in a paused group are neither kept nor learned from. Remove the
+  group to resume.
+- **Reply only when addressed.** Turn on **In groups, reply only when
+  addressed** under **Speaking and reply style**. In groups the character
+  then answers only when someone uses its name, mentions it or replies to
+  its message, and never joins in or starts a conversation by itself.
+  Private chats are not affected.
+- **Let only you teach it.** Turn on **Learn only from the admin's
+  corrections** under **Learning**. Reactions from anyone not under **Your
+  accounts** are still recorded, but nothing they suggest is put into use.
+  List your accounts first; with none listed, only corrections made under
+  **Chat** on this page teach it.
 - **Undo something it learned.** In **Activity**, pick the chat and click
   **Undo** next to the item, or run `personagent learned rollback <id>`.
 - **Remove it from a group.** Remove the bot in the platform itself.

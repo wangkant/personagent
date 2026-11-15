@@ -40,6 +40,15 @@ PA.strings({
     runtime_useWeek: "Last 7 days — requests: {calls}; tokens: {tokens}; cost: {cost}.",
     runtime_useNoCost: "not reported by the provider",
     runtime_useNone: "No model requests have been recorded yet. The figures are counted on this computer from what the model service reports.",
+    runtime_useBy: "Today's requests by purpose:",
+    runtime_usePart: "{what}: {calls}",
+    runtime_use_reply: "Replies",
+    runtime_use_gate: "Deciding whether to speak in groups",
+    runtime_use_search: "Web searches",
+    runtime_use_learning: "Learning (judging reactions and reviewing replies)",
+    runtime_use_memory: "Memory tidy-up",
+    runtime_use_check: "Model check at start-up",
+    runtime_use_other: "Other",
   },
   zh: {
     runtime_bgTitle: "后台运行",
@@ -81,6 +90,15 @@ PA.strings({
     runtime_useWeek: "近 7 日——请求：{calls} 次；Token：{tokens} 个；费用：{cost}。",
     runtime_useNoCost: "模型服务未提供",
     runtime_useNone: "尚无模型请求记录。数据由本机根据模型服务返回的信息统计。",
+    runtime_useBy: "今日请求按用途：",
+    runtime_usePart: "{what}：{calls} 次",
+    runtime_use_reply: "回复",
+    runtime_use_gate: "判断是否在群聊中发言",
+    runtime_use_search: "联网搜索",
+    runtime_use_learning: "学习（评判反馈与评审回复）",
+    runtime_use_memory: "整理记忆",
+    runtime_use_check: "启动时检查模型",
+    runtime_use_other: "其他",
   },
 });
 (() => {
@@ -265,7 +283,19 @@ PA.strings({
         : new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(n);
     const line = (key, total) =>
       make("p", "runtime-line", PA.t(key, { calls: count(total.calls), tokens: count(total.tokens), cost: money(total.cost) }));
-    box.append(line("runtime_useToday", use.today), line("runtime_useWeek", use.week));
+    box.append(line("runtime_useToday", use.today));
+    const parts = Object.entries(use.todayPurposes || {});
+    if (parts.length) {
+      const by = make("div", "runtime-by");
+      by.id = "runtime-use-by";
+      by.append(make("p", "runtime-line", PA.t("runtime_useBy")));
+      const list = make("ul", "runtime-parts");
+      for (const [what, calls] of parts)
+        list.append(make("li", "", PA.t("runtime_usePart", { what: PA.t(`runtime_use_${what}`), calls: count(calls) })));
+      by.append(list);
+      box.append(by);
+    }
+    box.append(line("runtime_useWeek", use.week));
     card.append(box);
     return card;
   }

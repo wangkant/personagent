@@ -69,8 +69,8 @@ Personalities:
 | `gamer` | Gamer: co-op shooters and roguelikes, friendly trash talk | 游戏伙伴 |
 | `bookworm` | Bookworm: careful words, recommends books when asked | 爱书人 |
 | `chatgpt` | The GPT dragon girl: proud, well-read, fond of treasure | GPT 娘（白龙） |
-| `deepseek` | The DeepSeek whale girl: clever, a bit lazy, lives on white rice | DeepSeek 鲸鱼娘 |
-| `claude` | The Claude lady: well-bred, gentle and candid, strict house rules | Claude 娘（豪门圣女） |
+| `deepseek` | The DeepSeek whale girl: clever, a little lazy, happy with a bowl of plain rice | DeepSeek 鲸鱼娘 |
+| `claude` | The Claude lady: well-bred, gentle and candid, raised under strict house rules | Claude 娘（豪门圣女） |
 | `template` | A plain starting character to rewrite later | 稍后自行编写 |
 
 `chatgpt`, `deepseek` and `claude` run on the `--provider` service like the others, whichever it is.

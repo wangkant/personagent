@@ -344,8 +344,14 @@ def test_images_arrive_as_bytes() -> None:
     check("caption", captioned["segments"][-1] == {"type": "text", "text": "look at this"})
     big = build(conn, GROUP, msg("huge.png", msgtype="m.image", url="mxc://example.org/pic",
                                  info={"size": mc.MAX_INLINE_IMAGE_BYTES + 1}))
-    check("too big is described", big["segments"] == [
-        {"type": "text", "text": "(sent an image)"}], repr(big["segments"]))
+    check("too big is a photo the agent cannot see", big["segments"] == [
+        {"type": "media", "kind": "photo"}], repr(big["segments"]))
+    lost_photo = build(conn, GROUP, msg("so blue", msgtype="m.image", filename="sky.png",
+                                        url="mxc://example.org/none"))
+    check("an unfetchable photo keeps its caption, and the text is only the caption",
+          lost_photo["segments"] == [{"type": "media", "kind": "photo"},
+                                     {"type": "text", "text": "so blue"}]
+          and lost_photo["text"] == "so blue", repr(lost_photo))
     sticker = build(conn, GROUP, {"type": "m.sticker", "sender": ALEX, "event_id": "$s",
                                   "origin_server_ts": NOW * 1000,
                                   "content": {"body": "wave", "url": "mxc://example.org/pic"}})
@@ -357,9 +363,31 @@ def test_images_arrive_as_bytes() -> None:
         {"type": "emoji", "name": "wave"}], repr(lost["segments"]))
     voice = build(conn, GROUP, msg("voice.ogg", msgtype="m.audio",
                                    **{"org.matrix.msc3245.voice": {}}))
-    check("voice described", voice["text"] == "(sent a voice message)")
+    check("voice is a media segment, not words",
+          voice["segments"] == [{"type": "media", "kind": "voice"}] and voice["text"] == "",
+          repr(voice))
     upload = build(conn, GROUP, msg("deck.pdf", msgtype="m.file"))
-    check("file described", upload["text"] == "(sent a file: deck.pdf)")
+    check("a file is a media segment with its name",
+          upload["segments"] == [{"type": "media", "kind": "file", "name": "deck.pdf"}],
+          repr(upload["segments"]))
+    song = build(conn, GROUP, msg("song.mp3", msgtype="m.audio"))
+    check("an audio file that is not a voice message is a named file",
+          song["segments"] == [{"type": "media", "kind": "file", "name": "song.mp3"}],
+          repr(song["segments"]))
+    clip = build(conn, GROUP, msg("watch", msgtype="m.video", filename="clip.mp4"))
+    check("a video is a media segment, its caption the sender's words",
+          clip["segments"] == [{"type": "media", "kind": "video"},
+                               {"type": "text", "text": "watch"}], repr(clip["segments"]))
+    place = build(conn, GROUP, msg("Big Ben", msgtype="m.location", geo_uri="geo:51.5,-0.1"))
+    check("a location has no media kind and stays a note",
+          place["segments"] == [{"type": "text", "text": "(shared a location)"}],
+          repr(place["segments"]))
+    check("quoted media reads as the agent's own placeholders",
+          mc.plain_text("m.room.message", {"msgtype": "m.file", "body": "deck.pdf"})
+          == "[file: deck.pdf]"
+          and mc.plain_text("m.room.message", {"msgtype": "m.audio", "body": "v.ogg",
+                                               "org.matrix.msc3245.voice": {}}) == "[voice]"
+          and mc.plain_text("m.sticker", {"body": "wave"}) == "[sticker: wave]")
 
     calls = []
 
