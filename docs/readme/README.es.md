@@ -93,7 +93,7 @@ personagent
 
 Con [uv](https://docs.astral.sh/uv/), `uvx personagent` lo ejecuta sin un paso de instalación independiente. En Windows también puede descargar el ZIP del código fuente y hacer doble clic en `start.bat`.
 
-En Windows se abre en una ventana propia, y en macOS y Linux, en el navegador. Pegue la clave de API de su modelo y seleccione **Verificar e iniciar el chat**. ¿Todavía no dispone de una clave? Los modelos gratuitos de OpenRouter están preseleccionados, y su clave no tiene coste. `personagent demo` reproduce tres escenas guionizadas sin ninguna clave. La [guía de primeros pasos](https://github.com/wangkant/personagent/blob/main/docs/start.es.md) recorre la página pantalla por pantalla.
+En Windows se abre en una ventana propia, y en macOS y Linux, en el navegador. Pegue la clave de API de su modelo y seleccione **Verificar e iniciar el chat**. Los modelos gratuitos de OpenRouter están preseleccionados, pero también necesitan una clave: no tiene coste y se obtiene en OpenRouter mediante **Obtener una clave de API** en la página. `personagent demo` reproduce tres escenas guionizadas sin ninguna clave. La [guía de primeros pasos](https://github.com/wangkant/personagent/blob/main/docs/start.es.md) recorre la página pantalla por pantalla.
 
 personagent es gratuito. Usted paga al servicio de modelos que elija, según sus propias tarifas. Un mensaje puede generar más de una solicitud al modelo: además de la respuesta, el personaje a veces decide si intervenir en un grupo, valora cómo se recibió una respuesta u ordena su memoria. Los modelos gratuitos de OpenRouter admiten 50 solicitudes al día, y algunos proveedores gratuitos conservan lo que reciben; Ollama ejecuta un modelo en su propio equipo sin clave.
 
@@ -135,7 +135,7 @@ Cuando hay una versión más reciente en PyPI, la página muestra un aviso con e
 
 ## Privacidad
 
-Todo lo que personagent guarda permanece en su equipo, en una única carpeta de inicio. El proveedor de modelos que elija ve las conversaciones a las que responde, y una vez al día personagent consulta a pypi.org si hay una versión más reciente (`UPDATE_CHECK_ENABLED=false` lo desactiva). Antes de conectarlo con personas reales, infórmeles de que es un bot y obtenga su consentimiento; la [guía](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md#privacidad-y-consentimiento) detalla qué información se envía a cada lugar.
+Todo lo que personagent guarda permanece en su equipo, en una única carpeta de personagent. El proveedor de modelos que elija ve las conversaciones a las que responde, y una vez al día personagent consulta a pypi.org si hay una versión más reciente (`UPDATE_CHECK_ENABLED=false` lo desactiva). Antes de conectarlo con personas reales, infórmeles de que es un bot y obtenga su consentimiento; la [guía](https://github.com/wangkant/personagent/blob/main/docs/guide.es.md#privacidad-y-consentimiento) detalla qué información se envía a cada lugar.
 
 ## Documentación
 

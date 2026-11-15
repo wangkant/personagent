@@ -305,7 +305,9 @@ PA.strings({
     const box = make("div", "feature agents-row");
     box.dataset.agent = item.id;
     const head = make("div", "feature-head");
-    head.append(make("strong", "", NAMES[item.id]));
+    const title = make("strong", "", NAMES[item.id]);
+    title.id = idOf(item, "name");
+    head.append(title);
     const state = make("span", "feature-state agents-state", stateText(item));
     state.classList.toggle("agents-on", item.state === "on");
     head.append(state);
@@ -336,6 +338,8 @@ PA.strings({
         const go = make("button", "secondary agents-connect", PA.t(key));
         go.type = "button";
         go.id = idOf(item, "connect");
+        // Two "Connect" buttons in a row: each is named after its assistant.
+        go.setAttribute("aria-labelledby", `${go.id} ${title.id}`);
         go.addEventListener("click", () => connect(item, go, key));
         actions.append(go);
       }
@@ -343,6 +347,7 @@ PA.strings({
         const off = make("button", "quiet agents-remove", PA.t("agents_remove"));
         off.type = "button";
         off.id = idOf(item, "remove");
+        off.setAttribute("aria-labelledby", `${off.id} ${title.id}`);
         off.addEventListener("click", () => remove(item, off));
         actions.append(off);
       }

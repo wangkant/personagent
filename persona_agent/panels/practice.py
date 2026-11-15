@@ -90,6 +90,8 @@ class Practice:
         self.mids: dict[str, str] = {}
         self.uids: dict[str, str] = {}
         self.demos: dict[str, list] = {}
+        # The home's reply settings the practice character follows.
+        self.rules: dict = {}
         atexit.register(self.stop)
 
     # -- the child ----------------------------------------------------------
@@ -149,6 +151,7 @@ class Practice:
         # A start that hangs is a failed start, not a slow model.
         ready = self._answer(START_TIMEOUT, "practice_failed")
         self.name = str(ready.get("name") or "")
+        self.rules = ready.get("rules") if isinstance(ready.get("rules"), dict) else {}
 
     def _call(self, request: dict) -> dict:
         self.proc.stdin.write((json.dumps(request) + "\n").encode("utf-8"))
@@ -174,7 +177,8 @@ class Practice:
     # -- what the routes do -------------------------------------------------
 
     def view(self) -> dict:
-        return {"running": self.running(), "name": self.name, "entries": list(self.entries)}
+        return {"running": self.running(), "name": self.name, "rules": dict(self.rules),
+                "entries": list(self.entries)}
 
     def _translate(self, lang: str) -> None:
         """Say the reasons of earlier lines again in `lang`, while the child still knows them."""
@@ -232,7 +236,7 @@ class Practice:
                     self.mids[reply["id"]] = str(answer["mid"])
                 fresh.append(reply)
             self.entries = (self.entries + fresh)[-ENTRY_LIMIT:]
-            return {"entries": fresh, "name": self.name}
+            return {"entries": fresh, "name": self.name, "rules": dict(self.rules)}
         return self._locked(work)
 
     def why(self, entry: str, lang: str) -> dict:
@@ -276,7 +280,8 @@ class Practice:
                 if not isinstance(item, dict):
                     continue
                 if item.get("kind") == "scene":
-                    scenes.append({"key": str(item.get("key", "")), "title": str(item.get("title", "")),
+                    scenes.append({"key": str(item.get("key", "")), "name": str(item.get("name", "")),
+                                   "title": str(item.get("title", "")),
                                    "intro": str(item.get("intro", "")), "beats": []})
                 elif scenes:
                     scenes[-1]["beats"].append(item)
@@ -346,9 +351,10 @@ def _demo(lang: str, out) -> int:
         def _scene(self, key, **fmt):
             self.trial.conv = f"demo-{key}"
             self.trial.last, self.trial.last_mid = None, ""
-            joiner = "" if lang.split("-")[0] in ("zh", "ja", "ko") else " "
+            # Korean writes spaces between words; Chinese and Japanese do not.
+            joiner = "" if lang.split("-")[0] in ("zh", "ja") else " "
             intro = self.t[f"{key}_intro"].format(name=self.name, **fmt)
-            _emit(out, {"kind": "scene", "key": key,
+            _emit(out, {"kind": "scene", "key": key, "name": self.name,
                         "title": self.t[key].format(name=self.name).strip("= "),
                         "intro": joiner.join(part.strip() for part in intro.splitlines())})
             return self.scripts[key]
@@ -397,6 +403,7 @@ class _Trial:
 
     def __init__(self) -> None:
         from .. import chat
+        from ..config_env import env_bool
 
         self.chat = chat
         lang = chat.normalize_lang(os.getenv("AGENT_LANG", "en"))
@@ -405,15 +412,27 @@ class _Trial:
                                 factory=lambda: chat.build_agent(lang, chat.TRIAL_TRIGGER)[0])
         self.turns: dict[int, object] = {}
         self.count = itertools.count(1)
+        # As server.py reads it: with replies off, no message is answered at all.
+        self.replies = env_bool("AGENT_ENABLED", True)
 
     @property
     def agent(self):
         return self.trial.agent
 
+    def rules(self) -> dict:
+        try:
+            live = int(os.getenv("CHAT_TRIGGER_COUNT", "").strip() or 30)
+        except ValueError:
+            live = 30
+        return {"replies": self.replies, "onlyCalled": self.agent._only_when_called(),
+                "trigger": self.chat.TRIAL_TRIGGER, "liveTrigger": live}
+
     def _what(self, turn) -> str:
         from ..access import ADMIN_MODE
         from ..decision import GATED_MODES
 
+        if turn.quiet == "off":
+            return "off"
         if turn.failure is not None:
             return "failed"
         if turn.memory:
@@ -481,7 +500,10 @@ class _Trial:
             name, uid = str(req.get("name") or "?"), str(req.get("uid") or "3001")
         quote = str(req.get("quote") or "")
         try:
-            turn = await self.trial._group_turn(name, uid, text, quote)
+            if not self.replies:
+                turn = self.chat.Turn(speaker=name, uid=uid, text=text, quiet="off")
+            else:
+                turn = await self.trial._group_turn(name, uid, text, quote)
         except Exception as error:
             turn = self.chat.Turn(speaker=name, uid=uid, text=text,
                                   failure=self.chat.describe_failure(error))
@@ -564,7 +586,7 @@ def _trial(out) -> int:
             logging.exception("practice: the character could not be built")
             _emit(out, {"error": "practice_failed"})
             return 1
-        _emit(out, {"ready": True, "name": session.agent.persona_name})
+        _emit(out, {"ready": True, "name": session.agent.persona_name, "rules": session.rules()})
         try:
             while True:
                 # The page closing its end of the pipe ends this process.

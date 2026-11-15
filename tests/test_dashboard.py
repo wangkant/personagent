@@ -654,11 +654,14 @@ def test_the_api_sends_what_the_local_page_reads_and_nothing_else(live) -> None:
     async def served(method, path, **kwargs):
         return listing
 
-    listed = asyncio.run(welcome.Workspace.activity(SimpleNamespace(_activity_call=served)))
+    listed = asyncio.run(welcome.Workspace.activity(SimpleNamespace(
+        _activity_call=served, _page_key=lambda: "private:browser:now")))
     check("list: the chat is there, with its counts",
           [(row["id"], row["observing"], row["learned"], row["notes"]) for row in listed["chats"]]
           == [("telegram:c1", 1, 1, 1)], repr(listed))
     check("list: when something last came into use here", listed["chats"][0]["latest"] > 0)
+    check("list: a chat on an app is not the page's current chat",
+          listed["chats"][0]["current"] is False)
     rows = listing["conversations"]
     check("list: every field sent is one the page reads", _mismatch(rows) == [],
           repr(_mismatch(rows)))

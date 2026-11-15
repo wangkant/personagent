@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextvars
 import logging
 import random
 import re
@@ -26,6 +27,8 @@ from .textproc import MAX_REPLY_MESSAGES, TextProcessing
 
 logger = logging.getLogger("agent")
 
+# Set while a memory command's answer goes out: one message per line, none cut inside a line.
+send_by_line: contextvars.ContextVar[bool] = contextvars.ContextVar("send_by_line", default=False)
 
 # Anti-flood: a jittered minimum gap between any two sends, plus a per-target
 # cap per window.
@@ -275,7 +278,7 @@ class Transport:
 
     async def _deliver_segments(self, segments, send, *, target_key: str,
                                 at_user_id: str = "", label: str = "",
-                                throttle_key: str = "") -> SendResult:
+                                throttle_key: str = "", by_line: bool = False) -> SendResult:
         """Send (kind, value) segments one message at a time through
         ``send(message) -> bool``, stopping at the first failure; ``at_user_id``
         prefixes the first message that goes out."""
@@ -316,7 +319,7 @@ class Transport:
             sent_stickers.append(rel)
             return True
 
-        for kind, value in TextProcessing._delivery_units(segments, cap):
+        for kind, value in TextProcessing._delivery_units(segments, cap, by_line=by_line):
             if kind == "sticker":
                 file_path = self.stickers.pick_by_tag(value, exclude_md5s=used_md5s)
                 if not file_path:
@@ -414,7 +417,7 @@ class Transport:
             TextProcessing._parse_sticker_markers(text),
             partial(self._onebot_send_dm, user_id),
             target_key=target_key, label=" (DM)",
-            throttle_key=target_key)
+            throttle_key=target_key, by_line=send_by_line.get())
 
     def _background_route(self, key: str):
         """How an unprompted message reaches `key`: the outbox handle, else

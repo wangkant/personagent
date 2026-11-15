@@ -21,13 +21,15 @@ const translations = {
     activityConnect: "连接平台",
     activityStart: "启动角色",
     activityStarting: "正在启动…",
-    activityNotRunning: "角色尚未运行。启动角色后即可查看它记住和学到的内容；在「开始聊天」中发送消息或连接平台也会启动角色。",
+    activityNotRunning: "角色尚未运行。启动角色后，即可在此查看它在各个聊天中记住的内容；在「开始聊天」中发送消息或连接平台也会启动角色。",
     activityNone: "暂无聊天记录。本页面的聊天在角色记下内容后会显示在此处。连接平台后，将角色添加到群聊或向它发送私信，相应记录也会显示在此处。",
     activityOff: "动态已关闭（.env 中 DASHBOARD_ENABLED=false）。",
     activity_unavailable: "暂时无法读取角色的动态，页面稍后将自动重试。",
     activity_changed: "该项已被处理，列表已刷新。",
     invalid_chat: "该聊天已不存在。",
     activityHere: "本页面",
+    activityHereNow: "本页面（当前对话）",
+    activityHereEarlier: "本页面（较早的对话）",
     activityGroup: "群聊",
     activityDm: "私聊",
     activityObserving: "仍在观察",
@@ -106,8 +108,8 @@ const translations = {
     activityLogEmpty: "聊天记录：本聊天的消息保留 {days} 天，目前尚无记录。角色据此核对所记住的内容，并用于回答有关过去的问题。",
     activityLogOff: "聊天记录：已关闭。角色在此聊天中记住的内容无法再与当时的对话核对，有关过去的问题只能依据其笔记回答。可在「角色与设置」的「高级设置」中的「记忆」部分开启。",
     activityForgetChat: "清除此聊天的记忆",
-    activityForgetChatAsk: "角色将清除在此聊天中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息、聊天记录，以及尚可恢复的已删除内容。其他聊天中记住的内容将予以保留。在此聊天中学到的内容也将保留并继续使用。此操作无法撤销。",
-    activityForgetOldChatAsk: "角色将清除在此聊天中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息、聊天记录，以及尚可恢复的已删除内容。其他聊天中记住的内容将予以保留。此操作无法撤销。",
+    activityForgetChatAsk: "角色将忘记在此聊天中记住的全部内容，包括事实、事件、摘要、聊天记录和可恢复的已删除内容。其他聊天中记住的内容予以保留，在此聊天中学到的内容也继续使用。此操作无法撤销。",
+    activityForgetOldChatAsk: "角色将忘记在此聊天中记住的全部内容，包括事实、事件、摘要、聊天记录和可恢复的已删除内容。其他聊天中记住的内容予以保留。此操作无法撤销。",
     ariaNav: "导航",
     ariaLanguage: "页面语言",
     ariaSend: "发送",
@@ -121,7 +123,7 @@ const translations = {
     minutesAgo: "{n} 分钟前",
     hoursAgo: "{n} 小时前",
     r_below: "未被点名，且累计消息数未达到主动发言的条件",
-    r_only_called: "未被点名；已设置为群聊中仅在被呼叫时回复",
+    r_only_called: "未被点名；已设置为群聊中仅在被点名时回复",
     r_sleep: "处于夜间休息时段，按作息规律跳过",
     r_skip: "为保持自然的发言节奏而随机跳过",
     r_passed: "判断此处无需发言",
@@ -148,8 +150,12 @@ const translations = {
     running: "正在运行",
     runningNoModel: "正在运行，无法连接模型",
     modelUnreachable: "角色无法连接模型，暂时不会回复。请在「应用」中执行运行检查以查看原因。",
+    repliesOff: "回复已关闭",
+    repliesOffHint: "回复已关闭，角色不回复任何消息。可在「角色与设置」→「高级设置」→「回复、管理员与回复范围」中勾选「回复消息」以重新开启。",
+    repliesOffOpen: "前往设置",
     serviceStopped: "已停止",
     exit: "退出",
+    exitAsk: "退出后，角色将在所有已连接的平台（{platforms}）上停止回复，直至再次运行 personagent。确定退出吗？",
     winMin: "最小化",
     winMax: "最大化",
     winRestore: "还原",
@@ -164,8 +170,9 @@ const translations = {
     getKey: "获取密钥 ↗",
     show: "显示",
     hide: "隐藏",
+    keyHint: "API 密钥是模型服务商发给你的一串字符，在其网站注册后即可创建；「获取密钥」会打开所选服务的相应页面。",
     keyNote: "密钥保存在本机；聊天内容会发送至你选择的模型服务。",
-    advanced: "高级设置",
+    advanced: "模型名称与服务地址",
     characterOptions: "更改角色名称、性格或语言",
     name: "角色名称",
     character: "性格",
@@ -186,7 +193,7 @@ const translations = {
     invalid_persona: "人设不能为空，且不能超过 4000 字。",
     avatar_type: "仅支持 PNG、JPEG 或 WebP 格式的图片，请重新选择文件。",
     avatar_too_large: "图片超过 {size} MB，请选择较小的文件。",
-    save: "保存",
+    featuresSave: "保存功能设置",
     featuresTitle: "更多功能",
     searchTitle: "联网搜索",
     searchHint: "遇到不了解的内容时，角色会先进行搜索。默认使用 DuckDuckGo，无需密钥；填写 Tavily 密钥可获得更稳定的结果。",
@@ -226,13 +233,13 @@ const translations = {
     previewText: "性格决定角色说话的语气。",
     sample: "今天过得怎么样？有什么想聊的吗？",
     changeLater: "名称和性格可随时更改。",
-    trioLabel: "也可以选择 GPT 娘、鲸鱼娘或 Claude 娘",
+    trioLabel: "也可以选择 GPT 娘、DeepSeek 鲸鱼娘或 Claude 娘",
     previewCustom: "使用你自己编写的人设。",
     ownAvatarPick: "使用自己的图片",
     ownAvatarRemove: "移除图片",
     ownAvatarUploading: "正在上传…",
     ownAvatarRemoving: "正在移除…",
-    ownAvatarNote: "支持 PNG、JPEG 或 WebP 格式，不超过 {size} MB。图片保存在本机，仅在本页面显示。",
+    ownAvatarNote: "支持 PNG、JPEG 或 WebP 格式，不超过 {size} MB。图片只保存在本机，不会发送到聊天平台。",
     ownAvatarSaved: "图片已设为角色头像。",
     ownAvatarRemoved: "图片已移除。",
     ownAvatarRemoveAsk: "确定移除这张图片吗？文件将从 personagent 文件夹中删除。",
@@ -243,11 +250,12 @@ const translations = {
     newChat: "新对话",
     newChatDone: "已开始新的对话，角色记住的内容仍然保留。",
     chatWait: "上一条消息的回复尚未完成，请稍候再发送。",
-    forgetChat: "清除本次对话的记忆",
-    forgetChatAsk: "角色将清除在本次对话中记住的全部内容：事实、事件、此前对话的摘要、常驻记忆、近期消息、聊天记录，以及尚可恢复的已删除内容，随后开始新的对话。角色在本次对话中学到的内容此后不再使用，仍列在「角色学到的内容」的「已搁置」中。本页面此前对话中记住的内容也将一并清除；在已连接平台的聊天中记住的内容将予以保留。此操作无法撤销。",
+    forgetChat: "清除本页面的聊天记忆",
+    forgetChatAsk: "角色将忘记在本页面各次对话中记住的全部内容，包括事实、事件、摘要、聊天记录和可恢复的已删除内容，随后开始新的对话。在已连接平台的聊天中记住的内容予以保留；角色在本页面学到的内容不再使用，列于「角色学到的内容」的「已搁置」中。此操作无法撤销。",
     forget_needs_activity: "清除记忆需要先开启动态数据，可在「角色与设置」的高级设置中开启。",
-    forgetChatDone: "已清除本次对话的记忆，并已开始新的对话。",
-    forgetChatNone: "本次对话中没有记下任何内容，已开始新的对话。",
+    forgetChatDone: "已清除本页面的聊天记忆，并已开始新的对话。",
+    forgetChatNone: "本页面的对话中没有记下任何内容，已开始新的对话。",
+    forgotLines: "此前包含这些字词的消息已从本页面移除。",
     commandsShow: "记忆命令",
     commandsHint: "点击命令即可填入输入框：",
     emptyHint: "发送一条消息以开始聊天。",
@@ -317,6 +325,7 @@ const translations = {
     saved: "设置已保存，可以开始聊天。",
     thinking: "正在回复…",
     noReply: "角色未作回复，请换一个话题再试。",
+    noReplyOff: "回复已关闭，因此角色未作回复。可在「角色与设置」→「高级设置」→「回复、管理员与回复范围」中勾选「回复消息」以重新开启。",
     greeting: "你好，我是{name}。",
     platformsTitle: "连接平台",
     keySaved: "留空以保留已保存的密钥",
@@ -324,16 +333,19 @@ const translations = {
     working: "当前操作仍在进行，请稍候。",
     offline: "与应用的连接已中断，请关闭 personagent 后重新打开。",
     auth: "请通过启动窗口中显示的本地链接打开此页面。",
-    key_required: "请填写 API Key。",
+    key_required: "请填写 API 密钥。",
+    key_again: "更换模型服务或服务地址后，需要重新填写该服务的 API 密钥。",
     key_rejected: "密钥未通过验证。请检查密钥是否完整，以及是否属于所选服务。",
+    key_malformed: "密钥中含有其他文字或空格。请只粘贴密钥本身。",
     model_limited:
       "服务商提示请求过多或额度已用完。OpenRouter 免费模型每天限 50 次请求，于 UTC 零点重置。请稍后重试，或更换其他服务。",
     model_unreachable:
       "暂时无法连接该模型。请检查网络、模型名称和服务地址后重试。",
-    model_required: "请在高级设置中填写模型名称。",
+    model_required: "请在「模型名称与服务地址」中填写模型名称。",
     invalid_url: "请填写完整的服务地址。",
     https_required: "远程模型服务须使用 HTTPS 地址。",
     invalid_character: "请检查角色名称和性格。",
+    name_required: "请填写角色名称。",
     busy: "当前操作仍在进行，请等待其完成。",
     chat_failed: "回复未能完成。请检查模型服务和网络后重试。「应用」中的「运行检查」可显示原因。",
     setup_failed:
@@ -420,13 +432,15 @@ const translations = {
     activityConnect: "Connect an app",
     activityStart: "Start the character",
     activityStarting: "Starting…",
-    activityNotRunning: "The character is not running. Start it to see what it remembers and has learned; sending a message in Chat or connecting an app also starts it.",
+    activityNotRunning: "The character is not running. Start it to see here what it remembers in each chat; sending a message in Chat or connecting an app also starts it.",
     activityNone: "There are no chats yet. Chats on this page appear here once the character has noted something from them. Connect an app, then add the character to a group or send it a direct message, and those chats appear here as well.",
     activityOff: "Activity is turned off (DASHBOARD_ENABLED=false in .env).",
     activity_unavailable: "The character's activity could not be read. The page will try again shortly.",
     activity_changed: "This item has already been handled. The list has been refreshed.",
     invalid_chat: "This chat no longer exists.",
     activityHere: "This page",
+    activityHereNow: "This page (current chat)",
+    activityHereEarlier: "This page (earlier chat)",
     activityGroup: "group",
     activityDm: "DM",
     activityObserving: "Still under observation",
@@ -508,8 +522,8 @@ const translations = {
     activityLogEmpty: "Chat record: this chat's messages are kept for {days} days; none has been recorded yet. The character checks what it remembers against them and uses them to answer questions about the past.",
     activityLogOff: "Chat record: turned off. What the character remembers from this chat can no longer be checked against what was said, and questions about the past are answered from its notes alone. It can be turned on in Character & settings, under Advanced settings, Memory.",
     activityForgetChat: "Forget this chat",
-    activityForgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages, the chat record and the removed items that could still be restored. What it remembers from other chats is kept. What it learned in this chat is kept and stays in use. This cannot be undone.",
-    activityForgetOldChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages, the chat record and the removed items that could still be restored. What it remembers from other chats is kept. This cannot be undone.",
+    activityForgetChatAsk: "The character will forget everything it remembers from this chat, including facts, events, summaries, the chat record and removed items that could still be restored. What it remembers from other chats is kept, and what it learned in this chat stays in use. This cannot be undone.",
+    activityForgetOldChatAsk: "The character will forget everything it remembers from this chat, including facts, events, summaries, the chat record and removed items that could still be restored. What it remembers from other chats is kept. This cannot be undone.",
     ariaNav: "Navigation",
     ariaLanguage: "Page language",
     ariaSend: "Send",
@@ -550,8 +564,12 @@ const translations = {
     running: "Running",
     runningNoModel: "Running, model unreachable",
     modelUnreachable: "The character cannot reach its model and will not reply for now. Run the health check under App to see the cause.",
+    repliesOff: "Replies off",
+    repliesOffHint: "Replies are turned off: the character replies to no message. To turn them on again, tick Reply to messages under Character & settings > Advanced settings > Replies, admin and access.",
+    repliesOffOpen: "Open settings",
     serviceStopped: "Stopped",
     exit: "Quit",
+    exitAsk: "After quitting, the character stops replying on every connected app ({platforms}) until personagent runs again. Quit now?",
     winMin: "Minimize",
     winMax: "Maximize",
     winRestore: "Restore",
@@ -568,9 +586,11 @@ const translations = {
     getKey: "Get an API key ↗",
     show: "Show",
     hide: "Hide",
+    keyHint:
+      "An API key is a string of characters the model service gives you; create one on its website after signing up. Get an API key opens that page for the chosen service.",
     keyNote:
       "Your key stays on this computer. Chats go to the model service you choose.",
-    advanced: "Advanced settings",
+    advanced: "Model name and address",
     characterOptions: "Choose a name, personality or language",
     name: "Character name",
     character: "Personality",
@@ -594,7 +614,7 @@ const translations = {
     invalid_persona: "The persona cannot be empty or longer than 4,000 characters.",
     avatar_type: "Only PNG, JPEG or WebP pictures can be used. Choose another file.",
     avatar_too_large: "The picture is larger than {size} MB. Choose a smaller file.",
-    save: "Save",
+    featuresSave: "Save features",
     featuresTitle: "More features",
     searchTitle: "Web search",
     searchHint: "It looks up what it does not know. DuckDuckGo needs no key; a Tavily key is more reliable.",
@@ -642,7 +662,7 @@ const translations = {
     ownAvatarUploading: "Uploading…",
     ownAvatarRemoving: "Removing…",
     ownAvatarNote:
-      "PNG, JPEG or WebP, up to {size} MB. The picture stays on this computer and is shown only on this page.",
+      "PNG, JPEG or WebP, up to {size} MB. The picture stays on this computer and is never sent to a chat app.",
     ownAvatarSaved: "The picture is now the character's avatar.",
     ownAvatarRemoved: "Picture removed.",
     ownAvatarRemoveAsk: "Remove this picture? The file is deleted from the personagent folder.",
@@ -654,11 +674,12 @@ const translations = {
     newChat: "New chat",
     newChatDone: "A new chat has started. What the character remembers is kept.",
     chatWait: "The reply to your last message is still coming. Send this one when it is done.",
-    forgetChat: "Forget this chat",
-    forgetChatAsk: "The character will forget everything it remembers from this chat: the facts, the events, the summary of earlier conversation, the always-present note, the recent messages, the chat record and the removed items that could still be restored. A new chat then starts. What the character learned in this chat is no longer used from then on; it remains listed under Set aside in What the character has learned. What it remembers from earlier chats on this page is forgotten too; what it remembers from chats on connected apps is kept. This cannot be undone.",
+    forgetChat: "Forget this page's chats",
+    forgetChatAsk: "The character will forget everything it remembers from the chats on this page, including facts, events, summaries, the chat record and removed items that could still be restored, and a new chat starts. What it remembers from chats on connected apps is kept; what it learned on this page is no longer used and is listed under Set aside in What the character has learned. This cannot be undone.",
     forget_needs_activity: "Forgetting a chat needs activity data, which is switched off. Turn it on in the advanced settings under Character & settings.",
-    forgetChatDone: "The character has forgotten this chat, and a new chat has started.",
-    forgetChatNone: "The character had noted nothing in this chat. A new chat has started.",
+    forgetChatDone: "The character has forgotten this page's chats, and a new chat has started.",
+    forgetChatNone: "The character had noted nothing from this page's chats. A new chat has started.",
+    forgotLines: "The earlier messages holding these words have been removed from this page.",
     commandsShow: "Memory commands",
     commandsHint: "Select a command to insert it into the message box:",
     emptyHint: "Send a message to start the conversation.",
@@ -731,6 +752,7 @@ const translations = {
     saved: "Settings saved. You can start chatting.",
     thinking: "Replying…",
     noReply: "The character did not reply. Try a different topic.",
+    noReplyOff: "Replies are turned off, so the character did not reply. To turn them on again, tick Reply to messages under Character & settings > Advanced settings > Replies, admin and access.",
     greeting: "Hi, I'm {name}.",
     platformsTitle: "Connect apps",
     keySaved: "Leave blank to keep the saved key",
@@ -740,16 +762,19 @@ const translations = {
       "The connection to the app was lost. Close personagent and open it again.",
     auth: "Open this page using the local link in the launch window.",
     key_required: "Enter your API key.",
+    key_again: "A different model service or address needs its own API key. Enter the key again.",
     key_rejected:
       "The key was not accepted. Check that it is complete and belongs to this service.",
+    key_malformed: "The key holds other characters or spaces. Paste only the key itself.",
     model_limited:
       "The service reports too many requests or an exhausted quota. OpenRouter's free models allow 50 requests a day, reset at midnight UTC. Try again later or choose another service.",
     model_unreachable:
       "The model could not be reached. Check the network, the model name and the API address, then try again.",
-    model_required: "Enter a model name under advanced settings.",
+    model_required: "Enter a model name under Model name and address.",
     invalid_url: "Enter a complete API address.",
     https_required: "Remote model services require an HTTPS address.",
     invalid_character: "Check the character name and personality.",
+    name_required: "Enter a character name.",
     busy: "An operation is still running. Please wait.",
     chat_failed:
       "The reply could not be completed. Check the model service and the network, then try again. The Health check under App shows the cause.",
@@ -927,25 +952,38 @@ const t = (key, fields = {}) =>
 // A shared code in one platform's own words (`token_rejected_zulip`), when it has them.
 const tFor = (key, kind) =>
   translations.en[`${key}_${kind}`] ? t(`${key}_${kind}`) : t(key);
-// `undo`, when given, is {label, run}: a button in the message that runs it.
-function toast(text, undo) {
+// `undo`, when given, is {label, run}: a button in the message that runs it,
+// which is returned. A focus left in the message goes to `after` when it closes.
+function toast(text, undo, after = null) {
   const box = $("toast");
   box.textContent = text;
+  let button = null;
+  const close = () => {
+    const held = box.contains(document.activeElement);
+    box.hidden = true;
+    if (held) after?.()?.focus();
+  };
   if (undo) {
-    const button = document.createElement("button");
+    button = document.createElement("button");
     button.type = "button";
     button.className = "toast-action";
     button.textContent = undo.label;
     button.addEventListener("click", () => {
       clearTimeout(toastTimer);
-      box.hidden = true;
+      close();
       undo.run();
     });
     box.append(" ", button);
   }
+  // Clear of the message box, wherever the open command list has pushed it.
+  const chatShown = !$("chat-view").hidden;
+  box.style.bottom = chatShown
+    ? `${Math.max(24, innerHeight - $("chat-form").getBoundingClientRect().top + 12)}px`
+    : "";
   box.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (box.hidden = true), undo ? 10000 : 5000);
+  toastTimer = setTimeout(close, undo ? 10000 : 5000);
+  return button;
 }
 async function api(path, payload) {
   const response = await fetch(`/api/${path}`, {
@@ -1233,6 +1271,8 @@ function providerChanged(reset = true) {
   if (local || !state.configured || (reset && provider.id !== state.provider))
     $("api-key").placeholder = local ? "" : "sk-…";
   $("test-note").hidden = local;
+  // Said once, to someone who has not set a key up yet.
+  $("key-hint").hidden = local || Boolean(state.configured);
   $("base-url").placeholder = provider.id === "other" ? "https://…/v1" : "";
 }
 function showView(next) {
@@ -1245,8 +1285,11 @@ function showView(next) {
     next = "settings";
   }
   view = next;
-  for (const button of document.querySelectorAll(".nav"))
+  for (const button of document.querySelectorAll(".nav")) {
     button.classList.toggle("active", button.dataset.view === next);
+    if (button.dataset.view === next) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  }
   const setup = next === "settings" || (next === "chat" && !state.configured);
   $("setup-view").hidden = !setup;
   $("chat-view").hidden = setup || next !== "chat";
@@ -1276,7 +1319,10 @@ let personaShown = null,
   personaSaving = false;
 function personaEdited() {
   const text = $("persona-text").value;
-  $("persona-count").textContent = `${Array.from(text).length} / 4000`;
+  const length = Array.from(text).length;
+  $("persona-count").textContent = `${length} / 4000`;
+  // A long paste is kept whole and marked, not cut: saving says what to shorten.
+  $("persona-count").classList.toggle("over", length > 4000);
   $("persona-undo").hidden = personaShown === null || text === personaShown;
 }
 async function loadPersona() {
@@ -1519,6 +1565,15 @@ function openPanel(kind) {
   buildFields();
   renderStatus();
   window.scrollTo(0, 0);
+  // The list it came from is hidden now: the focus starts at the panel's way back.
+  $("panel-back").focus();
+}
+function closePanel() {
+  const kind = selected;
+  selected = null;
+  renderStatus();
+  // Back where it was opened: that platform's tile.
+  document.querySelector(`.tile[data-platform="${CSS.escape(kind || "")}"]`)?.focus();
 }
 function renderConnected(connected, working) {
   const list = $("connected-list");
@@ -1541,11 +1596,13 @@ function renderConnected(connected, working) {
     const again = document.createElement("button");
     again.className = "quiet";
     again.textContent = t("reconnect");
+    again.setAttribute("aria-label", labelled(t("reconnect"), platformName(kind)));
     again.disabled = working;
     again.addEventListener("click", () => openPanel(kind));
     const remove = document.createElement("button");
     remove.className = "quiet";
     remove.textContent = t("disconnect");
+    remove.setAttribute("aria-label", labelled(t("disconnect"), platformName(kind)));
     remove.disabled = working;
     remove.addEventListener("click", () => disconnect(kind));
     row.append(badge(kind, "small"), name, status, again, remove);
@@ -1639,6 +1696,7 @@ function renderUpdate() {
   set("update-command", update.command);
   $("update-close").setAttribute("aria-label", t("close"));
 }
+let agentWasRunning = null;
 function renderStatus() {
   for (const changed of panelHooks.state) changed(state);
   // Once set up, the view is the settings, not the first-run invitation.
@@ -1649,12 +1707,24 @@ function renderStatus() {
   renderGettingStarted();
   renderUpdate();
   const unreachable = Boolean(state.agentRunning && state.modelUnreachable);
+  const repliesOff = Boolean(state.configured && state.repliesOff);
   const pill = $("service-status");
   pill.textContent = t(
-    unreachable ? "runningNoModel" : state.agentRunning ? "running" : "localReady",
+    repliesOff
+      ? "repliesOff"
+      : unreachable
+        ? "runningNoModel"
+        : state.agentRunning
+          ? "running"
+          : "localReady",
   );
-  pill.classList.toggle("warn", unreachable);
-  pill.title = unreachable ? t("modelUnreachable") : "";
+  pill.classList.toggle("warn", unreachable || repliesOff);
+  // On a narrow window only the dot shows: the title says the rest.
+  pill.title = repliesOff ? t("repliesOffHint") : unreachable ? t("modelUnreachable") : pill.textContent;
+  $("replies-off").hidden = !repliesOff;
+  // Started or stopped since the last look: what was learned reads its own running state again.
+  if (agentWasRunning !== null && agentWasRunning !== Boolean(state.agentRunning)) learnedChanged();
+  agentWasRunning = Boolean(state.agentRunning);
   const appDot = $("app-dot");
   appDot.classList.toggle("model-attention", unreachable);
   if (unreachable) {
@@ -1773,7 +1843,9 @@ let activity = null,
   activitySources = {},
   // What the view last drew; a poll that brings nothing new leaves the
   // page, and the keyboard focus in it, alone.
-  activityShown = "";
+  activityShown = "",
+  // A control that held the focus but was disabled when the view was drawn.
+  activityFocus = "";
 const ACTIVITY_MS = 8000;
 const ACTIVITY_IDLE_MS = 30000;
 // Why it spoke or stayed quiet, as the service records it.
@@ -1815,7 +1887,11 @@ function ago(epoch) {
   });
 }
 function chatTitle(chat) {
-  if (chat.platform === "browser") return t("activityHere");
+  if (chat.platform === "browser") {
+    // Two page chats look alike: say which is the one on the Chat view.
+    const page = (activity?.chats || []).filter((c) => c.platform === "browser").length;
+    return t(page < 2 ? "activityHere" : chat.current ? "activityHereNow" : "activityHereEarlier");
+  }
   const platform = spec(chat.platform)
     ? pick(spec(chat.platform).name)
     : CHAT_PLATFORMS[chat.platform] || chat.platform;
@@ -1892,7 +1968,9 @@ function renderActivity() {
   ]);
   if (shown === activityShown) return;
   activityShown = shown;
-  const focused = document.activeElement?.dataset?.focus || "";
+  const focused =
+    document.activeElement?.dataset?.focus ||
+    (!document.activeElement || document.activeElement === document.body ? activityFocus : "");
   const chats = activity?.chats || [];
   const empty = !activity
     ? activityError
@@ -1939,8 +2017,12 @@ function renderActivity() {
     }),
   );
   renderChat();
-  if (focused)
-    document.querySelector(`[data-focus="${CSS.escape(focused)}"]`)?.focus();
+  if (focused) {
+    const next = document.querySelector(`[data-focus="${CSS.escape(focused)}"]`);
+    next?.focus();
+    // Disabled while a write runs: the focus comes back once it is done.
+    activityFocus = next && document.activeElement !== next && next.disabled ? focused : "";
+  }
 }
 function section(key, count) {
   const node = el("section", "activity-section");
@@ -2217,12 +2299,17 @@ function eventWhen(event) {
       : clockTime(event.from);
   return `${activityDate(event.from)} ${hours}`;
 }
+// An action's accessible name with what it acts on, punctuated as the page's language writes it.
+const labelled = (verb, what) => (/^(zh|ja)/.test(lang) ? `${verb}：${what}` : `${verb}: ${what}`);
 function memoryItem(text, details, ...buttons) {
   const item = el("li");
   const body = el("div", "memory-body");
   body.append(el("span", "", text));
   const shown = details.filter(Boolean);
   if (shown.length) body.append(el("small", "", shown.join(" · ")));
+  // A screen reader hears which item each "Forget" or "Restore" is for.
+  const named = Array.from(text).length > 60 ? `${Array.from(text).slice(0, 59).join("")}…` : text;
+  for (const button of buttons) button.setAttribute("aria-label", labelled(button.textContent, named));
   item.append(body, ...buttons);
   return item;
 }
@@ -2387,7 +2474,10 @@ function memorySection(chat) {
           note.used && t("activityLastUsed", { date: activityDate(note.used) }),
           note.checked
             ? t("activityChecked", { date: activityDate(note.checked) })
-            : t("activityNotChecked"),
+            : // With the record off nothing is ever checked: the line above says so once.
+              chat.log && !chat.log.on
+              ? ""
+              : t("activityNotChecked"),
         ],
         ...(note.refs ? [sourceButton("note", note.conv, note.id)] : []),
         forgetButton(`forget:${note.id}`, () => forget("note", note.conv, note.id)),
@@ -2457,10 +2547,13 @@ function forget(kind, conv, id) {
   return memoryCall("activity/forget", { chat: activitySelected, conv, kind, id }, (result, seq) => {
     if (seq === activitySeq) activityChat = result.chat;
     const tid = result.tid;
-    toast(
+    // Its row is gone: the focus waits on Undo, then moves to the chat's first remaining action.
+    const undo = toast(
       t("activityForgotten"),
       tid ? { label: t("activityUndo"), run: () => restore(tid) } : null,
+      () => document.querySelector("#activity-chat button:not([disabled])"),
     );
+    undo?.focus();
   });
 }
 function restore(tid) {
@@ -2607,7 +2700,8 @@ async function reveal(items, spent = 0) {
       showMessage(item);
       continue;
     }
-    const time = Math.min(left, Math.max(0, typingTime(item) - spent));
+    // A memory command's answer is a record, not talk: it comes whole at once.
+    const time = item.command ? 0 : Math.min(left, Math.max(0, typingTime(item) - spent));
     spent = 0;
     if (time > 0) {
       const typing = typingBubble();
@@ -2744,12 +2838,16 @@ async function send(text, mine = null, retrySeq = null) {
     pending.remove();
     const own = value.messages.filter((item) => item.role === "user").pop();
     const answered = value.messages.some((item) => item.role !== "user" && own && item.seq > own.seq);
-    if (value.chat !== chatTag) {
+    if (value.forgotLines) {
+      // A forget took earlier messages off this page too: the chat is drawn afresh.
+      showHistory(value);
+      toast(t("forgotLines"));
+    } else if (value.chat !== chatTag) {
       showHistory(await api("chat/history"));
       avatarMood(answered ? "talking" : "", Array.from(value.reply || "").length);
     } else await reveal(value.messages, performance.now() - asked);
     if (!answered) {
-      bubble(t("noReply"), "bot");
+      bubble(t(state.repliesOff ? "noReplyOff" : "noReply"), "bot");
       avatarMood("");
     }
   } catch (error) {
@@ -2926,6 +3024,13 @@ $("features-save").addEventListener("click", async () => {
   }
 });
 $("gs-platform").addEventListener("click", () => showView("platforms"));
+$("replies-off-open").addEventListener("click", () => {
+  showView("settings");
+  // The first group of the advanced settings holds Reply to messages.
+  const group = $("tuning-root").querySelector("details");
+  if (group) group.open = true;
+  $("tuning-root").scrollIntoView({ block: "start" });
+});
 $("activity-connect").addEventListener("click", () => showView("platforms"));
 $("activity-start").addEventListener("click", async () => {
   if (activityStarting) return;
@@ -3103,6 +3208,18 @@ function memoryCommands() {
   const name = state.name || defaultName();
   return (MEMORY_COMMANDS[state.lang] || MEMORY_COMMANDS.en).map((line) => line.replace("{n}", name));
 }
+function closeCommands() {
+  $("chat-commands").hidden = true;
+  $("commands-show").setAttribute("aria-expanded", "false");
+  $("commands-show").focus();
+}
+// The list sits above its button: Esc closes it and hands the focus back.
+$("chat-commands").addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeCommands();
+  }
+});
 $("commands-show").addEventListener("click", () => {
   const open = $("chat-commands").hidden;
   $("chat-commands").hidden = !open;
@@ -3122,6 +3239,8 @@ $("commands-show").addEventListener("click", () => {
       return chip;
     }),
   );
+  // It opens above its button, before it in the Tab order: the focus goes into it.
+  $("chat-command-list").firstElementChild?.focus();
 });
 $("forget-chat").addEventListener("click", async () => {
   if (chatting) return toast(t("working"));
@@ -3204,11 +3323,14 @@ $("panel-mode").addEventListener("click", () => {
   buildFields(true);
   renderStatus();
 });
-for (const id of ["panel-back", "panel-finish"])
-  $(id).addEventListener("click", () => {
-    selected = null;
-    renderStatus();
-  });
+for (const id of ["panel-back", "panel-finish"]) $(id).addEventListener("click", closePanel);
+$("platform-panel").addEventListener("keydown", (event) => {
+  // Esc is the way back, unless a sign-in is under way there.
+  if (event.key === "Escape" && selected !== null && !$("panel-back").hidden && state.job.state !== "working") {
+    event.preventDefault();
+    closePanel();
+  }
+});
 $("cancel-platform").addEventListener("click", async () => {
   try {
     await api("platforms/cancel", {});
@@ -3234,6 +3356,13 @@ $("stop-services").addEventListener("click", async () => {
   }
 });
 $("exit").addEventListener("click", async () => {
+  // Quitting stops the character everywhere it is connected, not only here.
+  const connected = state?.platforms || [];
+  if (
+    connected.length &&
+    !(await ask(t("exitAsk", { platforms: connected.map(platformName).join(t("listSep")) }), t("exit")))
+  )
+    return;
   try {
     $("exit").disabled = true;
     $("exit").textContent = t("closing");

@@ -139,9 +139,9 @@ def test_the_page_reads_the_group_only_through_start(client):
 
 
 def test_start_runs_the_trial_child_on_this_home(client, workspace):
-    assert view(client) == {"running": False, "name": "", "entries": []}
+    assert view(client) == {"running": False, "name": "", "rules": {}, "entries": []}
     started = post(client, "start").json()
-    assert started == {"running": True, "name": "Nova", "entries": []}
+    assert started == {"running": True, "name": "Nova", "rules": {}, "entries": []}
     made = FakeChild.made[-1]
     assert made.argv[1:] == ["-m", "persona_agent.panels.practice", "trial"]
     assert made.options["env"]["AGENT_HOME"] == str(workspace.home)
@@ -155,6 +155,14 @@ def test_start_without_a_key_is_refused(client, workspace):
     response = post(client, "start")
     assert response.status_code == 400 and response.json() == {"error": "practice_needs_key"}
     assert FakeChild.made == []
+
+
+def test_the_home_reply_settings_reach_the_page(client, child):
+    rules = {"replies": False, "onlyCalled": True, "trigger": 4, "liveTrigger": 30}
+    child["ready"] = {"ready": True, "name": "Nova", "rules": rules}
+    assert post(client, "start").json()["rules"] == rules
+    said = post(client, "say", {"as": "owner", "text": "hello"}).json()
+    assert said["rules"] == rules
 
 
 def test_a_child_that_cannot_build_the_character_fails_plainly(client, child):
@@ -296,6 +304,8 @@ def test_the_demo_child_plays_three_scenes_as_beats(tmp_path, monkeypatch):
     scenes = [b for b in beats if b["kind"] == "scene"]
     assert [s["key"] for s in scenes] == ["quiet", "teach", "troll"]
     assert scenes[0]["title"].startswith("quiet") and "\n" not in scenes[0]["intro"]
+    # The page names the demo's own character as a sample.
+    assert scenes[0]["name"] == "Nova"
     kinds = {b["kind"] for b in beats}
     assert {"say", "bot", "note", "info", "check"} <= kinds
     notes = [b["text"] for b in beats if b["kind"] == "note"]
@@ -352,6 +362,7 @@ async def test_the_trial_child_answers_say_why_learned_and_reset(tmp, monkeypatc
         session.trial = chat.Trial(agent, conv="g1",
                                    factory=lambda: demo.build_agent("en", root, offline=True)[0])
         session.turns, session.count = {}, itertools.count(1)
+        session.replies = True
         try:
             quiet = await session.handle({"op": "say", "lang": "en", "name": "Sam", "uid": "3001",
                                           "text": "anyone around?"})
@@ -383,6 +394,46 @@ async def test_the_trial_child_answers_say_why_learned_and_reset(tmp, monkeypatc
             assert session.turns == {}
         finally:
             await session.trial.agent.aclose()
+
+
+def _session(agent, root):
+    session = object.__new__(practice._Trial)
+    session.chat = chat
+    session.trial = chat.Trial(agent, conv="g1",
+                               factory=lambda: demo.build_agent("en", root, offline=True)[0])
+    session.turns, session.count, session.replies = {}, itertools.count(1), True
+    return session
+
+
+async def test_the_practice_character_follows_the_home_reply_settings(tmp, monkeypatch):
+    monkeypatch.setattr(TextProcessing, "_is_sleep_hour", staticmethod(lambda: False))
+    with demo.throwaway_home(str(tmp)) as root:
+        agent, model = demo.build_agent("en", root, offline=True)
+        session = _session(agent, root)
+        try:
+            monkeypatch.setattr(agent, "_only_when_called", lambda: True)
+            assert session.rules()["onlyCalled"] is True and session.rules()["replies"] is True
+            for n in range(5):
+                quiet = await session.handle({"op": "say", "lang": "en", "name": "Sam", "uid": "3001",
+                                              "text": f"anyone around, take {n}?"})
+                assert quiet["what"] == "quiet" and model.calls == []
+            assert quiet["reason"] == "not addressed; set to reply in groups only when addressed"
+            session.replies = False
+            off = await session.handle({"op": "say", "lang": "en", "name": "Sam", "uid": "3001",
+                                        "text": "Nova, are you there?"})
+            assert (off["what"], off["reply"], off["reason"]) == ("off", "", "")
+            assert model.calls == []
+            why = await session.handle({"op": "why", "lang": "en", "turn": off["turn"]})
+            assert why["what"] == "off"
+        finally:
+            await session.trial.agent.aclose()
+
+
+def test_korean_scene_intros_keep_their_spaces(tmp_path, monkeypatch):
+    monkeypatch.setattr(TextProcessing, "_is_sleep_hour", staticmethod(lambda: False))
+    beats = [json.loads(line) for line in scripted_demo(tmp_path, monkeypatch, "ko").decode().splitlines()]
+    intros = "".join(b["intro"] for b in beats if b["kind"] == "scene")
+    assert "검증되어야 효력이" in intros and "검증되어야효력이" not in intros
 
 
 def test_the_trial_child_without_a_key_says_so(tmp_path, monkeypatch):

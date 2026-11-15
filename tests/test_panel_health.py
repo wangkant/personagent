@@ -265,6 +265,20 @@ def test_logs_are_read_by_name_only_masked_and_capped(client, workspace):
     assert [entry["name"] for entry in listed] == ["agent"]
 
 
+def test_the_log_view_leaves_out_the_pages_own_polling(client, workspace):
+    polls = ['INFO:     127.0.0.1:62647 - "GET /api/dashboard/model HTTP/1.1" 200 OK',
+             'INFO:     127.0.0.1:54782 - "GET /health HTTP/1.1" 200 OK'] * 120
+    polls[0] = 'INFO:     127.0.0.1:50365 - "GET /api/dashboard/model HTTP/1.1" 403 Forbidden'
+    kept = ['INFO:     127.0.0.1:54783 - "POST /v1/events HTTP/1.1" 200 OK',
+            'INFO:     127.0.0.1:50366 - "GET /v1/other HTTP/1.1" 404 Not Found',
+            "12:07:06 | INFO     | [Agent] DM reply"]
+    _log(workspace.home, "agent", "\n".join(kept[:1] + polls + kept[1:]) + "\n")
+    lines = client.get("/api/health/log", params={"name": "agent", "lines": 80}, headers=HEADERS).json()["lines"]
+    assert lines == kept
+    # The file on disk keeps every line.
+    assert (workspace.home / "runtime" / "desktop" / "agent.log").read_text(encoding="utf-8").count("GET") == 241
+
+
 def test_logs_hide_telegram_tokens_in_urls_and_astrbot_platform_credentials(client, workspace):
     data = workspace.home / "platforms" / "astrbot" / "data"
     data.mkdir(parents=True)
@@ -377,3 +391,10 @@ def test_the_page_keeps_focus_announces_results_and_stores_codes():
     # Translated when shown, not when stored.
     assert not re.search(r"(Error|error)\w* = PA\.t\(", source)
     assert "alerts.contains(active)" in source and "restoreFocus()" in source
+
+
+def test_a_failed_search_decision_is_explained_in_the_pages_words():
+    code = (ASSETS / "health.js").read_text(encoding="utf-8").split("PA.strings")[1].split("});", 1)[1]
+    assert 's.id === "searchdecide" && s.ok === false' in code
+    assert 'PA.t("tuning_f_llm_judge_model")' in code
+    assert 'logBox.setAttribute("aria-labelledby", "health-logs-title health-log-name")' in code

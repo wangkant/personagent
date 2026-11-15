@@ -45,7 +45,7 @@ SPEC = Spec(
     replies={
         "remember_what": ("記什麼？你什麼都沒說", "說啊，要記啥", "要我記什麼"),
         "not_instructions": ("我只記事實，不記指令",),
-        "noted": ("記下來了", "好，記住了", "嗯，記著呢", "收到"),
+        "noted": ("記下來了", "好，記住了", "嗯，記下了", "收到"),
         "forget_what": ("忘掉什麼？講清楚一點", "哪一條？再說清楚點"),
         "nothing_to_forget": ("呃，沒記過這個", "沒什麼印象耶", "沒有對得上的可以忘"),
         "forgotten": ("忘掉了", "刪掉了", "沒了"),
@@ -59,8 +59,8 @@ SPEC = Spec(
                      "訊號不太好，稍等",
                      "卡住了，等等再聊"),
     learned_text={
-        "head": ("記憶 {memories} 條，學到 {examples} 條回覆和 {fixes} 組糾正，"
-                 "{voice} 條仍在觀察（再獲得一次一致的反應即生效），{admin} 條由我自行判斷"),
+        "head": ("記憶 {memories} 則，學到 {examples} 則回覆和 {fixes} 組糾正，"
+                 "{voice} 則仍在觀察（再獲得一次一致的反應即生效），{admin} 則由我自行判斷"),
         "score": "，最近自評 {score}/5",
         "pair": "原本：{was}，改成：{better}",
         "someone_else": "另一個聊天裡有人",

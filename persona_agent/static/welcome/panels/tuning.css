@@ -53,7 +53,9 @@
 .tuning-charsets {
   margin: 10px 0 0;
 }
-.tuning-limit {
+/* Only a limit in force is shown in the warning colour; "no limit" stays grey. */
+.tuning-limit.tuning-limit-on,
+#tuning-admin-only-note {
   color: var(--warn-text);
 }
 .tuning-pick {

@@ -43,6 +43,7 @@ PA.strings({
     health_details: "Technical details",
     health_ledger_note: "Some records could not be read and were skipped, or the record files are large. No action is needed unless this continues to grow.",
     health_data_note: "One of your own files in the data folder cannot be read, so the character uses none of its entries. Correct or remove the file named under the technical details; the lorebook can also be edited under Character & settings.",
+    health_searchdecide_note: "The model for quick decisions does not call tools, so the character never searches the web; everything else works. To fix this, open Character & settings → Advanced settings → {section} and choose another “{field}”.",
     health_show_skipped: "Show {count} services not set up",
     health_hide_skipped: "Hide services not set up",
     health_fail_agent: "The character is not running. It failed to start or stopped unexpectedly.",
@@ -84,7 +85,7 @@ PA.strings({
     health_opening: "Opening…",
     health_opened: "The folder was opened in the file manager.",
     health_logs_title: "Logs",
-    health_logs_hint: "The last {count} lines each component wrote while running. Recognizable keys and tokens are hidden, but chat content may appear.",
+    health_logs_hint: "The last {count} lines each component wrote while running, without the requests this page makes to read its own status. Recognizable keys and tokens are hidden, but chat content may appear.",
     health_log_pick: "Log",
     health_log_agent: "Character",
     health_log_astrbot: "Chat platform (AstrBot)",
@@ -150,6 +151,7 @@ PA.strings({
     health_details: "技术详情",
     health_ledger_note: "部分记录无法读取，已跳过；或记录文件较大。如数量未持续增加，则无需处理。",
     health_data_note: "data 文件夹中你自己的某个文件无法读取，角色不会使用其中任何一条。请修正或移除技术详情中列出的文件；背景设定也可在「角色与设置」中编辑。",
+    health_searchdecide_note: "用于快速判断的模型不支持调用工具，因此角色不会联网搜索；其他功能不受影响。如需修正，请在「角色与设置」→「高级设置」→「{section}」中更换「{field}」。",
     health_show_skipped: "显示 {count} 项未设置的服务",
     health_hide_skipped: "隐藏未设置的服务",
     health_fail_agent: "角色未在运行：启动失败或已意外停止。",
@@ -191,7 +193,7 @@ PA.strings({
     health_opening: "正在打开…",
     health_opened: "已在文件管理器中打开该文件夹。",
     health_logs_title: "运行日志",
-    health_logs_hint: "各组件运行时写入的记录，显示最后 {count} 行。可识别的密钥和令牌已隐藏，但其中可能包含聊天内容。",
+    health_logs_hint: "各组件运行时写入的记录，显示最后 {count} 行，不含本页面读取自身状态的请求。可识别的密钥和令牌已隐藏，但其中可能包含聊天内容。",
     health_log_pick: "日志",
     health_log_agent: "角色",
     health_log_astrbot: "聊天平台（AstrBot）",
@@ -323,6 +325,7 @@ PA.strings({
   const logCard = el("div", "card side-card health-logs");
   logCard.id = "health-logs";
   const logTitle = el("h2");
+  logTitle.id = "health-logs-title";
   const logHint = el("p", "field-note");
   const logBar = el("div", "health-log-bar");
   const logLabel = el("label", "health-log-label");
@@ -341,6 +344,8 @@ PA.strings({
   const logBox = el("pre", "health-log");
   logBox.id = "health-log";
   logBox.tabIndex = 0;
+  // Focusable for scrolling by keyboard, so it needs a name: the card's title and the log chosen.
+  logBox.setAttribute("aria-labelledby", "health-logs-title health-log-name");
   logCard.append(logTitle, logHint, logBar, logNone, logErr, logBox);
   root.append(card, logCard);
 
@@ -429,6 +434,10 @@ PA.strings({
       }
       if (s.id === "ledger" && s.ok === false) main.append(el("p", "field-note", PA.t("health_ledger_note")));
       if (s.id === "data" && s.ok === false) main.append(el("p", "field-note", PA.t("health_data_note")));
+      // The probe's own detail names an English setting; this says the same in the page's words.
+      if (s.id === "searchdecide" && s.ok === false)
+        main.append(el("p", "field-note", PA.t("health_searchdecide_note",
+          { section: PA.t("tuning_sec_models"), field: PA.t("tuning_f_llm_judge_model") })));
       row.append(mark, main);
       rows.append(row);
     }

@@ -9,8 +9,9 @@ PA.strings({
     tuning_sec_learning: "Learning",
     tuning_sec_memory: "Memory",
     tuning_sec_more: "Other settings",
+    tuning_who_note: "Two related switches are in other groups: “{onlyCalled}” under “{talk}”, and “{adminOnly}” under “{learning}”.",
     tuning_more_note: "Each field shows the value currently set. An empty field uses its default, shown in grey. Times are in seconds.",
-    tuning_save: "Save",
+    tuning_save: "Save advanced settings",
     tuning_saving: "Saving…",
     tuning_saved: "Saved.",
     tuning_saved_restarted: "Saved. The character has restarted with the new settings.",
@@ -93,7 +94,7 @@ PA.strings({
     tuning_f_persona_tz_offset_hours: "Time zone",
     tuning_h_persona_tz_offset_hours: "Sets the character's clock and its quiet hours, 02:00 to 07:00 in this time zone, during which it neither starts conversations nor joins in unprompted.",
     tuning_f_chat_only_when_called: "In groups, reply only when addressed",
-    tuning_h_chat_only_when_called: "In group chats the character replies only when someone uses its name, mentions it or replies to its message. It never joins in, follows up or starts a conversation by itself, so the next setting and “{feature}” no longer apply to groups. Private chats are not affected.",
+    tuning_h_chat_only_when_called: "In group chats the character replies only when someone uses its name, mentions it or replies to its message. It never joins in, follows up or starts a conversation by itself, so the next setting and “{feature}” no longer apply to groups. Private chats are not affected. To turn replies off entirely, or in some groups only, see “{who}”.",
     tuning_f_chat_trigger_count: "Messages before joining in",
     tuning_h_chat_trigger_count: "How many messages others send in a group before the character considers joining in unprompted. A lower number makes it more active and uses more model calls.",
     tuning_f_llm_fallback_model: "Backup model",
@@ -109,7 +110,7 @@ PA.strings({
     tuning_f_react_learn_enabled: "Learn from reactions",
     tuning_h_react_learn_enabled: "The character reads replies to its messages to learn which ones were well received. Each reading uses a small model call.",
     tuning_f_react_learn_admin_only: "Learn only from the admin's corrections",
-    tuning_h_react_learn_admin_only: "Only reactions from the accounts under “{accounts}” change what the character says. Reactions from others are still recorded, but nothing they suggest is put into use, neither automatically nor by the character's own decision. With no accounts listed, only corrections made under “{chat}” teach the character.",
+    tuning_h_react_learn_admin_only: "Only reactions from the accounts under “{accounts}”, in “{who}”, change what the character says. Reactions from others are still recorded, but nothing they suggest is put into use, neither automatically nor by the character's own decision. With no accounts listed, only corrections made under “{chat}” teach the character.",
     tuning_f_react_elicit_enabled: "Ask for clarification after a complaint",
     tuning_h_react_elicit_enabled: "When someone says a reply was wrong without saying why, the character may later ask once what was expected.",
     tuning_f_promote_auto_enabled: "Put learned items into use automatically",
@@ -196,8 +197,9 @@ PA.strings({
     tuning_sec_learning: "学习",
     tuning_sec_memory: "记忆",
     tuning_sec_more: "其他设置",
+    tuning_who_note: "另有两项相关开关位于其他分组：「{talk}」中的「{onlyCalled}」，以及「{learning}」中的「{adminOnly}」。",
     tuning_more_note: "各项显示当前设置的值；留空即使用灰色显示的默认值。时间单位均为秒。",
-    tuning_save: "保存",
+    tuning_save: "保存高级设置",
     tuning_saving: "正在保存…",
     tuning_saved: "已保存。",
     tuning_saved_restarted: "已保存，角色已按新设置重新启动。",
@@ -266,7 +268,7 @@ PA.strings({
     tuning_f_agent_enabled: "回复消息",
     tuning_h_agent_enabled: "关闭后，角色仍保持与平台的连接，但不回复任何消息。如只需在部分群聊中保持沉默，请使用下一项设置。",
     tuning_f_access_paused_groups: "在以下群聊中暂停回复",
-    tuning_h_access_paused_groups: "填写群聊编号，格式为 平台:编号，多个以逗号分隔。角色继续运行，并在其他地方照常回复；在这些群聊中，即使被呼叫也不回复，平台自带的机器人同样保持沉默。这些群聊中的消息不作为上下文保留，也不会从中学习。使用下方的「{pick}」并勾选「{pause}」最为简便。将群聊移出列表即可恢复回复。",
+    tuning_h_access_paused_groups: "填写群聊编号，格式为 平台:编号，多个以逗号分隔。角色继续运行，并在其他地方照常回复；在这些群聊中，即使被点名也不回复，平台自带的机器人同样保持沉默。这些群聊中的消息不作为上下文保留，也不会从中学习。使用下方的「{pick}」并勾选「{pause}」最为简便。将群聊移出列表即可恢复回复。",
     tuning_f_admin_name: "角色对你的称呼",
     tuning_h_admin_name: "角色以此名称称呼你，即它的管理员。",
     tuning_f_admin_relationship: "你与角色的关系",
@@ -279,8 +281,8 @@ PA.strings({
     tuning_h_access_dm_users: "无需填写你自己。某个平台一旦填写了任一用户，该平台的其他用户将无法私聊角色。",
     tuning_f_persona_tz_offset_hours: "角色所在时区",
     tuning_h_persona_tz_offset_hours: "决定角色使用的时间和休息时段：按此时区 02:00 至 07:00，角色既不主动发起对话，也不主动加入群聊讨论。",
-    tuning_f_chat_only_when_called: "群聊中仅在被呼叫时回复",
-    tuning_h_chat_only_when_called: "在群聊中，角色仅在有人提及其名字、@它或回复它的消息时才回复，不会主动加入、接续或发起对话，因此下一项设置和「{feature}」对群聊不再生效。私聊不受影响。",
+    tuning_f_chat_only_when_called: "群聊中仅在被点名时回复",
+    tuning_h_chat_only_when_called: "在群聊中，角色仅在有人提及其名字、@它或回复它的消息时才回复，不会主动加入、接续或发起对话，因此下一项设置和「{feature}」对群聊不再生效。私聊不受影响。如需完全关闭回复或仅在部分群聊中关闭，请参阅「{who}」。",
     tuning_f_chat_trigger_count: "主动加入讨论前的消息数",
     tuning_h_chat_trigger_count: "群聊中其他人的消息达到此数量后，角色才会考虑主动加入讨论。数值越小，角色越活跃，调用模型的次数也越多。",
     tuning_f_llm_fallback_model: "备用模型",
@@ -290,13 +292,13 @@ PA.strings({
     tuning_f_llm_fallback_api_key: "备用模型密钥",
     tuning_h_llm_fallback_api_key: "仅当备用模型位于其他模型服务时需要填写。",
     tuning_f_llm_judge_model: "快速判断模型",
-    tuning_h_llm_judge_model: "无人呼叫角色时，用于判断是否发言的低成本模型。留空则使用备用模型；未设置备用模型时使用主模型。",
+    tuning_h_llm_judge_model: "无人点名角色时，用于判断是否发言的低成本模型。留空则使用备用模型；未设置备用模型时使用主模型。",
     tuning_f_llm_dm_model: "私聊模型",
     tuning_h_llm_dm_model: "主模型所在模型服务上的另一个模型，专用于一对一私聊。留空即使用主模型。",
     tuning_f_react_learn_enabled: "从他人的反应中学习",
     tuning_h_react_learn_enabled: "角色读取他人对其消息的回应，以了解哪些回复效果较好。每次读取会额外调用一次模型。",
     tuning_f_react_learn_admin_only: "仅从管理员的纠正中学习",
-    tuning_h_react_learn_admin_only: "仅「{accounts}」中的账号作出的反应会改变角色的说话方式。其他人的反应仍会记录，但其中的建议不会投入使用，无论是自动投入还是由角色自行判断。未填写任何账号时，仅在「{chat}」中作出的纠正会使角色学习。",
+    tuning_h_react_learn_admin_only: "仅「{who}」中「{accounts}」所填的账号作出的反应会改变角色的说话方式。其他人的反应仍会记录，但其中的建议不会投入使用，无论是自动投入还是由角色自行判断。未填写任何账号时，仅在「{chat}」中作出的纠正会使角色学习。",
     tuning_f_react_elicit_enabled: "回复被否定后询问原因",
     tuning_h_react_elicit_enabled: "有人指出回复不当但未说明原因时，角色可能在稍后主动询问一次。",
     tuning_f_promote_auto_enabled: "自动将学到的内容投入使用",
@@ -410,6 +412,11 @@ PA.strings({
     me: t("tuning_me"),
     pause: t("tuning_pause_here"),
     accounts: t("tuning_f_admin_ids"),
+    who: t("tuning_sec_who"),
+    talk: t("tuning_sec_talk"),
+    learning: t("tuning_sec_learning"),
+    onlyCalled: t("tuning_f_chat_only_when_called"),
+    adminOnly: t("tuning_f_react_learn_admin_only"),
   });
   const tell = (key, fields = {}) => t(key, { ...names(), ...fields });
   const say = (node, key, fields = () => ({})) => {
@@ -470,6 +477,8 @@ PA.strings({
     say(el("summary", "", box), "tuning_sec_" + name);
     sections[name] = el("div", "tuning-body", box);
   }
+  // Testers looked for these two switches in the first group.
+  note(sections.who, "tuning_who_note");
   note(sections.more, "tuning_more_note");
   const error = el("div", "error", card);
   error.id = "tuning-error";
@@ -541,6 +550,7 @@ PA.strings({
       line.textContent = platforms.length
         ? t("tuning_restricted", { platforms: platforms.join(", ") })
         : t("tuning_unrestricted");
+      line.classList.toggle("tuning-limit-on", platforms.length > 0);
     };
     item.input.addEventListener("input", item.refresh);
   }
@@ -550,6 +560,7 @@ PA.strings({
     item.refresh = () => {
       const n = idList(item.input.value).length;
       line.textContent = n ? t("tuning_paused", { n: String(n) }) : t("tuning_paused_none");
+      line.classList.toggle("tuning-limit-on", n > 0);
     };
     item.input.addEventListener("input", item.refresh);
   }

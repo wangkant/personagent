@@ -62,14 +62,14 @@ personagent
 
 ## 管住它
 
-以下操作都在本地页面中完成。相关设置位于「角色与设置」→「高级设置」，点击「保存」后生效。
+以下操作都在本地页面中完成。相关设置位于「角色与设置」→「高级设置」，点击「保存高级设置」后生效。括号中为各项在 `.env` 中的设置名；直接修改 `.env` 后，需重新启动 personagent 才会生效。
 
-- **把自己设为管理员。** 先私聊角色一次，再在「回复、管理员与回复范围」中点击「从最近的聊天中选择」，在自己的账号旁点击「这是我」。扫码接入的 QQ 官方机器人看到的是 openid，而不是 QQ 号，因此请用这种方式设置。
-- **只在部分群聊中回复。** 在同一列表中为要保留的群聊勾选「在此群聊中回复」，或在「仅在以下群聊中回复」中填写群聊编号。某个平台一旦列出任一群聊，角色在该平台的其他群聊中便不再回复。
-- **暂停全部回复。** 关闭「回复、管理员与回复范围」中的第一项「回复消息」，保存前会先确认。角色仍保持连接，但在重新开启之前不回复任何消息。
-- **只在部分群聊中暂停。** 在同一列表中为该群聊勾选「在此群聊中暂停回复」，或在「在以下群聊中暂停回复」中填写群聊编号。角色在这些群聊中不回复任何消息，即使被呼叫也不回复，平台自带的机器人同样保持沉默；在其他地方照常回复。暂停的群聊中的消息既不保留，也不用于学习。将群聊移出列表即可恢复。
-- **只在被呼叫时回复。** 在「发言与回复风格」中开启「群聊中仅在被呼叫时回复」。此后在群聊中，角色仅在有人提及其名字、@它或回复它的消息时才回复，不会主动加入或发起对话。私聊不受影响。
-- **只让你来教它。** 在「学习」中开启「仅从管理员的纠正中学习」。不在「你的账号」中的人的反应仍会记录，但其中的建议不会投入使用。请先填写你的账号；未填写时，仅本页「开始聊天」中的纠正会使角色学习。
+- **把自己设为管理员。** 先私聊角色一次，再在「回复、管理员与回复范围」中点击「从最近的聊天中选择」，在自己的账号旁点击「这是我」（`ADMIN_IDS`）。扫码接入的 QQ 官方机器人看到的是 openid，而不是 QQ 号，因此请用这种方式设置。
+- **只在部分群聊中回复。** 在同一列表中为要保留的群聊勾选「在此群聊中回复」，或在「仅在以下群聊中回复」（`ACCESS_GROUPS`）中填写群聊编号。某个平台一旦列出任一群聊，角色在该平台的其他群聊中便不再回复。经扫码接入的 QQ 官方机器人所在群聊，编号形如 `qq_official:<id>`，在 QQ 中无法直接看到：请先在该群中 @ 机器人一次，再通过「从最近的聊天中选择」勾选。
+- **暂停全部回复。** 关闭「回复、管理员与回复范围」中的第一项「回复消息」（`AGENT_ENABLED`），保存前会先确认。角色仍保持连接，但在重新开启之前不回复任何消息。
+- **只在部分群聊中暂停。** 在同一列表中为该群聊勾选「在此群聊中暂停回复」，或在「在以下群聊中暂停回复」（`ACCESS_PAUSED_GROUPS`）中填写群聊编号。角色在这些群聊中不回复任何消息，即使被呼叫也不回复，平台自带的机器人同样保持沉默；在其他地方照常回复。暂停的群聊中的消息既不保留，也不用于学习。将群聊移出列表即可恢复。
+- **只在被点名时回复。** 在「发言与回复风格」中开启「群聊中仅在被点名时回复」（`CHAT_ONLY_WHEN_CALLED`）。此后在群聊中，角色仅在有人提及其名字、@它或回复它的消息时才回复，不会主动加入或发起对话。私聊不受影响。
+- **只让你来教它。** 在「学习」中开启「仅从管理员的纠正中学习」（`REACT_LEARN_ADMIN_ONLY`）。不在「你的账号」中的人的反应仍会记录，但其中的建议不会投入使用。请先填写你的账号；未填写时，仅本页「开始聊天」中的纠正会使角色学习。
 - **撤销学到的内容。** 在「动态」中选中该聊天，点击条目旁的「撤销」，或运行 `personagent learned rollback <编号>`。
 - **将机器人移出群聊。** 请在平台中将机器人移出群。在「连接平台」中断开只会结束 personagent 的连接，机器人仍是群成员。
 - **被移出群或被限制时。** 机器人被移出的群只是不再有消息送达，无需重新连接。平台封禁机器人或将其下架时，personagent 直接连接的平台会停止连接，「连接平台」中会显示原因。
@@ -139,6 +139,7 @@ AstrBot、NapCat（OneBot）、Koishi（经 Satori 连接器）和 Matrix（经 
 1. 按 [NapCat 文档](https://napneko.github.io/)安装 NapCat，使用手机上的**小号**扫码登录。
 2. 在 personagent 页面的「连接平台」中选择「高级 → OneBot v11（NapCat）」，端口默认为 `6199`。
 3. 在 NapCat 的网页中依次点击「网络配置」→「新建」→「WebSockets 客户端」，勾选「启用」，URL 填 `ws://127.0.0.1:6199/ws`，然后保存。
+4. 在手机 QQ 上把这个小号拉进你的群。小号必须是群成员，群里的消息才会送达角色。
 
 托管的 AstrBot 会自动安装 personagent 插件，并写入 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`。使用此路线时，NapCat 也需要持续运行。
 
@@ -185,7 +186,7 @@ LLM_BASE_URL=https://openrouter.ai/api/v1
 LLM_MODEL=openrouter/free
 ```
 
-`.env` 中只写 key 时，地址和模型分别为 `https://api.deepseek.com` 和 `deepseek-flash`。二者可以指向任何兼容 OpenAI 的接口，托管或本地（Ollama、llama.cpp）均可。API 地址请按服务商文档粘贴，根地址或 `.../v1`、`.../api/paas/v4` 这类带版本的地址均可。在你编写 `persona.txt` 之前，使用的是随包附带的 `data/persona.example.<lang>.txt`。在设置 `PERSONA_NAME` 之前（设置流程会写入），角色名为 "bot"。
+这两行不可省略：`.env` 中只写 key 时，使用的是代码自带的默认值，即 DeepSeek 的 `https://api.deepseek.com` 和 `deepseek-flash`，而不是 OpenRouter。二者可以指向任何兼容 OpenAI 的接口，托管或本地（Ollama、llama.cpp）均可。API 地址请按服务商文档粘贴，根地址或 `.../v1`、`.../api/paas/v4` 这类带版本的地址均可。在你编写 `persona.txt` 之前，使用的是随包附带的 `data/persona.example.<lang>.txt`。在设置 `PERSONA_NAME` 之前（设置流程会写入），角色名为 "bot"。
 
 页面还会写入 `PERSONA_NAME`、`AGENT_LANG` 和一个 `CONNECTOR_TOKEN`。从页面连接的平台无需在 `.env` 中另行写入任何内容。其凭据存放在 `<home>/platforms/`：`direct.json` 保存 personagent 直接连接的平台，其余平台由托管的 AstrBot 保存在其自身的配置中。可选的补充：
 
@@ -297,7 +298,7 @@ AstrBot 位于 Docker 中或另一台主机上时，请参阅[使用指南](guid
 
 #### 经 NapCat（OneBot）接入 QQ
 
-此路径使用个人 QQ 账号代替官方机器人。你需要一个已在目标群中的 QQ 小号，请勿使用本人的主号（见 [DISCLAIMER.zh-CN.md](DISCLAIMER.zh-CN.md)）。该小号登录（通常通过扫码，会话在重启后保留）一个 OneBot v11 实现，后者连接 AstrBot 的 `aiocqhttp` 适配器。[NapCat](https://github.com/NapNeko/NapCatQQ) 已经过测试，它附着在 QQ NT 桌面客户端上。LLOneBot 和 Lagrange 是其他 OneBot v11 实现。
+此路径使用个人 QQ 账号代替官方机器人。你需要一个已在目标群中的 QQ 小号，请勿使用本人的主号（见 [DISCLAIMER.zh-CN.md](DISCLAIMER.zh-CN.md)）。该小号登录（通常通过扫码，会话在重启后保留）一个 OneBot v11 实现，后者连接 AstrBot 的 `aiocqhttp` 适配器。[NapCat](https://github.com/NapNeko/NapCatQQ) 已经过测试，它附着在 QQ NT 桌面客户端上。LLOneBot 和 Lagrange 是其他 OneBot v11 实现。请先把该小号拉进每个目标群：它成为群成员之前，群里的消息不会送达角色。
 
 使用托管的 AstrBot 时，在本地页面添加「高级 → OneBot v11（NapCat）」，并让 NapCat 指向 `ws://127.0.0.1:6199/ws`。[第三方路线](#第三方路线astrbot--napcat)一节有分步说明。使用你自己的 AstrBot 时，请从插件的 `excluded_platforms` 中移除 `aiocqhttp`，设置 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`（`--qq` 会同时完成这两项），并设置 `QQ_BOT_ID`（`personagent connect astrbot` 会询问）。
 
@@ -360,13 +361,13 @@ AstrBot 位于 Docker 中或另一台主机上时，请参阅[使用指南](guid
 ### 费用
 
 - **探测会产生费用。** `personagent doctor` 和 `/health/details` 向角色实际调用的每个模型发送一个很小的聊天请求：群聊和私聊回复、联网搜索判断、反应判断（`REACT_LEARN_ENABLED` 开启时）、自我审查（`EVAL_ENABLED` 开启时）和视觉。设置了 `EMBEDDING_MODEL` 时还会发送一次嵌入请求，设置了 `TAVILY_API_KEY` 时还会进行一次 Tavily 搜索。`/health` 以及设置和学习记录检查不产生费用。
-- **模型用量会被统计。** 每次模型请求都按模型、按日统计，依据是服务方返回的用量，服务方提供费用时一并记录。`personagent doctor` 输出今日与近 7 日的用量，本地页面的「应用」视图也显示同样的数据。统计文件在后台写入，每分钟最多一次，停止运行时再写入一次。
+- **模型用量会被统计。** 每次模型请求都按模型、按日统计，依据是服务方返回的用量，服务方提供费用时一并记录。`personagent doctor` 输出今日与近 7 日的用量，本地页面的「应用」视图也显示同样的数据。统计文件在后台写入，每分钟最多一次，停止运行时再写入一次。一次请求即一次模型调用，一条消息通常会产生多次请求；「应用」视图还会按用途列出今日的请求。强制结束进程可能丢失最后一分钟的统计。
 - **学习与记忆。** 角色每次自行判断学习条目时，调用一次 `PROMOTE_JUDGE_MODEL`，每隔 `PROMOTE_JUDGE_INTERVAL_S` 最多 `PROMOTE_JUDGE_BATCH` 次。记忆整理每处理一段聊天调用一次 `LLM_JUDGE_MODEL`，每个聊天每天最多 16 次，所有聊天合计每天不超过 `MEMORY_CALLS_PER_DAY`（40）次。设置 `PROMOTE_JUDGE_ENABLED=false` 和 `MEMORY_CALLS_PER_DAY=0` 即可分别关闭。
 - **`tools/` 中的脚本**各不相同，有的免费，有的调用模型。[tools.zh-CN.md](tools.zh-CN.md) 的表格中逐一注明。
 - **`personagent eval`** 对每个用例都调用模型，`memory` 测试集除外：它以预设的回答离线运行。人设和学习两套用例还需要第二个模型进行评判（`BENCH_JUDGE_MODEL`）。
 - **记忆。** 带命名空间（非 QQ）的会话超过 256 个时，最久未活动的空闲会话会从内存中移除，并失去待处理的反应。移除前会先整理其尚未整理的消息；除非设置 `MEMORY_KEEP_RECENT=false`，其近期消息会在 `runtime/recent.json` 中保留 72 小时。事实、事件、核心笔记和学习记录会保留。正在处理请求的会话不会被清除。长期记忆在启动时从磁盘加载，不受此上限限制。
-- **磁盘。** `runtime/` 中的证据日志和候选学习记录只追加，从不截断。任何一个超过 50 MB 时，`personagent doctor` 会标记（`LEDGER_EVIDENCE_WARN_BYTES`、`LEDGER_CANDIDATES_WARN_BYTES`）。记忆文件始终较小：`recent.json` 只保存最近 72 小时内活跃的聊天，`memory_trash.jsonl` 中被移除的内容最多保留 30 天。每天第一次修改之前，`memory.json`、`core_memory.json` 和 `episodes.json` 会复制为同名的 `.bak` 文件；本版本首次启动时，会将旧的记忆文件保留为 `memory.json.pre-v2`。使用「清除此聊天的记忆」或在聊天中要求忘记之后，`.bak` 副本会按当前文件重新写入，`memory.json.pre-v2` 也会删去被忘记的内容，因此 `runtime/` 中不会留下任何副本；但此前制作的备份仍然保留这些内容。请备份 `runtime/`，因为机器人学到和记住的全部内容都保存在其中。
-- **聊天记录。** 每个聊天在 `runtime/log/` 中的记录保留 `MEMORY_LOG_DAYS`（30）天、最多 5,000 行，每天清理一次。它没有 `.bak` 副本，从不放入备份，各种删除都会作用于它。依据聊天记录复核事实随记忆整理调用一并进行；安静的聊天每天最多进行一次单独的复核调用，计入 `MEMORY_CALLS_PER_DAY`。
+- **磁盘。** `runtime/` 中的证据日志和候选学习记录只追加，从不截断。任何一个超过 50 MB 时，`personagent doctor` 会标记（`LEDGER_EVIDENCE_WARN_BYTES`、`LEDGER_CANDIDATES_WARN_BYTES`）。记忆文件始终较小：`recent.json` 只保存最近 72 小时内活跃的聊天，`memory_trash.jsonl` 中被移除的内容最多保留 30 天。每天第一次修改之前，`memory.json`、`core_memory.json` 和 `episodes.json` 会复制为同名的 `.bak` 文件；本版本首次启动时，会将旧的记忆文件保留为 `memory.json.pre-v2`。使用「清除此聊天的记忆」或在聊天中要求忘记之后，`.bak` 副本会按当前文件重新写入，`memory.json.pre-v2` 也会删去被忘记的内容，因此记忆文件的副本中不会留下这些内容；但此前制作的备份仍然保留这些内容，本页面自己的聊天（`runtime/desktop/browser-chat.json`）也会保留到「新对话」或「清除本页面的聊天记忆」为止（在该聊天中要求忘记而移除的部分除外）。请备份 `runtime/`，因为机器人学到和记住的全部内容都保存在其中。
+- **聊天记录。** 每个聊天在 `runtime/log/` 中的记录保留 `MEMORY_LOG_DAYS`（30）天、最多 5,000 行，每天清理一次。它没有 `.bak` 副本，从不放入备份，各种删除都会作用于它。依据聊天记录复核事实随记忆整理调用一并进行；安静的聊天每天最多进行一次单独的复核调用，计入 `MEMORY_CALLS_PER_DAY`。但备份中包含 `recent.json` 和 `pending_reactions.json`，其中保存着近期的聊天原文。
 
 ### 完整排查清单
 

@@ -710,10 +710,13 @@ class Retrieval:
         scan_blob = " ".join(scan_pool)
         if not scan_blob.strip():
             return ""
+        # The starter entries name the admin by a placeholder.
+        admin = str(getattr(self, "admin_name", "") or "").strip()
         matched = []
         for entry in self._lorebook_cache:
             for kw in entry["keywords"]:
-                if kw and _lorebook_keyword_re(kw).search(scan_blob):
+                kw = kw.replace(_ADMIN_SLOT, admin.lower()) if kw else kw
+                if kw and _ADMIN_SLOT not in kw and _lorebook_keyword_re(kw).search(scan_blob):
                     matched.append(entry)
                     break
             if len(matched) >= 5:
@@ -722,7 +725,11 @@ class Retrieval:
             return ""
         parts = ["\n\n<lorebook>"]
         for entry in matched:
-            parts.append(f"\n[{entry['name']}] {entry['content']}")
+            content = entry["content"]
+            if _ADMIN_SLOT in content:
+                content = content.replace(_ADMIN_SLOT, admin or (
+                    "管理员" if _CJK.search(content) else "the admin"))
+            parts.append(f"\n[{entry['name']}] {content}")
         parts.append("\n</lorebook>")
         return "".join(parts)
 
@@ -731,6 +738,9 @@ class Retrieval:
 # keyword does not ("帮我google一下"), so `\b` would be wrong here.
 _WORDISH = r"0-9a-zÀ-ɏЀ-ӿ"
 _CJK = re.compile(r"[぀-ヿ㐀-鿿가-힯豈-﫿]")
+
+
+_ADMIN_SLOT = "{admin_name}"
 
 
 @functools.lru_cache(maxsize=2048)

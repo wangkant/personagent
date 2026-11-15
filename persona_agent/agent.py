@@ -123,6 +123,15 @@ class _RecentBuffers(dict):
 _RECENT_FLUSH_S = 5.0
 
 
+def _loop_time() -> float:
+    """The running loop's clock, which is the monotonic clock outside tests;
+    one clock for the write interval and its timer keeps a replay exact."""
+    try:
+        return asyncio.get_running_loop().time()
+    except RuntimeError:
+        return time.monotonic()
+
+
 class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
             Retrieval, ModelCalls, WebSearch, Proactive, Consolidation, Memory,
             DataViews, ContentIngestion, Transport, Learning):
@@ -496,13 +505,12 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         if not getattr(self.settings, "memory_keep_recent", True):
             dirty.clear()
             return
-        mono = time.monotonic()
+        mono = _loop_time()
         if not (force or only) and (not dirty or (
                 self._recent_flushed_at is not None
                 and mono - self._recent_flushed_at < _RECENT_FLUSH_S)):
             if dirty:
-                self._flush_recent_later(
-                    self._recent_flushed_at + _RECENT_FLUSH_S - mono)
+                self._flush_recent_later()
             return
         store = self._recent
         convs = [only] if only else list(dirty)
@@ -524,7 +532,7 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         if not only:
             self._recent_flushed_at = mono
 
-    def _flush_recent_later(self, delay: float) -> None:
+    def _flush_recent_later(self) -> None:
         """The last line of a turn has no later line to carry its write: a
         timer does, so a stop a few seconds on loses nothing."""
         if self.__dict__.get("_recent_timer") is not None:
@@ -536,9 +544,9 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
 
         def fire() -> None:
             self._recent_timer = None
-            self._maybe_flush_recent()
+            self._maybe_flush_recent(force=True)
 
-        self._recent_timer = loop.call_later(max(0.0, delay) + 0.05, fire)
+        self._recent_timer = loop.call_later(_RECENT_FLUSH_S, fire)
 
     def _load_seen_msg_ids(self) -> None:
         """Refill the de-dup ring from disk."""

@@ -308,3 +308,8 @@ def test_the_bar_s_buttons_reach_the_window(page) -> None:
         refused = page.client.post("/api/window", json={"action": action}, headers=own)
         assert (refused.status_code, refused.json()) == (400, {"error": "window_unavailable"}), action
     assert asked == ["maximize", "minimize", "close"]
+
+
+def test_check_for_updates_looks_like_the_other_text_buttons():
+    js = (welcome.ASSETS / "panels" / "runtime.js").read_text(encoding="utf-8")
+    assert 'const check = button("secondary",' in js

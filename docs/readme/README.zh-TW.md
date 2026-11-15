@@ -29,7 +29,7 @@ personagent 在你自己的電腦上執行，儲存的所有內容都留在本�
 <tr>
 <td width="220" valign="top"><strong>擁有自己的個性</strong></td>
 <td valign="top">
-提供七種現成個性。其中三個是社群中早已有人繪製的角色：DeepSeek 鯨魚娘、GPT 娘（白龍）和 Claude 娘，立繪會眨眼、思考與開口說話。<br>
+提供七種現成個性。其中三個是社群中早已有人繪製的角色：DeepSeek 娘（鯨魚）、GPT 娘（白龍）和 Claude 娘，立繪會眨眼、思考與開口說話。<br>
 人設可隨時改寫，角色學到的內容會予以保留。
 </td>
 </tr>
@@ -82,7 +82,7 @@ personagent 在你自己的電腦上執行，儲存的所有內容都留在本�
 </tr>
 </table>
 
-也可以在聊天中要求它記住或忘記指定的內容（小夏是預設角色的名字）：`小夏，記住 阿傑不吃辣`、`小夏 忘掉 不吃辣`（[記憶指令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#教導角色)）。會保存哪些內容、保存多久，請參閱使用手冊的[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#記憶)一節。
+也可以在聊天中要求它記住或忘記指定的內容（小夏是預設角色的名字）：`小夏，記住 阿傑不吃辣`、`小夏 忘掉 不吃辣`（[記憶指令](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#教導角色)）。會保留哪些內容、保留多久，請參閱使用手冊的[記憶](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#記憶)一節。
 
 ## 從這裡開始
 
@@ -93,7 +93,7 @@ personagent
 
 若已安裝 [uv](https://docs.astral.sh/uv/)，`uvx personagent` 無須另行安裝即可執行。在 Windows 上，也可以下載原始碼 ZIP，再按兩下 `start.bat`。
 
-在 Windows 上，它會在獨立的視窗中開啟；在 macOS 和 Linux 上則在瀏覽器中開啟。貼上模型 API 金鑰，再點選「驗證並開始聊天」。尚未取得金鑰時，可使用預設選取的 OpenRouter 免費模型，其金鑰無須付費。`personagent demo` 無須金鑰，會播放三段預先編寫的場景。[入門指南](https://github.com/wangkant/personagent/blob/main/docs/start.zh-TW.md)逐一說明了頁面中的各個畫面。
+在 Windows 上，它會在獨立的視窗中開啟；在 macOS 和 Linux 上則在瀏覽器中開啟。貼上模型 API 金鑰，再點選「驗證並開始聊天」。預設選取的 OpenRouter 免費模型同樣需要金鑰：此金鑰無須付費，可透過頁面上的「取得 API 金鑰」向 OpenRouter 申請。`personagent demo` 無須金鑰，會播放三段預先編寫的場景。[入門指南](https://github.com/wangkant/personagent/blob/main/docs/start.zh-TW.md)逐一說明了頁面中的各個畫面。
 
 personagent 本身免費。費用支付給你選擇的模型服務，依該服務的價格計算。一則訊息可能產生不只一次模型請求：除了回覆本身，角色有時還會判斷是否在群組中發言、評估回覆得到的反應，或整理記憶。OpenRouter 的免費模型每天可請求 50 次，部分免費服務商會保留收到的內容；Ollama 在你自己的電腦上執行模型，不需要金鑰。
 
@@ -135,7 +135,7 @@ PyPI 上有新版本時，頁面會顯示提示和對應的更新指令。以 pi
 
 ## 隱私
 
-personagent 儲存的所有內容都位於你自己電腦上的一個主目錄中。你選擇的模型服務商會看到它所回覆的對話；personagent 每天會向 pypi.org 查詢一次是否有新版本（設定 `UPDATE_CHECK_ENABLED=false` 即可關閉）。與真人互動之前，請告知對方這是機器人，並徵得其同意；哪些內容會傳送至何處，[手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#隱私與知情同意)中均有列出。
+personagent 儲存的所有內容都位於你自己電腦上的一個 personagent 資料夾中。你選擇的模型服務商會看到它所回覆的對話；personagent 每天會向 pypi.org 查詢一次是否有新版本（設定 `UPDATE_CHECK_ENABLED=false` 即可關閉）。與真人互動之前，請告知對方這是機器人，並徵得其同意；哪些內容會傳送至何處，[手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#隱私與知情同意)中均有列出。
 
 ## 文件
 

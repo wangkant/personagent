@@ -29,7 +29,7 @@ personagent läuft auf Ihrem eigenen Computer und bewahrt alles, was es speicher
 <tr>
 <td width="220" valign="top"><strong>Er hat eine eigene Persönlichkeit.</strong></td>
 <td valign="top">
-Sieben fertige Persönlichkeiten. Drei davon sind Figuren, die die Community längst zeichnet: das DeepSeek-Walmädchen, das GPT-Drachenmädchen und die Claude-Dame, mit Porträts, die blinzeln, nachdenken und sprechen.<br>
+Sieben fertige Persönlichkeiten. Drei davon sind Figuren, die die Community längst zeichnet: DeepSeek-chan, GPT-chan und Claude-chan, mit Porträts, die blinzeln, nachdenken und sprechen.<br>
 Sie können die Persona jederzeit umschreiben. Was die Figur gelernt hat, bleibt erhalten.
 </td>
 </tr>
@@ -93,7 +93,7 @@ personagent
 
 Mit [uv](https://docs.astral.sh/uv/) startet `uvx personagent` das Programm ohne gesonderten Installationsschritt. Unter Windows können Sie auch das Quellcode-ZIP herunterladen und `start.bat` doppelklicken.
 
-Unter Windows öffnet es sich in einem eigenen Fenster, unter macOS und Linux im Browser. Fügen Sie einen API-Schlüssel für das Modell ein und klicken Sie auf **Prüfen & Chat starten**. Sie haben noch keinen Schlüssel? Die kostenlosen Modelle von OpenRouter sind vorausgewählt, und ihr Schlüssel ist kostenlos. `personagent demo` spielt drei vorgefertigte Szenen ganz ohne Schlüssel ab. Die [Einstiegsanleitung](https://github.com/wangkant/personagent/blob/main/docs/start.de.md) erläutert die Seite Ansicht für Ansicht.
+Unter Windows öffnet es sich in einem eigenen Fenster, unter macOS und Linux im Browser. Fügen Sie einen API-Schlüssel für das Modell ein und klicken Sie auf **Prüfen & Chat starten**. Die kostenlosen Modelle von OpenRouter sind vorausgewählt, brauchen aber ebenfalls einen Schlüssel: Er ist kostenlos und wird über **API-Schlüssel anfordern** auf der Seite bei OpenRouter erstellt. `personagent demo` spielt drei vorgefertigte Szenen ganz ohne Schlüssel ab. Die [Einstiegsanleitung](https://github.com/wangkant/personagent/blob/main/docs/start.de.md) erläutert die Seite Ansicht für Ansicht.
 
 personagent ist kostenlos. Sie bezahlen den gewählten Modelldienst zu dessen eigenen Preisen. Eine Nachricht kann mehr als eine Modellanfrage auslösen: Neben der Antwort entscheidet die Figur bisweilen, ob sie sich in einer Gruppe äußert, beurteilt, wie eine Antwort aufgenommen wurde, oder ordnet ihr Gedächtnis. Die kostenlosen Modelle von OpenRouter erlauben 50 Anfragen pro Tag, und manche kostenlosen Anbieter speichern, was sie erhalten; Ollama führt ein Modell ganz ohne Schlüssel auf Ihrem eigenen Computer aus.
 
@@ -135,7 +135,7 @@ Wenn auf PyPI eine neuere Version verfügbar ist, zeigt die Seite einen Hinweis 
 
 ## Datenschutz
 
-Alles, was personagent speichert, bleibt auf Ihrem Rechner, in einem Home-Ordner. Der von Ihnen gewählte Modellanbieter sieht die Unterhaltungen, auf die er antwortet, und einmal täglich fragt personagent bei pypi.org nach, ob eine neuere Version vorliegt (`UPDATE_CHECK_ENABLED=false` deaktiviert dies). Bevor Sie die Figur mit echten Menschen verbinden, teilen Sie ihnen mit, dass es sich um einen Bot handelt, und holen Sie ihre Einwilligung ein; das [Handbuch](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#datenschutz-und-einwilligung) listet auf, was wohin geht.
+Alles, was personagent speichert, bleibt auf Ihrem Rechner, in einem personagent-Ordner. Der von Ihnen gewählte Modellanbieter sieht die Unterhaltungen, auf die er antwortet, und einmal täglich fragt personagent bei pypi.org nach, ob eine neuere Version vorliegt (`UPDATE_CHECK_ENABLED=false` deaktiviert dies). Bevor Sie die Figur mit echten Menschen verbinden, teilen Sie ihnen mit, dass es sich um einen Bot handelt, und holen Sie ihre Einwilligung ein; das [Handbuch](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#datenschutz-und-einwilligung) listet auf, was wohin geht.
 
 ## Dokumentation
 

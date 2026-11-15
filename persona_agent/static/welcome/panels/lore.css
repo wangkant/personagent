@@ -67,11 +67,20 @@
   line-clamp: 3;
   overflow: hidden;
 }
+.lore-card .lore-placeholder {
+  margin: 6px 0 0;
+}
 .lore-entry.is-editing {
   max-width: 620px;
 }
 .lore-field > label {
   margin-top: 10px;
+}
+/* With the default line height some fonts cut off an underscore at the baseline. */
+.lore-field input {
+  height: auto;
+  padding: 9px 12px;
+  line-height: 1.6;
 }
 .lore-field textarea {
   display: block;

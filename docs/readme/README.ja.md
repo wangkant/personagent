@@ -29,7 +29,7 @@ personagent はあなた自身のコンピューターで動き、保存する�
 <tr>
 <td width="220" valign="top"><strong>独自のキャラクターを持っています。</strong></td>
 <td valign="top">
-既成のキャラクターが 7 つあります。そのうち DeepSeek クジラ娘、GPT ドラゴン娘、Claude お嬢様の 3 つは、コミュニティですでに描かれてきたキャラクターです。立ち絵はまばたきし、考え、話します。<br>
+既成のキャラクターが 7 つあります。そのうち DeepSeekちゃん、GPTちゃん、Claudeちゃんの 3 つは、コミュニティですでに描かれてきたキャラクターです。立ち絵はまばたきし、考え、話します。<br>
 ペルソナはいつでも書き直せます。キャラクターが学んだことは残ります。
 </td>
 </tr>
@@ -93,7 +93,7 @@ personagent
 
 [uv](https://docs.astral.sh/uv/) があれば、`uvx personagent` で個別のインストールなしに実行できます。Windows では、ソースの ZIP をダウンロードして `start.bat` をダブルクリックする方法もあります。
 
-Windows では専用のウィンドウで開き、macOS と Linux ではブラウザーで開きます。モデルの API キーを貼り付けて **確認してチャットを開始** をクリックします。まだキーがない場合も、最初から OpenRouter の無料モデルが選ばれていて、そのキーは無料で取得できます。`personagent demo` はキーなしで、台本どおりの 3 つの場面を再生します。[はじめに](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)では、ページを画面ごとに説明しています。
+Windows では専用のウィンドウで開き、macOS と Linux ではブラウザーで開きます。モデルの API キーを貼り付けて **確認してチャットを開始** をクリックします。最初から選ばれている OpenRouter の無料モデルにもキーが必要です。キーは無料で、ページの **API キーを取得** から OpenRouter で取得できます。`personagent demo` はキーなしで、台本どおりの 3 つの場面を再生します。[はじめに](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)では、ページを画面ごとに説明しています。
 
 personagent 自体は無料です。料金は、選んだモデルサービスに、そのサービスの料金で支払います。1 件のメッセージで複数回のモデルリクエストが発生することがあります。返信のほかに、グループで発言するかどうかの判断、返信がどう受け止められたかの判断、記憶の整理を行うことがあるためです。OpenRouter の無料モデルは 1 日 50 リクエストまで使え、無料のプロバイダーの中には受け取った内容を保持するところもあります。Ollama ならキーなしで自分のコンピューター上でモデルを動かせます。
 
@@ -135,7 +135,7 @@ PyPI に新しいバージョンが出ると、ページに通知とアップデ
 
 ## プライバシー
 
-personagent が保存するものはすべて、あなたのマシン上の 1 つのホームフォルダーに置かれます。選んだモデルプロバイダーは、自分が応答する会話を見ることになります。また personagent は 1 日に 1 回、新しいバージョンが出ていないか pypi.org に問い合わせます（`UPDATE_CHECK_ENABLED=false` で止められます）。実在の人がいるチャットと連携する前に、ボットであることを伝えて同意を得てください。何がどこに送られるかは[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#プライバシーと同意)に記載しています。
+personagent が保存するものはすべて、あなたのマシン上の 1 つの personagent フォルダーに置かれます。選んだモデルプロバイダーは、自分が応答する会話を見ることになります。また personagent は 1 日に 1 回、新しいバージョンが出ていないか pypi.org に問い合わせます（`UPDATE_CHECK_ENABLED=false` で止められます）。実在の人がいるチャットと連携する前に、ボットであることを伝えて同意を得てください。何がどこに送られるかは[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#プライバシーと同意)に記載しています。
 
 ## ドキュメント
 

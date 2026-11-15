@@ -420,3 +420,15 @@ def test_page_strings_match_in_both_languages():
             assert code in found["en"]
     prefixed = {k for k in used if not k.endswith("_")}
     assert prefixed <= found["en"].keys() | {"tuning_invalid"}
+
+
+def test_the_first_group_points_to_the_switches_kept_elsewhere_and_calls_them_alike():
+    script = SCRIPT.read_text(encoding="utf-8")
+    assert 'note(sections.who, "tuning_who_note")' in script
+    for name in ("onlyCalled", "adminOnly", "talk", "learning"):
+        assert "{" + name + "}" in script.split("tuning_who_note:")[1].split("\n")[0]
+    # Chinese says 点名 for being addressed, as the practice panel and the docs do.
+    zh = script.split("\n  zh: {")[1]
+    assert "被呼叫" not in zh and "无人呼叫" not in zh
+    css = SCRIPT.with_suffix(".css").read_text(encoding="utf-8")
+    assert ".tuning-limit.tuning-limit-on" in css and "\n.tuning-limit {" not in css

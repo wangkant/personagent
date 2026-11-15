@@ -4,6 +4,7 @@ PA.strings({
     practice_tab_demo: "Demo",
     practice_tab_group: "Practice group",
     practice_demo_lead: "Three short scenes played with a scripted model: when the character stays silent, how it learns from a correction, and how it refuses a disruptive member. No key is needed, and nothing is sent over the network.",
+    practice_demo_sample: "The scenes are played by {sample}, a sample character, not by your own character.",
     practice_scene_quiet: "Staying silent",
     practice_scene_teach: "Learning from a correction",
     practice_scene_troll: "Refusing a disruptive member",
@@ -16,7 +17,9 @@ PA.strings({
     practice_demo_done: "The demo is complete. You can try the same steps in the practice group.",
     practice_try_group: "Open the practice group",
     practice_group_lead: "A simulated group chat with {name}. You can write as different members, see when the character replies or stays silent, and view the reason for each decision. What the character learns here is used only in practice and does not affect your real chats.",
-    practice_group_hint: "Include “{name}” in a message to address the character. When it is not addressed, it considers joining in about every 4 messages.",
+    practice_group_hint: "Include “{name}” in a message to address the character. When it is not addressed, it considers joining in after every {trigger} messages here, so that the effect shows quickly; in your groups it waits for {live} messages.",
+    practice_group_hint_called: "Include “{name}” in a message to address the character. As in your groups, it replies only when addressed, because “{setting}” is turned on under Character & settings.",
+    practice_group_hint_off: "“{setting}” is turned off under Character & settings, so the character replies to no message here, as on your platforms. Turn it on there to try the practice group.",
     practice_starting: "Starting the practice group…",
     practice_retry: "Try again",
     practice_open_settings: "Open Character & settings",
@@ -36,6 +39,7 @@ PA.strings({
     practice_cancel: "Cancel",
     practice_second_try: "second attempt",
     practice_quiet: "{name} did not reply: {reason}",
+    practice_off: "{name} did not reply: replies are turned off.",
     practice_joins: "{name} joined in: {reason}",
     practice_memory_saved: "{name} saved this as a memory.",
     practice_memory_refused: "{name} did not save this. Memory stores facts, not instructions.",
@@ -46,6 +50,7 @@ PA.strings({
     practice_why_quiet: "The character did not reply to the message from {who}: {reason}",
     practice_why_memory: "{who} asked the character to remember or forget something, so it handled the request directly without calling the model.",
     practice_why_failed: "The model did not respond to this message, so the character did not reply.",
+    practice_why_off: "Replies are turned off under Character & settings, so the character did not read the message from {who}.",
     practice_why_retry: "This is a second attempt. The first reply, “{text}”, was rejected.",
     practice_why_learning: "Learned from this message: {text}",
     practice_why_offered_none: "No earlier learning was used for this reply.",
@@ -80,6 +85,7 @@ PA.strings({
     practice_tab_demo: "演示",
     practice_tab_group: "模拟群聊",
     practice_demo_lead: "以下三个场景由预设脚本的模型演示：角色何时保持沉默、如何从一次纠正中学习、如何拒绝干扰者。演示无需密钥，也不会向外发送任何数据。",
+    practice_demo_sample: "以下场景由示例角色{sample}演示，并非你自己的角色。",
     practice_scene_quiet: "保持沉默",
     practice_scene_teach: "从纠正中学习",
     practice_scene_troll: "拒绝干扰",
@@ -92,7 +98,9 @@ PA.strings({
     practice_demo_done: "演示已结束。你可以在模拟群聊中亲自尝试。",
     practice_try_group: "打开模拟群聊",
     practice_group_lead: "这是一个包含{name}的模拟群聊。你可以以不同成员的身份发言，观察角色何时回复、何时保持沉默，并查看每次判断的原因。角色在此学到的内容仅用于演练，不会影响真实聊天。",
-    practice_group_hint: "在消息中提及「{name}」即可点名角色；未被点名时，角色大约每 4 条消息考虑一次是否发言。",
+    practice_group_hint: "在消息中提及「{name}」即可点名角色。未被点名时，角色在此每累计 {trigger} 条消息考虑一次是否发言，以便尽快看到效果；在你的群聊中则为每 {live} 条。",
+    practice_group_hint_called: "在消息中提及「{name}」即可点名角色。由于「角色与设置」中已开启「{setting}」，角色在此与在你的群聊中一样，仅在被点名时回复。",
+    practice_group_hint_off: "「角色与设置」中已关闭「{setting}」，因此角色在此与在各平台上一样，不回复任何消息。如需使用模拟群聊，请先在该处开启此项。",
     practice_starting: "正在启动模拟群聊…",
     practice_retry: "重试",
     practice_open_settings: "打开「角色与设置」",
@@ -112,6 +120,7 @@ PA.strings({
     practice_cancel: "取消",
     practice_second_try: "第二次尝试",
     practice_quiet: "{name}未回复：{reason}",
+    practice_off: "{name}未回复：回复已关闭。",
     practice_joins: "{name}主动参与了对话：{reason}",
     practice_memory_saved: "{name}已将此内容保存为记忆。",
     practice_memory_refused: "{name}未保存此内容：记忆只保存事实，不保存指令。",
@@ -122,6 +131,7 @@ PA.strings({
     practice_why_quiet: "{who}发言后，角色未回复：{reason}",
     practice_why_memory: "{who}要求角色记住或忘记某件事，角色直接处理了该请求，未调用模型。",
     practice_why_failed: "模型未响应此消息，因此角色没有回复。",
+    practice_why_off: "「角色与设置」中已关闭回复，因此角色未处理{who}的消息。",
     practice_why_retry: "此回复是第二次尝试，第一次的回复「{text}」已被否定。",
     practice_why_learning: "从此消息中学到：{text}",
     practice_why_offered_none: "此回复未使用之前学到的内容。",
@@ -229,6 +239,9 @@ PA.strings({
   demoPart.id = "practice-demo";
   const demoLead = el("p", "field-note");
   demoLead.dataset.key = "practice_demo_lead";
+  const demoSample = el("p", "field-note");
+  demoSample.id = "practice-demo-sample";
+  demoSample.hidden = true;
   const sceneBar = el("div", "practice-scenes");
   const sceneButtons = SCENES.map((key) => {
     const node = button("practice-scene", `practice_scene_${key}`, `practice-scene-${key}`);
@@ -254,7 +267,7 @@ PA.strings({
   const play = button("primary small", "practice_play", "practice-play");
   const toGroup = button("secondary", "practice_try_group", "practice-to-group");
   demoActions.append(replay, toGroup, next, play);
-  demoPart.append(demoLead, sceneBar, sceneTitle, sceneIntro, demoLog, demoStatus, demoError, demoActions);
+  demoPart.append(demoLead, demoSample, sceneBar, sceneTitle, sceneIntro, demoLog, demoStatus, demoError, demoActions);
 
   const groupPart = el("div", "practice-part");
   groupPart.id = "practice-group";
@@ -377,6 +390,10 @@ PA.strings({
     sceneTitle.textContent = data ? data.title.charAt(0).toUpperCase() + data.title.slice(1) : PA.t(`practice_scene_${key}`);
     sceneIntro.textContent = data ? data.intro : "";
     sceneIntro.hidden = !data;
+    // The demo's own character, so that its name is not taken for a failed rename.
+    const sample = demo && demo[0] && demo[0].name;
+    demoSample.textContent = sample ? PA.t("practice_demo_sample", { sample }) : "";
+    demoSample.hidden = !sample;
     const seen = played.has(scene);
     play.hidden = seen && !playing;
     replay.hidden = !seen && !playing;
@@ -448,6 +465,7 @@ PA.strings({
 
   // ---- the practice group -------------------------------------------------
   let groupName = "",
+    groupRules = {},
     starting = false,
     started = false,
     sending = false,
@@ -456,7 +474,8 @@ PA.strings({
   const entries = new Map();
 
   function memberOptions() {
-    const chosen = asPick.value || store.get("personagent-practice-as") || "m1";
+    // The owner first: a newcomer's first message should be their own.
+    const chosen = asPick.value || store.get("personagent-practice-as") || "owner";
     asPick.replaceChildren();
     const owner = el("option", "", PA.t("practice_owner"));
     owner.value = "owner";
@@ -528,6 +547,7 @@ PA.strings({
     row.append(said);
     const notes = el("div", "practice-line-actions");
     if (entry.failure) notes.append(caption(PA.t(`practice_fail_${entry.failure}`), "practice-note failed"));
+    else if (entry.what === "off") notes.append(caption(PA.t("practice_off", { name: name() })));
     else if (entry.what === "quiet") notes.append(caption(PA.t("practice_quiet", { name: name(), reason: entry.reason })));
     else if (entry.what === "joined") notes.append(caption(PA.t("practice_joins", { name: name(), reason: entry.reason })));
     else if (entry.what === "memory")
@@ -549,7 +569,15 @@ PA.strings({
   }
   function renderGroupText() {
     groupLead.textContent = PA.t("practice_group_lead", { name: name() });
-    groupHint.textContent = PA.t("practice_group_hint", { name: name() });
+    // The hint says which of the home's reply settings the practice character follows.
+    const hint =
+      groupRules.replies === false
+        ? PA.t("practice_group_hint_off", { setting: PA.t("tuning_f_agent_enabled") })
+        : groupRules.onlyCalled
+          ? PA.t("practice_group_hint_called", { name: name(), setting: PA.t("tuning_f_chat_only_when_called") })
+          : PA.t("practice_group_hint", { name: name(), trigger: groupRules.trigger || 4, live: groupRules.liveTrigger || 30 });
+    groupHint.textContent = hint;
+    groupHint.hidden = !("replies" in groupRules);
     input.placeholder = PA.t("practice_message");
     if (!sending) relabel(send);
     if (quoting) replyingText.textContent = PA.t("practice_replying", { name: name(), text: quoting.text });
@@ -572,11 +600,13 @@ PA.strings({
     try {
       const value = await PA.api("practice/start", { lang: PA.lang });
       groupName = value.name || groupName;
+      groupRules = value.rules || groupRules;
       started = true;
       renderGroupText();
       renderLog(value.entries);
       setReady(true);
-      input.focus();
+      // A keyboard user on the tab stays there; the next Tab reaches "Write as" first.
+      if (focusLost()) asPick.focus();
     } catch (error) {
       showGroupError(error.message);
     } finally {
@@ -628,6 +658,10 @@ PA.strings({
     try {
       const value = await PA.api("practice/say", payload);
       groupName = value.name || groupName;
+      if (value.rules) {
+        groupRules = value.rules;
+        renderGroupText();
+      }
       groupEmpty.hidden = true;
       for (const entry of value.entries) groupLog.append(renderEntry(entry));
       groupLog.scrollTop = groupLog.scrollHeight;
@@ -660,11 +694,11 @@ PA.strings({
     }
   });
 
-  function whyView(data) {
+  function whyView(data, entry) {
     const panel = el("div", "practice-why");
     panel.setAttribute("role", "status");
     const add = (text, className = "") => panel.append(el("p", className, text));
-    const who = data.what === "admin" ? PA.t("practice_owner") : data.speaker;
+    const who = data.what === "admin" || entry.owner ? PA.t("practice_owner") : data.speaker;
     const head = {
       named: "practice_why_named",
       admin: "practice_why_admin",
@@ -672,6 +706,7 @@ PA.strings({
       quiet: "practice_why_quiet",
       memory: "practice_why_memory",
       failed: "practice_why_failed",
+      off: "practice_why_off",
     }[data.what];
     if (head) add(PA.t(head, { who, reason: data.reason }));
     if (data.retryOf) add(PA.t("practice_why_retry", { text: data.retryOf }));
@@ -708,7 +743,7 @@ PA.strings({
     working(node, "practice_why_busy");
     try {
       const value = await PA.api("practice/why", { id: entry.id, lang: PA.lang });
-      row.append(whyView(value));
+      row.append(whyView(value, entry));
     } catch (error) {
       const fail = el("p", "error practice-why-error");
       fail.setAttribute("role", "alert");
@@ -794,6 +829,8 @@ PA.strings({
     if (!started || sending) return;
     try {
       const value = await PA.api("practice/start", { lang: PA.lang });
+      groupRules = value.rules || groupRules;
+      renderGroupText();
       renderLog(value.entries);
     } catch {
       /* the lines keep the language they have */
@@ -815,6 +852,8 @@ PA.strings({
   PA.onShow("practice", () => {
     renderText();
     showPart(part);
+    // Settings saved meanwhile restart the practice character; its hint follows them.
+    if (started && part === "group") relang();
   });
   setReady(false);
   renderText();

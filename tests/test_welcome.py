@@ -124,8 +124,22 @@ def test_a_chosen_personality_keeps_a_copy_of_the_persona_someone_wrote(client, 
 @pytest.mark.parametrize("key", ["密钥 sk-abc", "sk-abc def"])
 def test_a_key_pasted_with_other_words_is_turned_down_as_a_key(client, workspace, key):
     response = client.post("/api/config", headers=HEADERS, json={"apiKey": key})
-    assert response.status_code == 400 and response.json()["error"] == "key_rejected"
+    # Its own message: not a key the service refused, but text around the key.
+    assert response.status_code == 400 and response.json()["error"] == "key_malformed"
     assert not workspace.config().get("LLM_API_KEY")
+
+
+def test_a_blank_name_is_asked_for_by_name(client, workspace):
+    response = client.post("/api/config", headers=HEADERS, json={"apiKey": "k", "name": "   "})
+    assert response.status_code == 400 and response.json()["error"] == "name_required"
+    assert not workspace.config().get("LLM_API_KEY")
+
+
+def test_the_state_says_when_replies_are_turned_off(client, workspace):
+    sw.write_env(workspace.env, {"LLM_API_KEY": "k"})
+    assert client.get("/api/state", headers=HEADERS).json()["repliesOff"] is False
+    sw.write_env(workspace.env, {"AGENT_ENABLED": "false"})
+    assert client.get("/api/state", headers=HEADERS).json()["repliesOff"] is True
 
 
 def test_the_persona_is_shown_as_the_agent_reads_it_and_edits_become_its_own(client, workspace, monkeypatch):
@@ -299,7 +313,8 @@ def test_changing_the_api_endpoint_never_sends_the_saved_key(client, workspace, 
     sw.write_env(workspace.env, {"LLM_API_KEY": "old-key", "LLM_BASE_URL": "https://api.deepseek.com"})
     monkeypatch.setattr(sw, "probe_key", lambda *a, **kw: pytest.fail("must not send a saved key to a new endpoint"))
     response = client.post("/api/config", headers=HEADERS, json={"baseUrl": "https://new.example/v1"})
-    assert response.status_code == 400 and response.json()["error"] == "key_required"
+    # Said as such: the saved key stays with the address it was saved for.
+    assert response.status_code == 400 and response.json()["error"] == "key_again"
 
 
 def test_large_and_malformed_posts_are_rejected(client):
@@ -777,6 +792,55 @@ def test_chat_posts_to_the_real_character_connector_and_is_serialised(workspace,
         restored.close()
 
 
+def test_a_memory_answer_is_marked_and_a_forget_takes_the_words_off_the_page(workspace, monkeypatch):
+    sw.write_env(workspace.env, {"LLM_API_KEY": "key", "CONNECTOR_TOKEN": "token",
+                                 "PERSONA_NAME": "Mira", "AGENT_LANG": "en"})
+    monkeypatch.setattr(workspace.services, "start_agent", lambda: None)
+    answers = {"my sister lives in Denver": ["nice city"], "the weather is fine": ["it is"],
+               "Mira, what do you remember": ["Here's what I remember:", "you said: my sister lives in Denver"],
+               "Mira, forget Denver": ["forgotten"], "Mira, forget Paris": ["nothing matching to forget"]}
+    class Connector:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def send_event(self, event):
+            return {"replies": [{"type": "text", "text": t} for t in answers[event["text"]]]}
+    monkeypatch.setattr(welcome, "_connector_type", lambda: Connector)
+    calls = []
+    async def activity_call(method, path, **kwargs):
+        calls.append((path, kwargs.get("json")))
+        return {"ok": True}
+    monkeypatch.setattr(workspace, "_activity_call", activity_call)
+    import asyncio
+    for text in ("my sister lives in Denver", "the weather is fine"):
+        assert "command" not in asyncio.run(workspace.chat(text))["messages"][-1]
+    recall = asyncio.run(workspace.chat("Mira, what do you remember"))
+    assert [m.get("command") for m in recall["messages"] if m["role"] == "assistant"] == ["recall", "recall"]
+    # Nothing was forgotten: nothing leaves the page.
+    kept = asyncio.run(workspace.chat("Mira, forget Paris"))
+    assert "forgotLines" not in kept and not calls
+    gone = asyncio.run(workspace.chat("Mira, forget Denver"))
+    texts = [m["text"] for m in workspace.history()["messages"]]
+    # The message and its reply go; the recall answer quoting it goes whole, heading and
+    # question included; the command and its answer stay.
+    assert texts == ["the weather is fine", "it is", "Mira, forget Paris",
+                     "nothing matching to forget", "Mira, forget Denver", "forgotten"]
+    assert gone["forgotLines"] == 5 and gone["messages"] == workspace.history()["messages"]
+    assert calls == [("/api/dashboard/memory/forget_recent", {"conv": workspace._page_key(), "query": "Denver"})]
+    assert "Denver" not in (workspace.home / "runtime" / "desktop" / "browser-chat.json").read_text(
+        encoding="utf-8").replace("forget Denver", "")
+
+
+def test_recent_lines_lose_the_forgotten_words():
+    from persona_agent import dashboard, decision_log
+    log = decision_log.DecisionLog()
+    log.record("c", "called", True, "addressed", "my sister lives in Denver", answered="nice")
+    log.record("c", "called", True, "addressed", "the weather", answered="fine")
+    assert log.drop_where("c", dashboard.forget_hit("denver")) == 1
+    assert [r["excerpt"] for r in log.recent("c")] == ["the weather"]
+    # Whole words in a spaced script, a substring in CJK.
+    assert not dashboard.forget_hit("tea")("a steak") and dashboard.forget_hit("雾蓝")("颜色是雾蓝色")
+
+
 def test_shutdown_stops_only_owned_services(client, workspace, monkeypatch):
     stopped = []
     monkeypatch.setattr(workspace.services, "shutdown", lambda: stopped.append(True))
@@ -973,7 +1037,12 @@ def test_activity_reads_the_service_with_its_token_and_keeps_only_what_the_view_
     assert listed["running"] and not listed["off"]
     assert [c["id"] for c in listed["chats"]] == ["telegram:-100", "private:browser:x"]
     assert listed["chats"][0] == {"id": "telegram:-100", "platform": "telegram", "kind": "group",
-                                  "last": 9.0, "observing": 1, "learned": 1, "latest": 7.0, "notes": 1}
+                                  "last": 9.0, "observing": 1, "learned": 1, "latest": 7.0, "notes": 1,
+                                  "current": False}
+    # A page chat "New chat" left behind is told from the one in the Chat view.
+    assert listed["chats"][1]["current"] is False
+    workspace._conversation = "x"
+    assert [c["current"] for c in client.get("/api/activity", headers=HEADERS).json()["chats"]] == [False, True]
     chat = client.get("/api/activity/chat", params={"id": "telegram:-100"}, headers=HEADERS).json()
     assert seen[-1].url.params["id"] == "telegram:-100"
     assert all(r.headers["x-personagent-dashboard-token"] == "service-token" for r in seen)

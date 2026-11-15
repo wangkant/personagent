@@ -46,7 +46,7 @@ Se você ativar, ele inicia uma conversa depois de um longo silêncio e retoma o
 <td width="220" valign="top"><strong>Ele lembra.</strong></td>
 <td valign="top">
 Cada conversa tem sua própria memória: mensagens recentes que sobrevivem a um reinício, um resumo da conversa anterior, eventos datados e fatos sobre as pessoas, que ele mantém atualizados por conta própria.<br>
-Tudo o que ele lembra aparece na visão Atividade, onde qualquer item pode ser esquecido ou trazido de volta.
+Tudo o que ele lembra aparece na tela Atividade, onde qualquer item pode ser esquecido ou trazido de volta.
 </td>
 </tr>
 <tr>
@@ -93,7 +93,7 @@ personagent
 
 Com o [uv](https://docs.astral.sh/uv/), `uvx personagent` o executa sem uma etapa de instalação separada. No Windows, você também pode baixar o ZIP do código-fonte e dar dois cliques em `start.bat`.
 
-No Windows, ele abre em uma janela própria; no macOS e no Linux, no navegador. Cole uma chave de API de modelo e clique em **Verificar e iniciar a conversa**. Caso ainda não tenha uma chave, os modelos gratuitos do OpenRouter já vêm selecionados, e a chave deles é gratuita. `personagent demo` mostra três cenas roteirizadas sem chave nenhuma. O [guia de primeiros passos](https://github.com/wangkant/personagent/blob/main/docs/start.pt-BR.md) percorre a página tela por tela.
+No Windows, ele abre em uma janela própria; no macOS e no Linux, no navegador. Cole uma chave de API de modelo e clique em **Verificar e iniciar a conversa**. Os modelos gratuitos do OpenRouter já vêm selecionados, mas também precisam de uma chave: ela é gratuita e é obtida no OpenRouter por meio de **Obter uma chave de API** na página. `personagent demo` mostra três cenas roteirizadas sem chave nenhuma. O [guia de primeiros passos](https://github.com/wangkant/personagent/blob/main/docs/start.pt-BR.md) percorre a página tela por tela.
 
 O personagent é gratuito. Você paga o serviço de modelo que escolher, pelos preços dele. Uma mensagem pode gerar mais de uma solicitação ao modelo: além da resposta, o personagem às vezes decide se fala em um grupo, avalia como uma resposta foi recebida ou organiza a própria memória. Os modelos gratuitos do OpenRouter permitem 50 solicitações por dia, e alguns provedores gratuitos guardam o que recebem; o Ollama executa um modelo no seu próprio computador, sem chave.
 
@@ -131,15 +131,15 @@ personagent connect dsh
 
 ## Atualizar e desinstalar
 
-Quando há uma versão mais nova no PyPI, a página mostra um aviso com o comando de atualização. Com pip, é `python -m pip install -U personagent`. Na maioria das instalações, **Atualizar e reabrir**, na visão **Aplicativo** da página, executa esse comando por você. As configurações, o personagem, o que ele aprendeu e as plataformas conectadas são mantidos. Para remover, siga [Remover o personagent](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#remover-o-personagent) no guia.
+Quando há uma versão mais nova no PyPI, a página mostra um aviso com o comando de atualização. Com pip, é `python -m pip install -U personagent`. Na maioria das instalações, **Atualizar e reabrir**, na tela **Aplicativo** da página, executa esse comando por você. As configurações, o personagem, o que ele aprendeu e as plataformas conectadas são mantidos. Para remover, siga [Remover o personagent](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#remover-o-personagent) no guia.
 
 ## Privacidade
 
-Tudo o que o personagent guarda fica na sua máquina, em uma única pasta inicial. O provedor de modelo que você escolher vê as conversas que ele responde, e uma vez por dia o personagent pergunta ao pypi.org se há uma versão mais nova (`UPDATE_CHECK_ENABLED=false` desativa isso). Antes de conectá-lo a pessoas reais, avise que é um bot e peça o consentimento delas; o [guia](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#privacidade-e-consentimento) lista o que vai para onde.
+Tudo o que o personagent guarda fica na sua máquina, em uma única pasta do personagent. O provedor de modelo que você escolher vê as conversas que ele responde, e uma vez por dia o personagent pergunta ao pypi.org se há uma versão mais nova (`UPDATE_CHECK_ENABLED=false` desativa isso). Antes de conectá-lo a pessoas reais, avise que é um bot e peça o consentimento delas; o [guia](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md#privacidade-e-consentimento) lista o que vai para onde.
 
 ## Documentação
 
-- [Guia do usuário](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md): configuração, conectores, como ensiná-lo, a visão Atividade, solução de problemas.
+- [Guia do usuário](https://github.com/wangkant/personagent/blob/main/docs/guide.pt-BR.md): configuração, conectores, como ensiná-lo, a tela Atividade, solução de problemas.
 - [Guia de implantação](https://github.com/wangkant/personagent/blob/main/docs/deploy.pt-BR.md): execução em produção, custos e o que verificar quando o bot fica em silêncio.
 - [Protocolo de conectores](https://github.com/wangkant/personagent/blob/main/docs/connectors.pt-BR.md): para escrever seu próprio conector.
 - [Ferramentas](https://github.com/wangkant/personagent/blob/main/docs/tools.pt-BR.md): os scripts em `tools/`, para execução a partir de um clone.

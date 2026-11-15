@@ -37,15 +37,28 @@ PA.strings({
     lore_err_priority: "Enter a whole number from {min} to {max}, or leave the field empty.",
     lore_import: "Import a file",
     lore_importing: "Importing…",
-    lore_import_hint: "A JSON file in personagent's lorebook format, or a World Info export from SillyTavern. Its entries are added below; disabled entries and entries without keywords or text are skipped. At most 1 MB.",
-    lore_imported: "{taken} entries were taken from {file} and {skipped} were skipped. Save to use them.",
+    lore_import_hint: "A JSON file in personagent's lorebook format, or a World Info export from SillyTavern. Its entries are added below. Skipped: disabled entries, entries without keywords or text, and always-on entries without keywords. At most 1 MB.",
+    lore_imported: "{taken} entries were taken from {file}. Save to use them.",
+    lore_imported_none: "No entry was taken from {file}.",
+    lore_skipped: "Skipped: {list}.",
+    lore_skip_disabled: "{n} disabled",
+    lore_skip_always_on: "{n} always-on without keywords (this lorebook has no always-on entries; put such text in the persona instead)",
+    lore_skip_no_keywords: "{n} without keywords",
+    lore_skip_no_text: "{n} without text",
+    lore_skip_invalid: "{n} too long or not readable",
+    lore_skip_duplicate: "{n} repeated within the file",
+    lore_skip_present: "{n} already in the list",
+    lore_list_sep: "; ",
+    lore_partly_always_on: "{n} always-on entries were taken as ordinary entries: they are used only when one of their keywords appears.",
+    lore_partly_secondary: "{n} entries have secondary keywords, which this lorebook does not use: only their main keywords were taken.",
+    lore_placeholder: "{placeholder} in this entry is a sample placeholder and is not replaced: edit the entry and write the actual name in its place, or delete the entry.",
+    lore_placeholder_admin: "{placeholder} stands for Your name in Advanced settings; while that is empty, the character reads \"the admin\".",
     lore_import_large: "The file is larger than 1 MB. Choose a smaller file.",
     lore_import_broken: "The file {file} is not valid JSON. Check that it is a lorebook or World Info export.",
     lore_import_unknown: "The file is neither a personagent lorebook nor a SillyTavern World Info export.",
-    lore_import_empty: "The file contains no entry that can be used: every entry is disabled or lacks keywords or text.",
     lore_import_too_many: "With the imported entries there would be more than {max}. Delete some entries first.",
     lore_unsaved: "There are unsaved changes.",
-    lore_save: "Save",
+    lore_save: "Save lorebook",
     lore_saving: "Saving…",
     lore_nothing: "There are no changes to save.",
     lore_saved_restarted: "Saved. The character has restarted and uses the new lorebook.",
@@ -110,15 +123,28 @@ PA.strings({
     lore_err_priority: "请填写 {min} 至 {max} 之间的整数，或留空。",
     lore_import: "导入文件",
     lore_importing: "正在导入…",
-    lore_import_hint: "支持 personagent 背景设定格式的 JSON 文件，以及 SillyTavern 导出的世界书（World Info）。文件中的条目将添加到下方；已停用的条目以及缺少关键词或内容的条目将被跳过。文件不超过 1 MB。",
-    lore_imported: "已从 {file} 中导入 {taken} 条，跳过 {skipped} 条。保存后生效。",
+    lore_import_hint: "支持 personagent 背景设定格式的 JSON 文件，以及 SillyTavern 导出的世界书（World Info）。文件中的条目将添加到下方。以下条目将被跳过：已停用的条目、缺少关键词或内容的条目，以及没有关键词的常驻条目。文件不超过 1 MB。",
+    lore_imported: "已从 {file} 中导入 {taken} 条，保存后生效。",
+    lore_imported_none: "未从 {file} 中导入任何条目。",
+    lore_skipped: "跳过：{list}。",
+    lore_skip_disabled: "已停用 {n} 条",
+    lore_skip_always_on: "没有关键词的常驻条目 {n} 条（背景设定不支持常驻条目，此类内容请写入人设）",
+    lore_skip_no_keywords: "缺少关键词 {n} 条",
+    lore_skip_no_text: "缺少内容 {n} 条",
+    lore_skip_invalid: "过长或无法读取 {n} 条",
+    lore_skip_duplicate: "文件内重复 {n} 条",
+    lore_skip_present: "列表中已有 {n} 条",
+    lore_list_sep: "；",
+    lore_partly_always_on: "其中 {n} 条常驻条目已作为普通条目导入：仅在出现其关键词时使用。",
+    lore_partly_secondary: "其中 {n} 条带有次要关键词；背景设定不使用次要关键词，仅导入了主关键词。",
+    lore_placeholder: "此条目中的 {placeholder} 是示例占位符，不会被自动替换：请编辑此条目，将其改为实际的名字，或删除此条目。",
+    lore_placeholder_admin: "{placeholder} 代表「角色对你的称呼」（在高级设置中填写）；未填写时，角色读到的是「管理员」。",
     lore_import_large: "文件超过 1 MB，请选择较小的文件。",
     lore_import_broken: "文件 {file} 不是有效的 JSON。请确认它是背景设定文件或世界书导出文件。",
     lore_import_unknown: "该文件既不是 personagent 的背景设定，也不是 SillyTavern 导出的世界书。",
-    lore_import_empty: "该文件中没有可用的条目：所有条目均已停用，或缺少关键词或内容。",
     lore_import_too_many: "加上导入的条目后将超过 {max} 条。请先删除部分条目。",
     lore_unsaved: "有尚未保存的修改。",
-    lore_save: "保存",
+    lore_save: "保存背景设定",
     lore_saving: "正在保存…",
     lore_nothing: "没有需要保存的更改。",
     lore_saved_restarted: "已保存，角色已重新启动并使用新的背景设定。",
@@ -184,6 +210,11 @@ PA.strings({
     return seen;
   };
   const same = (a, b) => a.content === b.content && a.keywords.join("\n") === b.keywords.join("\n");
+  const focusLost = () => !document.activeElement || document.activeElement === document.body;
+  // A button disabled while it works drops the focus; it gets it back, or the first neighbour still shown.
+  const refocus = (had, ...nodes) => {
+    if (had && focusLost()) nodes.find((node) => node && !node.hidden && node.isConnected)?.focus();
+  };
   const fromServer = (list) =>
     list.map((e) => ({ name: e.name, keywords: [...e.keywords], content: e.content, priority: e.priority, key: ++serial }));
 
@@ -276,10 +307,12 @@ PA.strings({
     const cancel = button("quiet", t("lore_cancel"), actions, id("cancel"));
     const done = button("secondary", t("lore_done"), actions, id("done"));
     cancel.addEventListener("click", () => {
-      if (entry.isNew) entries.splice(entries.indexOf(entry), 1);
+      const dropped = entry.isNew;
+      if (dropped) entries.splice(entries.indexOf(entry), 1);
       entry.draft = null;
       entry.bad = "";
       render();
+      (dropped ? addButton : root.querySelector(`#lore-${entry.key}-edit`))?.focus();
     });
     done.addEventListener("click", () => {
       const ok = applyDraft(entry);
@@ -310,18 +343,26 @@ PA.strings({
       return;
     }
     const head = el("div", "lore-entry-head", box);
-    el("strong", "lore-entry-name", head, entry.name || entry.keywords[0]);
+    const nameNode = el("strong", "lore-entry-name", head, entry.name || entry.keywords[0]);
+    nameNode.id = `lore-${entry.key}-title`;
     el("span", "lore-entry-priority", head, t("lore_priority", { priority: entry.priority }));
     const actions = el("span", "lore-entry-buttons", head);
     const edit = button("quiet lore-edit", t("lore_edit"), actions, `lore-${entry.key}-edit`);
     const remove = button("quiet lore-delete", t("lore_delete"), actions, `lore-${entry.key}-delete`);
+    // A screen reader hears which entry, not a row of identical "Edit" and "Delete".
+    for (const node of [edit, remove]) node.setAttribute("aria-labelledby", `${node.id} ${nameNode.id}`);
     el("p", "lore-entry-keywords", box, entry.keywords.join(", "));
     el("p", "lore-entry-content", box, entry.content);
+    const placeholder = /\{[a-z_]+\}/.exec(`${entry.content}\n${entry.keywords.join("\n")}`);
+    // The agent fills {admin_name} itself; any other placeholder stays as written.
+    const filled = placeholder && placeholder[0] === "{admin_name}";
+    if (placeholder) el("p", "field-note lore-placeholder", box,
+      t(filled ? "lore_placeholder_admin" : "lore_placeholder", { placeholder: placeholder[0] }));
     edit.addEventListener("click", () => {
       entry.draft = draftOf(entry);
       entry.bad = "";
       render();
-      root.querySelector(`#lore-${entry.key}-keywords`)?.focus();
+      root.querySelector(`#lore-${entry.key}-name`)?.focus();
     });
     remove.addEventListener("click", () => {
       const at = entries.indexOf(entry);
@@ -329,6 +370,9 @@ PA.strings({
       const wasDirty = dirty;
       dirty = true;
       render();
+      // The keyboard stays in the list: the entry that took its place, else the one before.
+      const near = entries[at] || entries[at - 1];
+      (near && !near.draft ? root.querySelector(`#lore-${near.key}-edit`) : addButton).focus();
       PA.toast(t("lore_deleted"), {
         label: t("lore_undo"),
         run: () => {
@@ -417,6 +461,16 @@ PA.strings({
     error.hidden = true;
   }
 
+  const SKIPS = ["disabled", "always_on", "no_keywords", "no_text", "invalid", "duplicate", "present"];
+  function importText(note) {
+    const gap = /^(zh|ja)/.test(PA.lang) ? "" : " ";
+    const parts = [t(note.taken ? "lore_imported" : "lore_imported_none", note)];
+    const skipped = SKIPS.filter((k) => note.reasons[k]).map((k) => t(`lore_skip_${k}`, { n: note.reasons[k] }));
+    if (skipped.length) parts.push(t("lore_skipped", { list: skipped.join(t("lore_list_sep")) }));
+    for (const k of ["always_on", "secondary"]) if (note.partly[k]) parts.push(t(`lore_partly_${k}`, { n: note.partly[k] }));
+    return parts.join(gap);
+  }
+
   function render() {
     title.textContent = t("lore_title");
     lead.textContent = t("lore_lead");
@@ -432,7 +486,7 @@ PA.strings({
     if (errorCode && !error.hidden)
       error.textContent = error.dataset.fields ? t(errorCode, JSON.parse(error.dataset.fields)) : errorText(errorCode);
     importLine.hidden = !importNote;
-    if (importNote) importLine.textContent = t("lore_imported", importNote);
+    if (importNote) importLine.textContent = importText(importNote);
     showUnsaved();
     if (!data) return;
     const failed = data.error && data.error.reason;
@@ -444,7 +498,7 @@ PA.strings({
       " " +
       t("lore_lang", { lang: data.lang });
     source.hidden = !!failed;
-    foldSummary.textContent = t("lore_entries", { count: list.children.length });
+    foldSummary.textContent = t("lore_entries", { count: entries.length });
     fold.hidden = !!failed;
     if (!foldSet) {
       foldSet = true;
@@ -532,7 +586,9 @@ PA.strings({
         return;
       }
       entries.push(...fromServer(fresh));
-      importNote = { taken: fresh.length, skipped: found.skipped + found.entries.length - fresh.length, file: file.name };
+      const reasons = { ...(found.reasons || {}) };
+      if (found.entries.length > fresh.length) reasons.present = found.entries.length - fresh.length;
+      importNote = { taken: fresh.length, file: file.name, reasons, partly: found.partly || {} };
       if (fresh.length) dirty = true;
     } catch (failure) {
       showError(failure.message);
@@ -540,6 +596,7 @@ PA.strings({
       busy = false;
       picker.value = "";
       render();
+      refocus(true, importButton);
     }
   });
 
@@ -558,6 +615,7 @@ PA.strings({
       PA.toast(t("lore_nothing"));
       return;
     }
+    const had = document.activeElement === saveButton;
     busy = "save";
     render();
     try {
@@ -568,6 +626,7 @@ PA.strings({
       const result = await PA.api("lore", payload);
       busy = false;
       take(result);
+      refocus(had, saveButton);
       PA.toast(t(result.restarted ? "lore_saved_restarted" : "lore_saved_later"));
       PA.refresh().catch(() => {});
     } catch (failure) {
@@ -583,6 +642,7 @@ PA.strings({
       }
       showError(failure.message);
       render();
+      refocus(had, saveButton);
     }
   });
 
@@ -596,18 +656,22 @@ PA.strings({
     const name = fileName(data.path);
     if (!(await PA.ask(t("lore_reset_ask", { name }), t("lore_reset_yes")))) return;
     clearError();
+    const had = document.activeElement === resetButton || focusLost();
     busy = "reset";
     render();
     try {
       const result = await PA.api("lore/reset", { stamp: data.stamp });
       busy = false;
       take(result);
+      // The restore button hides once the built-in set is back.
+      refocus(had, resetButton, addButton);
       PA.toast(t(result.restarted ? "lore_reset_restarted" : "lore_reset_later", { name }));
       PA.refresh().catch(() => {});
     } catch (failure) {
       busy = false;
       showError(failure.message);
       render();
+      refocus(had, resetButton);
     }
   });
 

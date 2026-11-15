@@ -91,7 +91,7 @@ personagent
 
 如已安装 [uv](https://docs.astral.sh/uv/)，可直接运行 `uvx personagent`，无需单独安装。在 Windows 上也可以下载源码 ZIP，然后双击 `start.bat`。
 
-在 Windows 上，personagent 会在独立窗口中打开；在 macOS 和 Linux 上则在浏览器中打开。填写模型 API Key 后，点击「验证并开始聊天」。如尚无 Key，可使用默认选中的 OpenRouter 免费模型，其 Key 不收费。`personagent demo` 无需 Key，会播放三段预先编写的场景。[简明入门](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)逐屏介绍了页面的各个部分。
+在 Windows 上，personagent 会在独立窗口中打开；在 macOS 和 Linux 上则在浏览器中打开。填写模型 API Key 后，点击「验证并开始聊天」。默认选中的 OpenRouter 免费模型同样需要 Key：该 Key 不收费，可通过页面上的「获取密钥」到 OpenRouter 申请。`personagent demo` 无需 Key，会播放三段预先编写的场景。[简明入门](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)逐屏介绍了页面的各个部分。
 
 personagent 本身免费。费用支付给你选择的模型服务，按其价格计算。一条消息可能产生不止一次模型请求：除回复本身外，角色有时还会判断是否在群里发言、评估回复得到的反应，或整理记忆。OpenRouter 的免费模型每天限 50 次请求，部分免费服务商会保留收到的内容；Ollama 在你自己的电脑上运行模型，无需 Key。
 

@@ -91,7 +91,7 @@ personagent
 
 With [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separate install step. On Windows you can also download the source ZIP and double-click `start.bat`.
 
-It opens in a window of its own on Windows, and in your browser on macOS and Linux. Paste a model API key and click **Verify & start chatting**. No key yet? OpenRouter's free models are preselected, and their key costs nothing. `personagent demo` plays three scripted scenes with no key at all. The [getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md) walks through the page screen by screen.
+It opens in a window of its own on Windows, and in your browser on macOS and Linux. Paste a model API key and click **Verify & start chatting**. OpenRouter's free models are preselected; they still need a key, which costs nothing and which you get from OpenRouter through **Get an API key** on the page. `personagent demo` plays three scripted scenes with no key at all. The [getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md) walks through the page screen by screen.
 
 personagent is free. You pay the model service you choose, at its own rates. One message can lead to more than one model request: besides the reply, the character at times decides whether to speak in a group, judges how a reply was received, or tidies its memory. OpenRouter's free models allow 50 requests a day, and some free providers keep what they receive; Ollama runs a model on your own computer with no key.
 

@@ -62,14 +62,14 @@ personagent
 
 ## 管好它
 
-以下操作都在本機頁面中完成。相關設定位於「角色與設定」→「進階設定」，點選「儲存」後生效。
+以下操作都在本機頁面中完成。相關設定位於「角色與設定」→「進階設定」，點選「儲存進階設定」後生效。括號中為各項在 `.env` 中的設定名稱；直接修改 `.env` 後，需重新啟動 personagent 才會生效。
 
-- **將自己設為管理員。** 先私訊角色一次，再在「回覆、管理員與回覆範圍」中點選「從最近的聊天中選擇」，在自己的帳號旁點選「這是我」。以掃描連接的 QQ 官方機器人看到的是 openid，而非 QQ 號碼，因此請以這種方式設定。
-- **只在部分群組中回覆。** 在同一清單中為要保留的群組勾選「在此群組中回覆」，或在「僅在以下群組中回覆」中填寫群組編號。某個平台一旦列出任一群組，角色在該平台的其他群組中便不再回覆。
-- **暫停全部回覆。** 關閉「回覆、管理員與回覆範圍」中的第一項「回覆訊息」，儲存前會先確認。角色仍保持連線，但在重新開啟之前不回覆任何訊息。
-- **只在部分群組中暫停。** 在同一清單中為該群組勾選「在此群組中暫停回覆」，或在「在以下群組中暫停回覆」中填寫群組編號。角色在這些群組中不回覆任何訊息，即使被呼叫也不回覆，平台自帶的機器人同樣保持沉默；在其他地方照常回覆。暫停的群組中的訊息既不保留，也不用於學習。將群組移出清單即可恢復。
-- **只在被呼叫時回覆。** 在「發言與回覆風格」中開啟「群組中僅在被呼叫時回覆」。此後在群組中，角色僅在有人提及其名字、@它或回覆它的訊息時才回覆，不會主動加入或發起對話。私訊不受影響。
-- **只讓你來教它。** 在「學習」中開啟「僅從管理員的糾正中學習」。不在「你的帳號」中的人的反應仍會記錄，但其中的建議不會投入使用。請先填寫你的帳號；未填寫時，僅本頁「開始聊天」中的糾正會使角色學習。
+- **將自己設為管理員。** 先私訊角色一次，再在「回覆、管理員與回覆範圍」中點選「從最近的聊天中選擇」，在自己的帳號旁點選「這是我」（`ADMIN_IDS`）。以掃描連接的 QQ 官方機器人看到的是 openid，而非 QQ 號碼，因此請以這種方式設定。
+- **只在部分群組中回覆。** 在同一清單中為要保留的群組勾選「在此群組中回覆」，或在「僅在以下群組中回覆」（`ACCESS_GROUPS`）中填寫群組編號。某個平台一旦列出任一群組，角色在該平台的其他群組中便不再回覆。經掃描連接的 QQ 官方機器人所在群組，編號形如 `qq_official:<id>`，在 QQ 中無法直接看到：請先在該群組中 @ 機器人一次，再透過「從最近的聊天中選擇」勾選。
+- **暫停全部回覆。** 關閉「回覆、管理員與回覆範圍」中的第一項「回覆訊息」（`AGENT_ENABLED`），儲存前會先確認。角色仍保持連線，但在重新開啟之前不回覆任何訊息。
+- **只在部分群組中暫停。** 在同一清單中為該群組勾選「在此群組中暫停回覆」，或在「在以下群組中暫停回覆」（`ACCESS_PAUSED_GROUPS`）中填寫群組編號。角色在這些群組中不回覆任何訊息，即使被點名也不回覆，平台自帶的機器人同樣保持沉默；在其他地方照常回覆。暫停的群組中的訊息既不保留，也不用於學習。將群組移出清單即可恢復。
+- **只在被點名時回覆。** 在「發言與回覆風格」中開啟「群組中僅在被點名時回覆」（`CHAT_ONLY_WHEN_CALLED`）。此後在群組中，角色僅在有人提及其名字、@它或回覆它的訊息時才回覆，不會主動加入或發起對話。私訊不受影響。
+- **只讓你來教它。** 在「學習」中開啟「僅從管理員的糾正中學習」（`REACT_LEARN_ADMIN_ONLY`）。不在「你的帳號」中的人的反應仍會記錄，但其中的建議不會投入使用。請先填寫你的帳號；未填寫時，僅本頁「開始聊天」中的糾正會使角色學習。
 - **復原學到的內容。** 在「動態」中選取該聊天，點選項目旁的「復原」，或執行 `personagent learned rollback <編號>`。
 - **將機器人移出群組。** 請在平台中將機器人移出群組。在「連接平台」中中斷連線只會結束 personagent 的連線，機器人仍是群組成員。
 - **被移出群組或受到限制時。** 機器人被移出的群組只是不再有訊息送達，不需要重新連線。平台封鎖機器人或將其下架時，personagent 直接連線的平台會停止連線，「連接平台」中會顯示原因。
@@ -78,7 +78,7 @@ personagent
 
 - 每次開機後執行 `personagent`。頁面開啟期間，角色服務、直連處理程序和託管的 AstrBot 都會持續執行，已連接的平台會自動恢復連線。如果不想開啟瀏覽器，可以使用 `personagent up`，效果相同。
 - 由它啟動的處理程序會隨它一併結束，無論它以何種方式結束。上次異常結束時遺留的處理程序，會在下次啟動時先行停止。
-- 所有資料都位於一個主目錄中：`.env`（設定）、`persona.txt`（人設）、`runtime/`（學到的內容和記錄檔）、`platforms/`（託管的 AstrBot，以及直連平台的憑證 `direct.json`）。金鑰只儲存在這台電腦上，對話內容會傳送給你選擇的模型服務。
+- 所有資料都位於一個 personagent 資料夾中：`.env`（設定）、`persona.txt`（人設）、`runtime/`（學到的內容和記錄檔）、`platforms/`（託管的 AstrBot，以及直連平台的憑證 `direct.json`）。金鑰只儲存在這台電腦上，對話內容會傳送給你選擇的模型服務。
 - 如需直接修改 `.env`，可以使用記事本編輯，儲存為 UTF-8（不含 BOM），然後重新啟動 `personagent`。
 - 有新版本時，「開始聊天」頁面和終端機會顯示與你的安裝方式對應的更新指令。頁面和 `personagent up` 每天最多向 pypi.org 查詢一次，請求中只包含版本號；在 `.env` 中設定 `UPDATE_CHECK_ENABLED=false` 即可關閉此項檢查。
 - 手動更新：`python -m pip install -U personagent`（以 uv 安裝時，請執行 `uv tool upgrade personagent`）。從 0.x 升級時，如果啟動時提示存在舊的設定名稱，請執行 `personagent doctor --fix`，它會將 `.env` 中的舊名稱改為新名稱，並將原檔案另存為 `.env.bak`。
@@ -88,7 +88,7 @@ personagent
 
 本機頁面側欄中的「動態」會列出角色所在的每個群組與私訊。選取一個聊天後，可以看到它學到的內容及各自的投入使用方式、仍在觀察的內容及各自的進展、它記住的內容，以及近期的訊息：包括它每次發言的原因，以及未發言時的理由。這裡沒有任何內容需要你確認。詳見[使用手冊](guide.zh-TW.md#動態)。
 
-「動態」的資料來自本機頁面所啟動的角色服務，取自它在 `/api/dashboard/` 下的 JSON 介面。僅以 `personagent run` 啟動服務時，請查看服務記錄檔，並使用 `personagent learned` 檢視學到的內容、`personagent memory` 檢視記住的內容。每次呼叫都須帶有 `X-Personagent-Dashboard-Token` 請求標頭，其值為執行目錄（預設 `<主目錄>/runtime/`，可用 `AGENT_RUNTIME_DIR` 修改）中 `dashboard.token` 檔案的內容。此檔案在服務啟動時產生，僅限本人讀取。修改操作還須帶有 `X-Personagent-Dashboard: 1` 和 `Content-Type: application/json`；如果請求帶有 `Origin`，則必須是服務本身的位址。跨站的瀏覽器請求一律拒絕，`CONNECTOR_TOKEN` 也無法存取此介面。傳回內容中的金鑰都會被遮蔽。腳本也可以依相同方式呼叫。設定 `DASHBOARD_ENABLED=false` 會關閉此介面，「動態」也將不顯示內容，`personagent doctor` 會輸出 `activity: off (...)`。
+「動態」的資料來自本機頁面所啟動的角色服務，取自它在 `/api/dashboard/` 下的 JSON 介面。僅以 `personagent run` 啟動服務時，請查看服務記錄檔，並使用 `personagent learned` 檢視學到的內容、`personagent memory` 檢視記住的內容。每次呼叫都須帶有 `X-Personagent-Dashboard-Token` 請求標頭，其值為執行目錄（預設 `<personagent 資料夾>/runtime/`，可用 `AGENT_RUNTIME_DIR` 修改）中 `dashboard.token` 檔案的內容。此檔案在服務啟動時產生，僅限本人讀取。修改操作還須帶有 `X-Personagent-Dashboard: 1` 和 `Content-Type: application/json`；如果請求帶有 `Origin`，則必須是服務本身的位址。跨站的瀏覽器請求一律拒絕，`CONNECTOR_TOKEN` 也無法存取此介面。傳回內容中的金鑰都會被遮蔽。腳本也可以依相同方式呼叫。設定 `DASHBOARD_ENABLED=false` 會關閉此介面，「動態」也將不顯示內容，`personagent doctor` 會輸出 `activity: off (...)`。
 
 角色服務本身不提供網頁，存取 `http://127.0.0.1:8080/` 只會看到一段說明，指向本機頁面和 `personagent learned`；以往的 `?token=` 連結現在也只會開啟這段說明。本機頁面只監聽 127.0.0.1。在沒有本機頁面的伺服器上，可使用 `personagent learned` 檢視角色學到的內容、正在觀察的內容及原因，並可立即啟用、擱置、撤回某項，或恢復由角色或時限擱置、由角色或規則停止使用的內容；`personagent memory` 可列出角色記住的內容，並刪除或還原某一項。
 
@@ -111,11 +111,11 @@ personagent
 
 ## 記憶
 
-角色會為每個聊天保存近期訊息（在 `runtime/recent.json` 中保留 72 小時，重新啟動不會遺失）、此前對話的摘要、附日期的事件、關於成員和群組的事實，以及常駐記憶。較早的訊息離開近期訊息的範圍時，會呼叫一次判斷模型進行記憶整理，更新摘要、事件和事實，每項變更都單獨檢查。每個聊天每天最多整理 16 次，所有聊天合計不超過 `MEMORY_CALLS_PER_DAY`（預設 40）次；設為 0 即關閉。角色自行移除的內容可在 30 天內還原，在頁面或終端機中刪除的內容可在 24 小時內還原；在聊天中要求忘記的內容和「清除此聊天的記憶」都無法還原。在「動態」中選取一個聊天，「記憶」區塊會列出全部內容；在終端機中可使用 `personagent memory`。詳見[使用手冊的記憶一節](guide.zh-TW.md#記憶)。
+角色會為每個聊天儲存近期訊息（在 `runtime/recent.json` 中保留 72 小時，重新啟動不會遺失）、此前對話的摘要、附日期的事件、關於成員和群組的事實，以及常駐記憶。較早的訊息離開近期訊息的範圍時，會呼叫一次判斷模型進行記憶整理，更新摘要、事件和事實，每項變更都單獨檢查。每個聊天每天最多整理 16 次，所有聊天合計不超過 `MEMORY_CALLS_PER_DAY`（預設 40）次；設為 0 即關閉。角色自行移除的內容可在 30 天內還原，在頁面或終端機中刪除的內容可在 24 小時內還原；在聊天中要求忘記的內容和「清除此聊天的記憶」都無法還原。在「動態」中選取一個聊天，「記憶」區塊會列出全部內容；在終端機中可使用 `personagent memory`。詳見[使用手冊的記憶一節](guide.zh-TW.md#記憶)。
 
 ## 機器人未回覆
 
-請依序排查，越前面的原因越常見。角色服務由本機頁面啟動時，請先查看「動態」：聊天是否出現、是否收到訊息、它為何沒有發言，都可以在此查看。在伺服器上，請查看服務記錄檔，學到的內容請以 `personagent learned` 檢視，記住的內容請以 `personagent memory` 檢視。接著查看主目錄下 `runtime/desktop/` 中的記錄檔：`agent.log`（角色服務）、`direct.log`（personagent 直接連線的平台）、`astrbot.log`（其他平台）。
+請依序排查，越前面的原因越常見。角色服務由本機頁面啟動時，請先查看「動態」：聊天是否出現、是否收到訊息、它為何沒有發言，都可以在此查看。在伺服器上，請查看服務記錄檔，學到的內容請以 `personagent learned` 檢視，記住的內容請以 `personagent memory` 檢視。接著查看 personagent 資料夾下 `runtime/desktop/` 中的記錄檔：`agent.log`（角色服務）、`direct.log`（personagent 直接連線的平台）、`astrbot.log`（其他平台）。
 
 1. **訊息未送達。** 在「連接平台」中確認該平台顯示為「已連接」。QQ 機器人必須已在群組中，它在群組中可收到哪些訊息由 QQ 的設定決定；個人微信僅支援私訊。使用第三方 AstrBot 時，請參閱[第三方路線排查](#第三方路線排查)。
 2. **角色服務未啟動，或缺少金鑰。** 在「角色與設定」中重新填寫金鑰並儲存。如果 `.env` 中設定了 `AGENT_ENABLED=false`，請改為 `true` 後重新啟動。
@@ -139,6 +139,7 @@ AstrBot、NapCat（OneBot）、Koishi（經 Satori 聯結器）和 Matrix（經 
 1. 按 [NapCat 文件](https://napneko.github.io/)安裝 NapCat，以手機上的**次要帳號**掃描登入。
 2. 在 personagent 頁面的「連接平台」中選擇「進階 → OneBot v11（NapCat）」，連接埠預設為 `6199`。
 3. 在 NapCat 的網頁中依序點選「網路設定」→「新建」→「WebSockets 客戶端」，勾選「啟用」，URL 填入 `ws://127.0.0.1:6199/ws`，然後儲存。
+4. 在手機 QQ 上把這個次要帳號拉進你的群組。次要帳號必須是群組成員，群組中的訊息才會送達角色。
 
 託管的 AstrBot 會自動安裝 personagent 外掛程式，並寫入 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`。採用此方式時，NapCat 也需要持續執行。
 
@@ -177,7 +178,7 @@ AstrBot 透過外掛程式 `astrbot_plugin_personagent` 將訊息交給 personag
 
 ### 最精簡的可執行設定
 
-本機頁面（`personagent`，或使用 `personagent init --terminal` 的終端機設定精靈）會傳送一個很小的請求以驗證金鑰，然後將 `.env` 寫入主目錄。聊天需要金鑰，`.env.example` 預設使用 OpenRouter 的免費模型：
+本機頁面（`personagent`，或使用 `personagent init --terminal` 的終端機設定精靈）會傳送一個很小的請求以驗證金鑰，然後將 `.env` 寫入 personagent 資料夾。聊天需要金鑰，`.env.example` 預設使用 OpenRouter 的免費模型：
 
 ```
 LLM_API_KEY=...
@@ -185,7 +186,7 @@ LLM_BASE_URL=https://openrouter.ai/api/v1
 LLM_MODEL=openrouter/free
 ```
 
-`.env` 中只寫入金鑰時，位址和模型為 `https://api.deepseek.com` 和 `deepseek-flash`。兩者可以指向任何相容 OpenAI 的介面，無論是託管服務或本機服務（Ollama、llama.cpp）皆可。API 位址請依服務商文件貼上，根位址或 `.../v1`、`.../api/paas/v4` 這類帶版本的位址皆可。在你寫好 `persona.txt` 之前，使用的是套件內附的 `data/persona.example.<lang>.txt`。在設定 `PERSONA_NAME` 之前（設定流程會寫入），角色名稱為 "bot"。
+這兩行不可省略：`.env` 中只寫入金鑰時，使用的是程式內建的預設值，即 DeepSeek 的 `https://api.deepseek.com` 和 `deepseek-flash`，而不是 OpenRouter。兩者可以指向任何相容 OpenAI 的介面，無論是託管服務或本機服務（Ollama、llama.cpp）皆可。API 位址請依服務商文件貼上，根位址或 `.../v1`、`.../api/paas/v4` 這類帶版本的位址皆可。在你寫好 `persona.txt` 之前，使用的是套件內附的 `data/persona.example.<lang>.txt`。在設定 `PERSONA_NAME` 之前（設定流程會寫入），角色名稱為 "bot"。
 
 頁面還會寫入 `PERSONA_NAME`、`AGENT_LANG` 和一個 `CONNECTOR_TOKEN`。從頁面連接的平台不需要在 `.env` 中另外寫入任何內容。其憑證存放於 `<home>/platforms/`：`direct.json` 儲存 personagent 直接連線的平台，其餘平台由託管的 AstrBot 儲存在其本身的設定中。選用的補充設定：
 
@@ -234,11 +235,11 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 
 ### 主機需求
 
-1. **可寫入的主目錄。** 啟動時會鎖定 `<home>/.personagent.instance.lock`，該檔案位於 `runtime/` 之外。主目錄為唯讀時無法啟動。
-2. **每個主目錄僅一個處理程序。** 同一主目錄上的第二個 `personagent run` 會結束，並以一句話說明原因。
+1. **可寫入的 personagent 資料夾。** 啟動時會鎖定 `<home>/.personagent.instance.lock`，該檔案位於 `runtime/` 之外。personagent 資料夾為唯讀時無法啟動。
+2. **每個 personagent 資料夾僅一個處理程序。** 同一 personagent 資料夾上的第二個 `personagent run` 會結束，並以一句話說明原因。
 3. **可用的連接埠。** 連接埠已被佔用或遭到禁止時也會結束，並以一句話說明原因。請以 `--port` 或 `SERVER_PORT` 改用其他連接埠。
 
-`AGENT_RUNTIME_DIR` 必須解析至主目錄之內，否則啟動失敗。相對路徑的 `PERSONA_FILE` 或 `PERSONA_CARD_FILE` 也以主目錄為基準解析，因此存放於其他位置的人設須使用絕對路徑。
+`AGENT_RUNTIME_DIR` 必須解析至 personagent 資料夾之內，否則啟動失敗。相對路徑的 `PERSONA_FILE` 或 `PERSONA_CARD_FILE` 也以 personagent 資料夾為基準解析，因此存放於其他位置的人設須使用絕對路徑。
 
 `memory.json`、`core_memory.json` 或 `episodes.json` 損毀時，啟動會以結束代碼 2 停止，並以一句話指出損毀的檔案，以及應換上的 `.bak` 副本。損毀的檔案維持原樣。
 
@@ -297,7 +298,7 @@ AstrBot 位於 Docker 中或另一台主機上時，請參閱[使用手冊](guid
 
 #### 透過 NapCat（OneBot）接入 QQ
 
-此方式以個人 QQ 帳號取代官方機器人。你需要一個已在目標群組中的 QQ 次要帳號，請勿使用自己的主要帳號（請參閱 [DISCLAIMER.zh-TW.md](DISCLAIMER.zh-TW.md)）。該帳號登入一個 OneBot v11 實作（通常以掃描登入，工作階段在重新啟動後仍會保留），該實作再連接 AstrBot 的 `aiocqhttp` 配接器。[NapCat](https://github.com/NapNeko/NapCatQQ) 已經過測試，它附加於 QQ NT 桌面用戶端之上。LLOneBot 和 Lagrange 是其他的 OneBot v11 實作。
+此方式以個人 QQ 帳號取代官方機器人。你需要一個已在目標群組中的 QQ 次要帳號，請勿使用自己的主要帳號（請參閱 [DISCLAIMER.zh-TW.md](DISCLAIMER.zh-TW.md)）。該帳號登入一個 OneBot v11 實作（通常以掃描登入，工作階段在重新啟動後仍會保留），該實作再連接 AstrBot 的 `aiocqhttp` 配接器。[NapCat](https://github.com/NapNeko/NapCatQQ) 已經過測試，它附加於 QQ NT 桌面用戶端之上。LLOneBot 和 Lagrange 是其他的 OneBot v11 實作。請先把該次要帳號拉進每個目標群組：它成為群組成員之前，群組中的訊息不會送達角色。
 
 使用託管的 AstrBot 時，請在本機頁面新增「進階 → OneBot v11（NapCat）」，並讓 NapCat 指向 `ws://127.0.0.1:6199/ws`。[第三方路線](#第三方路線astrbot--napcat)一節有逐步說明。使用你自己的 AstrBot 時，請從外掛程式的 `excluded_platforms` 移除 `aiocqhttp`，設定 `CONNECTOR_QQ_PLATFORMS=aiocqhttp`（`--qq` 會同時完成這兩項），並設定 `QQ_BOT_ID`（`personagent connect astrbot` 會詢問）。
 
@@ -360,13 +361,13 @@ AstrBot 位於 Docker 中或另一台主機上時，請參閱[使用手冊](guid
 ### 費用
 
 - **探測會產生費用。** `personagent doctor` 和 `/health/details` 會向角色實際呼叫的每個模型傳送一個很小的聊天請求：群組和私訊回覆、網路搜尋判斷、反應判斷（`REACT_LEARN_ENABLED` 開啟時）、自我審查（`EVAL_ENABLED` 開啟時）和視覺。設定了 `EMBEDDING_MODEL` 時還會傳送一次嵌入請求，設定了 `TAVILY_API_KEY` 時還會進行一次 Tavily 搜尋。`/health` 以及設定和學習紀錄檢查均為免費。
-- **模型用量會被統計。** 每次模型請求都按模型、按日統計，依據是服務方回傳的用量，服務方提供費用時一併記錄。`personagent doctor` 輸出今日與近 7 日的用量，本機頁面的「應用程式」頁面也顯示相同的數據。統計檔案在背景寫入，每分鐘最多一次，停止執行時再寫入一次。
+- **模型用量會被統計。** 每次模型請求都按模型、按日統計，依據是服務方回傳的用量，服務方提供費用時一併記錄。`personagent doctor` 輸出今日與近 7 日的用量，本機頁面的「應用程式」頁面也顯示相同的資料。統計檔案在背景寫入，每分鐘最多一次，停止執行時再寫入一次。一次請求即一次模型呼叫，一則訊息通常會產生多次請求；「應用程式」頁面還會依用途列出今日的請求。強制結束程序可能遺失最後一分鐘的統計。
 - **學習與記憶。** 角色每次自行判斷學習項目時，呼叫一次 `PROMOTE_JUDGE_MODEL`，每隔 `PROMOTE_JUDGE_INTERVAL_S` 最多 `PROMOTE_JUDGE_BATCH` 次。記憶整理每處理一段聊天呼叫一次 `LLM_JUDGE_MODEL`，每個聊天每天最多 16 次，所有聊天合計每天不超過 `MEMORY_CALLS_PER_DAY`（40）次。設定 `PROMOTE_JUDGE_ENABLED=false` 和 `MEMORY_CALLS_PER_DAY=0` 即可分別關閉。
 - **`tools/` 中的腳本**各不相同，部分免費，部分會呼叫模型。[tools.zh-TW.md](tools.zh-TW.md) 的表格逐一註明。
 - **`personagent eval`** 對每個測試案例都會呼叫模型，`memory` 測試集除外：它以預設的回答離線執行。人設和學習兩組測試案例還需要第二個模型擔任裁判（`BENCH_JUDGE_MODEL`）。
 - **記憶。** 帶命名空間（非 QQ）的對話超過 256 個時，閒置最久的對話會從記憶體中移除，並失去待處理的反應。移除前會先整理其尚未整理的訊息；除非設定 `MEMORY_KEEP_RECENT=false`，其近期訊息會在 `runtime/recent.json` 中保留 72 小時。事實、事件、核心筆記和學習紀錄會保留。正在處理請求的對話不會被清除。長期記憶在啟動時從磁碟載入，不受此上限限制。
-- **磁碟。** `runtime/` 中的證據記錄檔和候選項目記錄檔只會追加，從不截斷。任一檔案超過 50 MB 時，`personagent doctor` 會加以標示（`LEDGER_EVIDENCE_WARN_BYTES`、`LEDGER_CANDIDATES_WARN_BYTES`）。記憶檔案始終較小：`recent.json` 只保存最近 72 小時內活躍的聊天，`memory_trash.jsonl` 中被移除的內容最多保留 30 天。每天第一次修改之前，`memory.json`、`core_memory.json` 和 `episodes.json` 會複製為同名的 `.bak` 檔案；本版本首次啟動時，會將舊的記憶檔案保留為 `memory.json.pre-v2`。使用「清除此聊天的記憶」或在聊天中要求忘記之後，`.bak` 副本會依目前的檔案重新寫入，`memory.json.pre-v2` 也會刪去被忘記的內容，因此 `runtime/` 中不會留下任何副本；但先前製作的備份仍保有這些內容。請備份 `runtime/`，因為機器人學到和記住的所有內容都在其中。
-- **聊天紀錄。** 每個聊天在 `runtime/log/` 中的紀錄保留 `MEMORY_LOG_DAYS`（30）天、最多 5,000 行，每天清理一次。它沒有 `.bak` 副本，從不放入備份，各種刪除都會作用於它。依據聊天紀錄複核事實隨記憶整理呼叫一併進行；安靜的聊天每天最多進行一次單獨的複核呼叫，計入 `MEMORY_CALLS_PER_DAY`。
+- **磁碟。** `runtime/` 中的證據記錄檔和候選項目記錄檔只會追加，從不截斷。任一檔案超過 50 MB 時，`personagent doctor` 會加以標示（`LEDGER_EVIDENCE_WARN_BYTES`、`LEDGER_CANDIDATES_WARN_BYTES`）。記憶檔案始終較小：`recent.json` 只儲存最近 72 小時內活躍的聊天，`memory_trash.jsonl` 中被移除的內容最多保留 30 天。每天第一次修改之前，`memory.json`、`core_memory.json` 和 `episodes.json` 會複製為同名的 `.bak` 檔案；本版本首次啟動時，會將舊的記憶檔案保留為 `memory.json.pre-v2`。使用「清除此聊天的記憶」或在聊天中要求忘記之後，`.bak` 副本會依目前的檔案重新寫入，`memory.json.pre-v2` 也會刪去被忘記的內容，因此記憶檔案的副本中不會留下這些內容；但先前製作的備份仍保有這些內容，本頁面自己的聊天（`runtime/desktop/browser-chat.json`）也會保留到「新對話」或「清除本頁面的聊天記憶」為止，但在該聊天中要求的忘記已從中移除的部分除外。請備份 `runtime/`，因為機器人學到和記住的所有內容都在其中。
+- **聊天紀錄。** 每個聊天在 `runtime/log/` 中的紀錄保留 `MEMORY_LOG_DAYS`（30）天、最多 5,000 行，每天清理一次。它沒有 `.bak` 副本，從不放入備份，各種刪除都會作用於它。依據聊天紀錄複核事實隨記憶整理呼叫一併進行；安靜的聊天每天最多進行一次單獨的複核呼叫，計入 `MEMORY_CALLS_PER_DAY`。但備份中包含 `recent.json` 和 `pending_reactions.json`，其中儲存著近期的聊天原文。
 
 ### 完整排查清單
 

@@ -979,6 +979,31 @@ async def dashboard_forget_chat(request: Request):
     return _json({"ok": True, "forgotten": count}, agent)
 
 
+def forget_hit(query: str):
+    """Whether a line holds what a forget asked for, matched as the character
+    matches it: whole words in a spaced script, a substring in CJK."""
+    from .addressing import _HAS_CJK
+    if _HAS_CJK.search(query):
+        return lambda text: query in text
+    edge = "A-Za-z0-9_" if query.isascii() else r"\w"
+    word = re.compile(rf"(?<![{edge}]){re.escape(query)}(?![{edge}])", re.IGNORECASE)
+    return lambda text: bool(word.search(text))
+
+
+@router.post("/api/dashboard/memory/forget_recent", include_in_schema=False)
+async def dashboard_forget_recent(request: Request):
+    """After a forget in a chat: the recent lines Activity shows lose the words too."""
+    parsed, refused = await _memory_write(request)
+    if refused is not None:
+        return refused
+    conv = _conv_of(parsed)
+    query = str(parsed.get("query") or "")
+    if not conv or not 0 < len(query) <= 512:
+        return _refused(400, "invalid_id", "give a conversation id and the words")
+    cut = decision_log.LOG.drop_where(conv, forget_hit(query))
+    return _json({"ok": True, "removed": cut}, _server().agent)
+
+
 @router.get("/api/dashboard/memory/list", include_in_schema=False)
 async def dashboard_memory_list(request: Request, conv: str = ""):
     """What `personagent memory` lists while the service runs."""

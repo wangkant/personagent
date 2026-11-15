@@ -2011,12 +2011,17 @@ class TextProcessing:
     @staticmethod
     def _delivery_units(
             segments: list[tuple[str, str]],
-            cap: int = MAX_REPLY_MESSAGES) -> list[tuple[str, str]]:
+            cap: int = MAX_REPLY_MESSAGES, *, by_line: bool = False) -> list[tuple[str, str]]:
         """One (kind, value) per message, at most `cap`: overflow text folds into
-        the last bubble, overflow stickers are dropped."""
+        the last bubble, overflow stickers are dropped. `by_line`: one message
+        per line of the text, never cut inside a line (a memory command's answer)."""
+        def chunks(value: str) -> list[str]:
+            if by_line:
+                return [line.strip() for line in value.split("\n") if line.strip()] or [value]
+            return TextProcessing._split_text(value)
+
         units = [(kind, chunk) for kind, value in segments
-                 for chunk in ((value,) if kind == "sticker"
-                               else TextProcessing._split_text(value))]
+                 for chunk in ((value,) if kind == "sticker" else chunks(value))]
         cap = max(1, min(cap, MAX_REPLY_MESSAGES))
         if len(units) <= cap:
             return units

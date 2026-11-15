@@ -301,3 +301,9 @@ def test_the_page_keeps_focus_codes_and_one_dark_button():
     row = body[body.index("function row("):body.index("function cooldownRow(")]
     assert "primary" not in row
     assert body.count('"primary small') == 2 and 'info.connected ? "secondary' in body
+
+
+def test_each_connect_and_remove_button_names_its_assistant():
+    js = (welcome.ASSETS / "panels" / "agents.js").read_text(encoding="utf-8")
+    assert 'go.setAttribute("aria-labelledby", `${go.id} ${title.id}`)' in js
+    assert 'off.setAttribute("aria-labelledby", `${off.id} ${title.id}`)' in js

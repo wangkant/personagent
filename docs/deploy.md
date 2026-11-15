@@ -21,8 +21,9 @@ LLM_BASE_URL=https://openrouter.ai/api/v1
 LLM_MODEL=openrouter/free
 ```
 
-A `.env` that sets only the key means `https://api.deepseek.com` and
-`deepseek-flash`. You can point them at any OpenAI-compatible endpoint,
+Keep those two lines: a `.env` that sets only the key uses the code's own
+defaults, DeepSeek's `https://api.deepseek.com` and `deepseek-flash`, not
+OpenRouter. You can point them at any OpenAI-compatible endpoint,
 hosted or local (Ollama, llama.cpp). Paste the API address the way the
 provider documents it, either a root or a version base such as `.../v1` or
 `.../api/paas/v4`. Until you write a `persona.txt`, the bundled
@@ -224,32 +225,36 @@ AstrBot connection for the same platform.
 
 Everything below is done on the local page. The settings are under
 **Character & settings** → **Advanced settings** and apply when you click
-**Save**.
+**Save advanced settings**. Each control's setting in `.env` is named in brackets; a change
+made in `.env` itself takes effect after personagent restarts.
 
 - **Make yourself the admin.** Send the character one private message, then
   under **Replies, admin and access** click **Choose from recent chats** and click
-  **This is me** next to your account. This is the way on the official QQ
+  **This is me** (`ADMIN_IDS`) next to your account. This is the way on the official QQ
   bot, which sees an openid instead of your QQ number.
 - **Reply only in some groups.** In the same list, tick **Reply in this
   group** for each group to keep, or enter the ids under **Reply only in
-  these groups**. Once one group of a platform is listed, the character no
-  longer replies in that platform's other groups.
-- **Pause all replies.** Turn off **Reply to messages**, the first setting
+  these groups** (`ACCESS_GROUPS`). Once one group of a platform is listed, the character no
+  longer replies in that platform's other groups. A group that reaches the
+  official QQ bot connected by QR code has an id of the form
+  `qq_official:<id>`, which QQ itself does not show: mention the bot once in
+  that group, then pick the group with **Choose from recent chats**.
+- **Pause all replies.** Turn off **Reply to messages** (`AGENT_ENABLED`), the first setting
   under **Replies, admin and access**. The character stays connected and
   replies to nothing until you turn it back on. Saving asks first.
 - **Pause some groups only.** Tick **Stay silent here** next to a group in
-  the same list, or enter its id under **Stay silent in these groups**. The
+  the same list, or enter its id under **Stay silent in these groups** (`ACCESS_PAUSED_GROUPS`). The
   character replies to nothing there, not even when addressed, and a
   platform's own bot stays quiet too; it keeps replying everywhere else.
   Messages in a paused group are neither kept nor learned from. Remove the
   group to resume.
 - **Reply only when addressed.** Turn on **In groups, reply only when
-  addressed** under **Speaking and reply style**. In groups the character
+  addressed** (`CHAT_ONLY_WHEN_CALLED`) under **Speaking and reply style**. In groups the character
   then answers only when someone uses its name, mentions it or replies to
   its message, and never joins in or starts a conversation by itself.
   Private chats are not affected.
 - **Let only you teach it.** Turn on **Learn only from the admin's
-  corrections** under **Learning**. Reactions from anyone not under **Your
+  corrections** (`REACT_LEARN_ADMIN_ONLY`) under **Learning**. Reactions from anyone not under **Your
   accounts** are still recorded, but nothing they suggest is put into use.
   List your accounts first; with none listed, only corrections made under
   **Chat** on this page teach it.
@@ -356,7 +361,9 @@ second QQ account in the target groups, not your own (see
 session that survives restarts, to a OneBot v11 implementation connected to
 AstrBot's `aiocqhttp` adapter. [NapCat](https://github.com/NapNeko/NapCatQQ)
 is tested and attaches to the QQ NT desktop client. LLOneBot and Lagrange
-are other OneBot v11 implementations.
+are other OneBot v11 implementations. Add that account to each group
+yourself: until it is a member, no message from the group reaches the
+character.
 
 On the managed AstrBot, add **Advanced > OneBot v11 (NapCat)** on the local
 page and point NapCat at `ws://127.0.0.1:6199/ws`. The
@@ -503,7 +510,10 @@ add any proxy or tunnel, even on one host.
   day from the usage the provider reports, with the cost where the provider
   reports it. `personagent doctor` prints today and the last 7 days, and the
   App view of the local page shows the same. The tally file is written in the
-  background, at most once a minute and once more at shutdown.
+  background, at most once a minute and once more at shutdown. A request is
+  one model call, and one message usually leads to several; the App view also
+  splits today's requests by purpose. A forced stop can lose the last minute's
+  counts.
 - **Learning and memory.** The character's own learning decisions cost one
   call each on `PROMOTE_JUDGE_MODEL`, at most `PROMOTE_JUDGE_BATCH` every
   `PROMOTE_JUDGE_INTERVAL_S`. Memory consolidation costs one call per stretch
@@ -532,13 +542,17 @@ add any proxy or tunnel, even on one host.
   and the first start of this version keeps the old memory file as
   `memory.json.pre-v2`. After **Forget this chat** or a forget asked for in
   chat, the `.bak` copies are written again from the current files and
-  `memory.json.pre-v2` loses what was forgotten, so no copy in `runtime/`
-  keeps it; a backup made earlier still does. Back up `runtime/`, because it holds
+  `memory.json.pre-v2` loses what was forgotten, so no copy of the memory
+  files keeps it; a backup made earlier still does, and so does the page's
+  own chat (`runtime/desktop/browser-chat.json`) until **New chat** or
+  **Forget this page's chats**, except what a forget asked for in that chat
+  removed from it. Back up `runtime/`, because it holds
   everything the bot has learned and remembers.
 - **Chat record.** Each chat's record in `runtime/log/` keeps its lines for
   `MEMORY_LOG_DAYS` (30) days and at most 5,000 lines, and is pruned once a
   day. It has no `.bak` copy, is never put in a backup, and every kind of
-  forgetting reaches it. Reviewing facts against it rides on consolidation
+  forgetting reaches it. A backup does hold `recent.json` and
+  `pending_reactions.json`, which keep recent chat text. Reviewing facts against it rides on consolidation
   calls, and a quiet chat gets at most one review-only call a day, inside
   `MEMORY_CALLS_PER_DAY`.
 

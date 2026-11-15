@@ -618,3 +618,24 @@ def test_empty_pool_returns_nothing() -> None:
         a = make_agent(Path(d))
         check("rank: empty pool yields no examples block",
               a._examples_for_prompt(focus_text="anything", mode="called") == "")
+
+
+def test_a_lorebook_entry_names_the_admin_instead_of_its_placeholder() -> None:
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        a = make_agent(tmp)
+        a.lorebook_file = tmp / "lorebook.json"
+        a.lorebook_file.write_text(json.dumps([
+            {"name": "owner", "keywords": ["your dad", "{admin_name}"],
+             "content": "Someone is teasing {admin_name}."},
+        ]), encoding="utf-8")
+        a.admin_name = "Morgan"
+        check("the placeholder is filled with the admin's name",
+              "teasing Morgan." in a._lorebook_for_prompt([], focus_text="your dad"))
+        check("and the admin's name is a keyword",
+              "teasing Morgan." in a._lorebook_for_prompt([], focus_text="morgan again"))
+        a.admin_name = ""
+        got = a._lorebook_for_prompt([], focus_text="your dad")
+        check("without a name the entry speaks of the admin", "teasing the admin." in got, got)
+        check("and the bare placeholder matches nothing",
+              a._lorebook_for_prompt([], focus_text="{admin_name}") == "")

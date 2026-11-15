@@ -15,7 +15,7 @@
 
 *이 문서는 영어 README를 번역한 것입니다. 기준이 되는 영어 README가 더 최신일 수 있습니다.*
 
-personagent는 사용자의 컴퓨터에서 실행되며, 저장하는 모든 내용을 그 컴퓨터에 둡니다. QQ, WeChat, Telegram, Discord와 그 밖의 18개 플랫폼의 그룹 채팅과 개인 채팅, 사용자의 컴퓨터에 있는 창, Claude Code, Codex 같은 코딩 어시스턴트 등 사용하는 모든 곳에서 작동합니다. 캐릭터는 직접 고르거나 쓸 수 있으며, OpenAI 호환 모델이라면 어떤 모델로든 실행됩니다.
+personagent는 사용자의 컴퓨터에서 실행되며, 저장하는 모든 내용을 그 컴퓨터에 둡니다. QQ, WeChat, Telegram, Discord와 그 밖의 18개 플랫폼의 그룹 채팅과 개인 메시지, 사용자의 컴퓨터에 있는 창, Claude Code, Codex 같은 코딩 어시스턴트 등 사용하는 모든 곳에서 작동합니다. 캐릭터는 직접 고르거나 쓸 수 있으며, OpenAI 호환 모델이라면 어떤 모델로든 실행됩니다.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/wangkant/personagent/main/docs/welcome.jpg" alt="로컬 페이지의 플랫폼 연결 화면. 스캔하거나 값 몇 개를 붙여넣어 연결하는 플랫폼, 접힌 고급 플랫폼, 참여할 수 있는 코딩 어시스턴트가 표시되어 있습니다" width="960">
@@ -29,7 +29,7 @@ personagent는 사용자의 컴퓨터에서 실행되며, 저장하는 모든 �
 <tr>
 <td width="220" valign="top"><strong>고유한 캐릭터를 지닙니다.</strong></td>
 <td valign="top">
-준비된 성격은 7가지입니다. 그중 셋은 커뮤니티에서 이미 그려 온 캐릭터인 DeepSeek 고래 소녀, GPT 드래곤 소녀, Claude 아가씨로, 초상화가 눈을 깜빡이고, 생각하고, 말합니다.<br>
+준비된 성격은 7가지입니다. 그중 셋은 커뮤니티에서 이미 그려 온 캐릭터인 DeepSeek쨩, GPT쨩, Claude쨩으로, 초상화가 눈을 깜빡이고, 생각하고, 말합니다.<br>
 페르소나는 언제든 다시 쓸 수 있습니다. 캐릭터가 배운 것은 그대로 남습니다.
 </td>
 </tr>
@@ -68,7 +68,7 @@ personagent는 사용자의 컴퓨터에서 실행되며, 저장하는 모든 �
 <tr>
 <td width="220" valign="top"><strong>모든 플랫폼에 연결됩니다.</strong></td>
 <td valign="top">
-채팅 플랫폼 22개를 한 페이지에서 휴대폰 스캔 한 번이나 값 몇 개를 붙여 넣어 연결합니다. 대부분은 그룹 채팅과 개인 채팅을 모두 지원합니다.<br>
+채팅 플랫폼 22개를 한 페이지에서 휴대폰 스캔 한 번이나 값 몇 개를 붙여 넣어 연결합니다. 대부분은 그룹 채팅과 개인 메시지를 모두 지원합니다.<br>
 같은 에이전트가 사용자의 컴퓨터에 있는 창에서도, Claude Code, Codex, DeepSeek Harness 안에서도 답합니다.<br>
 그 밖의 플랫폼은 AstrBot, Koishi, Matrix 브리지 또는 직접 작성한 커넥터를 통해 추가할 수 있습니다.
 </td>
@@ -93,7 +93,7 @@ personagent
 
 [uv](https://docs.astral.sh/uv/)가 있다면 `uvx personagent`로 별도 설치 없이 실행할 수 있습니다. Windows에서는 소스 ZIP을 내려받아 `start.bat`을 더블클릭해도 됩니다.
 
-Windows에서는 전용 창에서 열리고, macOS와 Linux에서는 브라우저에서 열립니다. 모델 API 키를 붙여 넣고 **확인 후 채팅 시작**을 누르십시오. 아직 키가 없습니까? OpenRouter의 무료 모델이 미리 선택되어 있고, 그 키는 무료입니다. `personagent demo`는 키 없이 대본이 있는 장면 세 개를 보여 줍니다. [시작 가이드](https://github.com/wangkant/personagent/blob/main/docs/start.ko.md)가 페이지를 화면별로 안내합니다.
+Windows에서는 전용 창에서 열리고, macOS와 Linux에서는 브라우저에서 열립니다. 모델 API 키를 붙여 넣고 **확인 후 채팅 시작**을 누르십시오. 미리 선택된 OpenRouter의 무료 모델도 키가 필요합니다. 키는 무료이며, 페이지의 **API 키 발급**을 통해 OpenRouter에서 받을 수 있습니다. `personagent demo`는 키 없이 대본이 있는 장면 세 개를 보여 줍니다. [시작 가이드](https://github.com/wangkant/personagent/blob/main/docs/start.ko.md)가 페이지를 화면별로 안내합니다.
 
 personagent는 무료입니다. 비용은 선택한 모델 서비스에, 그 서비스의 요금대로 냅니다. 메시지 하나가 모델 요청 여러 번으로 이어질 수 있습니다. 답장 외에도 캐릭터는 때때로 그룹에서 말할지 판단하거나, 답장이 어떻게 받아들여졌는지 판단하거나, 기억을 정리합니다. OpenRouter의 무료 모델은 하루 50회까지 요청할 수 있고, 일부 무료 제공자는 받은 내용을 보관합니다. Ollama는 키 없이 사용자의 컴퓨터에서 모델을 실행합니다.
 
@@ -135,7 +135,7 @@ PyPI에 새 버전이 올라오면 페이지에 알림과 업데이트 명령이
 
 ## 개인정보
 
-personagent가 저장하는 모든 것은 사용자 컴퓨터의 홈 폴더 하나에 남습니다. 선택한 모델 제공자는 자신이 답하는 대화를 보게 되며, personagent는 하루에 한 번 pypi.org에 새 버전이 나왔는지 묻습니다(`UPDATE_CHECK_ENABLED=false`로 끌 수 있습니다). 실제 사람들과 연결하기 전에 봇이라는 사실을 알리고 동의를 받으십시오. 무엇이 어디로 가는지는 [가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#개인정보와-동의)에 나와 있습니다.
+personagent가 저장하는 모든 것은 사용자 컴퓨터의 personagent 폴더 하나에 남습니다. 선택한 모델 제공자는 자신이 답하는 대화를 보게 되며, personagent는 하루에 한 번 pypi.org에 새 버전이 나왔는지 묻습니다(`UPDATE_CHECK_ENABLED=false`로 끌 수 있습니다). 실제 사람들과 연결하기 전에 봇이라는 사실을 알리고 동의를 받으십시오. 무엇이 어디로 가는지는 [가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#개인정보와-동의)에 나와 있습니다.
 
 ## 문서
 

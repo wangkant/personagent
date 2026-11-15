@@ -75,7 +75,7 @@ SPEC = Spec(
                         "welches denn? sag mehr"),
         "nothing_to_forget": ("äh, hab ich mir nie gemerkt", "davon weiß ich nix",
                               "nichts Passendes zum Vergessen"),
-        "forgotten": ("vergessen", "weg damit", "gelöscht"),
+        "forgotten": ("vergessen", "weg damit", "ist vergessen"),
         "empty": ("Kopf ist leer", "da ist nix drin", "komplett leer"),
         "recall_head": ("Das weiß ich noch:",),
         "said": ("du hast gesagt: ",),

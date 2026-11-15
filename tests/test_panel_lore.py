@@ -181,17 +181,28 @@ def test_a_sillytavern_world_info_export_is_converted():
         "2": {"uid": 2, "key": [], "content": "Always on, no keyword.", "constant": True},
         "3": {"uid": 3, "key": ["empty"], "content": ""},
         "4": {"uid": 4, "key": "port, harbour", "content": "The port.", "order": 99999},
+        "5": {"uid": 5, "key": ["Lin"], "keysecondary": ["coffee"], "selective": True, "content": "Lin and coffee."},
+        "6": {"uid": 6, "key": ["sea"], "constant": True, "content": "The sea is always near."},
+        "7": {"uid": 7, "key": ["port", "harbour"], "content": "The port."},
+        "8": {"uid": 8, "key": ["x" * 101], "content": "Too long a keyword."},
+        "9": "not an entry",
     }}
-    entries, skipped = lore.convert(export)
-    assert skipped == 3
-    assert entries == [
+    entries, skipped, partly = lore.convert(export)
+    assert skipped == {"disabled": 1, "always_on": 1, "no_keywords": 0, "no_text": 1, "invalid": 2,
+                       "duplicate": 1}
+    assert partly == {"always_on": 1, "secondary": 1}
+    assert entries[:2] == [
         {"name": "Captain", "keywords": ["Ayla", "the captain"], "content": "Ayla runs the ship.", "priority": 250},
         {"name": "port", "keywords": ["port", "harbour"], "content": "The port.", "priority": 9999}]
+    assert [e["keywords"] for e in entries[2:]] == [["Lin"], ["sea"]]
     # The older list shape and a character card's embedded book.
     book = {"entries": [{"keys": ["moon"], "content": "Moon.", "enabled": True, "insertion_order": 5},
                         {"keys": ["sun"], "content": "Sun.", "enabled": False}]}
-    assert lore.convert(book) == ([{"name": "moon", "keywords": ["moon"], "content": "Moon.", "priority": 5}], 1)
-    assert lore.convert({"data": {"character_book": book}})[1] == 1
+    taken, skipped, _ = lore.convert(book)
+    assert taken == [{"name": "moon", "keywords": ["moon"], "content": "Moon.", "priority": 5}]
+    assert skipped["disabled"] == 1
+    assert lore.convert({"data": {"character_book": book}})[1]["disabled"] == 1
+    assert lore.convert({"entries": [{"key": [], "content": "No keyword."}]})[1]["no_keywords"] == 1
 
 
 def test_a_personagent_file_is_taken_as_is_and_unknown_files_are_refused(client):
@@ -199,10 +210,13 @@ def test_a_personagent_file_is_taken_as_is_and_unknown_files_are_refused(client)
                        {"keywords": ["gym"], "content": "The cave.", "priority": 120}]}
     body = post(client, {"data": own}, "/api/lore/import").json()
     assert body == {"entries": [{"name": "gym", "keywords": ["gym"], "content": "The cave.", "priority": 120}],
-                    "skipped": 1}
+                    "skipped": 1, "reasons": {"duplicate": 1}, "partly": {}}
     assert post(client, {"data": {"name": "card"}}, "/api/lore/import").json()["error"] == "lore_import_unknown"
-    assert post(client, {"data": {"entries": [{"key": [], "content": ""}]}},
-                "/api/lore/import").json()["error"] == "lore_import_empty"
+    # Nothing usable is still an answer, with the reasons the page reports.
+    empty = post(client, {"data": {"entries": [{"key": [], "content": "x", "constant": True},
+                                               {"key": ["a"], "content": "", "disable": True}]}},
+                 "/api/lore/import").json()
+    assert empty == {"entries": [], "skipped": 2, "reasons": {"always_on": 1, "disabled": 1}, "partly": {}}
     huge = {"data": {"entries": [{"keywords": ["a"], "content": "x" * 1000}] * 1100}}
     assert post(client, huge, "/api/lore/import").status_code == 413
 
@@ -304,3 +318,20 @@ def test_every_error_the_panel_raises_has_words_on_the_page():
         assert key == "lore_invalid" or key in found, code
     for field in lore.FIELDS:
         assert f"lore_err_{field}" in found
+
+
+def test_every_skip_reason_has_words_on_the_page():
+    found = tables()["en"]
+    for reason in (*lore.SKIP_REASONS, "present"):
+        assert f"lore_skip_{reason}" in found, reason
+    for kind in lore.PARTLY:
+        assert f"lore_partly_{kind}" in found, kind
+
+
+def test_entry_buttons_name_their_entry_and_keep_the_keyboard():
+    code = SCRIPT.read_text(encoding="utf-8").split("PA.strings")[1].split("});", 1)[1]
+    assert 'node.setAttribute("aria-labelledby", `${node.id} ${nameNode.id}`)' in code
+    # Editing starts at the first field; a deletion or a save leaves the focus in the panel.
+    assert "#lore-${entry.key}-name`)?.focus()" in code.split('edit.addEventListener("click"')[1].split("});")[0]
+    assert "refocus(had, saveButton)" in code and "refocus(true, importButton)" in code
+    assert 't("lore_entries", { count: entries.length })' in code

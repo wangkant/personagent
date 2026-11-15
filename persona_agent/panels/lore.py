@@ -26,12 +26,14 @@ DEFAULT_PRIORITY = 100
 # A whole lorebook or an imported file is larger than the page's usual request.
 MAX_REQUEST = 1_000_000
 FIELDS = ("keywords", "content", "name", "priority")
+# Why an imported entry was left out, and what an entry lost on the way in.
+SKIP_REASONS = ("disabled", "always_on", "no_keywords", "no_text", "invalid", "duplicate")
+PARTLY = ("always_on", "secondary")
 _SPLIT = re.compile(r"[,，、\n]")
 
 ERRORS: frozenset[str] = frozenset(
     {f"lore_invalid:{i}:{field}" for i in range(MAX_ENTRIES) for field in FIELDS}
-    | {"lore_too_many", "lore_unknown", "lore_changed", "lore_import_unknown",
-       "lore_import_empty"})
+    | {"lore_too_many", "lore_unknown", "lore_changed", "lore_import_unknown"})
 
 
 def _bad(index: int, field: str) -> ValueError:
@@ -91,9 +93,18 @@ def _int_or(value, default: int) -> int:
     return max(PRIORITY_RANGE[0], min(PRIORITY_RANGE[1], number))
 
 
-def convert(data) -> tuple[list[dict], int]:
-    """(entries, skipped) from personagent's own lorebook or a SillyTavern World
-    Info export; disabled entries and those without keywords or text are skipped."""
+def _skip_reason(shaped: dict, error: ValueError) -> str:
+    field = str(error).rsplit(":", 1)[-1]
+    if field == "keywords" and not _keywords(shaped.get("keywords")):
+        return "no_keywords"
+    if field == "content" and not str(shaped.get("content") or "").strip():
+        return "no_text"
+    return "invalid"
+
+
+def convert(data) -> tuple[list[dict], dict[str, int], dict[str, int]]:
+    """(entries, skipped by reason, what was taken only in part) from personagent's
+    own lorebook or a SillyTavern World Info export."""
     if isinstance(data, dict) and isinstance(data.get("data"), dict) \
             and isinstance(data["data"].get("character_book"), dict):
         data = data["data"]["character_book"]  # a character card with its book inside
@@ -104,11 +115,17 @@ def convert(data) -> tuple[list[dict], int]:
         raw = list(raw.values()) if isinstance(raw, dict) else raw
     else:
         raise ValueError("lore_import_unknown")
-    entries, skipped = [], 0
+    entries: list[dict] = []
+    skipped = dict.fromkeys(SKIP_REASONS, 0)
+    partly = dict.fromkeys(PARTLY, 0)
     for item in raw:
-        if not isinstance(item, dict) or item.get("disable") is True or item.get("enabled") is False:
-            skipped += 1
+        if not isinstance(item, dict):
+            skipped["invalid"] += 1
             continue
+        if item.get("disable") is True or item.get("enabled") is False:
+            skipped["disabled"] += 1
+            continue
+        always = item.get("constant") is True
         if "keywords" in item:
             shaped = item
         else:
@@ -118,16 +135,24 @@ def convert(data) -> tuple[list[dict], int]:
                       "content": item.get("content"),
                       "name": item.get("comment") or item.get("name") or "",
                       "priority": _int_or(order, DEFAULT_PRIORITY)}
+        if always and not _keywords(shaped.get("keywords")):
+            # Every entry here waits for a keyword; an always-on one has none to wait for.
+            skipped["always_on"] += 1
+            continue
         try:
             entry = clean_entry(shaped, len(entries))
-        except ValueError:
-            skipped += 1
+        except ValueError as error:
+            skipped[_skip_reason(shaped, error)] += 1
             continue
         if any(e["keywords"] == entry["keywords"] and e["content"] == entry["content"] for e in entries):
-            skipped += 1
+            skipped["duplicate"] += 1
             continue
         entries.append(entry)
-    return entries, skipped
+        if always:
+            partly["always_on"] += 1
+        if _keywords(item.get("keysecondary", item.get("secondary_keys"))):
+            partly["secondary"] += 1
+    return entries, skipped, partly
 
 
 def _stamp(path: Path) -> str:
@@ -239,11 +264,12 @@ class Lore:
 
     @staticmethod
     def import_file(payload: dict) -> dict:
-        """Entries converted from an uploaded file; nothing is written until saved."""
-        entries, skipped = convert(payload.get("data"))
-        if not entries:
-            raise ValueError("lore_import_empty")
-        return {"entries": entries, "skipped": skipped}
+        """Entries converted from an uploaded file; nothing is written until saved.
+        A file with nothing usable still answers, so the page can say why."""
+        entries, skipped, partly = convert(payload.get("data"))
+        return {"entries": entries, "skipped": sum(skipped.values()),
+                "reasons": {k: n for k, n in skipped.items() if n},
+                "partly": {k: n for k, n in partly.items() if n}}
 
 
 async def _read(request: Request) -> dict:

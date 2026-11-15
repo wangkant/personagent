@@ -78,6 +78,8 @@ def test_a_stopped_home_is_read_and_edited_through_its_files(home, capsys) -> No
     capsys.readouterr()
     core = json.loads((home / "runtime" / "core_memory.json").read_text(encoding="utf-8"))
     check("core: gone", "telegram:c1" not in core, repr(core))
+    check("forgetting it again says there is none", run("forget", "core") == 1
+          and "There is no always-present note to forget." in capsys.readouterr().out)
     check("an unknown id is refused", run("forget", "zzz") == 1
           and "No item has that id." in capsys.readouterr().out)
     check("json: the data", run("list", "--json") == 0

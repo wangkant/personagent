@@ -61,7 +61,7 @@ SPEC = Spec(
         "forget_what": ("¿olvidar qué? dime cuál", "¿cuál? explícate un poco"),
         "nothing_to_forget": ("eh, eso nunca lo apunté", "no me suena de nada",
                               "no hay nada así que olvidar"),
-        "forgotten": ("olvidado", "borrado", "fuera"),
+        "forgotten": ("olvidado", "borrado", "hecho, olvidado"),
         "empty": ("tengo la cabeza vacía", "ahí no hay nada", "en blanco"),
         "recall_head": ("Esto es lo que recuerdo:",),
         "said": ("dijiste: ",),

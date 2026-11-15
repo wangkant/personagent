@@ -27,7 +27,7 @@ personagent 有兩種方式接入聊天平台。QQ 官方機器人、個人微�
 
 ## 立繪署名
 
-DeepSeek 鯨魚娘、GPT 娘（白龍）和 Claude 娘的立繪是為 personagent 繪製的，參照的是社群中既有的形象。鯨魚娘源自 Bilibili 創作者上善无形的原創角色溟月（CC BY-NC-SA 4.0），身穿 ZipZipPipe 為她設計的女僕裝。GPT 娘參照 ZipZipPipe 的白龍。Claude 娘參照一個社群形象，最初的繪師已不可考。這些立繪另行採用 CC BY-NC-SA 4.0 授權：請保留署名，不得用於商業目的，修改後須以相同授權分享。詳見 `persona_agent/static/characters/LICENSE.md`。
+DeepSeek 娘（鯨魚）、GPT 娘（白龍）和 Claude 娘的立繪是為 personagent 繪製的，參照的是社群中既有的形象。DeepSeek 娘源自 Bilibili 創作者上善无形的原創角色溟月（CC BY-NC-SA 4.0），身穿 ZipZipPipe 為她設計的女僕裝。GPT 娘參照 ZipZipPipe 的白龍。Claude 娘參照一個社群形象，最初的繪師已不可考。這些立繪另行採用 CC BY-NC-SA 4.0 授權：請保留署名，不得用於商業目的，修改後須以相同授權分享。詳見 `persona_agent/static/characters/LICENSE.md`。
 
 ## 模型服務商可見的內容
 

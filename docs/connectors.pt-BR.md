@@ -24,7 +24,7 @@ personagent run --port 8080
 curl http://127.0.0.1:8080/health
 ```
 
-`personagent run` serve os dois endpoints descritos abaixo em `127.0.0.1`. Ele lê `CONNECTOR_TOKEN` do `.env` da pasta inicial indicada no aviso de inicialização; `--home DIR` escolhe outra.
+`personagent run` serve os dois endpoints descritos abaixo em `127.0.0.1`. Ele lê `CONNECTOR_TOKEN` do `.env` da pasta do personagent indicada no aviso de inicialização; `--home DIR` escolhe outra.
 
 - Com `CONNECTOR_TOKEN` vazio, o agente aceita apenas programas da mesma máquina que chamam `127.0.0.1` ou `localhost`, e eles não enviam cabeçalhos de autenticação. `personagent init` o deixa vazio. A página local, `personagent up` e `personagent connect astrbot` gravam um valor aleatório quando ele está vazio.
 - Para definir um, coloque um valor aleatório longo no `.env`, por exemplo a saída de `python -c "import secrets; print(secrets.token_urlsafe(32))"`, configure o mesmo valor no conector e reinicie o agente.
@@ -62,7 +62,7 @@ Os dois endpoints abaixo usam o mesmo esquema. Quando `CONNECTOR_TOKEN` está de
 - `X-Personagent-Nonce`: um valor aleatório novo. Um nonce reutilizado é recusado.
 - `X-Personagent-Signature`: `sha256=` seguido do HMAC-SHA256 em hexadecimal de `timestamp + "." + nonce + "." + body`, com o token como chave.
 
-A assinatura cobre os bytes do corpo exatamente como são enviados, então qualquer JSON válido em UTF-8 é aceito. JSON canônico (chaves ordenadas, separadores compactos e não ASCII sem escape) é recomendado, e os conectores incluídos o enviam, mas o agente não o exige. O token também é a chave de assinatura, então mantenha-o fora dos logs.
+A assinatura cobre os bytes do corpo exatamente como são enviados, então qualquer JSON válido em UTF-8 é aceito. JSON canônico (chaves ordenadas, separadores compactos e não ASCII sem escape) é recomendado, e os conectores incluídos o enviam, mas o agente não o exige. O token também é a chave de assinatura, então mantenha-o fora dos registros.
 
 Sem token, o agente só aceita programas locais que chamam `127.0.0.1` ou `localhost` diretamente. Um conector deve se recusar a enviar para qualquer coisa que não seja uma URL de loopback ou uma URL HTTPS com token.
 
@@ -131,8 +131,8 @@ A resposta é assim:
 ```
 
 - `replies`: envie em ordem, cada uma como uma mensagem separada. Quando `mention_user_id` está presente, é o id com prefixo a mencionar. Exiba a menção da forma usada pela plataforma. Um item com `"reason": "excuse"` é a mensagem curta que o personagem envia em uma conversa privada quando o modelo falhou, não uma resposta. Envie-o como os demais ou trate-o como um erro.
-- `owned`: o agente assumiu a mensagem, porque ela passou pelas listas de permissão do agente, independentemente do que a persona faça depois. Quando é verdadeiro, impeça qualquer outra lógica de bot de responder, mesmo que `replies` esteja vazio, porque a persona pode ter optado por permanecer em silêncio. Quando é falso, o agente não participou da mensagem: a conversa não está nas listas de permissão do agente ou o agente não consegue responder de forma alguma (sem `LLM_API_KEY`, ou `AGENT_ENABLED=false`). Quando o agente não consegue responder, o log dele traz uma linha ERROR com a causa. Um `message_id` repetido pertence ao próprio agente (veja "Mensagens repetidas" abaixo).
-- `handled`: verdadeiro quando o próprio turno desta solicitação entregou algo, uma resposta ou o resultado de um comando de memória. Serve para logs e estatísticas. Decida com base em `owned` e envie o que estiver em `replies`, seja qual for o valor de `handled`: uma mensagem `excuse`, por exemplo, vem com `handled: false`.
+- `owned`: o agente assumiu a mensagem, porque ela passou pelas listas de permissão do agente, independentemente do que a persona faça depois. Quando é verdadeiro, impeça qualquer outra lógica de bot de responder, mesmo que `replies` esteja vazio, porque a persona pode ter optado por permanecer em silêncio. Quando é falso, o agente não participou da mensagem: a conversa não está nas listas de permissão do agente ou o agente não consegue responder de forma alguma (sem `LLM_API_KEY`, ou `AGENT_ENABLED=false`). Quando o agente não consegue responder, o registro dele traz uma linha ERROR com a causa. Um `message_id` repetido pertence ao próprio agente (veja "Mensagens repetidas" abaixo).
+- `handled`: verdadeiro quando o próprio turno desta solicitação entregou algo, uma resposta ou o resultado de um comando de memória. Serve para registros e estatísticas. Decida com base em `owned` e envie o que estiver em `replies`, seja qual for o valor de `handled`: uma mensagem `excuse`, por exemplo, vem com `handled: false`.
 
 As combinações que um conector encontra:
 
@@ -145,7 +145,7 @@ As combinações que um conector encontra:
 
 Outras regras:
 
-- **Mensagens repetidas.** O agente lembra as últimas 2.000 mensagens que admitiu, de todas as conversas. A chave é formada por `platform`, pela conversa (o `conversation_id` de um grupo, o `sender_id` de uma conversa privada) e por `message_id`; para uma plataforma em `CONNECTOR_QQ_PLATFORMS`, é o `message_id` sem prefixo. A lista é salva de tempos em tempos, e ao encerrar, na pasta `runtime/` da pasta inicial, então ela sobrevive a uma reinicialização. Uma mensagem enviada de novo, como uma reentrega da plataforma ou uma nova tentativa após um tempo esgotado, recebe `{"handled": false, "owned": true, "replies": []}` na hora, mesmo enquanto a primeira solicitação ainda está em andamento. Não envie nada para ela; as respostas dela vêm só na primeira. Um turno continua quando quem o chamou desiste, então, após um tempo esgotado, as respostas se perdem; reserve tempo suficiente em vez de tentar de novo. Uma mensagem recusada pelas listas de permissão não é lembrada e é avaliada de novo quando reenviada.
+- **Mensagens repetidas.** O agente lembra as últimas 2.000 mensagens que admitiu, de todas as conversas. A chave é formada por `platform`, pela conversa (o `conversation_id` de um grupo, o `sender_id` de uma conversa privada) e por `message_id`; para uma plataforma em `CONNECTOR_QQ_PLATFORMS`, é o `message_id` sem prefixo. A lista é salva de tempos em tempos, e ao encerrar, na pasta `runtime/` da pasta do personagent, então ela sobrevive a uma reinicialização. Uma mensagem enviada de novo, como uma reentrega da plataforma ou uma nova tentativa após um tempo esgotado, recebe `{"handled": false, "owned": true, "replies": []}` na hora, mesmo enquanto a primeira solicitação ainda está em andamento. Não envie nada para ela; as respostas dela vêm só na primeira. Um turno continua quando quem o chamou desiste, então, após um tempo esgotado, as respostas se perdem; reserve tempo suficiente em vez de tentar de novo. Uma mensagem recusada pelas listas de permissão não é lembrada e é avaliada de novo quando reenviada.
 - **Mensagens enviadas em sequência.** Mensagens de uma conversa que chegam dentro de um debounce curto (2,5 segundos, ou 5 segundos após uma mensagem de grupo que apenas chama a persona pelo nome) formam um único turno, que responde a todas juntas. Mensagens que aguardam atrás de um turno em andamento também são lidas no turno seguinte. Só a solicitação da mensagem mais recente traz as respostas; cada solicitação anterior retorna `{"handled": false, "owned": true, "replies": []}`. Em um grupo, o `mention_user_id` de uma resposta indica a pessoa a quem a persona responde, que pode ter enviado uma mensagem anterior, e não aquela cuja solicitação traz a resposta. Comandos de memória não são combinados; veja o último item.
 - A solicitação dura até o turno terminar, que é um debounce curto mais o tempo do modelo. As chamadas ao modelo de um turno dividem um único orçamento de 1,5 × `LLM_TIMEOUT_S`, novas tentativas incluídas, tanto em um grupo quanto em uma conversa privada, e uma mensagem que chega enquanto um turno anterior da sua conversa ainda está pensando aguarda esse turno terminar antes de começar o seu. Reserve pelo menos 3 × `LLM_TIMEOUT_S` segundos (360 com o padrão).
 - Um comando de memória (como "remember ...") que chega enquanto um turno da sua conversa ainda está pensando é respondido depois desse turno. Um conector que declarou `outbox` recebe `{"handled": false, "owned": true, "replies": []}` na hora e o resultado depois, como uma entrega `follow_up`. Sem `outbox`, o resultado vem na resposta a uma solicitação: a dele mesmo ou a de outra solicitação em espera da mesma conversa, então uma resposta pode trazer `replies` que mencionam outra pessoa que não o remetente do evento.
@@ -191,7 +191,7 @@ O agente segura a solicitação por até `wait_s` segundos (no máximo 30) até 
 
 `items` tem a mesma forma de `replies`. `reason` é `proactive`, `follow_up` ou `excuse`, e `conversation_type` é `group` ou `dm`. `conversation_key` é a chave sob a qual o agente guarda a conversa, como `private:telegram:42` para uma conversa privada. `conversation_id` é o id bruto que o evento trouxe, que em uma conversa privada é o id do usuário. O agente lembra `reply_handle`, `connector_id` e `capabilities` do último evento admitido em cada conversa, então uma conversa fica alcançável depois de enviar uma mensagem. Uma exceção mantém em seu lugar um conector que busca a caixa de saída: um evento de um conector sem a capacidade `outbox` não substitui o que outro conector com essa capacidade guardou para a mesma conversa. Assim, um conector que busca a caixa de saída continua alcançando a conversa depois que outro programa, como um assistente de programação, falou nela. Um evento do mesmo conector, ou de qualquer conector que declare `outbox`, substitui os valores guardados como antes.
 
-A página local é, ela própria, um conector de caixa de saída, com o `connector_id` `local-welcome`. Ela recebe apenas as entregas da conversa da própria página e as mostra na visão Conversa.
+A página local é, ela própria, um conector de caixa de saída, com o `connector_id` `local-welcome`. Ela recebe apenas as entregas da conversa da própria página e as mostra na tela Conversa.
 
 Informe cada entrega em `acks` na próxima consulta:
 
@@ -204,7 +204,7 @@ Informe cada entrega em `acks` na próxima consulta:
 | `refused` | O conector não permite mais a conversa. |
 | `unsupported` | A plataforma não consegue enviar por conta própria para esta conversa. |
 
-Qualquer outro `status` conta como `failed`, e o log do agente informa isso uma vez.
+Qualquer outro `status` conta como `failed`, e o registro do agente informa isso uma vez.
 
 Regras:
 
@@ -219,7 +219,7 @@ Um 404 sem `code` significa que o agente não oferece a caixa de saída. Um `404
 
 ## Erros
 
-Um erro responde `{"error": "...", "code": "..."}`. `code` é estável, então baseie suas decisões nele. `error` é uma frase para quem lê um log, e o texto pode mudar.
+Um erro responde `{"error": "...", "code": "..."}`. `code` é estável, então baseie suas decisões nele. `error` é uma frase para quem lê um registro, e o texto pode mudar.
 
 | Status | `code` | Endpoint | Causa |
 |---|---|---|---|

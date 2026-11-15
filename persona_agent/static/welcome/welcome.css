@@ -52,6 +52,15 @@ body {
   line-break: strict;
   word-break: auto-phrase;
 }
+/* Korean spaces its words: break at the spaces, never inside a word. */
+:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+/* The scroll bar comes and goes between views; its room stays, so nothing shifts. */
+html {
+  scrollbar-gutter: stable;
+}
 ::selection {
   background: var(--select);
 }
@@ -60,6 +69,13 @@ input,
 select,
 textarea {
   font: inherit;
+}
+/* A field clips Microsoft YaHei UI's low underscore ("bilibili_share" read as
+   "bilibili share"): Latin text in a field takes Segoe UI before system-ui. */
+input,
+textarea {
+  font-family: "Inter", -apple-system, "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei UI",
+    "Microsoft YaHei", sans-serif;
 }
 button,
 a,
@@ -192,6 +208,11 @@ a:hover {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+/* A long label wraps beside its dot, not under it. */
+.sidebar-bottom > span[data-t="local"] {
+  flex: 1;
+  min-width: 0;
 }
 .sidebar-bottom small {
   flex-basis: 100%;
@@ -472,7 +493,8 @@ input:hover,
 select:hover {
   background: var(--hover);
 }
-/* The line thickens inside the box, so nothing moves. */
+/* The line thickens inside the box, so nothing moves; a form field's fill
+   deepens too, so the keyboard's place shows at a glance. */
 input:focus,
 select:focus,
 textarea:focus,
@@ -480,6 +502,15 @@ textarea:focus,
 .composer:focus-within {
   outline: none;
   box-shadow: inset 0 -2px 0 var(--ink);
+}
+input:focus,
+select:focus,
+.key-field:focus-within,
+:not(.composer) > textarea:focus {
+  background: var(--deep);
+}
+.key-field input:focus {
+  background: transparent;
 }
 .label-line {
   display: flex;
@@ -580,6 +611,8 @@ details[open] summary {
   padding: 28px 24px 22px;
   border-radius: var(--radius);
   background: var(--side);
+  /* Centred lines: no word or character left alone on the last one. */
+  text-wrap: balance;
 }
 .avatar {
   position: relative;
@@ -843,6 +876,10 @@ details[open] summary {
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
+.persona-count.over {
+  color: var(--error);
+  font-weight: 600;
+}
 .side-card h2 {
   margin-bottom: 4px;
 }
@@ -939,6 +976,19 @@ label.check input:checked {
 .gs-title {
   color: var(--muted);
   margin-right: 4px;
+}
+.replies-off {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+  line-height: 1.6;
+}
+.replies-off-text {
+  flex: 1;
+  min-width: 0;
+}
+.replies-off .quiet {
+  flex-shrink: 0;
+  color: var(--warn-text);
 }
 .gs-step {
   display: inline-flex;
@@ -2179,8 +2229,15 @@ button:active:not(:disabled) {
   .topbar {
     padding: 0 16px 0 20px;
   }
+  /* Only the dot: a warning still shows, and the title and the screen reader say it. */
   .status-pill {
-    display: none;
+    font-size: 0;
+    gap: 0;
+    padding: 0 6px;
+  }
+  .status-pill::before {
+    width: 8px;
+    height: 8px;
   }
   .chat-page {
     height: calc(100dvh - 48px);
@@ -2350,7 +2407,9 @@ button:active:not(:disabled) {
 /* Without a title bar the window's buttons take the right end of the top bar. */
 @media (max-width: 960px) {
   body.frameless .status-pill {
-    display: none;
+    font-size: 0;
+    gap: 0;
+    padding: 0 6px;
   }
 }
 @media (max-width: 600px) {

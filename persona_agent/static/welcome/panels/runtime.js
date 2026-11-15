@@ -236,7 +236,7 @@ PA.strings({
       }
     }
     const actions = make("div", "card-actions runtime-actions");
-    const check = button("quiet", PA.t(busy === "check" ? "runtime_checking" : "runtime_check"),
+    const check = button("secondary", PA.t(busy === "check" ? "runtime_checking" : "runtime_check"),
       () => call("check", "runtime/check", {}), "runtime-check");
     check.disabled = Boolean(busy);
     actions.append(check);

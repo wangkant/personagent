@@ -5,6 +5,11 @@
 .desk-card .feature > .secondary {
   margin-left: -10px;
 }
+/* A long state beside the title takes the narrow column, not the title (u38: one character on its own line). */
+.desk-card .feature-head > strong {
+  flex: none;
+  max-width: 50%;
+}
 .desk-warn {
   color: var(--warn-text);
 }

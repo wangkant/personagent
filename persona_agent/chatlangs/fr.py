@@ -74,7 +74,7 @@ SPEC = Spec(
         "nothing_to_forget": ("euh, j'ai jamais noté ça", "ça me dit rien",
                               "rien de tel à oublier"),
         "forgotten": ("oublié", "effacé", "c'est oublié"),
-        "empty": ("j'ai la tête vide", "y a rien là-dedans", "page blanche"),
+        "empty": ("j'ai la tête vide", "y a rien là-dedans", "j'ai rien retenu pour l'instant"),
         "recall_head": ("Voilà ce dont je me souviens :",),
         "said": ("tu as dit : ",),
         "about": ("sur {name} : ",),

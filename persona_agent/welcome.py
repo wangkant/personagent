@@ -43,6 +43,7 @@ from . import setup_wizard as sw
 from . import updates
 from . import window as appwindow
 from .astrbot_install import AstrBotInstallation, install_astrbot
+from .config_env import env_bool
 from .services import Services, stop_leftovers
 from .storage import FileLock, LockUnavailable, atomic_write_text, dated_copy
 from .storage import replace as storage_replace
@@ -127,6 +128,31 @@ def keep_recent(messages: list[dict]) -> tuple[list[dict], bool]:
     return kept[first:], True
 
 
+class _CommandReader:
+    """The character's own reading of a memory command, without the character:
+    its name, the nicknames on its card and the language it speaks."""
+
+    def __init__(self) -> None:
+        from .memory import Memory
+        self._parse = functools.partial(Memory._parse_memory_command, self)
+        self._memory_cmd_patterns = functools.partial(Memory._memory_cmd_patterns, self)
+        self.persona_name, self.persona_aliases, self.chat_lang = "", (), "en"
+
+    def read(self, text: str, name: str, aliases: tuple, lang: str):
+        self.persona_name, self.persona_aliases, self.chat_lang = name, aliases, lang
+        return self._parse(text)
+
+
+def _card_aliases(home: Path, values: dict) -> tuple:
+    try:
+        card = json.loads((home / (values.get("PERSONA_CARD_FILE") or "persona.card.json")).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ()
+    raw = card.get("aliases") if isinstance(card, dict) else None
+    names = (" ".join(a.split()) for a in raw if isinstance(a, str)) if isinstance(raw, list) else ()
+    return tuple(dict.fromkeys(n for n in names if n))
+
+
 def chat_failure(error: BaseException) -> str:
     # The character itself did not start: a different thing to fix than a reply that failed.
     return "agent_failed" if str(error).startswith("agent ") else "chat_failed"
@@ -173,6 +199,7 @@ class Workspace:
         self._lock = threading.RLock()
         self._chat_lock = asyncio.Lock()
         self._forgetting = False
+        self._commands = None
         self._pulling = False
         self._future = None
         self._closed = False
@@ -253,6 +280,8 @@ class Workspace:
                     "ownAvatar": self._own_avatar_version(own_picture),
                     "platforms": platforms, "platformStatus": status,
                     "agentRunning": self.services.running("agent"),
+                    # "Reply to messages" is off: running, yet it answers nobody.
+                    "repliesOff": not env_bool("AGENT_ENABLED", True, env=values),
                     "platformRunning": self.services.running("astrbot") or direct_on, "job": job,
                     "features": self._features(values)}
 
@@ -298,11 +327,14 @@ class Workspace:
                 key = old.get("LLM_API_KEY", "")
             if provider.key == "ollama":
                 key = key or "ollama"
+            if not key and old.get("LLM_API_KEY"):
+                # The saved key belongs to the service it was saved for.
+                raise ValueError("key_again")
             if not key or len(key) > 4096:
                 raise ValueError("key_required")
             if not key.isascii() or any(c.isspace() for c in key):
                 # Pasted with other words around it: no service would take it.
-                raise ValueError("key_rejected")
+                raise ValueError("key_malformed")
             base = _endpoint(base)
             model = str(payload.get("model") or provider.model).strip()
             if not model or len(model) > 256:
@@ -320,7 +352,9 @@ class Workspace:
                     raise ValueError("invalid_character")
             name = str(payload.get("name") or own or old.get("PERSONA_NAME")
                        or sw.DEFAULT_NAMES[lang]).strip()
-            if not name or len(name) > 64 or _expands(name):
+            if not name:
+                raise ValueError("name_required")
+            if len(name) > 64 or _expands(name):
                 raise ValueError("invalid_character")
             # dotenv would read ${VAR} back as another setting, a key included.
             if _expands(key):
@@ -949,11 +983,93 @@ class Workspace:
                 # The model failed: here the admin checks the setup, so it is reported, not chatted about.
                 self._unanswered(said, "chat_failed")
                 raise RuntimeError("the model did not answer")
-            self._append(self._entries(items))
+            entries = self._entries(items)
+            command = self._memory_command(text) if entries else None
+            for entry in entries:
+                # An answer to a memory command is shown whole at once, not typed out.
+                if command:
+                    entry["command"] = command[0]
+            self._append(entries)
+            dropped, query = self._drop_forgotten(command, said, entries)
             self._save_chat()
+            if query:
+                # Activity's recent lines lose the words too.
+                with contextlib.suppress(ValueError):
+                    await self._activity_call("POST", "/api/dashboard/memory/forget_recent",
+                                              json={"conv": self._page_key(), "query": query})
             reply = "\n".join(str(i.get("text", "")) for i in items if i.get("type") == "text")
+            if dropped:
+                # Earlier messages went: the page draws the chat afresh.
+                return {"reply": reply, "forgotLines": dropped, **self.history()}
             since = said["seq"] - 1 if after is None else after
             return {"reply": reply, **self.history(since)}
+
+    def _memory_command(self, text: str):
+        """(kind, argument, chat language) when the character reads `text` as a
+        memory command; None for conversation or when it cannot be told."""
+        values = self.config()
+        try:
+            if self._commands is None:
+                self._commands = _CommandReader()
+            return self._commands.read(text, values.get("PERSONA_NAME", "").strip(),
+                                       _card_aliases(self.home, values),
+                                       langs.normalize(values.get("AGENT_LANG")) or "en")
+        except Exception:
+            return None
+
+    def _drop_forgotten(self, command, said: dict, answer: list[dict]) -> tuple[int, str]:
+        """After a forget the character carried out, the page's own record of
+        the forgotten words goes too: each earlier message holding them and the
+        replies that answered it. The command and its answer stay. How many
+        went, and the words; (0, "") when nothing was forgotten."""
+        if not command or command[0] != "forget":
+            return 0, ""
+        from . import chatlangs
+        from .dashboard import forget_hit
+        from .memory import _forget_query, _loosely_names
+        spec = chatlangs.SPECS.get(command[2])
+        if spec is None:
+            return 0, ""
+        done = {str(s).strip().lower() for s in spec.replies.get("forgotten", ())}
+        if not any(str(e.get("text") or "").strip().lower() in done for e in answer):
+            return 0, ""
+        query = _forget_query(command[1], spec)
+        exact = forget_hit(query)
+
+        def hit(text: str) -> bool:
+            # As the character found its note: word for word, or in another form of the words.
+            return exact(text) or _loosely_names(query, text, spec.stopwords)
+
+        rows = self._history
+        fixed = {id(said), *(id(e) for e in answer)}
+        gone: set[int] = set()
+        dropping = False
+        for i, message in enumerate(rows):
+            if id(message) in fixed:
+                dropping = False
+                continue
+            text = str(message.get("text") or "")
+            if message.get("role") == "user":
+                dropping = hit(text)
+            if dropping or hit(text):
+                gone.add(i)
+        for i in sorted(gone):
+            # One line of a memory answer went: its other lines ("Here is what
+            # I remember:") and the question that asked for them go with it.
+            if not rows[i].get("command"):
+                continue
+            first = last = i
+            while first > 0 and rows[first - 1].get("command") and id(rows[first - 1]) not in fixed:
+                first -= 1
+            while (last + 1 < len(rows) and rows[last + 1].get("command")
+                   and id(rows[last + 1]) not in fixed):
+                last += 1
+            if first > 0 and rows[first - 1].get("role") == "user" \
+                    and id(rows[first - 1]) not in fixed:
+                first -= 1
+            gone.update(range(first, last + 1))
+        self._history = [m for i, m in enumerate(rows) if i not in gone]
+        return len(gone), query
 
     def _unanswered(self, said: dict, code: str) -> None:
         """Kept, marked, so the person can see which message went unanswered and send it again."""
@@ -1015,7 +1131,9 @@ class Workspace:
         chats = [{"id": str(c.get("id", "")), "platform": str(c.get("platform", "")),
                   "kind": str(c.get("kind", "")), "last": c.get("last_activity", 0),
                   "observing": int(c.get("observing", 0)), "learned": int(c.get("learned", 0)),
-                  "latest": float(c.get("latest") or 0), "notes": int(c.get("memories", 0))}
+                  "latest": float(c.get("latest") or 0), "notes": int(c.get("memories", 0)),
+                  # This page's chat now, as against one "New chat" left behind.
+                  "current": str(c.get("id", "")) == self._page_key()}
                  for c in raw.get("conversations", [])]
         return {"running": True, "off": False, "chats": chats}
 
@@ -1322,6 +1440,7 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     async def bad_value(request, exc):
         allowed = {"busy", "invalid_provider", "key_required", "invalid_url", "https_required",
                    "model_required", "invalid_character", "key_rejected", "model_limited", "model_unreachable",
+                   "key_malformed", "key_again", "name_required",
                    "vision_unsupported",
                    "permission_required", "invalid_message", "invalid_platform",
                    "field_required", "invalid_field", "invalid_persona", "invalid_feature",

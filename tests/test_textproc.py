@@ -2637,6 +2637,17 @@ def test_one_reply_cannot_fan_out_past_the_message_cap() -> None:
           == [("sticker", "a")])
 
 
+def test_a_memory_answer_goes_out_one_whole_line_per_message() -> None:
+    long_line = ("1 memory, 0 replies and 0 fixes learned, 0 under observation until "
+                 "another agreeing reaction arrives, 0 under my own review")
+    answer = "Here's what I remember:\nyou said: hi\n" + long_line
+    check("a chat reply wraps a long line",
+          len(TP._delivery_units([("text", long_line)])) > 1)
+    check("a memory answer keeps each line whole, one message each",
+          TP._delivery_units([("text", answer)], by_line=True)
+          == [("text", "Here's what I remember:"), ("text", "you said: hi"), ("text", long_line)])
+
+
 def test_a_single_character_trigger_still_scores_for_retrieval() -> None:
     """The n-grams are taken per CJK RUN, which is what the docstring always
     claimed and the code never did: it slid a 2-window over every hanzi in the

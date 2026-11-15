@@ -33,8 +33,8 @@ from persona_agent import access, candidates, channels, evidence, home, langs, p
 from persona_agent.access import ADMIN_MODE
 from persona_agent.agent import Agent
 from persona_agent.connector import ConnectorSink, current_sink
-from persona_agent.decision import (GATED_MODES, choose_group_mode, is_pass_sentinel,
-                                    pacing_skip)
+from persona_agent.decision import (GATED_MODES, ONLY_WHEN_CALLED, choose_group_mode,
+                                    is_pass_sentinel, pacing_skip)
 from persona_agent.llm import _status_of
 from persona_agent.memstore import MemoryFileDamaged
 from persona_agent.prompt import BUFFERED_LINE_CHARS
@@ -109,6 +109,7 @@ _TEXT = {
         "quiet": "({name} stays quiet: {reason})",
         "joins": "({name} joins in: {reason})",
         "below": "not addressed, {count} of {trigger} messages",
+        "only_called": "not addressed; set to reply in groups only when addressed",
         "short": ("not addressed, {count} of {trigger} messages so far; this one "
                   "is too short to count (under 4 characters)"),
         "trigger_count": "{count} of {trigger} messages",
@@ -220,11 +221,12 @@ _TEXT = {
         "quiet": "（{name}未发言：{reason}）",
         "joins": "（{name}主动发言：{reason}）",
         "below": "未被点名，已累计 {count}/{trigger} 条消息",
+        "only_called": "未被点名；已设置为群聊中仅在被点名时回复",
         "short": "未被点名，目前已累计 {count}/{trigger} 条消息；此条消息过短（少于 4 个字符），不计入",
         "trigger_count": "已累计 {count}/{trigger} 条消息",
         "first_appearance": "已累计 {count} 条消息，且角色尚未在此发言",
         "followup": "角色在 {window} 秒内刚发过言",
-        "gate_pass": "{why}，但判断模型认为不应发言",
+        "gate_pass": "{why}，判断模型认为不应发言",
         "gate_speak": "{why}，判断模型认为应当发言",
         "sleep": "{name}所在时区当前为深夜（休息时段）",
         "skip": "随机跳过，以模拟真人并非每次都会参与对话",
@@ -686,7 +688,7 @@ class Trial:
             addressed=addressed, is_admin=is_admin, sticky_admin=None,
             in_followup=agent._followup_open(conv, uid),
             counter=turn.count, trigger_count=agent.chat_trigger_count,
-            never_replied=never_replied)
+            never_replied=never_replied, only_when_called=agent._only_when_called())
         if mode == "followup" and turn.short:
             # As live: a "lol" in the window takes no turn and no gate call.
             mode, why = "", "below the trigger count"
@@ -898,9 +900,10 @@ def reason(lang: str, turn: Turn, name: str) -> str:
               "messages": plural(lang, turn.count, "message", "messages")}
     base = {"below the trigger count": t["below"], "trigger count": t["trigger_count"],
             "first appearance": t["first_appearance"],
-            "followup window": t["followup"]}.get(turn.why, "").format(**counts)
+            "followup window": t["followup"],
+            ONLY_WHEN_CALLED: t["only_called"]}.get(turn.why, "").format(**counts)
     if turn.quiet == "below":
-        return t["short"].format(**counts) if turn.short else base
+        return t["short"].format(**counts) if turn.short and turn.why != ONLY_WHEN_CALLED else base
     if turn.quiet == "gate_pass":
         return t["gate_pass"].format(why=base)
     if turn.mode in GATED_MODES and not turn.quiet:

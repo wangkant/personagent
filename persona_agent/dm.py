@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from .access import ADMIN_MODE, PAGE_PLATFORM
 from . import channels
 from . import decision_log
+from . import transport
 from .llm import purpose
 from .connector import current_sink
 from .messages import message_time
@@ -274,13 +275,18 @@ class DirectMessages:
         """Send a memory command's answer to a DM. `background`: no request
         of the conversation is open to carry it."""
         pkey = channels.dm_routing_key(user_id)
-        async with self._dm_sending(pkey):
-            if background:
-                send_result = await self._send_background(
-                    pkey, lambda: self._send_dm(user_id, answer),
-                    reason="follow_up")
-            else:
-                send_result = await self._send_dm(user_id, answer)
+        # One message per line of the answer, none cut mid-sentence.
+        lines = transport.send_by_line.set(True)
+        try:
+            async with self._dm_sending(pkey):
+                if background:
+                    send_result = await self._send_background(
+                        pkey, lambda: self._send_dm(user_id, answer),
+                        reason="follow_up")
+                else:
+                    send_result = await self._send_dm(user_id, answer)
+        finally:
+            transport.send_by_line.reset(lines)
         if not send_result.success:
             logger.warning("[Agent] memory command delivery failed (user=%s)",
                            user_id)

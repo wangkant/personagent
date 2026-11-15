@@ -371,7 +371,10 @@ def cmd_forget(args, backend) -> int:
     items = _items(listing)
     found = _pick([item[2] for item in items], wanted) if wanted else []
     if not found:
-        _no_such_id()
+        if wanted == CORE_ID:
+            _say("There is no always-present note to forget.")
+        else:
+            _no_such_id()
         return 1
     if len(found) > 1:
         _say("Several chats have an always-present note; name one with --chat."

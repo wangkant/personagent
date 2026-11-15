@@ -66,6 +66,19 @@ class DecisionLog:
             rows = self._rows.get(str(conv_id or ""))
             return [dict(r) for r in reversed(rows)] if rows else []
 
+    def drop_where(self, conv_id: str, gone) -> int:
+        """Remove one conversation's rows whose message or answer `gone(text)`
+        holds; how many went."""
+        with self._lock:
+            rows = self._rows.get(str(conv_id or ""))
+            if not rows:
+                return 0
+            kept = [r for r in rows if not (gone(r["excerpt"]) or gone(r["answered"]))]
+            cut = len(rows) - len(kept)
+            rows.clear()
+            rows.extend(kept)
+            return cut
+
     def last_seen(self) -> dict[str, float]:
         with self._lock:
             return {key: rows[-1]["ts"] for key, rows in self._rows.items() if rows}

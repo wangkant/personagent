@@ -52,6 +52,10 @@ _PATTERNS = (
     re.compile(r"()((?<![0-9])\d{6,}:[A-Za-z0-9_-]{30,})"),
     re.compile(r"()(\b[A-Za-z0-9_-]{40,})"),
 )
+# uvicorn's access line for the page reading its own state: any GET that succeeded,
+# and the dashboard polls, which are refused once while the character starts.
+_POLL = re.compile(r'^INFO:\s+[\d.:\[\]a-f]+ - "(?:GET|HEAD) '
+                   r'(?:/api/dashboard/\S* HTTP/[\d.]+" \d{3}|/health\S* HTTP/[\d.]+" \d{3}|\S+ HTTP/[\d.]+" [23]\d\d)\b')
 _PROBLEM = re.compile(r"^personagent: (.+)")
 _RAISED = re.compile(r"^[A-Za-z_][\w.]*(?:Error|Exception|Exit|Interrupt)\b.*")
 
@@ -361,8 +365,10 @@ def mount(app, workspace, body) -> None:
         def read() -> dict:
             mask = _Masker(home)
             path = _logs_dir(home) / f"{name}.log"
+            # The file keeps every line; the page leaves out its own polling.
+            rows = [row for row in tail(home, name, TAIL_BYTES) if not _POLL.match(row)]
             return {"name": name, "exists": path.is_file(),
-                    "lines": [mask(row) for row in tail(home, name, count)]}
+                    "lines": [mask(row) for row in rows[-count:]]}
         return await asyncio.to_thread(read)
 
     @app.post("/api/health/fix")
