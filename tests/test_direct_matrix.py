@@ -191,8 +191,9 @@ def test_run_skips_the_backlog_then_hands_over_group_messages_and_dms(tmp_path, 
 
     async def on_event(event, target):
         seen.append((event, target))
-    connection.dropped = lambda: states.append("connecting")
-    with pytest.raises(base.Refused, match="token_rejected"):
+    connection.dropped = lambda cause=None: states.append("connecting")
+    # A token refused once it was working: the sign-in expired, which the page names.
+    with pytest.raises(base.Refused, match="sign_in_expired"):
         run(connection.run(on_event, lambda: states.append("connected")))
     assert states == ["connected"]
     by_id = {e["message_id"]: (e, t) for e, t in seen}
@@ -218,7 +219,8 @@ def test_run_skips_the_backlog_then_hands_over_group_messages_and_dms(tmp_path, 
     assert "since" not in syncs[0].url.params and syncs[0].url.params["timeout"] == "0"
     assert syncs[1].url.params["since"] == "s1"
     typing = [p for p, body in server.sent if "/typing/" in p and body.get("typing")]
-    assert typing        # addressed messages show the bot typing
+    # The bridge puts the sign up, only where an answer is expected; receiving alone does not.
+    assert not typing
     # The token never reaches an event or a log line.
     assert TOKEN not in json.dumps([e for e, _ in seen])
     assert not any(TOKEN in record.getMessage() for record in caplog.records)
@@ -250,8 +252,8 @@ def test_a_dropped_sync_reports_connecting_then_connected_again(tmp_path):
     server = Homeserver([{"next_batch": "s1"}, httpx.ConnectError("down"), {"next_batch": "s2"}])
     states = []
     connection = bot(server, tmp_path)
-    connection.dropped = lambda: states.append("connecting")
-    with pytest.raises(base.Refused, match="token_rejected"):
+    connection.dropped = lambda cause=None: states.append("connecting")
+    with pytest.raises(base.Refused, match="sign_in_expired"):
         run(connection.run(None, lambda: states.append("connected")))
     assert states == ["connected", "connecting", "connected"]
 

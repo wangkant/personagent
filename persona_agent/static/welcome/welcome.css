@@ -1331,6 +1331,48 @@ label.check input:checked {
   font-weight: 500;
   color: var(--ink);
 }
+#connected-list li.connected-note {
+  display: block;
+  height: auto;
+  border-top: none;
+  padding: 0 0 12px 31px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.connected-note p,
+#done-reach p {
+  margin: 0;
+}
+.connected-note p + p {
+  margin-top: 6px;
+}
+.connected-why[data-state="failed"] {
+  color: var(--error);
+}
+.connected-why[data-state="retrying"] {
+  color: var(--ink);
+}
+.connected-reach .quiet,
+#done-reach .quiet {
+  height: auto;
+  padding: 1px 6px;
+  font-size: inherit;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: normal;
+}
+#done-reach {
+  max-width: 460px;
+  margin: 4px auto 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.state[data-state="retrying"]::before {
+  background: var(--warn);
+}
 .state {
   display: inline-flex;
   align-items: center;

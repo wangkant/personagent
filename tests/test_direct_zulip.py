@@ -290,7 +290,7 @@ def test_a_lost_queue_is_registered_again_and_a_drop_reconnects(monkeypatch):
                      error(401, "USER_DEACTIVATED")])
     platform = zulip.Zulip(VALUES, client=mock(server))
     states = []
-    platform.dropped = lambda: states.append("connecting")
+    platform.dropped = lambda cause=None: states.append("connecting")
     with pytest.raises(base.Refused, match="account_deactivated"):
         run(platform.run(None, lambda: states.append("connected")))
     assert len(server.registered) == 2

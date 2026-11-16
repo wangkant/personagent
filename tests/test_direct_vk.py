@@ -225,7 +225,7 @@ def test_a_dropped_poll_reports_dropped_then_connected_again(instant):
     fake = FakeVK(polls=[None, None, {"ts": "11", "updates": []}, {"failed": 99}])
     bot = bot_for(fake)
     states = []
-    bot.dropped = lambda: states.append("connecting")
+    bot.dropped = lambda cause=None: states.append("connecting")
     run_until_error(bot, connected=lambda: states.append("connected"))
     assert states == ["connected", "connecting", "connecting", "connected"]
 

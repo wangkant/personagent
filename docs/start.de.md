@@ -4,7 +4,23 @@
 
 ## Öffnen
 
-Installieren Sie personagent von PyPI und öffnen Sie es:
+Vorab muss nichts installiert werden: Das Installationsprogramm bringt ein eigenes Python mit. Fügen Sie eine Zeile in ein Terminal ein.
+
+Drücken Sie unter Windows die Windows-Taste, geben Sie `PowerShell` ein, drücken Sie die Eingabetaste und fügen Sie Folgendes ein:
+
+```powershell
+irm https://raw.githubusercontent.com/wangkant/personagent/main/install.ps1 | iex
+```
+
+Öffnen Sie unter macOS das Terminal (unter Programme > Dienstprogramme), unter Linux ein beliebiges Terminal. Fügen Sie Folgendes ein:
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/wangkant/personagent/main/install.sh | sh
+```
+
+Der erste Durchlauf dauert einige Minuten. Er installiert personagent und öffnet es; unter Windows legt er ein personagent-Symbol auf dem Desktop und im Startmenü an, unter macOS die Datei `personagent.command` auf dem Desktop und unter Linux einen Eintrag im Anwendungsmenü. Sind PyPI oder GitHub nur langsam erreichbar, verwendet das Installationsprogramm selbstständig Spiegelserver in Festlandchina; mit `PERSONAGENT_MIRROR=cn` vor dem Befehl nutzt es sie von Anfang an, mit `off` nie. Ist `raw.githubusercontent.com` selbst nicht erreichbar, stehen dieselben beiden Dateien unter `https://cdn.jsdelivr.net/gh/wangkant/personagent@main/install.ps1` und `.../install.sh` bereit. Führen Sie dieselbe Zeile erneut aus, um zu aktualisieren, und `uv tool uninstall personagent`, um das Programm zu entfernen; Ihr personagent-Ordner bleibt erhalten.
+
+Ist bereits Python 3.10 oder neuer installiert, können Sie stattdessen von PyPI installieren:
 
 ```sh
 python -m pip install personagent
@@ -17,7 +33,7 @@ Unter Windows öffnet sich die Seite in einem eigenen Fenster. Unter macOS und L
 
 Ein Programmierassistent kann die Einrichtung für Sie übernehmen: Bitten Sie ihn, [setup-for-agents.md](setup-for-agents.md) zu lesen und personagent einzurichten.
 
-Unter Windows können Sie auch das Quellcode-ZIP herunterladen, entpacken und `start.bat` doppelklicken. Das Skript legt im Ordner eine eigene Python-Umgebung an und öffnet dieselbe Seite. Beim ersten Start legt es außerdem ein personagent-Symbol auf Ihrem Desktop und im Startmenü an.
+Unter Windows können Sie auch das Quellcode-ZIP herunterladen, entpacken und `start.bat` doppelklicken. Das Skript legt im Ordner eine eigene Python-Umgebung an, wobei es zuerst Python herunterlädt, falls auf dem Computer keines vorhanden ist, und öffnet dieselbe Seite. Beim ersten Start legt es außerdem ein personagent-Symbol auf Ihrem Desktop und im Startmenü an.
 
 Um personagent aus einem Klon zu starten, richten Sie eine eigene virtuelle Umgebung ein: `python -m venv .venv`, dann `.venv/bin/python -m pip install -e .` und `.venv/bin/python -m persona_agent`. Unter Windows lautet der Interpreter `.venv\Scripts\python.exe`; alternativ doppelklicken Sie `start.bat`.
 
@@ -25,11 +41,13 @@ Um personagent aus einem Klon zu starten, richten Sie eine eigene virtuelle Umge
 
 Wählen Sie einen Modelldienst, fügen Sie dessen API-Schlüssel ein und klicken Sie auf **Prüfen & Chat starten**. Voreingestellt sind die kostenlosen Modelle von OpenRouter und die Figur „Einfühlsamer Zuhörer“. Auch diese Modelle brauchen einen Schlüssel; er ist kostenlos und wird über **API-Schlüssel anfordern** bei OpenRouter erstellt. Das Limit beträgt 50 Anfragen pro Tag, und die eine kleine Anfrage, mit der er geprüft wird, kostet nur bei einem kostenpflichtigen Dienst etwas. **Modellname und Adresse** enthält den Modellnamen und die API-Adresse, **Namen, Persönlichkeit oder Sprache wählen** den Namen, die Persönlichkeit und die Sprache, in der die Figur spricht. Das Menü oben rechts auf der Seite ändert nur die Sprache, in der die Seite selbst angezeigt wird.
 
+Läuft auf dem Computer bereits Ollama oder LM Studio mit einem geladenen Modell, oder ist der Schlüssel eines Modelldienstes bereits in einer Umgebungsvariablen gesetzt (etwa `DEEPSEEK_API_KEY` oder `OPENAI_API_KEY`), weist die Seite oberhalb des Modelldienstes darauf hin; ein Klick auf **Ollama verwenden** oder **Diesen Schlüssel verwenden** prüft ihn und startet den Chat. Ein lokales Modell braucht keinen Schlüssel, und keine Daten verlassen den Computer.
+
 Der Schlüssel bleibt auf Ihrem Computer; klicken Sie auf **Anzeigen**, um ihn zu überprüfen. Chatnachrichten werden an den gewählten Modelldienst gesendet und zu dessen üblichen Preisen abgerechnet.
 
 Ihre Figur antwortet auf der Seite; dort erscheinen auch die Sticker und Bilder, die sie sendet. Nachrichten, die sie später sendet, etwa eine Nachricht, die sie von sich aus beginnt, erscheinen innerhalb weniger Sekunden im Chat. Ihre Einstellungen werden gespeichert, sodass der nächste Start direkt in den Chat führt.
 
-Nach der Einrichtung enthält **Figur & Einstellungen** ein Feld **Persona** mit dem Text, auf dem die Figur beruht. Formulieren Sie dort um, wer sie ist und wie sie spricht, und klicken Sie auf **Persona speichern**. Die Änderung gilt sofort, und was die Figur gelernt hat, bleibt erhalten.
+Nach der Einrichtung enthält **Figur & Einstellungen** ein Feld **Persona** mit dem Text, auf dem die Figur beruht. Formulieren Sie dort um, wer sie ist und wie sie spricht, und klicken Sie auf **Persona speichern**. Die Änderung gilt sofort, und was die Figur gelernt hat, bleibt erhalten. Um von einer Idee auszugehen, beschreiben Sie die Figur oberhalb des Feldes in einem Satz und klicken Sie auf **Entwurf schreiben**. Um eine Figur zu übernehmen, die jemand als Tavern-Charakterkarte (PNG, JSON oder CHARX) geteilt hat, verwenden Sie **Charakterkarte importieren** unterhalb des Feldes; [das Benutzerhandbuch](guide.de.md#charakterkarten-und-entwürfe) erklärt, was aus jedem Teil wird.
 
 Darunter schaltet **Weitere Funktionen** die Websuche, die Bilderkennung und eigene Gesprächsanstöße ein. Die Suche verwendet standardmäßig DuckDuckGo; mit einem Tavily-Schlüssel arbeitet sie zuverlässiger. **Erweiterte Einstellungen** darunter enthält die Einstellungen, die bisher nur in `.env` verfügbar waren. Solange Sie keine Plattform verbunden haben, zeigt die Ansicht **Chat** eine kurze Leiste **Erste Schritte**.
 
@@ -48,7 +66,8 @@ Zwei weitere Ansichten kommen ohne verbundene Plattform aus. **Übung** spielt e
 2. personagent verbindet QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK und Stoat selbst. Die übrigen Plattformen laufen über AstrBot, eine Brücke eines Drittanbieters. Wenn Sie eine davon zum ersten Mal verbinden, lädt personagent AstrBot mit einer separaten Python-3.12-Laufzeit herunter; lassen Sie die Seite daher geöffnet, bis der Vorgang abgeschlossen ist. AstrBot läuft anschließend im Hintergrund, ohne ein Dashboard, bei dem man sich anmelden müsste.
 3. personagent prüft die Zugangsdaten bei der Plattform, bevor es sie speichert. Lehnt die Plattform sie ab, teilt Ihnen die Seite dies mit, und es wird nichts gespeichert.
 4. Verbundene Plattformen werden oben unter **Plattformen verbinden** aufgeführt; dort können Sie sie neu einrichten oder trennen.
-5. Ohne die Seite, etwa auf einem Server ohne Bildschirm, verbindet `personagent connect <platform>` im Terminal QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK oder Stoat, mit denselben Schritten und Prüfungen. `personagent connect` allein listet diese Plattformen auf. Die [vollständige Anleitung](guide.de.md#eine-plattform-im-terminal-verbinden) beschreibt den Befehl.
+5. Für jede andere Software, die eine OpenAI-kompatible Adresse annimmt, etwa Open WebUI, SillyTavern oder ein Skript, schalten Sie **Andere Software** unten unter **Plattformen verbinden** ein und übertragen Adresse, Schlüssel und Modell in diese Anwendung. Die [vollständige Anleitung](guide.de.md#andere-software) beschreibt das.
+6. Ohne die Seite, etwa auf einem Server ohne Bildschirm, verbindet `personagent connect <platform>` im Terminal QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK oder Stoat, mit denselben Schritten und Prüfungen. `personagent connect` allein listet diese Plattformen auf. Die [vollständige Anleitung](guide.de.md#eine-plattform-im-terminal-verbinden) beschreibt den Befehl.
 
 Um einen QQ-Bot zu finden, öffnen Sie die mobile QQ-App und wechseln Sie zu Kontakte → Bots. Chatten Sie privat mit ihm oder fügen Sie ihn einer Gruppe hinzu, deren Inhaber Sie sind. Dieser Weg nutzt die offizielle Bot-Plattform von QQ; Sie benötigen daher weder ein persönliches QQ-Konto noch zusätzliche Software. QQ legt fest, wo der Bot eingesetzt werden darf. Bis der Bot zertifiziert ist, kann er nur Gruppen beitreten, deren Inhaber sein Administrator ist, und es ist keine Sandbox einzurichten. In einer Gruppe sieht er nur Nachrichten, die ihn per @ erwähnen, es sei denn, der Gruppeninhaber aktiviert im Profil des Bots in dieser Gruppe den Empfang aller Nachrichten. Die [Bot-Anleitung von QQ](https://bot.q.qq.com/wiki/bot_new_product-intro/) behandelt die Zertifizierung und die übrigen Kontoeinstellungen.
 

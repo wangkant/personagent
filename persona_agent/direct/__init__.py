@@ -18,7 +18,7 @@ def platform_for(kind: str, values: dict, home: Path) -> Platform:
     """A live connection for one stored platform."""
     if kind == "telegram":
         from .telegram import Telegram
-        return Telegram(values)
+        return Telegram(values, state=state_path(home, kind))
     if kind == "discord":
         from .discord import Discord
         return Discord(values)
@@ -70,7 +70,8 @@ def sign_in_for(kind: str) -> tuple[SignIn, type[Exception]] | None:
 
 def state_path(home: Path, kind: str) -> Path:
     """What a platform keeps between runs (WeChat: its cursor and reply
-    tokens). It belongs to one login and goes when that login does."""
+    tokens; Telegram: its update offset). It belongs to one login and goes
+    when that login does."""
     return home / "platforms" / "direct-state" / f"{kind}.json"
 
 

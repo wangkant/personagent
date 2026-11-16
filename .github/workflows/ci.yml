@@ -146,3 +146,71 @@ jobs:
           assert home.resource('data', 'persona.example.en.txt').is_file()
           print('sdist install ok')
           "
+
+  installer:
+    # install.sh and install.ps1 as a newcomer runs them: uv and a Python of its own are fetched.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2022]
+    env:
+      # The checkout stands in for the PyPI release.
+      PERSONAGENT_PACKAGE: ${{ github.workspace }}
+      PERSONAGENT_NO_START: "1"
+      PERSONAGENT_NO_MODIFY_PATH: "1"
+      PERSONAGENT_MIRROR: "off"
+      UV_PYTHON_PREFERENCE: only-managed
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install on macOS or Linux, with no uv on PATH
+        if: runner.os != 'Windows'
+        run: |
+          while command -v uv >/dev/null 2>&1; do
+            gone=$(dirname "$(command -v uv)")
+            PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vx "$gone" | paste -sd: -)
+          done
+          export PERSONAGENT_UV_DIR="$RUNNER_TEMP/uvbin" UV_TOOL_BIN_DIR="$RUNNER_TEMP/bin"
+          export PERSONAGENT_SHORTCUT_DIR="$RUNNER_TEMP/launcher"
+          mkdir -p "$PERSONAGENT_SHORTCUT_DIR"
+          sh install.sh
+          test -x "$PERSONAGENT_UV_DIR/uv"
+          "$UV_TOOL_BIN_DIR/personagent" --version
+          test -n "$(ls "$PERSONAGENT_SHORTCUT_DIR")"
+          # Again: an update of what is there, with the uv it fetched.
+          sh install.sh
+      - name: Install on Linux through the mirrors (manual runs only)
+        if: runner.os == 'Linux' && github.event_name == 'workflow_dispatch'
+        run: |
+          export PERSONAGENT_MIRROR=cn PERSONAGENT_UV_DIR="$RUNNER_TEMP/uvbin-cn" UV_TOOL_BIN_DIR="$RUNNER_TEMP/bin-cn"
+          export UV_TOOL_DIR="$RUNNER_TEMP/tools-cn" UV_PYTHON_INSTALL_DIR="$RUNNER_TEMP/python-cn"
+          export PERSONAGENT_NO_SHORTCUT=1 PATH="/usr/bin:/bin"
+          sh install.sh
+          "$UV_TOOL_BIN_DIR/personagent" --version
+      - name: Install on Windows, with no uv on PATH
+        if: runner.os == 'Windows'
+        # Windows PowerShell 5.1, which is what `irm | iex` runs in.
+        shell: powershell
+        run: |
+          $found = Get-Command uv -CommandType Application -ErrorAction SilentlyContinue
+          if ($found) {
+            $gone = Split-Path -Parent $found.Source
+            $env:Path = (($env:Path -split ';') | Where-Object { $_ -and $_.TrimEnd('\') -ne $gone.TrimEnd('\') }) -join ';'
+          }
+          $env:PERSONAGENT_UV_DIR = Join-Path $env:RUNNER_TEMP 'uvbin'
+          $env:UV_TOOL_BIN_DIR = Join-Path $env:RUNNER_TEMP 'bin'
+          $links = 'desktop', 'programs', 'startup' | ForEach-Object { Join-Path $env:RUNNER_TEMP "links\$_" }
+          $links | ForEach-Object { $null = New-Item -ItemType Directory -Force -Path $_ }
+          $env:PERSONAGENT_SHORTCUT_DIRS = $links -join ';'
+          powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File install.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path (Join-Path $env:PERSONAGENT_UV_DIR 'uv.exe'))) { throw 'uv was not fetched' }
+          & (Join-Path $env:UV_TOOL_BIN_DIR 'personagent.exe') --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path (Join-Path $links[0] 'personagent.lnk'))) { throw 'no desktop icon' }
+          # The way the README gives it: the script as a string, through iex.
+          Get-Content -Raw install.ps1 | Invoke-Expression
+          if (-not $PersonagentInstalled) { throw 'the piped install failed' }

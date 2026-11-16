@@ -189,7 +189,7 @@ These optional fields turn on more of the agent:
 |---|---|
 | `connector_id` | A stable id for this connector instance. The outbox requires it. |
 | `reply_handle` | Whatever the connector needs to reach this conversation later without an incoming message: AstrBot's `unified_msg_origin`, a Matrix room id, or a Satori login plus channel id. The agent treats it as opaque, stores it per conversation and hands it back in outbox deliveries. |
-| `capabilities` | What the connector can do. `outbox` means it polls the outbox and can send unprompted. `quote_text` means reply segments carry the quoted text. |
+| `capabilities` | What the connector can do. `outbox` means it polls the outbox and can send unprompted. `quote_text` means reply segments carry the quoted text. `text_only` means the conversation can show nothing but text: the agent is told not to use stickers and sends none, so every reply item is `text`. The OpenAI-compatible API sends it. |
 | `prefiltered` | `true` (the default) when the connector applied its own allowlist. `false` makes the agent's lists the only filter. |
 | `proactive` | Marks a DM event as a cue the connector wrote, not the person's words. See "Speaking first without the outbox". |
 

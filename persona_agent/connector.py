@@ -99,13 +99,16 @@ class ConnectorSink:
     handle_event returns; a late add is dropped with a warning."""
 
     def __init__(self, platform: str = "", native: bool = False,
-                 bot_id: str = "", prefiltered: bool = True) -> None:
+                 bot_id: str = "", prefiltered: bool = True,
+                 text_only: bool = False) -> None:
         # For re-prefixing outbound mentions (message_to_reply_item).
         self.platform = platform
         self.native = native
         self.bot_id = bot_id
         # Whether the connector filtered this turn itself.
         self.prefiltered = prefiltered
+        # The conversation shows only text (capability TEXT_ONLY): no stickers.
+        self.text_only = text_only
         self.items: list[dict] = []
         self.closed = False
         # Set once the turn clears admission, so a silence is not handed to
@@ -135,6 +138,14 @@ CONVERSATION_TYPES = ("group", "dm")
 MAX_CONNECTOR_ID_CHARS = 128
 MAX_REPLY_HANDLE_CHARS = 512
 _MAX_CAPABILITIES = 16
+#: The capability of a conversation that can show nothing but text.
+TEXT_ONLY = "text_only"
+
+
+def text_only_turn() -> bool:
+    """Whether the connector turn being handled can show only text."""
+    sink = current_sink.get()
+    return bool(sink is not None and sink.text_only)
 
 
 def opaque_value(value, limit: int) -> str:

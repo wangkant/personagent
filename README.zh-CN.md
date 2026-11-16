@@ -28,7 +28,8 @@ personagent 在你自己的电脑上运行，保存的所有内容都留在本�
 <td width="220" valign="top"><strong>拥有自己的性格</strong></td>
 <td valign="top">
 提供七种现成性格。其中三个是社区中早已流行的形象：DeepSeek 鲸鱼娘、GPT 娘（白龙）和 Claude 娘，立绘会眨眼、思考和说话。<br>
-人设可随时改写，角色已学到的内容将保留。
+人设可随时改写，角色已学到的内容将保留。<br>
+可导入 Tavern 角色卡（一个文件即可），也可用一两句话描述角色，由模型起草人设；自己的角色可保存为角色卡，便于分享。
 </td>
 </tr>
 <tr>
@@ -68,6 +69,7 @@ personagent 在你自己的电脑上运行，保存的所有内容都留在本�
 <td valign="top">
 二十二个聊天平台均可在同一页面中连接，用手机扫码一次或填写几项即可；其中多数同时支持群聊与私聊。<br>
 同一个智能体也在本机窗口中与你对话，并可接入 Claude Code、Codex 和 DeepSeek Harness。<br>
+任何可填写 OpenAI 兼容地址的软件（如 Open WebUI、SillyTavern）都可以与同一个角色对话。<br>
 其他平台可通过 AstrBot、Koishi 或 Matrix 桥接接入，也可自行编写连接器。
 </td>
 </tr>
@@ -75,7 +77,7 @@ personagent 在你自己的电脑上运行，保存的所有内容都留在本�
 <td width="220" valign="top"><strong>适配你现有的条件</strong></td>
 <td valign="top">
 可使用任意兼容 OpenAI 接口的模型：OpenRouter 的免费模型、付费服务，或用 Ollama 在本机运行的模型。<br>
-一条命令即可打开，页面支持中文、英文及其他八种语言；填写一个模型 Key 即可开始聊天。
+一行命令即可安装，自带 Python，电脑上无需预装任何软件。页面支持中文、英文及其他八种语言；填写一个模型 Key 即可开始聊天，本机已在运行 Ollama 或 LM Studio 时点击一次即可。
 </td>
 </tr>
 </table>
@@ -84,12 +86,23 @@ personagent 在你自己的电脑上运行，保存的所有内容都留在本�
 
 ## 快速开始
 
-```sh
-python -m pip install personagent
-personagent
+无需预先安装任何软件，在终端中粘贴一行命令即可。
+
+Windows（PowerShell）：
+
+```powershell
+irm https://raw.githubusercontent.com/wangkant/personagent/main/install.ps1 | iex
 ```
 
-如已安装 [uv](https://docs.astral.sh/uv/)，可直接运行 `uvx personagent`，无需单独安装。在 Windows 上也可以下载源码 ZIP，然后双击 `start.bat`。
+macOS 和 Linux：
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/wangkant/personagent/main/install.sh | sh
+```
+
+安装程序自带 Python，安装完成后自动打开 personagent；在 Windows 上还会在桌面添加图标。PyPI 或 GitHub 访问不畅时，安装程序会自动改用中国大陆的镜像。再次运行同一条命令即可更新。
+
+如已安装 Python 3.10 或更高版本，也可以运行 `python -m pip install personagent`，再运行 `personagent`；如已安装 [uv](https://docs.astral.sh/uv/)，可直接运行 `uvx personagent`，无需单独安装。在 Windows 上还可以下载源码 ZIP，然后双击 `start.bat`；电脑上没有 Python 时，该脚本会自动获取。
 
 在 Windows 上，personagent 会在独立窗口中打开；在 macOS 和 Linux 上则在浏览器中打开。填写模型 API Key 后，点击「验证并开始聊天」。默认选中的 OpenRouter 免费模型同样需要 Key：该 Key 不收费，可通过页面上的「获取密钥」到 OpenRouter 申请。`personagent demo` 无需 Key，会播放三段预先编写的场景。[简明入门](https://github.com/wangkant/personagent/blob/main/docs/start.zh-CN.md)逐屏介绍了页面的各个部分。
 
@@ -106,6 +119,8 @@ personagent 本身免费。费用支付给你选择的模型服务，按其价�
 | 高级 | 企业微信应用、微信公众号、QQ（Webhook）、OneBot v11（NapCat）、Satori | 公网地址，或本机的其他软件 |
 
 已连接的平台在每次启动 personagent 时都会自动连接。扫码连接的平台，以及 Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 直接连接；其余平台通过 personagent 在后台下载并运行的 [AstrBot](https://github.com/AstrBotDevs/AstrBot) 接入。在没有显示器的服务器上，可在终端中运行 `personagent connect <平台>` 连接上述十个平台中的任意一个，操作步骤和核验方式与页面相同；运行 `personagent up` 即可在不打开浏览器的情况下全部启动。各平台的设置方法见[使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#接入聊天平台)；从零开始接入 QQ 请参阅[部署教程](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)。
+
+其余软件可通过同一页面中的「其他软件」接入：开启后，将地址、密钥和模型名称填入任何可填写 OpenAI 兼容地址的软件，该软件即可与你的角色对话，记忆与其他平台相同。详见[使用手册](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#其他软件)；在终端中运行 `personagent connect api` 效果相同。
 
 如果你已在运行 AstrBot、Koishi 或 Matrix，personagent 可以接在其后，仅作为智能体运行：请参阅[你自己运行的桥接](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-CN.md#你自己运行的桥接)、[Satori 连接器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.zh-CN.md)和 [Matrix 连接器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.zh-CN.md)。
 

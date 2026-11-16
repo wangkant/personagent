@@ -11,6 +11,7 @@ from typing import Optional
 
 from .access import ADMIN_MODE
 from . import channels, ranking
+from .connector import text_only_turn
 from .prompts import (
     DM_TOOL_GUIDE,
     HONEST_DISCLOSURE,
@@ -374,6 +375,11 @@ class PromptBuilder:
     def _sticker_guide_for_prompt(self, dm: bool = False) -> str:
         """Sticker guide: with an empty library, not to invent stickers; else
         how and how often to use them. `dm` sizes the explanation threshold."""
+        if text_only_turn():
+            return ("\n\n<sticker_guide>\n"
+                    "This conversation shows text only: no sticker or picture can reach it. "
+                    "Do NOT emit `[STICKER:xxx]` markers; say it in words.\n"
+                    "</sticker_guide>")
         stats = self.stickers.stats()
         tags_summary = self.stickers.available_tags_summary(limit=20)
         if not tags_summary:

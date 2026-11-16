@@ -13,6 +13,7 @@
 - [改成你自己的角色](#改成你自己的角色)
 - [接進聊天平台](#接入聊天平台)：[personagent 直接連線的平台](#personagent-直接連線的平台) · [其他平台](#其他平台透過託管的-astrbot) · [你自己執行的橋接](#你自己執行的橋接) · [主動發言](#主動發言)
 - [程式設計助理](#程式設計助理)
+- [其他軟體](#其他軟體)
 - [教導角色](#教導角色)
 - [記憶](#記憶)
 - [動態](#動態)
@@ -179,6 +180,7 @@ PyPI 上有新版本時，「開始聊天」頁面會顯示提示，並提供適
 | `personagent learned` | 檢視角色學到的內容和仍在觀察的內容，並可在需要時介入 |
 | `personagent memory` | 列出角色記住的內容，刪除某一項或將其還原 |
 | `personagent eval` | 評測發言時機、人設、學習效果和記憶 |
+| `personagent character` | [匯入角色卡](#角色卡與草稿)（`import 檔案`）、將角色儲存為角色卡（`export 檔案.png` 或 `.json`），或根據描述起草人設並輸出（`draft "……"`） |
 
 每個指令都支援 `--help`。
 
@@ -317,7 +319,7 @@ personagent 資料夾中的 `persona.txt` 定義了此角色。可以在頁面�
   {"scenario": "朋友分享影片", "context": ["阿強: 史上最扯的泡麵吃法"], "reply": "半夜看料理犯罪現場，你也太狠了吧"}
   ```
 
-**人設長度與 `[style]` 區塊。** 「人設」欄位最多可填寫 4000 個字元。`persona.txt` 中的 `[style]` 區塊可調整私訊中的六條規則，對群組無效。每行的格式為 `名稱: 值`。未列出的值會保留預設值（即下文各項中的第一個），並記入記錄檔：
+**人設長度與 `[style]` 區塊。** 「人設」欄位最多可填寫 16,000 個字元；每次回覆都會傳送完整人設，因此人設越短，費用越低。`persona.txt` 中的 `[style]` 區塊可調整私訊中的六條規則，對群組無效。每行的格式為 `名稱: 值`。未列出的值會保留預設值（即下文各項中的第一個），並記入記錄檔：
 
 ```text
 [style]
@@ -329,6 +331,22 @@ vent: ask
 各項名稱和值為：`length`（short、medium、long）；有人傾訴時的 `vent`（hold、ask、solve）；有人請求推薦時的 `recs`（ask_back、offer）；`good_news`（cheer、deadpan）；關於語氣詞的 `particles`（capped、free、none）；`fatigue`（stock、own）。
 
 **辨識圖片。** 如需讓它理解圖片，請設定 `VISION_MODEL`、`VISION_API_KEY` 和 `VISION_BASE_URL`，或在頁面「更多功能」中開啟「辨識圖片」。所選模型無法讀取圖片時，頁面會在儲存時說明。角色看不到的圖片（未開啟辨識圖片或辨識失敗），無論在群組還是私訊中，都會標明為看不到的圖片，角色會詢問內容，而不會憑空描述。語音、影片、檔案和轉傳的訊息會依其實際類型交給角色；平台提供語音轉寫時，一併附上轉寫文字。轉傳訊息中的文字視為被轉傳者的話：其中的名字不算點名，也不會執行記憶指令。提及他人時，角色看到的是對方自己設定的名字；這個名字不算傳送者的話，既不會點名角色，也不會構成指令。
+
+### 角色卡與草稿
+
+**用一句話起草。** 在「人設」欄位上方用一兩句話描述角色，再點選「產生草稿」。personagent 會向你的模型服務傳送一次請求（在「應用程式」檢視的模型用量中計為「起草人設」），並將草稿填入欄位：以角色使用的語言寫成，內容是具體的習慣。點選「儲存人設」之前，草稿不會儲存；「還原先前的內容」可還原欄位中原有的文字。在終端機中執行 `personagent character draft "一位退休的燈塔看守人，熱愛填字遊戲"` 會輸出一份草稿，不會儲存任何內容。
+
+**匯入角色卡。** 「人設」欄位下方的「角色卡」支援 Tavern 角色卡，即 SillyTavern 和各類角色卡分享網站使用的格式：PNG 角色卡（V2 的 `chara` 或 V3 的 `ccv3` 資料，兩者皆有時以 V3 為準）、JSON 角色卡（V1、V2 或 V3）以及 CHARX 檔案。檢視預覽之前不會進行任何變更；預覽會逐項列出各部分，每個部分都有一個核取方塊：
+
+- 名稱：角色卡中的名稱成為 `PERSONA_NAME`，V3 的別名會加入 `persona.card.json` 的 `aliases`。角色學到的內容會保留，但只在學到這些內容時所用的名稱下適用，因此改用新名稱後會重新開始學習；改回原名即可恢復。無論哪種情況，對人和聊天的記憶都會保留。
+- 人設：由角色卡中的描述、個性、情境和指示（system prompt 與 post-history instructions）組合而成；`{{char}}` 和 `<BOT>` 會替換為名稱，`{{user}}` 和 `<USER>` 會替換為進階設定中的「角色對你的稱呼」，未填寫時為「使用者」。可在預覽中修改。無法替換的預留位置會逐一列出。角色卡中的指示放在最後一部分並加以標註：這些指示原本為角色扮演程式撰寫，常要求旁白或以星號標示動作，可視情況刪除。「人設」欄位最多可填寫 16,000 個字元；每次回覆都會將完整人設傳送給模型，因此人設越長，每次回覆的費用越高。
+- 範例對話：角色卡中的 `mes_example` 寫入 `data/examples.<lang>.jsonl`，與你自行放入的檔案一樣，整體取代內建的範例對話。
+- 背景設定：角色卡中的背景設定經由「背景設定」區塊中「匯入檔案」的同一套流程匯入，略過條目的原因也相同；以正規表示式比對的條目同樣會略過。寫入 `data/lorebook.<lang>.json`。
+- 圖片：PNG 圖片本身或 CHARX 中的主圖示會成為角色自己的圖片，必要時會縮小。
+
+角色卡中的開場白（`first_mes` 和備選開場白）會顯示，但不會使用：角色沒有固定的開場白，會以自己的方式開始對話。你撰寫的人設以及你自己的範例對話和背景設定檔案，在被取代前會保留為 `.bak` 檔案，並另存一份帶日期的副本。讀取角色卡時，各項大小均有上限：單一檔案不超過 16 MB，角色卡文字不超過 2 MB，PNG 資料區塊和壓縮檔成員數量有限，成員路徑不得指向壓縮檔之外，圖片不超過 4,000 萬像素。角色卡中的連結一律不會下載。在終端機中執行 `personagent character import 檔案` 效果相同：先輸出預覽，詢問後才進行變更；`--yes` 可略過詢問，`--only name,persona` 只匯入部分內容。
+
+**儲存為角色卡。** 「儲存為 PNG 角色卡」或「儲存為 JSON 角色卡」會將角色以 V2 角色卡的形式（PNG 中同時附帶 V3 資料）儲存到桌面或文件資料夾，包括名稱和別名、人設、你自己的範例對話和背景設定檔案，以及圖片（你自己的圖片；沒有時使用所選立繪；再沒有時使用素色方塊）。不包含 API 金鑰、記憶、角色學到的內容以及聊天中他人的名稱；「角色對你的稱呼」會寫為 `{{user}}`。重新匯入該角色卡會得到同一個角色。在終端機中執行 `personagent character export 檔案.png` 效果相同。
 
 ## 接入聊天平台
 
@@ -349,8 +367,8 @@ vent: ask
 | QQ | 使用手機 QQ 掃描並確認。這會新建一個 QQ 官方機器人，或使用你既有的機器人，金鑰由 personagent 自動取得。點選「改為手動填寫」，可以改為填入在 [QQ 機器人頁面](https://q.qq.com/qqbot/openclaw/login.html)建立的機器人的 AppID 和 AppSecret。 |
 | 個人微信 | 使用微信掃描並確認登入。連線使用騰訊的 iLink 機器人介面，僅支援私訊，因為微信不會將群組訊息傳送給這類機器人。 |
 | Telegram | 透過 [@BotFather](https://t.me/BotFather) 建立機器人，貼上它提供的 Token。 |
-| Discord | 在 [Developer Portal](https://discord.com/developers/applications) 的 Bot 頁面複製 Token，並開啟 Message Content Intent。 |
-| Matrix | 為機器人另外註冊一個 Matrix 帳號。在 Element 中以機器人帳號登入，於「所有設定 > 說明與關於 > 進階」複製其存取權杖（Access Token），然後直接關閉該視窗，不要登出。將權杖連同 homeserver 位址與你本人的 Matrix ID 一併填入。接著以你本人的帳號，邀請機器人加入一個已關閉端對端加密的聊天室。機器人只接受來自你的 Matrix ID 的邀請，且無法讀取加密的聊天室。 |
+| Discord | 在 [Developer Portal](https://discord.com/developers/applications) 的 Bot 頁面複製 Token，開啟 Message Content Intent，並關閉 Public Bot（除非希望他人也能加入該機器人）。邀請時勾選 View Channels、Send Messages、Send Messages in Threads、Attach Files 和 Read Message History 權限（`permissions=274878008320`）。 |
+| Matrix | 為機器人另外註冊一個 Matrix 帳號。填寫 homeserver 位址、你本人的 Matrix ID，以及機器人帳號的使用者 ID 和密碼：personagent 只登入一次，保存登入後取得的憑證，不會儲存密碼。改為貼上存取權杖時，只接受不會過期的權杖；在 matrix.org 上從 Element 複製的權杖（以 `mat_` 開頭）幾分鐘內就會失效，因此不被接受。接著以你本人的帳號，邀請機器人加入一個已關閉端對端加密的聊天室。在 Element 中以「開始聊天」（Start chat）發起的對話會加密，因此會被拒絕。機器人只接受來自你的 Matrix ID 的邀請，因此 ID 填寫錯誤時所有邀請都會被拒絕，頁面也會對此提出說明。 |
 | Twitch | 在 [Twitch 開發者主控台](https://dev.twitch.tv/console)免費註冊一個應用程式，Client Type 選擇「Public」。填入其 Client ID 與角色要聊天的頻道，點選「連接」，再於已登入角色 Twitch 帳號的瀏覽器中，透過頁面顯示的連結核准登入。角色只在所填頻道中以文字聊天。不支援 Twitch 悄悄話（Whisper，即私訊），因此「連接平台」中此平台的卡片標示為「僅限頻道」。 |
 | IRC | 填寫伺服器（預設為 Libera.Chat；OFTC 請填 `irc.oftc.net`）、TLS 連接埠、機器人暱稱、頻道，以及暱稱已註冊時的 NickServ 密碼。機器人透過 TLS 連線，只加入所列頻道，並回覆傳給其暱稱的私訊。僅支援文字。Libera.Chat 規定，AI 機器人加入頻道前須取得該頻道管理員（operator）的許可。 |
 | Zulip | 在「個人設定 > 機器人」中新增一個通用機器人（Generic bot），然後填入組織位址、機器人的電子郵件位址與其 API 金鑰。機器人只讀取它已訂閱的頻道，以及傳送給它的私訊；在頻道中，有人提及或引用它時才會回覆。組織內的所有成員都可以傳送私訊給它。 |
@@ -494,6 +512,61 @@ personagent connect dsh --remove
 ```json
 {"mcpServers": {"personagent": {"command": "personagent", "args": ["--home", "/path/to/home", "mcp"]}}}
 ```
+
+## 其他軟體
+
+任何可以填寫 OpenAI 相容位址的軟體都能與角色對話，例如 Open WebUI、SillyTavern 等聊天前端、自動化工具，或你自己撰寫的程式。personagent 依 OpenAI 聊天 API 的格式提供 `GET /v1/models` 和 `POST /v1/chat/completions`，預設關閉。
+
+**開啟。** 在本機頁面「連接平台」底部的「其他軟體」中開啟開關，首次開啟時會產生金鑰。頁面隨後顯示其他軟體需要的三項，每項旁邊都有「複製」；金鑰預設隱藏，點選「顯示」後才可見。「傳送測試訊息」會像其他軟體一樣經由 API 傳送一則訊息，並顯示回覆或失敗原因。「產生新金鑰」會先詢問，確認後替換金鑰，舊金鑰立即失效。變更其中任一項時，正在執行的角色會重新啟動，因為該設定僅在啟動時讀取。在終端機中：
+
+```bash
+personagent connect api            # 開啟 API，沒有金鑰時產生金鑰，並顯示三項
+personagent connect api --new-key  # 替換金鑰
+personagent connect api --remove   # 關閉 API，金鑰保留
+```
+
+**三項設定。**
+
+| 項目 | 填寫內容 |
+|---|---|
+| 位址（Base URL） | `http://127.0.0.1:<SERVER_PORT>/v1`，預設為 `http://127.0.0.1:8080/v1` |
+| API 金鑰 | `CHAT_API_KEY`，以 `Authorization: Bearer <金鑰>` 傳送 |
+| 模型 | `personagent`。任何模型名稱都會被接受；`/v1/models` 只列出這一個。 |
+
+**在常用軟體中填寫。** Open WebUI：由管理員開啟 Settings > Connections，在 **Manage OpenAI API Connections** 中點選 **Add Connection**，在 **URL** 中填寫位址、在 **API Key** 中填寫金鑰，然後點選 **Save**（請參閱 [Open WebUI 的說明](https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible)）。SillyTavern：開啟 API Connections，將 API 類型設為 **Chat Completion**，將 **Chat Completion Source** 設為 **Custom (OpenAI-compatible)**，將位址填入端點 URL、將金鑰填入 API 金鑰，模型選擇 `personagent`，然後點選 **Test Message**（請參閱 [SillyTavern 的說明](https://docs.sillytavern.app/usage/api-connections/openai/)）。
+
+**能做什麼，不做什麼。**
+
+- 角色保留自己的人設和記憶。軟體的系統提示詞、隨請求附帶的先前訊息，以及 temperature 等參數都會被忽略：只讀取最後一則角色為 `user` 的訊息，並視為一則新訊息。軟體重新產生回答時會再次傳送這則訊息，角色會將它視為說了兩次。
+- 請求中 `user` 欄位的每個值對應一個獨立的對話，平台為 `api`，在「動態」中顯示為 API 私訊。沒有 `user` 時，由請求標頭 `X-Personagent-Conversation` 指定對話；兩者皆無時，所有請求共用名為 `default` 的對話。
+- 回覆只有文字。訊息可以用 `image_url` 片段附帶圖片，可以是 `data:image/...;base64,` 網址或 `http(s)` 網址；角色會像讀取聊天平台上的圖片一樣讀取它們，大小限制相同（`VISION_MAX_IMAGE_BYTES`），也同樣拒絕你所在網路內部的位址。角色在這裡不會傳送貼圖。
+- 角色常將回答分成幾則短訊息。一般回答以換行連接各則；串流回答（`"stream": true`）會在整段回覆完成後每則訊息傳送一段，思考期間傳送保持連線的註解。`usage` 中的 token 數一律為 0。
+- 呼叫方不是角色的管理員，因此記憶指令的效果與其他人使用時相同。
+- 錯誤採用 OpenAI 的格式 `{"error": {"message", "type", "code"}}`：金鑰缺少或錯誤為 401，請求格式錯誤為 400，API 關閉時為 404，達到上限時為 429（附 `Retry-After`），模型服務失敗時為 502，角色關閉時為 503。
+- 僅在 personagent 執行時可以存取此位址：保持其視窗開啟，或執行 `personagent up` 或 `personagent run`。
+
+**在程式中呼叫。** 使用 curl：
+
+```bash
+curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Authorization: Bearer $CHAT_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model": "personagent", "user": "me", "messages": [{"role": "user", "content": "你好"}]}'
+```
+
+使用 Python，只需標準函式庫：
+
+```python
+import json, os, urllib.request
+body = {"model": "personagent", "user": "me", "messages": [{"role": "user", "content": "你好"}]}
+request = urllib.request.Request("http://127.0.0.1:8080/v1/chat/completions", json.dumps(body).encode(),
+    {"Authorization": "Bearer " + os.environ["CHAT_API_KEY"], "Content-Type": "application/json"})
+with urllib.request.urlopen(request, timeout=300) as response:
+    print(json.load(response)["choices"][0]["message"]["content"])
+```
+
+一輪對話可能需要一分鐘以上，請為用戶端設定較長的逾時時間。
+
+**從其他裝置或 Docker 存取。** 由於 personagent 監聽 `127.0.0.1`，此位址只供本機上的程式使用。Docker 容器中的程式、手機或其他電腦都算作其他裝置。若要從這些裝置存取，可以讓服務監聽網路位址，即執行 `personagent run --host 0.0.0.0`（此時必須設定 `CONNECTOR_TOKEN` 和 `CHAT_API_KEY`，且金鑰以未加密的方式傳輸，因此只應在信任的網路中這樣做）；或在 `127.0.0.1:<SERVER_PORT>` 前面設置 HTTPS 反向代理或私人通道。以上任何一種方式都必須設定金鑰：沒有金鑰時，經由代理或從其他位址送達的請求會被拒絕。`CHAT_API_ENABLED` 和 `CHAT_API_KEY` 位於 `.env` 中，在服務啟動時讀取。
 
 ## 教導角色
 
@@ -828,7 +901,7 @@ personagent 資料夾中的主要檔案和資料夾及其儲存的內容如下�
 
 **在終端機中執行 `personagent doctor`。** 它會檢查設定，指出拼寫錯誤和已更名的設定，並逐一探測 personagent 所依賴的服務。探測會傳送很小的請求，可能消耗少量額度。加上 `--json` 會以 JSON 格式輸出相同的內容；加上 `--fix` 會將 1.0 已停用的舊設定名稱改為新名稱，並將原檔案備份為 `.env.bak`。
 
-**無法連接平台。** 平台拒絕憑證時，頁面會說明原因，終端機中的 `personagent connect <平台>` 也會說明原因。請至平台後台核對；Discord 還須確認已開啟 Message Content Intent。QR 碼過期時可以重新取得，AstrBot 下載失敗時可以重試。「應用程式」頁面的「平台連線」會顯示 personagent 直接連線的各平台狀態。頁面或 `personagent up` 啟動的各處理程序的記錄檔位於 personagent 資料夾的 `runtime/desktop/` 中，也可以在「應用程式」頁面的「執行紀錄」中檢視。
+**無法連接平台。** 平台拒絕憑證時，頁面會說明原因，終端機中的 `personagent connect <平台>` 也會說明原因。請至平台後台核對；Discord 還須確認已開啟 Message Content Intent。QR 碼過期時可以重新取得，AstrBot 下載失敗時可以重試。某個平台約兩分鐘無法連線時，頁面會將其顯示為「正在重試」並說明原因，恢復後會自動回到已連接狀態；在中國大陸，Telegram 和 Discord 需要 HTTP 代理伺服器，請在系統設定或 `HTTPS_PROXY` 中設定後重新啟動。平台持續拒絕機器人的請求時，頁面也會同樣說明原因。每個已連接的平台下方會說明角色在該平台回覆哪些人，並附上前往回覆設定的連結，可在該處加以限制。「應用程式」頁面的「平台連線」會顯示 personagent 直接連線的各平台狀態。頁面或 `personagent up` 啟動的各處理程序的記錄檔位於 personagent 資料夾的 `runtime/desktop/` 中，也可以在「應用程式」頁面的「執行紀錄」中檢視。
 
 **服務正在執行，但始終沒有回覆。** 最常見的原因有三個：
 

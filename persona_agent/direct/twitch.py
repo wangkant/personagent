@@ -19,7 +19,7 @@ from typing import Any, Callable
 
 import httpx
 
-from .base import Platform, Refused, Unsupported, backoff_sleep, plain_name, raw_id, split_text
+from .base import Platform, Refused, Unsupported, backoff_sleep, send_failed, plain_name, raw_id, split_text
 from ..storage import atomic_write_text
 
 logger = logging.getLogger("personagent.direct.twitch")
@@ -114,7 +114,7 @@ async def login(client: httpx.AsyncClient, show: Callable[[str], None], values: 
             if "device code" in message or "expired" in message:
                 break       # used up or timed out: show a new code
             if "denied" in message:
-                raise LoginFailed("denied")
+                raise LoginFailed("login_denied")
             if "client" in message:
                 # A confidential app needs a secret this flow never has.
                 raise LoginFailed("app_rejected")
@@ -293,7 +293,7 @@ class Twitch(Platform):
                 raise
             except Exception as exc:
                 logger.warning("twitch: chat connection dropped (%s)", type(exc).__name__)
-                self.dropped()
+                self.dropped(exc)
                 await backoff_sleep(failures)
                 failures += 1
                 continue
@@ -449,8 +449,9 @@ class Twitch(Platform):
                     lead = f"@{mention} " if i == 0 and mention else ""
                     await self._post(target, lead + piece)
             except (ConnectionError, Refused) as exc:
-                logger.warning("twitch: sending stopped after %d item(s) (%s)", sent, exc)
-                break
+                if not send_failed(self.kind, item, exc, sent):
+                    break
+                continue
             sent += 1
         return sent
 

@@ -42,11 +42,10 @@ from . import direct_setup
 from . import setup_wizard as sw
 from . import updates
 from . import window as appwindow
-from .astrbot_install import AstrBotInstallation, install_astrbot
+from .astrbot_install import STALL_S, AstrBotInstallation, DownloadStalled, install_astrbot, progress_marker
 from .config_env import env_bool
 from .services import Services, stop_leftovers
-from .storage import FileLock, LockUnavailable, atomic_write_text, dated_copy
-from .storage import replace as storage_replace
+from .storage import FileLock, LockUnavailable, atomic_write_text
 
 ASSETS = Path(__file__).with_name("static") / "welcome"
 # The page's languages besides English and Chinese, each a translation in
@@ -55,18 +54,20 @@ PAGE_LANGUAGES = ("zh-TW", "ja", "ko", "es", "fr", "de", "pt-BR", "ru")
 # Parts of the page beyond its four first views. Each is a module in
 # persona_agent/panels with `mount(app, workspace, body)`, and a script and a
 # stylesheet of the same name under ASSETS/panels.
-PANELS = ("health", "runtime", "desk", "tuning", "learned", "agents", "practice", "lore")
+PANELS = ("health", "runtime", "desk", "tuning", "learned", "agents", "chatapi", "practice", "cards", "lore",
+          "detect")
 TOKEN_HEADER = "x-personagent-setup-token"
 # Bytes; a chat message may be 8000 characters, three bytes each in Chinese.
 MAX_BODY = 32_768
-# Characters; the shipped personas are under 800.
-PERSONA_LIMIT = 4000
+# Characters; the shipped personas are under 800, imported cards often run past 4,000,
+# and the engine itself sets no limit. Every reply sends the whole persona.
+PERSONA_LIMIT = 16_000
 # Platforms a setting may name: the ones the page knows, or QQ through NapCat.
 PLATFORM_KINDS = frozenset(p.kind for p in conn.PLATFORMS) | {"qq"}
 # How long a new adapter has to fail loudly before it counts as connected.
 REJECT_WINDOW = 12
 # How long a direct platform may take to accept a new session.
-DIRECT_WINDOW = 40
+DIRECT_WINDOW = direct_setup.DIRECT_WINDOW
 # Refusals a direct platform names, which the page explains one by one.
 NAMED_REFUSALS = direct_setup.NAMED_REFUSALS
 # The Activity view reads the character service's own API with the token it
@@ -151,6 +152,21 @@ def _card_aliases(home: Path, values: dict) -> tuple:
     raw = card.get("aliases") if isinstance(card, dict) else None
     names = (" ".join(a.split()) for a in raw if isinstance(a, str)) if isinstance(raw, list) else ()
     return tuple(dict.fromkeys(n for n in names if n))
+
+
+def reach(kind: str, values: dict) -> str:
+    """Who the character answers on one platform under the reply settings:
+    "all", "groups_listed", "people_listed" or "listed"; "dm_all" and
+    "dm_listed" on a platform without groups."""
+    from . import access
+
+    identity = access.identity_from_env(values)
+    groups = bool(access.entries_on(kind, identity.groups))
+    people = bool(access.entries_on(kind, identity.dm_users))
+    if not conn.platform(kind).groups:
+        return "dm_listed" if people else "dm_all"
+    return ("listed" if groups and people else "groups_listed" if groups
+            else "people_listed" if people else "all")
 
 
 def chat_failure(error: BaseException) -> str:
@@ -248,13 +264,18 @@ class Workspace:
             direct_on = self.services.running("direct")
             platforms = [p.kind for p in conn.PLATFORMS
                          if p.kind in stored or (p.kind in via_astrbot and p.kind not in stored)]
-            status = {}
+            status, details = {}, {}
             for kind in platforms:
                 if kind in stored:
                     # A refusal outlives the runner, which exits once nothing is left to run.
                     state = states.get(kind, {}).get("state")
                     status[kind] = ("failed" if state in ("refused", "error") else "paused" if not direct_on
-                                    else "running" if state == "connected" else "connecting")
+                                    else "running" if state == "connected"
+                                    else "retrying" if state == "retrying" else "connecting")
+                    detail = str(states.get(kind, {}).get("detail") or "")
+                    # Only the named codes: any other detail may quote the platform's own text.
+                    if detail in NAMED_REFUSALS and status[kind] != "paused":
+                        details[kind] = detail
                 else:
                     status[kind] = "running" if self.services.running("astrbot") else "paused"
             updates.refresh_soon(self.home)
@@ -278,7 +299,8 @@ class Workspace:
                     "avatar": avatar,
                     # Changes with the file, so the page fetches a replaced picture again.
                     "ownAvatar": self._own_avatar_version(own_picture),
-                    "platforms": platforms, "platformStatus": status,
+                    "platforms": platforms, "platformStatus": status, "platformDetail": details,
+                    "platformReach": {kind: reach(kind, values) for kind in platforms},
                     "agentRunning": self.services.running("agent"),
                     # "Reply to messages" is off: running, yet it answers nobody.
                     "repliesOff": not env_bool("AGENT_ENABLED", True, env=values),
@@ -323,6 +345,12 @@ class Workspace:
             base = str(payload.get("baseUrl") or provider.base_url).strip()
             same = same and base.rstrip("/") == old.get("LLM_BASE_URL", "").rstrip("/")
             key = str(payload.get("apiKey") or "").strip()
+            taken = str(payload.get("apiKeyFrom") or "")
+            if not key and taken:
+                # A key the page found in the environment and never saw.
+                from .panels import detect
+                if detect.ENV_KEYS.get(taken) == provider.key:
+                    key = detect.env_key(taken)
             if not key and same:
                 key = old.get("LLM_API_KEY", "")
             if provider.key == "ollama":
@@ -389,16 +417,8 @@ class Workspace:
 
     def _keep_written_persona(self) -> None:
         """Copy a persona.txt someone wrote to persona.txt.bak before a shipped one replaces it."""
-        path = self.home / "persona.txt"
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            return
-        if text.strip() and sw.shipped_persona(text) is None:
-            kept = path.with_name("persona.txt.bak")
-            atomic_write_text(kept, text)
-            # The next replacement writes persona.txt.bak again: this one stays.
-            dated_copy(kept)
+        from .charcard import back_up_persona
+        back_up_persona(self.home)
 
     def _restart_agent(self) -> None:
         """A running agent reads its settings and persona only as it starts."""
@@ -490,20 +510,10 @@ class Workspace:
         """Keep `data` as the character's picture on this page and show it."""
         if len(data) > sw.MAX_OWN_AVATAR:
             raise ValueError("avatar_too_large")
-        kind = sw.own_avatar_kind(data)
-        if not kind:
+        if not sw.own_avatar_kind(data):
             raise ValueError("avatar_type")
         with self._lock:
-            target = self.home / f"avatar.{kind}"
-            if target.is_symlink():
-                raise ValueError("avatar_type")
-            tmp = target.with_name(f"avatar.{secrets.token_hex(4)}.tmp")
-            tmp.write_bytes(data)
-            storage_replace(tmp, target)
-            # One picture: one left by an earlier choice of another type goes.
-            for other in sw.OWN_AVATAR_TYPES:
-                if other != kind:
-                    (self.home / f"avatar.{other}").unlink(missing_ok=True)
+            sw.write_own_avatar(self.home, data)
             sw.copy_env_template(self.home)
             sw.write_env(self.env, {"PERSONA_AVATAR": sw.OWN_AVATAR})
             return self.summary()
@@ -846,6 +856,7 @@ class Workspace:
                 # Services name what did not start: "agent could not start; ...".
                 service = reason.split(" ", 1)[0] if reason.split(" ", 1)[0] in ("agent", "astrbot", "direct") else ""
                 error = ("download_failed" if isinstance(exc, subprocess.CalledProcessError)
+                         else "download_stalled" if isinstance(exc, DownloadStalled)
                          else reason if reason in NAMED_REFUSALS
                          or reason in ("scan_failed", "platform_rejected", "network_failed")
                          else "agent_failed" if service == "agent"
@@ -865,10 +876,18 @@ class Workspace:
         direct_setup.connect_plugin(self.home)
 
     def _install(self) -> Path:
+        installation = AstrBotInstallation(self.home)
         run = functools.partial(self.services.run, "install",
-                                should_stop=lambda: self._cancelled or self._closed)
+                                should_stop=lambda: self._cancelled or self._closed,
+                                progress=functools.partial(progress_marker, installation),
+                                stall_s=STALL_S)
+
+        def step(name: str) -> None:
+            # Which download is running, for the page to say.
+            self.job = {**self.job, "installStep": name}
         try:
-            data = install_astrbot(self.home, run=run)
+            data = install_astrbot(self.home, run=run, step=step,
+                                   mirror=self.config().get("PERSONAGENT_MIRROR", ""))
         except subprocess.CalledProcessError as exc:
             # The page says only that the download failed; why is for this window.
             print(langs.term("install stopped; see runtime/desktop/install.log."), file=sys.stderr)
@@ -902,7 +921,7 @@ class Workspace:
             # The fields name the app; the sign-in adds the tokens, then the whole is checked.
             values = self._sign_in(spec, values)
             self._stage("check")
-        direct_setup.check(self.home, spec, values)
+        values = direct_setup.check(self.home, spec, values) or values
         self._store_direct(spec, values)
 
     def _scan_direct(self, spec: conn.Platform) -> None:
@@ -939,14 +958,14 @@ class Workspace:
         deadline = time.monotonic() + DIRECT_WINDOW
         self._stage("check")
         while time.monotonic() < deadline and not self._closed:
-            state = direct_base.read_status(self.home).get(spec.kind, {})
-            if state.get("state") == "connected":
+            result = direct_setup.verdict(direct_base.read_status(self.home).get(spec.kind, {}),
+                                          self.services.running("direct"))
+            if result == "connected":
                 return
-            if state.get("state") in ("refused", "error") or not self.services.running("direct"):
-                detail = str(state.get("detail") or "")
+            if result:
                 self._disconnect_direct(spec)
                 self.services.restart_direct()
-                raise RuntimeError(detail if detail in NAMED_REFUSALS else "platform_rejected")
+                raise RuntimeError(result)
             time.sleep(0.5)
         # Still connecting: kept, and the page shows it as connecting.
 
@@ -1422,11 +1441,11 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
             "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         return response
 
-    async def body(request: Request) -> dict:
+    async def body(request: Request, limit: int = MAX_BODY) -> dict:
         raw = bytearray()
         async for chunk in request.stream():
             raw.extend(chunk)
-            if len(raw) > MAX_BODY:
+            if len(raw) > limit:
                 raise HTTPException(413, "too_large")
         try:
             value = json.loads(raw or b"{}")
@@ -1500,7 +1519,7 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
                                 "ownNames": sorted(c.own_names),
                                 "avatar": f"/assets/characters/{c.key}.webp" if sw.portrait(c.key) else None}
                                for c in sw.CHARACTERS],
-                "ownAvatarLimit": sw.MAX_OWN_AVATAR,
+                "ownAvatarLimit": sw.MAX_OWN_AVATAR, "personaLimit": PERSONA_LIMIT,
                 "platforms": conn.catalog()}
 
     @app.post("/api/config")
@@ -1517,7 +1536,7 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
 
     @app.post("/api/persona")
     async def save_persona(request: Request):
-        payload = await body(request)
+        payload = await body(request, PERSONA_LIMIT * 4 + 1024)
         return await asyncio.to_thread(workspace.save_persona, str(payload.get("text") or ""))
 
     @app.get("/api/avatar")

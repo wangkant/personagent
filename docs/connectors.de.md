@@ -117,7 +117,7 @@ Diese optionalen Felder schalten weitere Funktionen des Agenten frei:
 |---|---|
 | `connector_id` | Eine stabile ID für diese Konnektor-Instanz. Die Outbox verlangt sie. |
 | `reply_handle` | Alles, was der Konnektor benötigt, um diese Unterhaltung später ohne eingehende Nachricht zu erreichen: `unified_msg_origin` von AstrBot, eine Matrix-Raum-ID oder eine Satori-Anmeldung plus Kanal-ID. Der Agent behandelt es als undurchsichtig, speichert es pro Unterhaltung und gibt es in Outbox-Zustellungen zurück. |
-| `capabilities` | Die Fähigkeiten des Konnektors. `outbox` bedeutet, dass er die Outbox abfragt und von sich aus senden kann. `quote_text` bedeutet, dass Antwortsegmente den zitierten Text tragen. |
+| `capabilities` | Die Fähigkeiten des Konnektors. `outbox` bedeutet, dass er die Outbox abfragt und von sich aus senden kann. `quote_text` bedeutet, dass Antwortsegmente den zitierten Text tragen. `text_only` bedeutet, dass die Unterhaltung nichts außer Text anzeigen kann: Der Agent wird angewiesen, keine Sticker zu verwenden, und sendet keine, sodass jedes Antwortelement `text` ist. Die OpenAI-kompatible API sendet diese Angabe. |
 | `prefiltered` | `true` (der Standard), wenn der Konnektor seine eigene Zulassungsliste angewendet hat. `false` macht die Listen des Agenten zum einzigen Filter. |
 | `proactive` | Kennzeichnet ein DM-Ereignis als Stichwort, das der Konnektor geschrieben hat, nicht als Worte der Person. Siehe „Zuerst sprechen ohne die Outbox“. |
 

@@ -47,6 +47,13 @@ def _no_bare_call_wait(request: pytest.FixtureRequest,
 
 
 @pytest.fixture(autouse=True)
+def _no_mirror_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test probes PyPI or GitHub: both count as reachable."""
+    monkeypatch.setattr("persona_agent.mirrors.reachable", lambda url, timeout=0: True)
+    monkeypatch.delenv("PERSONAGENT_MIRROR", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _no_update_check(monkeypatch: pytest.MonkeyPatch) -> None:
     """No test asks PyPI; tests/test_updates.py turns the check back on."""
     monkeypatch.setenv("UPDATE_CHECK_ENABLED", "false")

@@ -4,7 +4,23 @@ English · [简体中文](start.zh-CN.md) · [繁體中文](start.zh-TW.md) · [
 
 ## Open it
 
-Install personagent from PyPI and open it:
+Nothing needs to be installed first: the installer brings its own Python. Paste one line into a terminal.
+
+On Windows, press the Windows key, type `PowerShell`, press Enter, and paste:
+
+```powershell
+irm https://raw.githubusercontent.com/wangkant/personagent/main/install.ps1 | iex
+```
+
+On macOS, open Terminal (in Applications > Utilities); on Linux, any terminal. Paste:
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/wangkant/personagent/main/install.sh | sh
+```
+
+The first run takes a few minutes. It installs personagent, opens it, and on Windows puts a personagent icon on the desktop and in the Start menu; on macOS it leaves `personagent.command` on the desktop, and on Linux an entry in the application menu. Where PyPI or GitHub is slow to reach, the installer uses mirrors in mainland China by itself; `PERSONAGENT_MIRROR=cn` before the command makes it use them from the start, and `off` never. If `raw.githubusercontent.com` itself cannot be reached, the same two files are served at `https://cdn.jsdelivr.net/gh/wangkant/personagent@main/install.ps1` and `.../install.sh`. Run the same line again to update, and `uv tool uninstall personagent` to remove the program; your home folder stays.
+
+With Python 3.10 or later already installed, you can install from PyPI instead:
 
 ```sh
 python -m pip install personagent
@@ -17,7 +33,7 @@ On Windows the page opens in a window of its own. On macOS and Linux it opens in
 
 A coding agent can do the setup for you: ask it to read [setup-for-agents.md](setup-for-agents.md) and set up personagent.
 
-On Windows you can also download the source ZIP, unpack it and double-click `start.bat`. It creates its own Python environment in the folder and opens the same page. The first time, it also puts a personagent icon on your desktop and in the Start menu.
+On Windows you can also download the source ZIP, unpack it and double-click `start.bat`. It creates its own Python environment in the folder, fetching Python first when the computer has none, and opens the same page. The first time, it also puts a personagent icon on your desktop and in the Start menu.
 
 To run it from a clone, give it a venv of its own: `python -m venv .venv`, then `.venv/bin/python -m pip install -e .` and `.venv/bin/python -m persona_agent`. On Windows the interpreter is `.venv\Scripts\python.exe`, or you can double-click `start.bat`.
 
@@ -25,11 +41,13 @@ To run it from a clone, give it a venv of its own: `python -m venv .venv`, then 
 
 Choose a model service, paste its API key and click **Verify & start chatting**. OpenRouter's free models and the warm listener character are selected to begin with. They still need a key, which costs nothing and which you get from OpenRouter through **Get an API key**. The limit is 50 requests a day, and the one small request sent to verify it costs something only on a paid service. **Advanced settings** holds the model name and API address, and **Choose a name, personality or language** holds the character's name, personality and the language it talks in. The menu at the top right of the page changes only the language the page itself is shown in.
 
+If Ollama or LM Studio is already running on the computer with a model loaded, or a model service's key is already set in an environment variable (such as `DEEPSEEK_API_KEY` or `OPENAI_API_KEY`), the page says so above the model service, and one click on **Use Ollama** or **Use this key** verifies it and starts the chat. A local model needs no key, and nothing leaves the computer.
+
 The key stays on your computer; click **Show** to check it. Chat messages go to the model service you choose, at that service's usual rates.
 
 Your character replies in the page, with stickers and pictures where it sends them. Messages it sends later, such as one it starts itself, appear in the chat within a few seconds. Your settings are saved, so the next launch goes straight to chat.
 
-Once it is set up, **Character & settings** has a **Persona** box with the text the character runs on. Rewrite who it is and how it talks, then click **Save persona**. The change applies at once, and what the character has learned is kept.
+Once it is set up, **Character & settings** has a **Persona** box with the text the character runs on. Rewrite who it is and how it talks, then click **Save persona**. The change applies at once, and what the character has learned is kept. To start from an idea, describe the character in a sentence above the box and click **Write a draft**. To bring in a character someone shared as a Tavern character card (PNG, JSON or CHARX), use **Import a character card** below the box; [the guide](guide.md#character-cards-and-drafts) says what each part becomes.
 
 Below it, **More features** turns on web search, image understanding and speaking first. Search uses DuckDuckGo by default; a Tavily key makes it more reliable. **Advanced settings** below it holds the settings that were previously available only in `.env`. Until you connect an app, the Chat view shows a short getting-started bar.
 
@@ -48,7 +66,8 @@ Two more views need no app. **Practice** plays a scripted demo and runs a practi
 2. personagent connects QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat itself. The other apps go through AstrBot, a third-party bridge. The first time you connect one of them, personagent downloads AstrBot with a separate Python 3.12 runtime, so keep the page open until it finishes. AstrBot then runs in the background, with no dashboard to sign in to.
 3. personagent checks the credentials with the app before saving them. If the app refuses them, the page tells you and nothing is saved.
 4. Connected apps are listed at the top of **Connect apps**, where you can set one up again or disconnect it.
-5. Without the page, for example on a server without a display, `personagent connect <platform>` connects QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK or Stoat from the terminal, with the same steps and checks. `personagent connect` alone lists them. The [full guide](guide.md#connect-a-platform-in-the-terminal) describes the command.
+5. For any other software that accepts an OpenAI-compatible address, such as Open WebUI, SillyTavern or a script, turn on **Other software** at the bottom of **Connect apps** and copy its address, key and model into that app. The [full guide](guide.md#other-software) describes it.
+6. Without the page, for example on a server without a display, `personagent connect <platform>` connects QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK or Stoat from the terminal, with the same steps and checks. `personagent connect` alone lists them. The [full guide](guide.md#connect-a-platform-in-the-terminal) describes the command.
 
 To find a QQ bot, open mobile QQ and go to Contacts → Bots. Chat with it privately, or add it to a group you own. This route uses QQ's official bot platform, so you need no personal QQ account and no extra software. QQ decides where the bot may go. Until the bot is certified, it can join only groups its admin owns, and there is no sandbox to set up. In a group it sees only messages that @ it, unless the group owner turns on receiving all messages on the bot's profile in that group. [QQ's bot guide](https://bot.q.qq.com/wiki/bot_new_product-intro/) covers certification and the rest of the account side.
 

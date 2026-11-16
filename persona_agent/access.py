@@ -91,6 +91,8 @@ def parse_ids(*lists, native_platforms: Iterable[str] = ()) -> frozenset[str]:
 #: sits beside dashboard.token and is as private.
 PAGE_OWNER_FILE = "page.owner"
 PAGE_PLATFORM = "browser"
+#: The platform of conversations held through the OpenAI-compatible API (chat_api).
+API_PLATFORM = "api"
 _page_owner: dict = {}
 
 

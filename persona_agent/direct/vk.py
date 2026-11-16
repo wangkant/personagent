@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 
-from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep,
+from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep, send_failed,
                    has_content, media, plain_name, raw_id, split_text)
 
 logger = logging.getLogger("personagent.direct.vk")
@@ -30,6 +30,9 @@ RATE_LIMITED = {6: 1.0, 9: 5.0, 29: 10.0}
 TRANSIENT = {1, 10}
 # Permission denied / access denied / method unavailable with this token.
 NO_RIGHTS = {7, 15, 27}
+# The chat no longer takes the community's messages: the rest of a reply cannot go either.
+CANNOT_SEND = {7, 15, 901, 902, 917, 945, 946}
+MAX_FORWARDED = 5
 
 
 class ApiError(Exception):
@@ -147,7 +150,7 @@ class VK(Platform):
                 failures = 0
             except ConnectionError as exc:
                 logger.warning("vk: %s", exc)
-                self.dropped()
+                self.dropped(exc)
                 await backoff_sleep(failures)
                 failures += 1
                 continue
@@ -202,8 +205,10 @@ class VK(Platform):
             segments.append({"type": "text", "text": text})
         for attachment in message.get("attachments") or []:
             segments.append(await self._attachment(attachment))
-        if message.get("fwd_messages"):
-            segments.append({"type": "text", "text": "(forwarded messages)"})
+        forwarded = await self._forwarded(message.get("fwd_messages"))
+        segments.extend(forwarded)
+        if not text:
+            text = "\n".join(s["text"] for s in forwarded if s["type"] == "text")
         if not has_content(segments, self.bot_id):
             return None
         return {"conversation_type": "dm" if is_dm else "group",
@@ -213,6 +218,23 @@ class VK(Platform):
                 "sent_at": int(message.get("date") or 0),
                 "addressed": addressed, "text": text, "segments": segments,
                 "reply_handle": str(peer)}
+
+    async def _forwarded(self, messages: Any) -> list[dict]:
+        """Forwarded messages as the protocol's `forward` segments, each
+        followed by what that message held; never as the sender's own words."""
+        segments: list[dict] = []
+        for message in (messages if isinstance(messages, list) else [])[:MAX_FORWARDED]:
+            if not isinstance(message, dict):
+                continue
+            author = int(message.get("from_id") or 0)
+            segments.append({"type": "forward", "name": await self._name(str(author)) if author > 0 else ""})
+            # A mention of the bot inside a forward was someone else's call, long ago.
+            text = _readable(self._mention_re().sub("", str(message.get("text") or ""))).strip()
+            if text:
+                segments.append({"type": "text", "text": text})
+            for attachment in message.get("attachments") or []:
+                segments.append(await self._attachment(attachment))
+        return segments
 
     def _mention_re(self) -> re.Pattern:
         names = [f"club{self.group_id}", f"public{self.group_id}"]
@@ -299,8 +321,10 @@ class VK(Platform):
                 else:
                     continue
             except (ConnectionError, Refused, ApiError, ValueError) as exc:
-                logger.warning("vk: sending stopped after %d item(s) (%s)", sent, exc)
-                break
+                if not send_failed(self.kind, item, exc, sent,
+                                   final=isinstance(exc, ApiError) and exc.code in CANNOT_SEND):
+                    break
+                continue
             sent += 1
         return sent
 

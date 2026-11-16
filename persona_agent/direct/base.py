@@ -43,6 +43,13 @@ TYPING_OFF_S = 30.0
 OUTBOX_PACE_MAX_S = 6.0
 OUTBOX_QUEUE_MAX_S = 5.0
 OUTBOX_RUN_MAX_S = 45.0
+# Failing this long without a session: the page says the platform cannot be reached.
+UNREACHABLE_S = 120.0
+# The same refusal this many times in a row: the page names it.
+DENIED_AFTER = 3
+# Status details of a platform that keeps failing but is still retried.
+UNREACHABLE, ACCESS_DENIED = "unreachable", "access_denied"
+_DENIED = re.compile(r": (401|403)( |$)")
 
 # Typing time the first item of a reply already spent waiting for the agent.
 _spent: contextvars.ContextVar[float] = contextvars.ContextVar("personagent_direct_spent", default=0.0)
@@ -59,6 +66,38 @@ class Refused(Exception):
 
 class Unsupported(Exception):
     """The platform cannot send unprompted to this conversation."""
+
+
+class Denied(ConnectionError):
+    """The platform turned a request down (HTTP 401/403 or its own permission
+    error) in a way that may pass; the message is a short code, never a credential."""
+
+
+class Paused(ConnectionError):
+    """The platform asked for a pause before the next attempt; the message
+    is a short code the page explains."""
+
+
+def trouble(exc: BaseException | None) -> str:
+    """The named cause of a failed attempt, or "" for an ordinary network failure."""
+    if isinstance(exc, Denied):
+        return str(exc) or ACCESS_DENIED
+    if isinstance(exc, ConnectionError) and _DENIED.search(str(exc)):
+        return ACCESS_DENIED
+    return ""
+
+
+def send_failed(platform: str, item: dict, exc: BaseException, sent: int, *, final: bool = False) -> bool:
+    """Log one reply item that did not go out, never its content; True when
+    the items after it are still worth sending. `final`: the platform said
+    the chat takes no more, which a refusal of the credentials says too."""
+    # A 401/403 answer for this chat holds for the next item too.
+    if final or isinstance(exc, (Refused, Paused)) or trouble(exc):
+        logger.warning("%s: sending stopped after %d item(s) (%s)", platform, sent, exc)
+        return False
+    what = "a picture" if item.get("type") == "image" else "a message"
+    logger.warning("%s: %s was not sent (%s); sending the rest", platform, what, type(exc).__name__)
+    return True
 
 
 def sdk():
@@ -117,8 +156,9 @@ def read_status(home: Path) -> dict[str, dict]:
 
 
 class Status:
-    """kind -> {"state": connecting|connected|refused|error, "detail": code,
-    "since": unix seconds}, rewritten on every change for the page to poll."""
+    """kind -> {"state": connecting|connected|retrying|refused|error, "detail":
+    code, "since": unix seconds}, rewritten on every change for the page to
+    poll. "retrying": still retried, with a named cause (UNREACHABLE, ...)."""
 
     def __init__(self, home: Path):
         self.path = status_path(home)
@@ -165,19 +205,29 @@ class Platform:
 
     kind = ""                       # the event's `platform`, and the catalog id
     capabilities = ("outbox", "quote_text")
+    # Whether the platform can still refuse once a session opens, after `check` passed.
+    refuses_in_session = False
 
     def __init__(self, values: dict):
         self.values = values
         self.bot_id = ""
 
-    def dropped(self) -> None:
-        """Called when the connection is lost and being retried; the bridge
-        replaces it to show the platform as connecting again."""
+    def dropped(self, cause: BaseException | None = None) -> None:
+        """Called when the connection is lost and being retried, with what
+        failed; the bridge replaces it to show the platform as connecting again."""
+
+    def notice(self, code: str) -> None:
+        """Something the owner should know while the platform stays connected
+        (a code the page explains); the bridge replaces it."""
 
     async def check(self) -> str:
         """Prove the credentials work and learn the bot's own id; raises
         Refused when the platform turns them down."""
         raise NotImplementedError
+
+    def keep(self) -> dict:
+        """The values to store once `check` has passed."""
+        return dict(self.values)
 
     async def run(self, on_event: OnEvent, connected: Callable[[], None]) -> None:
         """Receive until cancelled, calling `connected` once the platform
@@ -201,6 +251,10 @@ class Platform:
     async def typing(self, target: Any) -> None:
         """Show that a reply is being written, where the platform has such a
         sign. The sign fades by itself."""
+
+    async def typing_done(self, target: Any) -> None:
+        """Take the sign down when no reply follows, on a platform whose sign
+        lasts longer than a few seconds."""
 
     async def pace(self, target: Any, item: dict) -> None:
         """Awaited by `send` before each item goes out; the bridge replaces it."""
@@ -240,10 +294,16 @@ class Bridge:
     #: Off in tests that are not about the pace.
     paced = True
 
-    def __init__(self, platform: Platform, agent: Any, status: Status):
+    def __init__(self, platform: Platform, agent: Any, status: Status,
+                 admits: Optional[Callable[[dict], bool]] = None):
         self.platform = platform
         self.agent = agent
         self.status = status
+        # Whether the settings let the character answer an addressed group message.
+        self.admits = admits
+        self._clock = time.monotonic
+        self._down_since: Optional[float] = None
+        self._denied = 0
         self._turns = asyncio.Semaphore(MAX_CONCURRENT_TURNS)
         self._tasks: set[asyncio.Task] = set()
         self._sleep = asyncio.sleep
@@ -269,20 +329,22 @@ class Bridge:
         started = time.monotonic()
         waiting: Optional[asyncio.Task] = None
         async with self._turns:
-            # A message meant for the character gets an answer: the sign goes up while it is written.
-            if self.paced and (event.get("addressed") or event.get("conversation_type") == "dm"):
+            # Only a message that is sure to be answered puts the sign up while it is written.
+            if self.paced and self.answer_expected(event):
                 waiting = asyncio.create_task(self._typing_while_waiting(target))
+            answer: dict = {}
             try:
                 answer = await self.agent.send_event(event)
             except Exception as exc:
                 logger.warning("%s: the agent did not take a message: %s",
                                self.platform.kind, type(exc).__name__)
-                return
             finally:
                 if waiting is not None:
                     waiting.cancel()
         items = answer.get("replies") or []
         if not items:
+            if waiting is not None:
+                await self._typing_done(target)
             return
         # Outside the turn limit: typing pauses must not hold up other chats.
         try:
@@ -293,6 +355,28 @@ class Bridge:
         if sent < len(items):
             logger.warning("%s: %d of %d reply items were not sent", self.platform.kind,
                            len(items) - sent, len(items))
+
+    def answer_expected(self, event: dict) -> bool:
+        """A one-to-one message is answered; in a group, only one addressed to
+        the character in a group the settings let it answer."""
+        if event.get("conversation_type") == "dm":
+            return True
+        if not event.get("addressed"):
+            return False
+        try:
+            return self.admits is None or bool(self.admits(event))
+        except Exception:
+            return False
+
+    async def _typing_done(self, target: Any) -> None:
+        call = asyncio.ensure_future(self.platform.typing_done(target))
+        done, _ = await asyncio.wait({call}, timeout=TYPING_CALL_MAX_S)
+        if not done:
+            call.cancel()
+            call.add_done_callback(lambda done: done.cancelled() or done.exception())
+        elif not call.cancelled() and call.exception() is not None:
+            logger.debug("%s: the typing sign stayed up: %s", self.platform.kind,
+                         type(call.exception()).__name__)
 
     async def deliver(self, delivery: dict) -> tuple[str, int]:
         try:
@@ -403,8 +487,11 @@ class Bridge:
         def connected() -> None:
             nonlocal failures
             failures = 0
+            self._down_since, self._denied = None, 0
             self.status.set(kind, "connected")
-        self.platform.dropped = lambda: self.status.set(kind, "connecting")
+        self.platform.dropped = lambda cause=None: self.failed(cause)
+        self.platform.notice = lambda code: self.status.set(
+            kind, self.status.states.get(kind, {}).get("state") or "connected", code)
         while not stop.is_set():
             try:
                 await self.platform.run(self.on_event, connected)
@@ -413,9 +500,33 @@ class Bridge:
                 raise
             except Exception as exc:
                 logger.warning("%s: connection failed (%s); retrying", kind, type(exc).__name__)
-                self.status.set(kind, "connecting", type(exc).__name__)
+                self.failed(exc, type(exc).__name__)
                 await backoff_sleep(failures)
                 failures += 1
+
+    def failed(self, cause: BaseException | None, detail: str = "") -> None:
+        """One failed attempt: "connecting" at first, then the named cause
+        once it has repeated or the platform has been out of reach too long.
+        The platform's next accepted session sets it back to connected."""
+        kind = self.platform.kind
+        now = self._clock()
+        if self._down_since is None:
+            self._down_since = now
+        code = trouble(cause)
+        self._denied = self._denied + 1 if code else 0
+        current = self.status.states.get(kind, {})
+        if isinstance(cause, Paused):
+            self.status.set(kind, "retrying", str(cause))
+        elif code and self._denied >= DENIED_AFTER:
+            if current.get("detail") != code:
+                logger.warning("%s: the platform keeps refusing the requests (%s)", kind, code)
+            self.status.set(kind, "retrying", code)
+        elif now - self._down_since >= UNREACHABLE_S:
+            if current.get("state") != "retrying":
+                logger.warning("%s: the platform cannot be reached; still retrying", kind)
+                self.status.set(kind, "retrying", UNREACHABLE)
+        elif current.get("state") != "retrying":
+            self.status.set(kind, "connecting", detail)
 
     async def run(self, stop: asyncio.Event) -> None:
         kind = self.platform.kind

@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep,
+from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep, send_failed,
                    has_content, media, plain_name, raw_id, split_text)
 
 logger = logging.getLogger("personagent.direct.zulip")
@@ -25,6 +25,8 @@ MAX_NAME = 100
 MAX_IMAGES = 4
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 DEACTIVATED = {"USER_DEACTIVATED", "REALM_DEACTIVATED"}
+# The place a reply goes no longer takes messages.
+GONE = {"STREAM_DOES_NOT_EXIST"}
 UPLOAD = re.compile(r"(!?)\[([^\]]*)\]\((/user_uploads/(\d+)/([^)\s]+))\)")
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
 VIDEO_EXT = (".mp4", ".webm", ".mov", ".mkv")
@@ -176,7 +178,7 @@ class Zulip(Platform):
 
     async def _drop(self, exc: Exception, failures: int) -> int:
         logger.warning("zulip: %s", exc)
-        self.dropped()
+        self.dropped(exc)
         await backoff_sleep(failures)
         return failures + 1
 
@@ -299,8 +301,10 @@ class Zulip(Platform):
                 else:
                     continue
             except (ConnectionError, Refused, QueueGone, ValueError) as exc:
-                logger.warning("zulip: sending stopped after %d item(s) (%s)", sent, exc)
-                break
+                if not send_failed(self.kind, item, exc, sent,
+                                   final=isinstance(exc, ApiError) and exc.code in GONE):
+                    break
+                continue
             sent += 1
         return sent
 

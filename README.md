@@ -28,7 +28,8 @@ personagent runs on your own computer and keeps everything it stores there. It w
 <td width="220" valign="top"><strong>It has a character of its own.</strong></td>
 <td valign="top">
 Seven ready personalities. Three are characters the community already draws: the DeepSeek whale girl, the GPT dragon girl and the Claude lady, with portraits that blink, think and talk.<br>
-Rewrite the persona whenever you like. What the character learned is kept.
+Rewrite the persona whenever you like. What the character learned is kept.<br>
+Bring in a Tavern character card as one file, or describe a character in a sentence and have the persona drafted for you. Your own character saves as a card to share.
 </td>
 </tr>
 <tr>
@@ -68,6 +69,7 @@ A burst of messages gets one reply.
 <td valign="top">
 Twenty-two chat platforms connect from one page, by a phone scan or a few pasted values. Most take both group chats and private chats.<br>
 The same agent answers in a window on your computer and inside Claude Code, Codex and DeepSeek Harness.<br>
+Any software that takes an OpenAI-compatible address, such as Open WebUI or SillyTavern, can talk to the same character.<br>
 Any other platform can be added through an AstrBot, Koishi or Matrix bridge, or a connector you write.
 </td>
 </tr>
@@ -75,7 +77,7 @@ Any other platform can be added through an AstrBot, Koishi or Matrix bridge, or 
 <td width="220" valign="top"><strong>It works with what you have.</strong></td>
 <td valign="top">
 Any OpenAI-compatible model: OpenRouter's free models, a paid service, or one running on your own computer with Ollama.<br>
-One command opens it, in English, Chinese or eight more languages, and one pasted model key starts the chat.
+One line installs it, with a Python of its own, on a computer that has nothing installed. The page is in English, Chinese or eight more languages, and one pasted model key starts the chat; with Ollama or LM Studio already running, one click does.
 </td>
 </tr>
 </table>
@@ -84,12 +86,23 @@ It also remembers and forgets when asked in chat (Nova is the default character'
 
 ## Start here
 
-```sh
-python -m pip install personagent
-personagent
+Nothing needs to be installed first. Paste one line into a terminal.
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/wangkant/personagent/main/install.ps1 | iex
 ```
 
-With [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separate install step. On Windows you can also download the source ZIP and double-click `start.bat`.
+macOS and Linux:
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/wangkant/personagent/main/install.sh | sh
+```
+
+The installer brings its own Python, installs personagent and opens it; on Windows it also puts an icon on the desktop. Where PyPI or GitHub is slow to reach, it switches to mirrors in mainland China by itself. Running it again updates personagent.
+
+With Python 3.10 or later already installed, `python -m pip install personagent` and then `personagent` do the same, and with [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separate install step. On Windows you can also download the source ZIP and double-click `start.bat`, which fetches Python as well when the computer has none.
 
 It opens in a window of its own on Windows, and in your browser on macOS and Linux. Paste a model API key and click **Verify & start chatting**. OpenRouter's free models are preselected; they still need a key, which costs nothing and which you get from OpenRouter through **Get an API key** on the page. `personagent demo` plays three scripted scenes with no key at all. The [getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md) walks through the page screen by screen.
 
@@ -106,6 +119,8 @@ Open **Connect apps** in the local page:
 | Advanced | WeCom app, WeChat Official Account, QQ webhook, OneBot v11 (NapCat), Satori | A public address, or other software on this computer |
 
 Connected apps start again each time personagent starts. The scan-to-connect apps, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat are connected by personagent itself; the rest go through an [AstrBot](https://github.com/AstrBotDevs/AstrBot) it downloads and runs in the background. On a server without a display, `personagent connect <platform>` connects any of those ten from the terminal, with the same steps and checks as the page, and `personagent up` starts everything without a browser. Setup for each app is in the [user guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#put-it-in-a-chat), and QQ from zero in the [Chinese deployment guide](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
+
+For everything else there is **Other software** on the same page: switch it on, copy the address, the key and the model name into any app that takes an OpenAI-compatible address, and that app talks to your character, with the same memory as everywhere else. The [guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#other-software) has the details, and `personagent connect api` does the same from a terminal.
 
 Already running AstrBot, Koishi or Matrix? personagent can sit behind it as the agent: see [bridges you run yourself](https://github.com/wangkant/personagent/blob/main/docs/guide.md#bridges-you-run-yourself), the [Satori connector](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.md) and the [Matrix connector](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.md).
 

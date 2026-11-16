@@ -27,6 +27,8 @@ from .storage import ALREADY_RUNNING, LockUnavailable, RuntimeInstanceLock, atom
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 # How much of a failed command's log its error carries.
 TAIL_LINES = 20
+# How often a running step is checked for progress.
+STALL_LOOK_S = 5.0
 
 # On POSIX a child's `python -m module ...` runs as `python -c _GUARD <app pid>
 # -m module ...`: the module runs as -m would run it, and the child's process
@@ -462,11 +464,16 @@ class Services:
             return ""
 
     def run(self, name: str, argv: list[str], *, cwd: Optional[Path] = None, env: dict,
-            should_stop: Callable[[], bool] = lambda: False) -> None:
+            should_stop: Callable[[], bool] = lambda: False,
+            progress: Optional[Callable[[], int]] = None, stall_s: float = 0) -> None:
         """Run `argv` to its end as a child like the others, so `stop` and
         `close` end it as well. Raises Stopped once `should_stop()` holds or
         the app closes, and CalledProcessError, carrying the end of what it
-        logged, when it fails."""
+        logged, when it fails. With `stall_s`, a step whose log and
+        `progress()` both stay the same that long is stopped with
+        DownloadStalled."""
+        from .astrbot_install import DownloadStalled
+
         log = self.home / "runtime" / "desktop" / f"{name}.log"
         with self._lock:
             if self._shutdown or should_stop():
@@ -474,13 +481,33 @@ class Services:
             offset = log.stat().st_size if log.is_file() else 0
             self._spawn(name, argv, cwd=cwd, env=env)
             process = self.processes[name]
+        stalled = False
+
+        def marker() -> tuple:
+            try:
+                written = log.stat().st_size
+            except OSError:
+                written = 0
+            return written, progress() if progress else 0
+        last, changed, looked = marker(), time.monotonic(), time.monotonic()
         try:
             while process.poll() is None and not (self._shutdown or should_stop()):
                 time.sleep(0.1)
+                now = time.monotonic()
+                if stall_s and now - looked >= min(STALL_LOOK_S, stall_s):
+                    looked = now
+                    seen = marker()
+                    if seen != last:
+                        last, changed = seen, now
+                    elif now - changed >= stall_s:
+                        stalled = True
+                        break
         finally:
             self.stop(name)
         if self._shutdown or should_stop():
             raise Stopped(name)
+        if stalled:
+            raise DownloadStalled(name)
         if process.returncode:
             tail = "\n".join(self._logged_since(name, offset).splitlines()[-TAIL_LINES:])
             raise subprocess.CalledProcessError(process.returncode, argv, output=tail)

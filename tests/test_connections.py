@@ -17,9 +17,11 @@ def test_every_platform_is_listed_once_and_only_scan_platforms_may_ask_for_nothi
         assert item.group in (conn.SCAN, conn.KEY, conn.ADVANCED)
         # A scan platform's fields, if any, are for a bot made elsewhere.
         assert item.fields or item.group == conn.SCAN
-        # The one exception: an unregistered IRC nickname has no password.
+        # The exceptions: an unregistered IRC nickname has no password, and a
+        # Matrix bot signs in either with its user ID and password or with a token.
         optional = [f.key for f in item.fields if not f.required]
-        assert not optional or item.group == conn.ADVANCED or optional == ["irc_password"]
+        assert (not optional or item.group == conn.ADVANCED or optional == ["irc_password"]
+                or optional == ["matrix_user", "matrix_password", "matrix_token"])
         # Only a direct platform with a login flow signs in by link.
         assert item.sign_in in ("", "link")
         assert not item.sign_in or conn.is_direct(item.kind) and item.group == conn.KEY

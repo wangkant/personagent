@@ -4,7 +4,23 @@
 
 ## Abrir personagent
 
-Instale personagent desde PyPI y ábralo:
+No hace falta instalar nada antes: el instalador trae su propio Python. Pegue una línea en un terminal.
+
+En Windows, pulse la tecla Windows, escriba `PowerShell`, pulse Intro y pegue:
+
+```powershell
+irm https://raw.githubusercontent.com/wangkant/personagent/main/install.ps1 | iex
+```
+
+En macOS, abra Terminal (en Aplicaciones > Utilidades); en Linux, cualquier terminal. Pegue:
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/wangkant/personagent/main/install.sh | sh
+```
+
+La primera ejecución tarda unos minutos. Instala personagent, lo abre y, en Windows, coloca un icono de personagent en el escritorio y en el menú Inicio; en macOS deja `personagent.command` en el escritorio y, en Linux, una entrada en el menú de aplicaciones. Si PyPI o GitHub responden con lentitud, el instalador usa por sí mismo servidores espejo de China continental; `PERSONAGENT_MIRROR=cn` delante del comando hace que los use desde el principio, y `off`, que no los use nunca. Si no se puede acceder al propio `raw.githubusercontent.com`, los mismos dos archivos están disponibles en `https://cdn.jsdelivr.net/gh/wangkant/personagent@main/install.ps1` y `.../install.sh`. Vuelva a ejecutar la misma línea para actualizar, y `uv tool uninstall personagent` para eliminar el programa; su carpeta de personagent se conserva.
+
+Si ya tiene instalado Python 3.10 o posterior, puede instalarlo desde PyPI:
 
 ```sh
 python -m pip install personagent
@@ -17,7 +33,7 @@ En Windows, la página se abre en una ventana propia. En macOS y Linux se abre e
 
 Un asistente de programación puede realizar la configuración por usted: pídale que lea [setup-for-agents.md](setup-for-agents.md) y configure personagent.
 
-En Windows también puede descargar el archivo ZIP del código fuente, descomprimirlo y hacer doble clic en `start.bat`. Este crea su propio entorno de Python en la carpeta y abre la misma página. La primera vez, también coloca un icono de personagent en su escritorio y en el menú Inicio.
+En Windows también puede descargar el archivo ZIP del código fuente, descomprimirlo y hacer doble clic en `start.bat`. Este crea su propio entorno de Python en la carpeta, descargando antes Python si el equipo no lo tiene, y abre la misma página. La primera vez, también coloca un icono de personagent en su escritorio y en el menú Inicio.
 
 Para ejecutarlo desde un clon, asígnele un entorno virtual propio: `python -m venv .venv`, a continuación `.venv/bin/python -m pip install -e .` y `.venv/bin/python -m persona_agent`. En Windows, el intérprete es `.venv\Scripts\python.exe`; también puede hacer doble clic en `start.bat`.
 
@@ -25,11 +41,13 @@ Para ejecutarlo desde un clon, asígnele un entorno virtual propio: `python -m v
 
 Elija un servicio de modelos, pegue su clave de API y seleccione **Verificar e iniciar el chat**. De forma predeterminada están seleccionados los modelos gratuitos de OpenRouter y el personaje del oyente cercano. Estos modelos también necesitan una clave, que no tiene coste y se obtiene en OpenRouter mediante **Obtener una clave de API**. El límite es de 50 solicitudes al día, y la pequeña solicitud que se envía para verificarla solo tiene coste en un servicio de pago. **Nombre del modelo y dirección** contiene el nombre del modelo y la dirección de la API, y **Elegir un nombre, una personalidad o un idioma** contiene el nombre, la personalidad y el idioma en que habla el personaje. El menú de la esquina superior derecha de la página solo cambia el idioma en que se muestra la propia página.
 
+Si Ollama o LM Studio ya se están ejecutando en el equipo con un modelo cargado, o si la clave de un servicio de modelos ya está definida en una variable de entorno (como `DEEPSEEK_API_KEY` u `OPENAI_API_KEY`), la página lo indica encima del servicio de modelos, y un clic en **Usar Ollama** o **Usar esta clave** la verifica e inicia el chat. Un modelo local no necesita clave y nada sale del equipo.
+
 La clave permanece en su equipo; seleccione **Mostrar** para comprobarla. Los mensajes del chat se envían al servicio de modelos que usted elija, con las tarifas habituales de dicho servicio.
 
 El personaje responde en la página, con stickers e imágenes cuando los envía. Los mensajes que envía más tarde, como uno que inicia por su cuenta, aparecen en el chat en pocos segundos. Los ajustes se guardan, por lo que el siguiente inicio abre directamente el chat.
 
-Una vez configurado, **Personaje y ajustes** contiene un cuadro **Perfil** con el texto en el que se basa el personaje. Modifique quién es y cómo habla, y seleccione **Guardar el perfil**. El cambio se aplica de inmediato y se conserva lo que el personaje ha aprendido.
+Una vez configurado, **Personaje y ajustes** contiene un cuadro **Perfil** con el texto en el que se basa el personaje. Modifique quién es y cómo habla, y seleccione **Guardar el perfil**. El cambio se aplica de inmediato y se conserva lo que el personaje ha aprendido. Para partir de una idea, describa el personaje en una frase encima del cuadro y seleccione **Escribir un borrador**. Para incorporar un personaje que alguien haya compartido como tarjeta de personaje de Tavern (PNG, JSON o CHARX), use **Importar una tarjeta de personaje** debajo del cuadro; [la guía](guide.es.md#tarjetas-de-personaje-y-borradores) explica en qué se convierte cada parte.
 
 Debajo, **Más funciones** activa la búsqueda web, la comprensión de imágenes y el inicio de conversaciones por iniciativa propia. La búsqueda utiliza DuckDuckGo de forma predeterminada; una clave de Tavily la hace más fiable. Más abajo, **Ajustes avanzados** reúne los ajustes que antes solo estaban disponibles en `.env`. Hasta que conecte una plataforma, la vista **Chat** muestra una breve barra de primeros pasos.
 
@@ -48,7 +66,8 @@ Hay otras dos vistas que no requieren conectar ninguna plataforma. **Práctica**
 2. personagent conecta por sí mismo QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK y Stoat. Las demás plataformas utilizan AstrBot, un puente de terceros. La primera vez que conecte una de ellas, personagent descargará AstrBot con un entorno de Python 3.12 independiente, por lo que debe mantener la página abierta hasta que finalice. A continuación, AstrBot se ejecuta en segundo plano, sin ningún panel en el que iniciar sesión.
 3. personagent comprueba las credenciales con la plataforma antes de guardarlas. Si la plataforma las rechaza, la página se lo indica y no se guarda nada.
 4. Las plataformas conectadas aparecen en la parte superior de **Conectar plataformas**, donde puede volver a configurarlas o desconectarlas.
-5. Sin la página, por ejemplo en un servidor sin pantalla, `personagent connect <plataforma>` conecta QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK o Stoat desde el terminal, con los mismos pasos y comprobaciones. `personagent connect` por sí solo las enumera. La [guía completa](guide.es.md#conectar-una-plataforma-en-el-terminal) describe el comando.
+5. Para cualquier otro software que admita una dirección compatible con OpenAI, como Open WebUI, SillyTavern o un script, active **Otro software** en la parte inferior de **Conectar plataformas** y copie la dirección, la clave y el modelo indicados en esa aplicación. La [guía completa](guide.es.md#otro-software) lo describe.
+6. Sin la página, por ejemplo en un servidor sin pantalla, `personagent connect <plataforma>` conecta QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK o Stoat desde el terminal, con los mismos pasos y comprobaciones. `personagent connect` por sí solo las enumera. La [guía completa](guide.es.md#conectar-una-plataforma-en-el-terminal) describe el comando.
 
 Para encontrar un bot de QQ, abra QQ para móvil y vaya a Contactos → Bots. Puede chatear con él en privado o añadirlo a un grupo del que sea propietario. Esta vía utiliza la plataforma oficial de bots de QQ, por lo que no necesita una cuenta personal de QQ ni software adicional. QQ determina dónde puede participar el bot. Hasta que el bot esté certificado, solo puede unirse a grupos de los que su administrador sea propietario, y no es necesario configurar ningún entorno de pruebas. En un grupo, solo ve los mensajes que lo mencionan con @, salvo que el propietario del grupo active la recepción de todos los mensajes en el perfil del bot en ese grupo. La [guía de bots de QQ](https://bot.q.qq.com/wiki/bot_new_product-intro/) describe la certificación y el resto de la configuración de la cuenta.
 

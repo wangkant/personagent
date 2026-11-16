@@ -21,7 +21,7 @@ import httpx
 from dataclasses import dataclass, field
 
 from . import channels
-from .connector import ConnectorSink, current_sink
+from .connector import ConnectorSink, current_sink, text_only_turn
 from .outbox import OutboxResult
 from .textproc import MAX_REPLY_MESSAGES, TextProcessing
 
@@ -284,6 +284,7 @@ class Transport:
         prefixes the first message that goes out."""
         # Behind a sink nothing sleeps: the connector paces the replies itself.
         collected = current_sink.get() is not None
+        text_only = text_only_turn()
         # Fold the overflow where the throttle still accepts it, rather than
         # losing the tail to a refusal.
         cap = MAX_REPLY_MESSAGES
@@ -321,6 +322,8 @@ class Transport:
 
         for kind, value in TextProcessing._delivery_units(segments, cap, by_line=by_line):
             if kind == "sticker":
+                if text_only:
+                    continue
                 file_path = self.stickers.pick_by_tag(value, exclude_md5s=used_md5s)
                 if not file_path:
                     logger.info("[Agent] sticker tag %r → no match, skipping%s",

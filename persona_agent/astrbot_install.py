@@ -15,6 +15,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
+from . import mirrors
+
+# A download step that writes nothing for this long is stopped.
+STALL_S = 300
+
+
+class DownloadStalled(RuntimeError):
+    """A download step made no progress for STALL_S seconds and was stopped."""
+
 
 @dataclass(frozen=True)
 class AstrBotInstallation:
@@ -55,7 +64,7 @@ def _discard(installation: AstrBotInstallation) -> None:
     """Remove a half-made environment, so the next attempt starts clean. The
     Python that uv downloaded stays: uv puts it in place whole."""
     tools = installation.tools
-    for path in (tools / "installer", tools / "envs", tools / "bin"):
+    for path in (tools / "installer", tools / "envs", tools / "bin", tools / "tmp"):
         # On Windows a process that just ended can hold its files a moment longer.
         for _ in range(30):
             shutil.rmtree(path, ignore_errors=True)
@@ -64,11 +73,30 @@ def _discard(installation: AstrBotInstallation) -> None:
             time.sleep(0.1)
 
 
-def install_astrbot(home: Path, *, run: Optional[Callable[..., object]] = None) -> Path:
+def progress_marker(installation: AstrBotInstallation) -> int:
+    """Bytes written under the tools folder, where the download steps put
+    their files: a download that makes progress changes it."""
+    total = 0
+    for folder, _, files in os.walk(installation.tools):
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(folder, name))
+            except OSError:
+                pass
+    return total
+
+
+def install_astrbot(home: Path, *, run: Optional[Callable[..., object]] = None,
+                    probe: Optional[Callable[[str], bool]] = None,
+                    step: Callable[[str], None] = lambda name: None, mirror: str = "") -> Path:
     """Install once, initialise with AstrBot's own config class, and return data/.
 
     `run(argv, env=..., cwd=...)` runs one step to its end and raises when
-    the step fails or is stopped; left out, each step runs in this terminal."""
+    the step fails or is stopped; left out, each step runs in this terminal.
+    `probe(url)` tells whether PyPI and GitHub answer (mirrors.reachable);
+    `step(name)` hears which step is running: network, tools, astrbot,
+    mirror (the second attempt, through mirrors) or prepare. `mirror` is
+    PERSONAGENT_MIRROR as .env sets it."""
     if run is None:
         run = functools.partial(subprocess.run, check=True)
     installation = AstrBotInstallation(home.resolve())
@@ -80,18 +108,37 @@ def install_astrbot(home: Path, *, run: Optional[Callable[..., object]] = None) 
         # A killed app can leave its installer running: end it before its files go.
         from .services import stop_leftovers   # imported here: services imports this module
         stop_leftovers(installation.home, under=installation.tools)
-        # An attempt that never got to clean up, such as a closed window.
-        _discard(installation)
-        try:
-            # pip is a step of its own: the builder's own pip setup cannot be stopped.
-            venv.EnvBuilder(with_pip=False).create(bootstrap)
-            run([str(python), "-m", "ensurepip", "--upgrade", "--default-pip"], env=env)
-            run([str(python), "-m", "pip", "install", "uv>=0.8,<1"], env=env)
-            run([str(python), "-m", "uv", "--no-config", "tool", "install",
-                 "--python", "3.12", "astrbot>=4.29,<5"], env=env)
-        except BaseException:
+        step("network")
+        routes = mirrors.attempts(mirrors.choose(probe, mirror), mirror)
+        # Downloads land under tools/, where the progress of a step can be seen.
+        scratch = installation.tools / "tmp"
+        downloads = {**env, "UV_CACHE_DIR": str(installation.tools / "cache"),
+                     "TMP": str(scratch), "TEMP": str(scratch), "TMPDIR": str(scratch)}
+        for attempt, route in enumerate(routes):
+            # An attempt that never got to clean up, such as a closed window.
             _discard(installation)
-            raise
+            try:
+                step("mirror" if attempt else "tools")
+                # pip is a step of its own: the builder's own pip setup cannot be stopped.
+                venv.EnvBuilder(with_pip=False).create(bootstrap)
+                scratch.mkdir(parents=True, exist_ok=True)
+                run([str(python), "-m", "ensurepip", "--upgrade", "--default-pip"], env=downloads)
+                run([str(python), "-m", "pip", "install", *mirrors.pip_args(route), "uv>=0.8,<1"],
+                    env=downloads)
+                if not attempt:
+                    step("astrbot")
+                run([str(python), "-m", "uv", "--no-config", "tool", "install", *mirrors.uv_args(route),
+                     "--python", "3.12", "astrbot>=4.29,<5"], env=mirrors.uv_env(route, downloads))
+                break
+            except (subprocess.CalledProcessError, DownloadStalled):
+                _discard(installation)
+                if attempt == len(routes) - 1:
+                    raise
+            except BaseException:
+                _discard(installation)
+                raise
+        shutil.rmtree(scratch, ignore_errors=True)
+    step("prepare")
     data = installation.root / "data"
     if not (installation.root / ".astrbot").is_file():
         run([str(installation.executable), "init", "--yes"], cwd=installation.root, env=env)

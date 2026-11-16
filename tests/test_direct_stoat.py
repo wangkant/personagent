@@ -312,7 +312,7 @@ def test_a_dropped_connection_reconnects_with_dropped_then_connected(monkeypatch
         return nxt
     bot = bot_with(Server(), connect=connect)
     log = []
-    bot.dropped = lambda: log.append("dropped")
+    bot.dropped = lambda cause=None: log.append("dropped")
 
     async def on_event(event, target):
         pass

@@ -47,7 +47,8 @@ SKIP_SUFFIXES = (".lock", ".tmp", ".pyc", ".part")
 # What "forget" leaves in the runtime folder: the sticker library and the
 # record of model use (the person's check on their bill) are not memory.
 HELD_WAIT_S = 10.0
-KEEP_ON_FORGET = {"stickers.json", "unknown_stickers.jsonl", "dashboard.token", usage.USAGE_FILE}
+KEEP_ON_FORGET = {"stickers.json", "unknown_stickers.jsonl", "dashboard.token", usage.USAGE_FILE,
+                  usage.PAGE_USAGE_FILE}
 SERVICES = ("agent", "astrbot", "direct")
 MAX_MEMBERS = 50_000
 MAX_UNPACKED = 4 * 1024 ** 3

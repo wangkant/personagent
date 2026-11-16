@@ -13,6 +13,7 @@
 - [自定义角色](#自定义角色)
 - [接入聊天平台](#接入聊天平台)：[personagent 直接连接的平台](#personagent-直接连接的平台) · [其他平台](#其他平台经托管的-astrbot) · [你自己运行的桥接](#你自己运行的桥接) · [主动发言](#主动发言)
 - [编程助手](#编程助手)
+- [其他软件](#其他软件)
 - [教导角色](#教导角色)
 - [记忆](#记忆)
 - [动态](#动态)
@@ -179,6 +180,7 @@ PyPI 上发布新版本时，「开始聊天」视图会显示提示，并给出
 | `personagent learned` | 查看角色学到的内容和仍在观察的内容，并可在需要时介入 |
 | `personagent memory` | 列出角色记住的内容，删除某一项或将其恢复 |
 | `personagent eval` | 评测开口时机、人设、学习效果和记忆 |
+| `personagent character` | [导入角色卡](#角色卡与草稿)（`import 文件`）、将角色保存为角色卡（`export 文件.png` 或 `.json`），或根据描述起草人设并输出（`draft "……"`） |
 
 每条命令都支持 `--help`。
 
@@ -317,7 +319,7 @@ personagent 运行期间，该连接保持有效。`personagent up` 会启动 pe
   {"scenario": "朋友分享视频", "context": ["阿强: 史上最离谱的泡面做法"], "reply": "半夜看做饭犯罪现场，你也是有点东西"}
   ```
 
-**人设长度与 `[style]` 块。** 「人设」框最多可填写 4000 个字符。`persona.txt` 中的 `[style]` 块可调整私聊中的六条规则，对群聊不起作用。每行的格式为 `名称: 取值`。未列出的取值会保留默认值（即下文各项中的第一个），并记入日志：
+**人设长度与 `[style]` 块。** 「人设」框最多可填写 16000 个字符；每次回复都会发送完整人设，人设越短费用越低。`persona.txt` 中的 `[style]` 块可调整私聊中的六条规则，对群聊不起作用。每行的格式为 `名称: 取值`。未列出的取值会保留默认值（即下文各项中的第一个），并记入日志：
 
 ```text
 [style]
@@ -329,6 +331,22 @@ vent: ask
 各项名称和取值为：`length`（short、medium、long）；有人倾诉时的 `vent`（hold、ask、solve）；有人请求推荐时的 `recs`（ask_back、offer）；`good_news`（cheer、deadpan）；关于语气词的 `particles`（capped、free、none）；`fatigue`（stock、own）。
 
 **识别图片。** 如需让角色识别图片，请配置 `VISION_MODEL`、`VISION_API_KEY` 和 `VISION_BASE_URL`，或在页面「更多功能」中开启「识别图片」。所选模型无法读取图片时，页面会在保存时说明。角色看不到的图片（未开启识图或识图失败），无论在群聊还是私聊中，都会标明为看不到的图片，角色会询问内容，而不会凭空描述。语音、视频、文件和转发的消息会按其实际类型交给角色；平台提供语音转写时，一并附上转写文字。转发消息中的文字视为被转发者的话：其中的名字不算点名，也不会执行记忆命令。提及他人时，角色看到的是对方自己设定的名字；这个名字不算发送者的话，既不会点名角色，也不会构成命令。
+
+### 角色卡与草稿
+
+**用一句话起草。** 在「人设」框上方用一两句话描述角色，再点击「生成草稿」。personagent 会向你的模型服务发送一次请求（在「应用」页的模型用量中计为「起草人设」），并将草稿填入框中：以角色使用的语言写成，内容是具体的习惯。点击「保存人设」之前，草稿不会保存；「恢复之前的内容」可恢复框中原有的文字。在终端运行 `personagent character draft "一位退休的灯塔看守人，热爱填字游戏"` 会输出一份草稿，不保存任何内容。
+
+**导入角色卡。** 「人设」框下方的「角色卡」支持 Tavern 角色卡，即 SillyTavern 和各类角色卡分享网站使用的格式：PNG 角色卡（V2 的 `chara` 或 V3 的 `ccv3` 数据，两者都有时以 V3 为准）、JSON 角色卡（V1、V2 或 V3）以及 CHARX 文件。查看预览之前不会做任何更改；预览逐项列出各部分，每部分都有一个复选框：
+
+- 名称：角色卡中的名称成为 `PERSONA_NAME`，V3 的别名会加入 `persona.card.json` 的 `aliases`。角色学到的内容会保留，但只在学到这些内容时所用的名称下适用，因此改用新名称后会重新开始学习；改回原名即可恢复。对人和聊天的记忆在两种情况下都会保留。
+- 人设：由角色卡中的描述、性格、情境和说明（system prompt 与 post-history instructions）合成；`{{char}}` 和 `<BOT>` 替换为名称，`{{user}}` 和 `<USER>` 替换为高级设置中的「角色对你的称呼」，未填写时为「用户」。可在预览中修改。无法替换的占位符会逐一列出。角色卡中的说明放在最后一部分并加以标注：这些说明原本为角色扮演程序编写，常要求旁白或用星号标注动作，可酌情删除。「人设」框最多可填写 16000 个字符；每次回复都会将完整人设发送给模型，人设越长，每次回复的费用越高。
+- 示例对话：角色卡中的 `mes_example` 写入 `data/examples.<lang>.jsonl`，与你自行放入的文件一样，整体替换内置示例对话。
+- 背景设定：角色卡中的背景设定经由「背景设定」部分「导入文件」的同一套流程导入，跳过条目的原因也相同；按正则表达式匹配的条目同样跳过。写入 `data/lorebook.<lang>.json`。
+- 图片：PNG 图片本身或 CHARX 中的主图标成为角色自己的图片，必要时缩小。
+
+角色卡中的开场白（`first_mes` 和备选开场白）会显示，但不使用：角色没有固定的开场白，会以自己的方式开始对话。你编写的人设以及你自己的示例对话和背景设定文件，在被替换前会保留为 `.bak` 文件，并另存一份带日期的副本。读取角色卡时，各项大小均有上限：单个文件不超过 16 MB，角色卡文字不超过 2 MB，PNG 数据块和压缩包成员数量有限，成员路径不得指向压缩包之外，图片不超过 4000 万像素。角色卡中的链接一律不会下载。在终端运行 `personagent character import 文件` 效果相同：先输出预览，询问后才做更改；`--yes` 可跳过询问，`--only name,persona` 只导入部分内容。
+
+**保存为角色卡。** 「保存为 PNG 角色卡」或「保存为 JSON 角色卡」会将角色以 V2 角色卡的形式（PNG 中同时附带 V3 数据）保存到桌面或文档文件夹，包括名称和别名、人设、你自己的示例对话和背景设定文件，以及图片（你自己的图片；没有时使用所选立绘；再没有时使用纯色方块）。不包含 API 密钥、记忆、角色学到的内容以及聊天中他人的名字；「角色对你的称呼」写为 `{{user}}`。重新导入该角色卡会得到同一个角色。在终端运行 `personagent character export 文件.png` 效果相同。
 
 ## 接入聊天平台
 
@@ -349,8 +367,8 @@ vent: ask
 | QQ | 用手机 QQ 扫码并确认。这会新建一个 QQ 官方机器人，或使用你已有的机器人，密钥由 personagent 自动获取。点「改为手动填写」，可以改填在 [QQ 机器人页面](https://q.qq.com/qqbot/openclaw/login.html)创建的机器人的 AppID 和 AppSecret。 |
 | 个人微信 | 用微信扫码并确认登录。连接使用腾讯的 iLink 机器人接口，只支持私聊，因为微信不会把群消息发给这类机器人。 |
 | Telegram | 通过 [@BotFather](https://t.me/BotFather) 创建机器人，粘贴它提供的 Token。 |
-| Discord | 在 [Developer Portal](https://discord.com/developers/applications) 的 Bot 页面复制 Token，并开启 Message Content Intent。 |
-| Matrix | 为机器人单独注册一个 Matrix 账号。在 Element 中以机器人账号登录，依次进入「所有设置」>「帮助与关于」，在底部「高级」中复制访问令牌（Access Token），然后直接关闭该窗口，不要退出登录。将令牌连同服务器地址和你本人的 Matrix ID 一起填入。随后用你本人的账号新建一个关闭端到端加密的房间，并邀请机器人。机器人只接受来自你本人 Matrix ID 的邀请，且无法读取加密房间。 |
+| Discord | 在 [Developer Portal](https://discord.com/developers/applications) 的 Bot 页面复制 Token，开启 Message Content Intent，并关闭 Public Bot（除非希望他人也能添加该机器人）。邀请时勾选 View Channels、Send Messages、Send Messages in Threads、Attach Files 和 Read Message History 权限（`permissions=274878008320`）。 |
+| Matrix | 为机器人单独注册一个 Matrix 账号。填写服务器地址、你本人的 Matrix ID，以及机器人账号的用户 ID 和密码：personagent 只登录一次，保存登录后获得的凭据，不会保存密码。改为粘贴访问令牌时，仅接受不会过期的令牌；在 matrix.org 上从 Element 复制的令牌（以 `mat_` 开头）几分钟内即会失效，因此不被接受。随后用你本人的账号新建一个关闭端到端加密的房间，并邀请机器人。在 Element 中通过「发起聊天」开始的对话是加密的，会被拒绝。机器人只接受来自你本人 Matrix ID 的邀请，因此 ID 填写有误时所有邀请都会被拒绝，页面会对此作出提示。 |
 | Twitch | 在 [Twitch 开发者后台](https://dev.twitch.tv/console)免费注册一个 Client Type 为 Public 的应用。填入它的 Client ID 和角色要加入的频道，点击「连接」，然后在已登录角色 Twitch 账号的浏览器中打开页面给出的链接并批准登录。角色只在所填频道中以文字聊天。不支持 Twitch 私信（Whisper），因此「连接平台」中该平台的卡片标为「仅频道」。 |
 | IRC | 填写服务器（默认为 Libera.Chat；OFTC 填 `irc.oftc.net`）、TLS 端口、机器人昵称、频道，以及已注册昵称的 NickServ 密码。机器人通过 TLS 连接，只加入所填的频道，并回复发给其昵称的私信。仅支持文字。Libera.Chat 规定，AI 机器人加入频道前须获得该频道管理员的许可。 |
 | Zulip | 在「个人设置 > 机器人」中添加一个通用机器人（Generic bot），然后填入组织地址、机器人邮箱和 API 密钥。机器人只能看到已订阅的频道和发给它的私信；在频道中，有人 @ 它或引用它的消息时才会作答。组织内的所有成员都可以向它发送私信。 |
@@ -494,6 +512,61 @@ personagent connect dsh --remove
 ```json
 {"mcpServers": {"personagent": {"command": "personagent", "args": ["--home", "/path/to/home", "mcp"]}}}
 ```
+
+## 其他软件
+
+任何可以填写 OpenAI 兼容地址的软件都能与角色对话，例如 Open WebUI、SillyTavern 等聊天前端、自动化工具或你自己编写的程序。personagent 按 OpenAI 聊天接口的格式提供 `GET /v1/models` 和 `POST /v1/chat/completions`，默认关闭。
+
+**开启。** 在本地页面「连接平台」底部的「其他软件」中打开开关，首次开启时会生成密钥。页面随后显示其他软件需要的三项，每项旁边有「复制」；密钥默认隐藏，点击「显示」后可见。「发送测试消息」会像其他软件一样经接口发送一条消息，并显示回复或失败原因。「生成新密钥」会先询问，确认后替换密钥，旧密钥立即失效。更改任一项时，正在运行的角色会自动重启，因为该设置仅在启动时读取。在终端中：
+
+```bash
+personagent connect api            # 开启接口，没有密钥时生成密钥，并打印三项
+personagent connect api --new-key  # 替换密钥
+personagent connect api --remove   # 关闭接口，密钥保留
+```
+
+**三项设置。**
+
+| 项目 | 填写内容 |
+|---|---|
+| 地址（Base URL） | `http://127.0.0.1:<SERVER_PORT>/v1`，默认为 `http://127.0.0.1:8080/v1` |
+| API 密钥 | `CHAT_API_KEY`，以 `Authorization: Bearer <密钥>` 发送 |
+| 模型 | `personagent`。任何模型名称都会被接受；`/v1/models` 只列出这一个。 |
+
+**在常用软件中填写。** Open WebUI：由管理员打开 Settings > Connections，在 **Manage OpenAI API Connections** 中点击 **Add Connection**，在 **URL** 中填写地址、在 **API Key** 中填写密钥，然后点击 **Save**（见 [Open WebUI 的说明](https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible)）。SillyTavern：打开 API Connections，将 API 类型设为 **Chat Completion**，将 **Chat Completion Source** 设为 **Custom (OpenAI-compatible)**，把地址填入端点 URL、把密钥填入 API 密钥，模型选择 `personagent`，然后点击 **Test Message**（见 [SillyTavern 的说明](https://docs.sillytavern.app/usage/api-connections/openai/)）。
+
+**能做什么，不做什么。**
+
+- 角色保留自己的人设和记忆。软件的系统提示词、随请求附带的之前的消息以及 temperature 等参数都会被忽略：只读取最后一条角色为 `user` 的消息，作为一条新消息。软件重新生成回答时会再次发送这条消息，角色会把它当作说了两遍。
+- 请求中 `user` 字段的每个值对应一个单独的对话，平台为 `api`，在「动态」中显示为 API 私聊。没有 `user` 时，由请求头 `X-Personagent-Conversation` 指定对话；两者都没有时，所有请求共用名为 `default` 的对话。
+- 回复只有文字。消息可以以 `image_url` 片段附带图片，可以是 `data:image/...;base64,` 地址或 `http(s)` 地址；角色像读取聊天平台上的图片一样读取它们，大小限制相同（`VISION_MAX_IMAGE_BYTES`），同样拒绝你所在网络内部的地址。角色在这里不会发送表情包。
+- 角色常把回答分成几条短消息。普通回答用换行连接各条；流式回答（`"stream": true`）在整段回复完成后每条消息发送一段，思考期间发送保活注释。`usage` 中的 token 数始终为 0。
+- 调用方不是角色的管理员，记忆命令的效果与其他人使用时相同。
+- 错误采用 OpenAI 的格式 `{"error": {"message", "type", "code"}}`：密钥缺失或错误为 401，请求格式错误为 400，接口关闭时为 404，达到并发上限时为 429（带 `Retry-After`），模型服务失败时为 502，角色关闭时为 503。
+- 仅在 personagent 运行时可以访问该地址：保持其窗口打开，或运行 `personagent up` 或 `personagent run`。
+
+**在程序中调用。** 使用 curl：
+
+```bash
+curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Authorization: Bearer $CHAT_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model": "personagent", "user": "me", "messages": [{"role": "user", "content": "你好"}]}'
+```
+
+使用 Python，仅需标准库：
+
+```python
+import json, os, urllib.request
+body = {"model": "personagent", "user": "me", "messages": [{"role": "user", "content": "你好"}]}
+request = urllib.request.Request("http://127.0.0.1:8080/v1/chat/completions", json.dumps(body).encode(),
+    {"Authorization": "Bearer " + os.environ["CHAT_API_KEY"], "Content-Type": "application/json"})
+with urllib.request.urlopen(request, timeout=300) as response:
+    print(json.load(response)["choices"][0]["message"]["content"])
+```
+
+一轮回复可能需要一分钟以上，请为客户端设置较长的超时时间。
+
+**从其他设备或 Docker 中访问。** 由于 personagent 监听 `127.0.0.1`，该地址只对本机上的程序有效。Docker 容器中的程序、手机或其他电脑都算作其他设备。如需从这些设备访问，可以让服务监听网络地址 `personagent run --host 0.0.0.0`（此时须设置 `CONNECTOR_TOKEN` 和 `CHAT_API_KEY`，且密钥以明文传输，因此只应在可信网络中使用），或在 `127.0.0.1:<SERVER_PORT>` 前设置 HTTPS 反向代理或私有隧道。以上任一方式都必须设置密钥：没有密钥时，经代理或来自其他地址的请求会被拒绝。`CHAT_API_ENABLED` 和 `CHAT_API_KEY` 位于 `.env` 中，在服务启动时读取。
 
 ## 教导角色
 
@@ -828,7 +901,7 @@ personagent 保存的所有内容都在你自己的机器上，位于主目录�
 
 **在终端中运行 `personagent doctor`。** 它会检查配置，指出拼写错误和已改名的设置，逐一探测 personagent 依赖的服务。探测会发送很小的请求，可能消耗少量额度。加 `--json` 以 JSON 格式输出同样的内容；加 `--fix` 会把 1.0 已停用的旧设置名改为新名字，并把原文件备份为 `.env.bak`。
 
-**无法连接平台。** 平台拒绝凭据时，页面会说明原因，终端中的 `personagent connect <平台>` 也会说明原因。请在平台后台核对；Discord 还须确认已开启 Message Content Intent。二维码过期可以重新获取，AstrBot 下载失败可以重试。「应用」页的「平台连接」显示 personagent 直接连接的各个平台的状态。页面或 `personagent up` 启动的各进程的日志在主目录的 `runtime/desktop/` 中，也可以在「应用」页的「运行日志」中查看。
+**无法连接平台。** 平台拒绝凭据时，页面会说明原因，终端中的 `personagent connect <平台>` 也会说明原因。请在平台后台核对；Discord 还须确认已开启 Message Content Intent。二维码过期可以重新获取，AstrBot 下载失败可以重试。某个平台约两分钟无法访问时，页面会将其显示为「正在重试」并说明原因，恢复后自动回到已连接；在中国大陆，Telegram 和 Discord 需要 HTTP 代理，请在系统设置或 `HTTPS_PROXY` 中设置后重新启动。平台持续拒绝机器人的请求时，页面也会说明原因。每个已连接平台下方会说明角色在该平台回复哪些人，并附有前往回复设置的链接。「应用」页的「平台连接」显示 personagent 直接连接的各个平台的状态。页面或 `personagent up` 启动的各进程的日志在主目录的 `runtime/desktop/` 中，也可以在「应用」页的「运行日志」中查看。
 
 **服务在运行，但始终不回复。** 最常见的原因有三个：
 

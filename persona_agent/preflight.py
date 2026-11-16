@@ -206,6 +206,27 @@ def _identity_findings(identity: access.Identity) -> list["Finding"]:
     return findings
 
 
+def _chat_api_findings(configured: dict) -> list["Finding"]:
+    """What the OpenAI-compatible API settings will not do as written."""
+    def said(key: str) -> str:
+        return str(configured.get(key) or "").strip()
+    on = said("CHAT_API_ENABLED").lower() in ("1", "true", "yes", "on")
+    key = said("CHAT_API_KEY")
+    host = said("SERVER_HOST") or "127.0.0.1"
+    findings: list[Finding] = []
+    if on and not key and host not in ("127.0.0.1", "localhost", "::1"):
+        findings.append(Finding(
+            "ERROR", "CHAT_API_KEY",
+            f"is blank while CHAT_API_ENABLED is on and SERVER_HOST is {host}, so the service"
+            " will not start. Run `personagent connect api` to create a key"))
+    if key and len(key) < 16:
+        findings.append(Finding(
+            "WARN", "CHAT_API_KEY",
+            "is shorter than 16 characters, which is easy to guess. Run"
+            " `personagent connect api --new-key` for a long random one"))
+    return findings
+
+
 class Finding:
     """One problem, at one level, about one key."""
 
@@ -440,6 +461,8 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
                     "is set, but EMBEDDING_MODEL is blank, so retrieval ranks"
                     " without embeddings and this has no effect"))
                 break
+
+    findings.extend(_chat_api_findings(configured))
 
     order = {"ERROR": 0, "WARN": 1, "INFO": 2}
     findings.sort(key=lambda f: (order.get(f.level, 3), f.key))

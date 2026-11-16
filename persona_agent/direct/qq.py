@@ -21,7 +21,7 @@ from urllib.parse import quote
 
 import httpx
 
-from .base import Platform, Refused, Unsupported, backoff_sleep, media, split_text
+from .base import Platform, Refused, Unsupported, backoff_sleep, send_failed, media, split_text
 
 logger = logging.getLogger("personagent.direct.qq")
 
@@ -113,6 +113,8 @@ async def bind(client: httpx.AsyncClient, show: Callable[[str], None]) -> dict:
 
 class QQ(Platform):
     kind = "qq_official"
+    # Missing intents are refused only when the gateway session opens.
+    refuses_in_session = True
     capabilities = ("outbox",)
 
     def __init__(self, values: dict, *, client: httpx.AsyncClient | None = None, connect=None):
@@ -199,7 +201,7 @@ class QQ(Platform):
                 raise
             except Exception as exc:
                 logger.warning("qq: gateway dropped (%s)", type(exc).__name__)
-                self.dropped()
+                self.dropped(exc)
                 await backoff_sleep(failures)
                 failures += 1
 
@@ -356,8 +358,9 @@ class QQ(Platform):
                         body.update({"msg_id": passive[0], "msg_seq": passive[2]})
                     await self.rest("POST", path, json=body)
             except (ConnectionError, Refused) as exc:
-                logger.warning("qq: sending stopped after %d item(s) (%s)", sent, exc)
-                break
+                if not send_failed(self.kind, item, exc, sent):
+                    break
+                continue
             sent += 1
         return sent
 

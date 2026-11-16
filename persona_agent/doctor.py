@@ -84,6 +84,7 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
             "retired_settings": [{"old": o, "new": n, "where": w} for o, n, w in retired],
             "services": [json_row(r) for r in results],
             "direct_platforms": direct_platforms(home.find_home()),
+            "chat_api": chat_api_state(),
             "update": update_notice(),
             "model_use": _snake_case_use(model_use()),
         }, ensure_ascii=False, indent=2))
@@ -123,6 +124,8 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
         print(f"[{mark}] {_pad(langs.term(r['name']), 34)}{_pad(tag, 11)} {r['ms']:5.0f}ms  {text}")
     mark, detail = direct_row(direct_platforms(home.find_home()))
     print(f"[{mark}] {_pad(langs.term('Directly connected platforms'), 34)}{_pad('', 11)} {'':7}  {detail}")
+    mark, detail = chat_api_row(chat_api_state())
+    print(f"[{mark}] {_pad(langs.term('OpenAI-compatible API'), 34)}{_pad('', 11)} {'':7}  {langs.term(detail)}")
     print("-" * 64)
     print("  " + langs.term(model_use_line(model_use())))
     print("=" * 64)
@@ -276,6 +279,13 @@ def direct_row(found: dict) -> tuple[str, str]:
              "refused": "{0}: refused the connection", "error": "{0}: stopped by an error"}
     parts = []
     for name, platform in named:
+        if platform["detail"] and platform["state"] == "retrying":
+            # The sentence `personagent connect` prints for the same cause.
+            from persona_agent import setup_wizard
+
+            parts.append(f"{name}: " + setup_wizard.refusal(platform["detail"], connections.platform(platform["id"]),
+                                                            name, lang=lang))
+            continue
         if platform["detail"] and platform["state"] == "refused":
             sentence = f"{name}: refused the connection ({platform['detail']})"
         else:
@@ -284,6 +294,22 @@ def direct_row(found: dict) -> tuple[str, str]:
     failed = any(p["state"] in ("refused", "error") for _, p in named)
     ok = all(p["state"] == "connected" for _, p in named)
     return (" FAIL" if failed else "  OK " if ok else "  -  "), "; ".join(parts)
+
+
+def chat_api_state() -> dict:
+    """Whether the OpenAI-compatible API is on and a key guards it, as the service reads them."""
+    from persona_agent.config_env import env_bool, env_str
+
+    return {"enabled": env_bool("CHAT_API_ENABLED", False), "key": bool(env_str("CHAT_API_KEY"))}
+
+
+def chat_api_row(state: dict) -> tuple[str, str]:
+    """The table's mark and words for `chat_api_state`; never the key itself."""
+    if not state["enabled"]:
+        return "  -  ", "off (CHAT_API_ENABLED=false); `personagent connect api` turns it on"
+    if state["key"]:
+        return "  OK ", "on, guarded by CHAT_API_KEY"
+    return "  OK ", "on, without a key: only programs on this computer may call it"
 
 
 def activity_off() -> str:

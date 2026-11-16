@@ -11,15 +11,16 @@ Ce guide explique comment configurer personagent, le placer dans vos discussions
 5. [En faire votre personnage](#en-faire-votre-personnage)
 6. [Le placer dans une discussion](#le-placer-dans-une-discussion) : [Plateformes connectées par personagent lui-même](#plateformes-connectées-par-personagent-lui-même) · [Autres plateformes](#autres-plateformes-via-lastrbot-géré) · [Ponts que vous exécutez vous-même](#ponts-que-vous-exécutez-vous-même) · [Parler en premier](#parler-en-premier)
 7. [Assistants de programmation](#assistants-de-programmation)
-8. [Lui enseigner](#lui-enseigner)
-9. [Mémoire](#mémoire)
-10. [Activité](#activité)
-11. [Le mesurer](#le-mesurer)
-12. [Fonctionnement](#fonctionnement)
-13. [Confidentialité et consentement](#confidentialité-et-consentement)
-14. [Dépannage](#dépannage)
-15. [Mettre à niveau depuis 0.x](#mettre-à-niveau-depuis-0x)
-16. [État et autres documents](#état-et-autres-documents)
+8. [Autres logiciels](#autres-logiciels)
+9. [Lui enseigner](#lui-enseigner)
+10. [Mémoire](#mémoire)
+11. [Activité](#activité)
+12. [Le mesurer](#le-mesurer)
+13. [Fonctionnement](#fonctionnement)
+14. [Confidentialité et consentement](#confidentialité-et-consentement)
+15. [Dépannage](#dépannage)
+16. [Mettre à niveau depuis 0.x](#mettre-à-niveau-depuis-0x)
+17. [État et autres documents](#état-et-autres-documents)
 
 ## Installation et dossier personagent
 
@@ -174,6 +175,7 @@ Tout ce que fait la page est aussi disponible depuis un terminal, ce qui convien
 | `personagent learned` | affiche ce qu'il a appris et ce qu'il observe encore, et vous permet d'intervenir si vous le souhaitez |
 | `personagent memory` | liste ce dont il se souvient, oublie un élément ou en rétablit un |
 | `personagent eval` | mesure la prise de parole, la persona, l'apprentissage et la mémoire |
+| `personagent character` | [importe une carte de personnage](#cartes-de-personnage-et-brouillons) (`import FILE`), enregistre le personnage sous forme de carte (`export FILE.png` ou `.json`) ou affiche une fiche rédigée à partir d'une description (`draft "..."`) |
 
 Toutes les commandes acceptent `--help`.
 
@@ -297,7 +299,7 @@ Dans ces noms de fichier, `<lang>` vaut `zh` pour le chinois simplifié et tradi
   {"scenario": "a friend shares a video", "context": ["alex: the most cursed way to make instant noodles"], "reply": "watching cooking crimes at midnight is a choice"}
   ```
 
-**Longueur de la fiche du personnage et bloc `[style]`.** Le champ **Fiche du personnage** accepte jusqu'à 4 000 caractères. Un bloc `[style]` dans `persona.txt` modifie six règles des discussions privées ; les discussions de groupe l'ignorent. Chaque ligne a la forme `nom: valeur`. Une valeur qui ne figure pas dans la liste laisse la valeur par défaut, la première indiquée ci-dessous, et le journal le signale :
+**Longueur de la fiche du personnage et bloc `[style]`.** Le champ **Fiche du personnage** accepte jusqu'à 16 000 caractères ; chaque réponse envoie la fiche entière, une fiche plus courte coûte donc moins. Un bloc `[style]` dans `persona.txt` modifie six règles des discussions privées ; les discussions de groupe l'ignorent. Chaque ligne a la forme `nom: valeur`. Une valeur qui ne figure pas dans la liste laisse la valeur par défaut, la première indiquée ci-dessous, et le journal le signale :
 
 ```text
 [style]
@@ -309,6 +311,22 @@ vent: ask
 Les noms et valeurs sont `length` (short, medium, long), `vent`, lorsque quelqu'un se confie (hold, ask, solve), `recs`, lorsque quelqu'un demande une recommandation (ask_back, offer), `good_news` (cheer, deadpan), `particles`, pour les mots de remplissage (capped, free, none), et `fatigue` (stock, own).
 
 Pour lui faire voir les images, définissez `VISION_MODEL`, `VISION_API_KEY` et `VISION_BASE_URL`, ou activez la compréhension d'images sous **Autres fonctions**. Lorsque le modèle choisi ne sait pas lire les images, la page le signale à l'enregistrement. Une image que le personnage ne peut pas voir, parce que la compréhension d'images est désactivée ou a échoué, lui parvient comme une image qu'il ne peut pas voir, dans les groupes comme dans les discussions privées ; il pose donc une question sur l'image au lieu de la décrire. Les messages vocaux, les vidéos, les fichiers et les messages transférés lui parviennent pour ce qu'ils sont, avec la transcription du message vocal lorsque la plateforme la fournit. Les mots d'un message transféré sont lus comme ceux de la personne dont le message a été transféré : ils n'interpellent personne par son nom et n'exécutent aucune commande de mémoire. La mention d'une autre personne parvient au personnage avec le nom que cette personne a choisi, qui ne compte jamais comme les mots de l'expéditeur ; elle n'interpelle donc pas le personnage et ne donne aucune commande.
+
+### Cartes de personnage et brouillons
+
+**Un brouillon à partir d'une phrase.** Au-dessus de la zone **Fiche du personnage**, décrivez le personnage en une ou deux phrases et cliquez sur **Rédiger un brouillon**. personagent envoie une requête à votre service de modèles, comptée comme **Brouillons de fiche** dans l'utilisation du modèle de la vue **Application**, et place un brouillon dans la zone, rédigé dans la langue du personnage sous forme d'habitudes concrètes. Le brouillon n'est enregistré que lorsque vous cliquez sur **Enregistrer la fiche** ; **Rétablir le texte précédent** remet ce que contenait la zone auparavant. `personagent character draft "a retired lighthouse keeper who loves crosswords"` affiche un brouillon dans le terminal et n'enregistre rien.
+
+**Importer une carte de personnage.** **Carte de personnage**, sous la zone Fiche du personnage, accepte une carte de personnage Tavern, le format utilisé par SillyTavern et les sites de partage de personnages : une carte PNG (données V2 `chara` ou V3 `ccv3` ; si les deux sont présentes, V3 l'emporte), une carte JSON (V1, V2 ou V3) ou un fichier CHARX. Rien ne change tant que vous n'avez pas examiné un aperçu, qui présente chaque partie avec une case à cocher :
+
+- **Nom** : le nom de la carte devient `PERSONA_NAME`, et un surnom V3 est ajouté à `aliases` dans `persona.card.json`. Ce que le personnage a appris est conservé, mais ne s'applique que sous le nom sous lequel il l'a appris : un nouveau nom recommence donc à apprendre, et revenir à l'ancien nom rétablit ses apprentissages. La mémoire des personnes et des discussions est conservée dans les deux cas.
+- **Fiche du personnage** : composée à partir de la description, de la personnalité, du scénario et des instructions de la carte (invite système et instructions après l'historique), où `{{char}}` et `<BOT>` sont remplacés par le nom, et `{{user}}` et `<USER>` par **Votre nom** des réglages avancés, ou par « the user ». Vous pouvez la modifier dans l'aperçu. Les espaces réservés qui ne peuvent pas être remplis sont listés. Les instructions de la carte sont conservées dans une dernière section signalée : écrites pour des programmes de jeu de rôle, elles demandent souvent une narration ou des actions entre astérisques, que vous voudrez peut-être supprimer. La zone Fiche du personnage accepte jusqu'à 16 000 caractères, et chaque réponse envoie la fiche entière au modèle ; une fiche longue coûte donc davantage par réponse.
+- **Dialogues d'exemple** : le `mes_example` de la carte devient `data/examples.<lang>.jsonl`, qui remplace entièrement les dialogues d'exemple fournis, comme le ferait un fichier que vous y placez.
+- **Notes de contexte** : les notes de contexte de la carte passent par la même importation que **Importer un fichier** dans la section Notes de contexte, avec les mêmes motifs d'exclusion des entrées ; les entrées déclenchées par expression régulière sont également ignorées. Elles deviennent `data/lorebook.<lang>.json`.
+- **Image** : le PNG lui-même ou l'icône principale du CHARX devient l'image propre du personnage, réduite si nécessaire.
+
+Le message d'accueil de la carte (`first_mes` et les messages d'accueil alternatifs) est affiché mais pas utilisé : le personnage n'a pas de message d'accueil fixe et entame les conversations à sa manière. Une fiche que vous avez rédigée, ainsi que vos propres fichiers d'exemples et de notes de contexte, sont conservés sous forme de fichiers `.bak` avec une copie datée avant d'être remplacés. Les cartes sont lues avec des limites sur chaque taille : 16 Mo au plus par fichier et 2 Mo de texte de carte, un nombre limité de blocs PNG et de membres d'archive, aucun chemin de membre sortant de l'archive, et des images de 40 mégapixels au plus. Rien de ce vers quoi pointe une carte n'est téléchargé. `personagent character import FILE` fait de même depuis le terminal : la commande affiche l'aperçu et demande confirmation avant de modifier quoi que ce soit ; `--yes` supprime la question et `--only name,persona` ne reprend que certaines parties.
+
+**Enregistrer comme carte de personnage.** **Enregistrer en carte PNG** ou **Enregistrer en carte JSON** écrit le personnage dans votre dossier Bureau ou Documents sous forme de carte V2 (le PNG contient aussi des données V3) : le nom et les surnoms, la fiche du personnage, vos propres fichiers de dialogues d'exemple et de notes de contexte, et l'image (votre propre image, sinon le portrait choisi, sinon un simple carré). Les clés API, la mémoire, ce que le personnage a appris et les noms des personnes de vos discussions n'y figurent pas, et **Votre nom** est écrit `{{user}}`. Réimporter la carte redonne le même personnage. `personagent character export FILE.png` fait de même depuis le terminal.
 
 ## Le placer dans une discussion
 
@@ -329,8 +347,8 @@ personagent connecte lui-même ces dix plateformes, dans un seul processus d'arr
 | QQ | Scannez le code avec QQ mobile et confirmez. Cela crée un bot QQ officiel, ou en utilise un que vous avez déjà, et personagent récupère ses clés. **Saisir les valeurs manuellement** prend l'AppID et l'AppSecret d'un bot créé sur la [page des bots QQ](https://q.qq.com/qqbot/openclaw/login.html). |
 | WeChat (personnel) | Scannez le code avec WeChat et confirmez la connexion. La connexion utilise l'API de bots iLink de Tencent et ne gère que les discussions individuelles, car WeChat ne transmet pas les messages de groupe à ces bots. |
 | Telegram | Créez un bot avec [@BotFather](https://t.me/BotFather) et collez son jeton. |
-| Discord | Dans le [Developer Portal](https://discord.com/developers/applications), copiez le jeton du bot et activez Message Content Intent. |
-| Matrix | Créez un compte Matrix distinct pour le bot. Dans Element, connecté en tant que bot, copiez son jeton d'accès sous **All settings > Help & About > Advanced**, puis fermez cette fenêtre sans vous déconnecter. Collez le jeton avec l'adresse du homeserver et votre propre identifiant Matrix. Ensuite, depuis votre propre compte, invitez le bot dans un salon dont le chiffrement de bout en bout est désactivé. Le bot n'accepte que les invitations provenant de votre identifiant Matrix et ne peut pas lire les salons chiffrés. |
+| Discord | Dans le [Developer Portal](https://discord.com/developers/applications), copiez le jeton du bot, activez Message Content Intent et désactivez Public Bot, sauf si d'autres personnes doivent pouvoir ajouter le bot. Invitez-le avec les autorisations View Channels, Send Messages, Send Messages in Threads, Attach Files et Read Message History (`permissions=274878008320`). |
+| Matrix | Créez un compte Matrix distinct pour le bot. Saisissez l'adresse du homeserver, votre propre identifiant Matrix, ainsi que l'identifiant utilisateur et le mot de passe du compte du bot : personagent se connecte une fois, conserve la connexion qu'il reçoit et n'enregistre pas le mot de passe. Un jeton d'accès collé à la place n'est accepté que là où il n'expire pas ; un jeton copié depuis Element sur matrix.org (il commence par `mat_`) expire en quelques minutes et est refusé. Ensuite, depuis votre propre compte, invitez le bot dans un salon dont le chiffrement de bout en bout est désactivé. Une discussion ouverte avec Start chat dans Element est chiffrée et refusée. Le bot n'accepte que les invitations provenant de votre identifiant Matrix ; un identifiant mal saisi entraîne donc le refus de toutes les invitations, ce que la page signale alors. |
 | Twitch | Enregistrez une application gratuite dont le Client Type est **Public** dans la [console développeur de Twitch](https://dev.twitch.tv/console). Collez son Client ID et les chaînes dans lesquelles le personnage doit discuter, sélectionnez **Connecter**, puis approuvez la connexion au moyen du lien affiché par la page, dans un navigateur connecté au compte Twitch du personnage. Le personnage discute uniquement par écrit, et seulement dans les chaînes indiquées. Les chuchotements (messages privés) de Twitch ne sont pas pris en charge ; la tuile de **Connecter des plateformes** indique donc **Canaux uniquement**. |
 | IRC | Indiquez le serveur (Libera.Chat par défaut, ou `irc.oftc.net` pour OFTC), le port TLS, le pseudonyme du bot, les canaux et, si le pseudonyme est enregistré, le mot de passe NickServ. Le bot se connecte en TLS, ne rejoint que les canaux indiqués et répond aux messages privés adressés à son pseudonyme. Texte uniquement. Libera.Chat exige l'autorisation des opérateurs de chaque canal avant qu'un bot d'IA ne le rejoigne. |
 | Zulip | Ajoutez un **Generic bot** sous **Personal settings > Bots**, puis collez l'adresse de l'organisation, l'adresse e-mail du bot et sa clé d'API. Le bot ne lit que les canaux auxquels il est abonné et les messages privés qui lui sont adressés. Dans un canal, il répond lorsqu'il est mentionné ou cité. Tout membre de l'organisation peut lui envoyer des messages privés. |
@@ -465,6 +483,61 @@ personagent connect dsh --remove
 ```json
 {"mcpServers": {"personagent": {"command": "personagent", "args": ["--home", "/path/to/home", "mcp"]}}}
 ```
+
+## Autres logiciels
+
+Toute application dans laquelle on peut saisir une adresse compatible OpenAI peut parler au personnage : des interfaces de discussion comme Open WebUI et SillyTavern, des outils d'automatisation ou un script de votre cru. personagent fournit `GET /v1/models` et `POST /v1/chat/completions` au format de l'API de discussion d'OpenAI. Cette fonction est désactivée par défaut.
+
+**L'activer.** Dans la page locale, **Autres logiciels**, en bas de **Connecter des plateformes**, comporte un interrupteur. À la première activation, une clé est créée. La page affiche alors les trois valeurs dont l'autre application a besoin, chacune accompagnée de **Copier** ; la clé reste masquée jusqu'à ce que vous choisissiez **Afficher**. **Envoyer un message de test** envoie un message par l'API comme le ferait une autre application et affiche la réponse, ou la raison de l'échec. **Créer une nouvelle clé** remplace la clé après confirmation, et l'ancienne clé cesse aussitôt de fonctionner. Un personnage en cours d'exécution est redémarré lorsque vous modifiez l'un ou l'autre, car il ne lit ce réglage qu'au démarrage. Dans le terminal :
+
+```bash
+personagent connect api            # turn it on, create the key if there is none, print the three values
+personagent connect api --new-key  # replace the key
+personagent connect api --remove   # turn it off; the key is kept
+```
+
+**Les trois valeurs.**
+
+| Valeur | Ce qu'il faut saisir |
+|---|---|
+| Adresse (URL de base) | `http://127.0.0.1:<SERVER_PORT>/v1`, par défaut `http://127.0.0.1:8080/v1` |
+| Clé API | `CHAT_API_KEY`, envoyée sous la forme `Authorization: Bearer <key>` |
+| Modèle | `personagent`. Tout nom de modèle est accepté ; `/v1/models` ne liste que celui-ci. |
+
+**Dans les applications courantes.** Dans Open WebUI, un administrateur ouvre Settings > Connections, choisit **Add Connection** sous **Manage OpenAI API Connections**, saisit l'adresse dans **URL** et la clé dans **API Key**, puis choisit **Save** ([guide d'Open WebUI](https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible)). Dans SillyTavern, ouvrez API Connections, réglez le type d'API sur **Chat Completion** et **Chat Completion Source** sur **Custom (OpenAI-compatible)**, saisissez l'adresse comme URL du point de terminaison et la clé comme clé API, choisissez `personagent`, puis **Test Message** ([guide de SillyTavern](https://docs.sillytavern.app/usage/api-connections/openai/)).
+
+**Ce que fait l'API et ce qu'elle ne fait pas.**
+
+- Le personnage conserve sa propre fiche et sa mémoire. L'invite système de l'application, les messages précédents qu'elle joint et les réglages comme la température sont ignorés : seul le dernier message ayant le rôle `user` est lu, comme un nouveau message. Lorsqu'une application régénère une réponse, elle renvoie ce message, et le personnage le lit comme dit deux fois.
+- Chaque valeur du champ `user` de la requête constitue une conversation distincte, sur la plateforme `api`, et apparaît dans Activité comme message privé API. Sans `user`, l'en-tête `X-Personagent-Conversation` nomme la conversation ; sans l'un ni l'autre, toutes les requêtes partagent une seule conversation, `default`.
+- Les réponses sont du texte. Un message peut contenir des images sous forme de parties `image_url`, soit des URL `data:image/...;base64,`, soit des URL `http(s)`, que le personnage lit comme les images d'une plateforme de discussion, avec la même limite de taille (`VISION_MAX_IMAGE_BYTES`) et le même refus des adresses internes à votre réseau. Le personnage n'envoie jamais d'autocollants ici.
+- Le personnage répond souvent en plusieurs messages courts. Une réponse simple les joint par des sauts de ligne ; une réponse en flux (`"stream": true`) envoie un morceau par message une fois la réponse entière prête, avec des commentaires de maintien de connexion pendant qu'il réfléchit. Les nombres de jetons dans `usage` valent toujours 0.
+- Les appelants ne sont pas administrateurs du personnage : les commandes de mémoire ne fonctionnent donc pour eux que comme pour les autres personnes.
+- Les erreurs suivent la forme d'OpenAI `{"error": {"message", "type", "code"}}` : 401 pour une clé absente ou erronée, 400 pour une requête mal formée, 404 tant que l'API est désactivée, 429 à pleine capacité (avec `Retry-After`), 502 en cas d'échec du service de modèles, 503 tant que le personnage est désactivé.
+- L'adresse ne répond que pendant l'exécution de personagent : avec sa fenêtre ouverte, ou sous `personagent up` ou `personagent run`.
+
+**Depuis un script.** Avec curl :
+
+```bash
+curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Authorization: Bearer $CHAT_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model": "personagent", "user": "me", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+Avec Python, sans rien d'autre que la bibliothèque standard :
+
+```python
+import json, os, urllib.request
+body = {"model": "personagent", "user": "me", "messages": [{"role": "user", "content": "Hello"}]}
+request = urllib.request.Request("http://127.0.0.1:8080/v1/chat/completions", json.dumps(body).encode(),
+    {"Authorization": "Bearer " + os.environ["CHAT_API_KEY"], "Content-Type": "application/json"})
+with urllib.request.urlopen(request, timeout=300) as response:
+    print(json.load(response)["choices"][0]["message"]["content"])
+```
+
+Un tour peut prendre une minute ou plus ; prévoyez donc un long délai d'attente dans le client.
+
+**Depuis un autre appareil ou depuis Docker.** L'adresse ne fonctionne que pour les programmes de cet ordinateur, car personagent écoute sur `127.0.0.1`. Un programme dans un conteneur Docker, un téléphone ou un autre ordinateur compte comme un autre appareil. Pour y accéder depuis l'un d'eux, lancez le service sur l'adresse réseau, `personagent run --host 0.0.0.0` (il exige alors `CONNECTOR_TOKEN` et `CHAT_API_KEY`, et la clé circule en clair : ne le faites que sur un réseau de confiance), ou placez un proxy inverse HTTPS ou un tunnel privé devant `127.0.0.1:<SERVER_PORT>`. Une clé est requise dans tous ces cas : sans clé, une requête qui arrive par un proxy ou depuis une autre adresse est refusée. `CHAT_API_ENABLED` et `CHAT_API_KEY` se trouvent dans `.env` et sont lus au démarrage du service.
 
 ## Lui enseigner
 
@@ -808,7 +881,7 @@ Une sauvegarde est un zip non chiffré qui contient la clé, la mémoire, ce que
 
 **Dans un terminal, exécutez `personagent doctor`.** Il vérifie la configuration et nomme les réglages mal orthographiés ou renommés. Il sonde ensuite chaque service dont personagent dépend. Les sondes envoient de toutes petites requêtes et peuvent coûter un peu de crédit. `--json` affiche les mêmes résultats en JSON. `--fix` renomme les réglages retirés en 1.0 et enregistre l'ancien fichier sous `.env.bak`.
 
-**Une plateforme ne se connecte pas.** Quand la plateforme refuse les identifiants, la page dit pourquoi, tout comme `personagent connect <plateforme>` dans un terminal. Vérifiez-les dans la console de la plateforme, et pour Discord, confirmez que Message Content Intent est activé. Vous pouvez demander un nouveau code QR quand il expire, et réessayer un téléchargement d'AstrBot qui a échoué. **Connexions aux plateformes**, dans la vue **Application**, indique l'état de chaque plateforme que personagent connecte lui-même. Les journaux de tout ce que la page ou `personagent up` a démarré se trouvent dans `runtime/desktop/` du dossier personagent, et la vue **Application** les affiche sous **Journaux**.
+**Une plateforme ne se connecte pas.** Quand la plateforme refuse les identifiants, la page dit pourquoi, tout comme `personagent connect <plateforme>` dans un terminal. Vérifiez-les dans la console de la plateforme, et pour Discord, confirmez que Message Content Intent est activé. Vous pouvez demander un nouveau code QR quand il expire, et réessayer un téléchargement d'AstrBot qui a échoué. Une plateforme injoignable pendant environ deux minutes s'affiche comme **Nouvelle tentative** avec la raison, puis se reconnecte d'elle-même ; en Chine continentale, Telegram et Discord nécessitent un proxy HTTP, défini dans les paramètres du système ou dans `HTTPS_PROXY`, suivi d'un redémarrage. Une plateforme qui continue de refuser les requêtes du bot est signalée de la même manière. Sous chaque plateforme connectée, la page indique à qui le personnage y répond, avec un lien vers les réglages de réponse qui le limitent. **Connexions aux plateformes**, dans la vue **Application**, indique l'état de chaque plateforme que personagent connecte lui-même. Les journaux de tout ce que la page ou `personagent up` a démarré se trouvent dans `runtime/desktop/` du dossier personagent, et la vue **Application** les affiche sous **Journaux**.
 
 **Il est en cours d'exécution mais ne répond jamais.** Les trois causes les plus courantes sont :
 

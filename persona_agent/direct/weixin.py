@@ -21,18 +21,23 @@ from urllib.parse import quote
 import httpx
 
 from .. import __version__
-from .base import Platform, Refused, Unsupported, backoff_sleep, media, split_text
+from .base import Paused, Platform, Refused, Unsupported, backoff_sleep, send_failed, media, split_text
 from ..storage import atomic_write_text
 
 logger = logging.getLogger("personagent.direct.weixin")
+
+# Swapped out by tests; the hour-long pause must not hold them up.
+_pause = asyncio.sleep
 
 API = "https://ilinkai.weixin.qq.com"
 POLL_TIMEOUT_S = 35
 CALL_TIMEOUT_S = 15
 # The reference client's chunk size; the protocol states no server limit.
 MAX_TEXT = 4000
-# getupdates and sendmessage answer this when the bot session is no longer valid.
+# getupdates and sendmessage answer this when the session is paused; the
+# protocol notes pause the account for an hour, then try again.
 STALE_SESSION = -14
+PAUSE_S = 3600
 QR_TTL_S = 300
 QR_REFRESHES = 3
 
@@ -59,6 +64,17 @@ def post_headers(token: str = "") -> dict:
 
 def base_info() -> dict:
     return {"channel_version": __version__, "bot_agent": f"personagent/{__version__}"}
+
+
+def message_id(message: dict) -> str:
+    """The message's own id, or one derived from what it holds, so that a
+    message delivered twice is still recognised as one."""
+    for key in ("message_id", "seq", "client_id"):
+        if message.get(key) not in (None, "", 0):
+            return str(message[key])
+    held = json.dumps([message.get("from_user_id"), message.get("create_time_ms"), message.get("item_list")],
+                      ensure_ascii=False, sort_keys=True, default=str)
+    return "h" + hashlib.sha256(held.encode("utf-8")).hexdigest()[:20]
 
 
 class LoginFailed(Exception):
@@ -98,7 +114,10 @@ async def login(client: httpx.AsyncClient, show: Callable[[str], None]) -> dict:
                 break
             if status == "scaned_but_redirect" and answer.get("redirect_host"):
                 base = "https://" + str(answer["redirect_host"]).strip("/")
-            elif status in ("need_verifycode", "verify_code_blocked", "binded_redirect"):
+            elif "need_verifycode" in str(status or ""):
+                # Also spelled confirmed_but_need_verifycode.
+                raise LoginFailed("need_verifycode")
+            elif status in ("verify_code_blocked", "binded_redirect"):
                 raise LoginFailed(status)
             await asyncio.sleep(1)
     raise LoginFailed("expired")
@@ -160,8 +179,8 @@ class Weixin(Platform):
             answer = response.json()
         except ValueError:
             raise ConnectionError(f"{path}: not JSON") from None
-        if STALE_SESSION in (answer.get("ret"), answer.get("errcode")):
-            raise Refused("session_expired")
+        if isinstance(answer, dict) and STALE_SESSION in (answer.get("ret"), answer.get("errcode")):
+            raise Paused("session_paused")
         return answer if isinstance(answer, dict) else {}
 
     async def check(self) -> str:
@@ -180,9 +199,15 @@ class Weixin(Platform):
             try:
                 answer = await self.call("getupdates", {"get_updates_buf": self.cursor}, timeout + 10,
                                          long_poll=True)
+            except Paused as exc:
+                logger.warning("weixin: WeChat paused the session; trying again in %d minutes", PAUSE_S // 60)
+                self.dropped(exc)
+                announced = False
+                await _pause(PAUSE_S)
+                continue
             except ConnectionError as exc:
                 logger.warning("weixin: %s", exc)
-                self.dropped()
+                self.dropped(exc)
                 announced = False
                 await backoff_sleep(failures)
                 failures += 1
@@ -190,7 +215,7 @@ class Weixin(Platform):
             if answer.get("ret") not in (0, None) or answer.get("errcode") not in (0, None):
                 logger.warning("weixin: getupdates answered ret=%s errcode=%s",
                                answer.get("ret"), answer.get("errcode"))
-                self.dropped()
+                self.dropped(None)
                 announced = False
                 await backoff_sleep(failures)
                 failures += 1
@@ -250,7 +275,7 @@ class Weixin(Platform):
         return {"conversation_type": "group" if group else "dm",
                 **({"conversation_id": group} if group else {}),
                 "sender_id": uid, "sender_name": "",
-                "message_id": str(message.get("message_id") or message.get("seq") or secrets.token_hex(8)),
+                "message_id": message_id(message),
                 "sent_at": int(message.get("create_time_ms") or 0) // 1000,
                 "addressed": not group, "text": "\n".join(texts), "segments": segments,
                 "reply_handle": uid}
@@ -278,8 +303,9 @@ class Weixin(Platform):
                     if answer.get("ret") not in (0, None):
                         raise ConnectionError(f"sendmessage: {answer.get('ret')}")
             except (ConnectionError, Refused) as exc:
-                logger.warning("weixin: sending stopped after %d item(s) (%s)", sent, exc)
-                break
+                if not send_failed(self.kind, item, exc, sent):
+                    break
+                continue
             sent += 1
         return sent
 

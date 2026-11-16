@@ -4,7 +4,23 @@
 
 ## 打开 personagent
 
-从 PyPI 安装后打开：
+无需预先安装任何软件：安装程序自带 Python。在终端中粘贴一行命令即可。
+
+在 Windows 上，按下 Windows 键，输入 `PowerShell` 并按回车，然后粘贴：
+
+```powershell
+irm https://raw.githubusercontent.com/wangkant/personagent/main/install.ps1 | iex
+```
+
+在 macOS 上打开「终端」（位于「应用程序 > 实用工具」），在 Linux 上打开任意终端，然后粘贴：
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/wangkant/personagent/main/install.sh | sh
+```
+
+首次运行需要几分钟。安装程序会安装并打开 personagent；在 Windows 上还会在桌面和开始菜单中添加 personagent 图标，在 macOS 上会在桌面放置 `personagent.command`，在 Linux 上会在应用程序菜单中添加一项。PyPI 或 GitHub 访问不畅时，安装程序会自动改用中国大陆的镜像；在命令前设置 `PERSONAGENT_MIRROR=cn` 可从一开始就使用镜像，设置为 `off` 则始终不使用。如果无法访问 `raw.githubusercontent.com`，可改用 `https://cdn.jsdelivr.net/gh/wangkant/personagent@main/install.ps1` 和 `.../install.sh`，内容相同。再次运行同一条命令即可更新；运行 `uv tool uninstall personagent` 可卸载程序，主目录会保留。
+
+如已安装 Python 3.10 或更高版本，也可以从 PyPI 安装：
 
 ```sh
 python -m pip install personagent
@@ -17,7 +33,7 @@ personagent
 
 也可以交由 AI 编程助手完成：请其阅读 [setup-for-agents.md](setup-for-agents.md)，然后代为安装并设置 personagent。
 
-在 Windows 上也可以下载源码 ZIP，解压后双击 `start.bat`。该脚本会在文件夹中建立独立的 Python 环境，然后打开同一个本地页面。首次运行时，还会在桌面和开始菜单中添加 personagent 图标。
+在 Windows 上也可以下载源码 ZIP，解压后双击 `start.bat`。该脚本会在文件夹中建立独立的 Python 环境（电脑上没有 Python 时会先自动获取），然后打开同一个本地页面。首次运行时，还会在桌面和开始菜单中添加 personagent 图标。
 
 从 Git 仓库运行时，请为其单独创建一个虚拟环境：先运行 `python -m venv .venv`，再运行 `.venv/bin/python -m pip install -e .` 和 `.venv/bin/python -m persona_agent`。Windows 上的解释器是 `.venv\Scripts\python.exe`，也可以直接双击 `start.bat`。
 
@@ -25,11 +41,13 @@ personagent
 
 选择模型服务，填写 API 密钥，然后点击「验证并开始聊天」。默认选中的是 OpenRouter 的免费模型和「温和的倾听者」角色。这些模型同样需要密钥：该密钥不收费，可通过「获取密钥」到 OpenRouter 申请，每天限 50 次请求；页面提示验证时会发送一次很小的请求，这只在付费服务上产生少量费用。模型名称和接口地址在「高级设置」中，角色的名称、性格和交谈所用的语言在「更改角色名称、性格或语言」中。页面右上角的语言菜单只切换页面本身的显示语言。
 
+如果电脑上已在运行 Ollama 或 LM Studio 并已加载模型，或环境变量（如 `DEEPSEEK_API_KEY`、`OPENAI_API_KEY`）中已有某个模型服务的密钥，页面会在「模型服务」上方给出提示，点击「使用 Ollama」或「使用此密钥」即可完成验证并开始聊天。使用本机模型无需密钥，聊天内容不会离开本机。
+
 密钥仅保存在本机，点击「显示」即可核对。聊天消息会发送给你选择的模型服务，按该服务的正常价格计费。
 
 角色直接在页面中回复，其发送的表情包和图片也会显示在页面中。角色之后发送的消息（例如其主动发起的消息）会在数秒内显示在对话中。设置将被保存，下次打开时直接进入聊天。
 
-设置完成后，「角色与设置」中有一个「人设」框，其内容即角色当前使用的人设。修改角色的身份和说话方式后，点击「保存人设」，修改立即生效，角色已学到的内容也将保留。
+设置完成后，「角色与设置」中有一个「人设」框，其内容即角色当前使用的人设。修改角色的身份和说话方式后，点击「保存人设」，修改立即生效，角色已学到的内容也将保留。如需从一个想法开始，可在框上方用一句话描述角色，再点击「生成草稿」。如需导入他人以 Tavern 角色卡（PNG、JSON 或 CHARX）形式分享的角色，请使用框下方的「导入角色卡」；[完整指南](guide.zh-CN.md#角色卡与草稿)说明了各部分会变成什么。
 
 其下方是「更多功能」，可开启联网搜索、识别图片和偶尔主动发言。联网搜索默认使用 DuckDuckGo，填写 Tavily 密钥可获得更稳定的结果。其下方的「高级设置」汇集了以前只能在 `.env` 中修改的设置。连接第一个平台之前，「开始聊天」页面上方会显示一条「开始使用」提示。
 
@@ -48,7 +66,8 @@ personagent
 2. QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 直接连接。其他平台通过第三方桥接程序 AstrBot 接入。首次连接此类平台时，personagent 会下载 AstrBot 和一个独立的 Python 3.12 运行环境，下载完成前请保持页面打开。此后 AstrBot 在后台运行，无需另外登录管理后台。
 3. 保存之前，personagent 会先向平台核验凭据。平台拒绝时，页面会显示提示，且不保存任何内容。
 4. 已连接的平台列于「连接平台」视图顶部，可在该处重新设置或断开连接。
-5. 不使用页面时（例如在没有显示器的服务器上），可在终端中运行 `personagent connect <平台>`，连接 QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 或 Stoat，操作步骤和核验方式与页面相同。单独运行 `personagent connect` 会列出这些平台。该命令的说明见[使用手册](guide.zh-CN.md#在终端中连接平台)。
+5. 对于其他可以填写 OpenAI 兼容地址的软件（例如 Open WebUI、SillyTavern 或自己编写的程序），在「连接平台」底部打开「其他软件」，再把地址、密钥和模型复制到该软件中。详见[使用手册](guide.zh-CN.md#其他软件)。
+6. 不使用页面时（例如在没有显示器的服务器上），可在终端中运行 `personagent connect <平台>`，连接 QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 或 Stoat，操作步骤和核验方式与页面相同。单独运行 `personagent connect` 会列出这些平台。该命令的说明见[使用手册](guide.zh-CN.md#在终端中连接平台)。
 
 QQ 机器人连接后，可在手机 QQ 的「联系人 → 机器人」中找到它，既可以私聊，也可以将其添加到你担任群主的群中。此方式使用 QQ 官方机器人平台，无需个人 QQ 小号，也无需安装其他软件。机器人可加入哪些群由 QQ 决定：通过认证之前，它只能加入管理员担任群主的群，且无需配置沙箱。在群中，机器人默认只接收 @ 它的消息，群主可在该群中机器人的资料页开启「接收全量消息」。认证及其他账号相关事项请参阅 [QQ 机器人官方指南](https://bot.q.qq.com/wiki/bot_new_product-intro/)。
 

@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 
 from .base import (Platform, Refused, Unsupported, backoff_sleep, has_content, media, plain_name,
-                   raw_id, split_text, tagged_segments)
+                   raw_id, send_failed, split_text, tagged_segments)
 
 logger = logging.getLogger("personagent.direct.discord")
 
@@ -33,6 +33,8 @@ FRESH = {4007, 4009}
 
 class Discord(Platform):
     kind = "discord"
+    # Message Content Intent is refused only when the gateway session opens.
+    refuses_in_session = True
 
     def __init__(self, values: dict, *, client: httpx.AsyncClient | None = None, connect=None):
         super().__init__(values)
@@ -41,6 +43,7 @@ class Discord(Platform):
         self._connect = connect
         self.session_id = ""
         self.resume_url = ""
+        self.own_roles: set[str] = set()
         self.seq = None
 
     def _headers(self) -> dict:
@@ -92,7 +95,7 @@ class Discord(Platform):
                 raise
             except Exception as exc:
                 logger.warning("discord: gateway dropped (%s)", type(exc).__name__)
-                self.dropped()
+                self.dropped(exc)
                 await backoff_sleep(failures)
                 failures += 1
 
@@ -160,10 +163,21 @@ class Discord(Platform):
             connected()
         elif name == "RESUMED":
             connected()
+        elif name == "GUILD_CREATE":
+            self._learn_roles(data.get("roles"))
+        elif name in ("GUILD_ROLE_CREATE", "GUILD_ROLE_UPDATE"):
+            self._learn_roles([data.get("role")])
         elif name == "MESSAGE_CREATE":
             event = self.event(data)
             if event:
                 await on_event(event, str(data.get("channel_id")))
+
+    def _learn_roles(self, roles) -> None:
+        """The role Discord makes for the bot in each server, which people mention as if it were the bot."""
+        for role in roles if isinstance(roles, list) else []:
+            tags = (role or {}).get("tags") if isinstance(role, dict) else None
+            if isinstance(tags, dict) and str(tags.get("bot_id") or "") == self.bot_id and self.bot_id:
+                self.own_roles.add(str(role.get("id")))
 
     def event(self, data: dict) -> dict | None:
         author = data.get("author") or {}
@@ -177,12 +191,13 @@ class Discord(Platform):
         snapshots = data.get("message_snapshots") or []
         forward = not text and not data.get("attachments") and bool(snapshots)
         # A forwarded call was someone else's, long ago.
-        mentioned = not forward and any(str(m.get("id")) == self.bot_id
-                                        for m in data.get("mentions") or [])
+        roles = [str(r) for r in data.get("mention_roles") or [] if str(r) in self.own_roles]
+        mentioned = not forward and (any(str(m.get("id")) == self.bot_id for m in data.get("mentions") or [])
+                                     or bool(roles))
         quoted = data.get("referenced_message") or {}
         quoted_author = quoted.get("author") or {}
         addressed = is_dm or mentioned or str(quoted_author.get("id")) == self.bot_id
-        for token in (f"<@{self.bot_id}>", f"<@!{self.bot_id}>"):
+        for token in (f"<@{self.bot_id}>", f"<@!{self.bot_id}>", *(f"<@&{r}>" for r in roles)):
             text = text.replace(token, "").strip()
         segments: list[dict] = []
         if quoted:
@@ -247,8 +262,9 @@ class Discord(Platform):
                 else:
                     continue
             except (ConnectionError, Refused) as exc:
-                logger.warning("discord: sending stopped after %d item(s) (%s)", sent, exc)
-                break
+                if not send_failed(self.kind, item, exc, sent):
+                    break
+                continue
             sent += 1
         return sent
 

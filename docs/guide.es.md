@@ -11,15 +11,16 @@ Esta guía describe cómo configurar personagent, incorporarlo a sus chats, ense
 5. [Personalizar el personaje](#personalizar-el-personaje)
 6. [Llevar el personaje a un chat](#llevar-el-personaje-a-un-chat): [Plataformas que personagent conecta por sí mismo](#plataformas-que-personagent-conecta-por-sí-mismo) · [Otras plataformas](#otras-plataformas-a-través-del-astrbot-gestionado) · [Puentes que ejecuta usted](#puentes-que-ejecuta-usted) · [Hablar primero](#hablar-primero)
 7. [Asistentes de programación](#asistentes-de-programación)
-8. [Enseñar al personaje](#enseñar-al-personaje)
-9. [Memoria](#memoria)
-10. [Actividad](#actividad)
-11. [Medir el rendimiento](#medir-el-rendimiento)
-12. [Cómo funciona](#cómo-funciona)
-13. [Privacidad y consentimiento](#privacidad-y-consentimiento)
-14. [Solución de problemas](#solución-de-problemas)
-15. [Actualizar desde 0.x](#actualizar-desde-0x)
-16. [Estado y otros documentos](#estado-y-otros-documentos)
+8. [Otro software](#otro-software)
+9. [Enseñar al personaje](#enseñar-al-personaje)
+10. [Memoria](#memoria)
+11. [Actividad](#actividad)
+12. [Medir el rendimiento](#medir-el-rendimiento)
+13. [Cómo funciona](#cómo-funciona)
+14. [Privacidad y consentimiento](#privacidad-y-consentimiento)
+15. [Solución de problemas](#solución-de-problemas)
+16. [Actualizar desde 0.x](#actualizar-desde-0x)
+17. [Estado y otros documentos](#estado-y-otros-documentos)
 
 ## Instalación y carpeta de personagent
 
@@ -174,6 +175,7 @@ Todo lo que hace la página también está disponible desde un terminal, lo que 
 | `personagent learned` | muestra lo aprendido y lo que todavía observa, y permite intervenir si lo desea |
 | `personagent memory` | enumera lo que recuerda, olvida un elemento o recupera uno |
 | `personagent eval` | mide el habla, el perfil, el aprendizaje y la memoria |
+| `personagent character` | [importa una tarjeta de personaje](#tarjetas-de-personaje-y-borradores) (`import FILE`), guarda el personaje como tarjeta (`export FILE.png` o `.json`) o muestra un perfil redactado a partir de una descripción (`draft "..."`) |
 
 Todos los comandos aceptan `--help`.
 
@@ -297,7 +299,7 @@ En estos nombres de archivo, `<lang>` es `zh` para el chino simplificado y el tr
   {"scenario": "a friend shares a video", "context": ["alex: the most cursed way to make instant noodles"], "reply": "watching cooking crimes at midnight is a choice"}
   ```
 
-**Longitud del perfil y bloque `[style]`.** El cuadro **Perfil** admite hasta 4000 caracteres. Un bloque `[style]` en `persona.txt` modifica seis reglas de los chats privados; los chats de grupo no lo tienen en cuenta. Cada línea tiene la forma `nombre: valor`. Un valor que no figure en la lista mantiene el predeterminado, el primero de los indicados abajo, y el registro lo anota:
+**Longitud del perfil y bloque `[style]`.** El cuadro **Perfil** admite hasta 16 000 caracteres; cada respuesta envía el perfil completo, por lo que uno más corto cuesta menos. Un bloque `[style]` en `persona.txt` modifica seis reglas de los chats privados; los chats de grupo no lo tienen en cuenta. Cada línea tiene la forma `nombre: valor`. Un valor que no figure en la lista mantiene el predeterminado, el primero de los indicados abajo, y el registro lo anota:
 
 ```text
 [style]
@@ -309,6 +311,22 @@ vent: ask
 Los nombres y valores son `length` (short, medium, long), `vent`, para cuando alguien se desahoga (hold, ask, solve), `recs`, para cuando alguien pide una recomendación (ask_back, offer), `good_news` (cheer, deadpan), `particles`, para las muletillas (capped, free, none), y `fatigue` (stock, own).
 
 Para que pueda ver imágenes, defina `VISION_MODEL`, `VISION_API_KEY` y `VISION_BASE_URL`, o active la comprensión de imágenes en **Más funciones**. Si el modelo elegido no puede leer imágenes, la página lo indica al guardar. Una imagen que el personaje no puede ver, porque la comprensión de imágenes está desactivada o ha fallado, le llega como una imagen que no puede ver, tanto en grupos como en chats privados, de modo que pregunta por ella en lugar de describirla. Los mensajes de voz, los vídeos, los archivos y los mensajes reenviados le llegan como lo que son, con la transcripción del mensaje de voz cuando la plataforma la proporciona. Las palabras de un mensaje reenviado se leen como palabras de la persona cuyo mensaje se reenvió: no llaman a nadie por su nombre ni ejecutan ningún comando de memoria. Una mención de otra persona llega al personaje con el nombre que esa persona eligió, que nunca cuenta como palabras del remitente, por lo que no llama al personaje ni da ninguna orden.
+
+### Tarjetas de personaje y borradores
+
+**Borrador a partir de una frase.** Encima del cuadro **Perfil**, describa el personaje en una o dos frases y seleccione **Escribir un borrador**. personagent envía una solicitud a su servicio de modelos, contabilizada como **Borradores de perfil** en el uso del modelo de la vista **Aplicación**, y coloca un borrador en el cuadro, escrito en el idioma del personaje en forma de hábitos concretos. El borrador no se guarda hasta que selecciona **Guardar el perfil**; **Restaurar el texto anterior** devuelve lo que el cuadro contenía antes. `personagent character draft "a retired lighthouse keeper who loves crosswords"` muestra un borrador en el terminal y no guarda nada.
+
+**Importar una tarjeta de personaje.** **Tarjeta de personaje**, debajo del cuadro Perfil, admite una tarjeta de personaje de Tavern, el formato que usan SillyTavern y los sitios donde se comparten personajes: una tarjeta PNG (datos V2 `chara` o V3 `ccv3`; si están ambos, prevalece V3), una tarjeta JSON (V1, V2 o V3) o un archivo CHARX. No cambia nada hasta que revise una vista previa, que muestra cada parte con una casilla:
+
+- **Nombre**: el nombre de la tarjeta pasa a ser `PERSONA_NAME`, y un apodo de V3 se añade a `aliases` en `persona.card.json`. Lo que el personaje aprendió se conserva, pero solo se aplica con el nombre con el que lo aprendió, de modo que con un nombre nuevo empieza a aprender de nuevo; si se devuelve el nombre anterior, lo aprendido vuelve a aplicarse. La memoria de las personas y los chats se conserva en ambos casos.
+- **Perfil**: se compone a partir de la descripción, la personalidad, el escenario y las instrucciones de la tarjeta (prompt de sistema e instrucciones posteriores al historial), sustituyendo `{{char}}` y `<BOT>` por el nombre, y `{{user}}` y `<USER>` por **Su nombre** de los ajustes avanzados, o por «the user». Puede editarlo en la vista previa. Se enumeran los marcadores de posición que no se pueden completar. Las instrucciones de la tarjeta se conservan en una última sección marcada: están escritas para programas de rol y a menudo piden narración o acciones entre asteriscos, que quizá desee eliminar. El cuadro Perfil admite hasta 16 000 caracteres, y cada respuesta envía el perfil completo al modelo, por lo que uno largo cuesta más por respuesta.
+- **Diálogos de ejemplo**: el `mes_example` de la tarjeta pasa a ser `data/examples.<lang>.jsonl`, que sustituye por completo los diálogos de ejemplo incluidos, igual que un archivo propio colocado allí.
+- **Trasfondo**: el trasfondo de la tarjeta pasa por la misma importación que **Importar un archivo** en la sección Trasfondo, con sus mismos motivos para omitir entradas; también se omiten las entradas que coinciden mediante expresiones regulares. Pasa a ser `data/lorebook.<lang>.json`.
+- **Imagen**: el propio PNG o el icono principal del CHARX pasa a ser la imagen propia del personaje, reducida si es necesario.
+
+El saludo de la tarjeta (`first_mes` y los saludos alternativos) se muestra, pero no se usa: el personaje no tiene un saludo fijo e inicia las conversaciones a su manera. Un perfil escrito por usted y sus propios archivos de ejemplos y de trasfondo se conservan como archivos `.bak` con una copia fechada antes de sustituirse. Las tarjetas se leen con límites para cada tamaño: como máximo 16 MB por archivo y 2 MB de texto de tarjeta, un número limitado de fragmentos PNG y de miembros del archivo comprimido, ninguna ruta de miembro que salga del archivo comprimido e imágenes de 40 megapíxeles como máximo. No se descarga nada de lo que enlace una tarjeta. `personagent character import FILE` hace lo mismo desde el terminal: muestra la vista previa y pregunta antes de cambiar nada; `--yes` omite la pregunta y `--only name,persona` toma solo algunas partes.
+
+**Guardar como tarjeta de personaje.** **Guardar como tarjeta PNG** o **Guardar como tarjeta JSON** escribe el personaje en su carpeta Escritorio o Documentos como tarjeta V2 (el PNG incluye también datos V3): el nombre y los apodos, el perfil, sus propios archivos de diálogos de ejemplo y de trasfondo, y la imagen (su propia imagen, si no el retrato elegido y, si no, un cuadrado liso). No se incluyen las claves de API, la memoria, lo que ha aprendido el personaje ni los nombres de las personas de sus chats, y **Su nombre** se escribe como `{{user}}`. Al volver a importar la tarjeta se obtiene el mismo personaje. `personagent character export FILE.png` hace lo mismo desde el terminal.
 
 ## Llevar el personaje a un chat
 
@@ -329,8 +347,8 @@ personagent conecta estas diez plataformas por sí mismo, en un único proceso e
 | QQ | Escanee el código con QQ para móvil y confirme. Esto crea un bot oficial de QQ o utiliza uno que ya tenga, y personagent obtiene sus claves. **Pegar los valores en su lugar** acepta el AppID y el AppSecret de un bot creado en la [página de bots de QQ](https://q.qq.com/qqbot/openclaw/login.html). |
 | WeChat (personal) | Escanee el código con WeChat y confirme el inicio de sesión. La conexión utiliza la API de bots iLink de Tencent y solo gestiona chats individuales, porque WeChat no entrega mensajes de grupo a estos bots. |
 | Telegram | Cree un bot con [@BotFather](https://t.me/BotFather) y pegue su token. |
-| Discord | En el [Developer Portal](https://discord.com/developers/applications), copie el token del bot y active Message Content Intent. |
-| Matrix | Cree una cuenta de Matrix independiente para el bot. En Element, con la sesión del bot iniciada, copie su token de acceso en **Todos los ajustes > Ayuda y acerca de > Avanzado** y cierre esa ventana sin cerrar la sesión. Pegue el token junto con la dirección del servidor doméstico (homeserver) y su propio ID de Matrix. A continuación, desde su propia cuenta, invite al bot a una sala con el cifrado de extremo a extremo desactivado. El bot solo acepta invitaciones de su ID de Matrix y no puede leer salas cifradas. |
+| Discord | En el [Developer Portal](https://discord.com/developers/applications), copie el token del bot, active Message Content Intent y desactive Public Bot salvo que otras personas deban poder añadir el bot. Invítelo con los permisos View Channels, Send Messages, Send Messages in Threads, Attach Files y Read Message History (`permissions=274878008320`). |
+| Matrix | Cree una cuenta de Matrix independiente para el bot. Introduzca la dirección del servidor doméstico, su propio ID de Matrix y el ID de usuario y la contraseña de la cuenta del bot: personagent inicia sesión una vez, conserva el inicio de sesión que recibe y no guarda la contraseña. Un token de acceso pegado en su lugar solo se acepta donde no caduca; un token copiado de Element en matrix.org (empieza por `mat_`) caduca en pocos minutos y se rechaza. Después, desde su propia cuenta, invite al bot a una sala con el cifrado de extremo a extremo desactivado. Un chat iniciado con Start chat en Element está cifrado y se rechaza. El bot solo acepta invitaciones de su ID de Matrix, de modo que si el ID está mal escrito se rechazan todas las invitaciones; la página lo indica entonces. |
 | Twitch | Registre una aplicación gratuita con Client Type **Public** en la [consola de desarrolladores de Twitch](https://dev.twitch.tv/console). Pegue su Client ID y los canales en los que debe chatear el personaje, seleccione **Conectar** y apruebe el inicio de sesión mediante el enlace que muestra la página, en un navegador con la sesión iniciada en la cuenta de Twitch del personaje. El personaje chatea solo por texto y solo en los canales indicados. personagent no admite los susurros (mensajes directos) de Twitch, por lo que la tarjeta de Twitch en **Conectar plataformas** indica **Solo canales**. |
 | IRC | Introduzca el servidor (Libera.Chat de forma predeterminada, o `irc.oftc.net` para OFTC), el puerto TLS, el apodo del bot, los canales y, si el apodo está registrado, la contraseña de NickServ. El bot se conecta mediante TLS, se une únicamente a los canales indicados y responde a los mensajes directos dirigidos a su apodo. Solo texto. Libera.Chat exige el permiso de los operadores de cada canal antes de que se una un bot de IA. |
 | Zulip | Añada un **Generic bot** en **Ajustes personales > Bots** y, a continuación, pegue la dirección de la organización, el correo electrónico del bot y su clave de API. El bot solo lee los canales a los que está suscrito y los mensajes directos que se le envían. En un canal responde cuando se le menciona o se le cita. Cualquier miembro de la organización puede enviarle mensajes directos. |
@@ -465,6 +483,61 @@ personagent connect dsh --remove
 ```json
 {"mcpServers": {"personagent": {"command": "personagent", "args": ["--home", "/path/to/home", "mcp"]}}}
 ```
+
+## Otro software
+
+Cualquier aplicación que permita introducir una dirección compatible con OpenAI puede hablar con el personaje: interfaces de chat como Open WebUI y SillyTavern, herramientas de automatización o un script propio. personagent ofrece `GET /v1/models` y `POST /v1/chat/completions` con el formato de la API de chat de OpenAI. Está desactivado de forma predeterminada.
+
+**Activarlo.** En la página local, **Otro software**, en la parte inferior de **Conectar plataformas**, tiene un interruptor. La primera vez que se activa, crea una clave. A continuación, la página muestra los tres valores que necesita la otra aplicación, cada uno con **Copiar** al lado; la clave permanece oculta hasta que seleccione **Mostrar**. **Enviar un mensaje de prueba** envía un mensaje a través de la API como lo haría otra aplicación y muestra la respuesta o el motivo del fallo. **Crear una clave nueva** sustituye la clave tras pedir confirmación, y la clave anterior deja de funcionar de inmediato. Un personaje en ejecución se reinicia cuando cambia cualquiera de los dos, porque solo lee el ajuste al iniciarse. En el terminal:
+
+```bash
+personagent connect api            # turn it on, create the key if there is none, print the three values
+personagent connect api --new-key  # replace the key
+personagent connect api --remove   # turn it off; the key is kept
+```
+
+**Los tres valores.**
+
+| Valor | Qué introducir |
+|---|---|
+| Dirección (URL base) | `http://127.0.0.1:<SERVER_PORT>/v1`, de forma predeterminada `http://127.0.0.1:8080/v1` |
+| Clave de API | `CHAT_API_KEY`, enviada como `Authorization: Bearer <key>` |
+| Modelo | `personagent`. Se acepta cualquier nombre de modelo; `/v1/models` solo muestra este. |
+
+**En aplicaciones habituales.** En Open WebUI, un administrador abre Settings > Connections, selecciona **Add Connection** en **Manage OpenAI API Connections**, introduce la dirección en **URL** y la clave en **API Key**, y selecciona **Save** ([guía de Open WebUI](https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible)). En SillyTavern, abra API Connections, establezca el tipo de API en **Chat Completion** y **Chat Completion Source** en **Custom (OpenAI-compatible)**, introduzca la dirección como URL del endpoint y la clave como clave de API, elija `personagent` y seleccione **Test Message** ([guía de SillyTavern](https://docs.sillytavern.app/usage/api-connections/openai/)).
+
+**Qué hace y qué no hace.**
+
+- El personaje conserva su propio perfil y su memoria. Se ignoran el prompt de sistema de la aplicación, los mensajes anteriores que envía junto con el nuevo y ajustes como la temperatura: solo se lee el último mensaje con el rol `user`, como un mensaje nuevo. Cuando una aplicación regenera una respuesta, vuelve a enviar ese mensaje, y el personaje lo interpreta como dicho dos veces.
+- Cada valor del campo `user` de la solicitud es una conversación propia, en la plataforma `api`, y aparece en Actividad como chat privado de API. Sin `user`, el encabezado `X-Personagent-Conversation` da nombre a la conversación; sin ninguno de los dos, todas las solicitudes comparten una conversación, `default`.
+- Las respuestas son de texto. Un mensaje puede incluir imágenes como partes `image_url`, ya sea con URL `data:image/...;base64,` o con URL `http(s)`, que el personaje lee igual que las imágenes de una plataforma de chat, con el mismo límite de tamaño (`VISION_MAX_IMAGE_BYTES`) y el mismo rechazo de direcciones de su red interna. Aquí el personaje nunca envía stickers.
+- El personaje suele responder con varios mensajes cortos. Una respuesta simple los une con saltos de línea; una respuesta en streaming (`"stream": true`) envía un fragmento por mensaje cuando la respuesta completa está lista, con comentarios keep-alive mientras piensa. Los recuentos de tokens de `usage` siempre son 0.
+- Quienes llaman a la API no son administradores del personaje, por lo que los comandos de memoria solo funcionan como para cualquier otra persona.
+- Los errores usan la forma de OpenAI `{"error": {"message", "type", "code"}}`: 401 si falta la clave o es incorrecta, 400 si la solicitud está mal formada, 404 mientras la API está desactivada, 429 al alcanzar la capacidad máxima (con `Retry-After`), 502 si falló el servicio de modelos y 503 mientras el personaje está desactivado.
+- La dirección solo responde mientras personagent está en ejecución: con su ventana abierta, o con `personagent up` o `personagent run`.
+
+**Desde un script.** Con curl:
+
+```bash
+curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Authorization: Bearer $CHAT_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model": "personagent", "user": "me", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+Con Python y solo la biblioteca estándar:
+
+```python
+import json, os, urllib.request
+body = {"model": "personagent", "user": "me", "messages": [{"role": "user", "content": "Hello"}]}
+request = urllib.request.Request("http://127.0.0.1:8080/v1/chat/completions", json.dumps(body).encode(),
+    {"Authorization": "Bearer " + os.environ["CHAT_API_KEY"], "Content-Type": "application/json"})
+with urllib.request.urlopen(request, timeout=300) as response:
+    print(json.load(response)["choices"][0]["message"]["content"])
+```
+
+Un turno puede tardar un minuto o más, así que configure un tiempo de espera largo en el cliente.
+
+**Desde otro dispositivo o desde Docker.** La dirección solo funciona para programas de este equipo, porque personagent escucha en `127.0.0.1`. Un programa en un contenedor Docker, un teléfono u otro equipo cuentan como otro dispositivo. Para acceder desde uno de ellos, ejecute el servicio en la dirección de red, `personagent run --host 0.0.0.0` (entonces requiere `CONNECTOR_TOKEN` y `CHAT_API_KEY`, y la clave viaja sin cifrar, así que hágalo solo en una red de confianza), o coloque un proxy inverso HTTPS o un túnel privado delante de `127.0.0.1:<SERVER_PORT>`. En todos estos casos se requiere una clave: sin ella, se rechaza toda solicitud que llegue a través de un proxy o desde otra dirección. `CHAT_API_ENABLED` y `CHAT_API_KEY` están en `.env` y se leen al iniciarse el servicio.
 
 ## Enseñar al personaje
 
@@ -808,7 +881,7 @@ Una copia de seguridad es un zip sin cifrar que contiene la clave, la memoria, l
 
 **En un terminal, ejecute `personagent doctor`.** Comprueba la configuración e indica los ajustes mal escritos o con un nombre antiguo. A continuación, sondea cada servicio del que depende personagent. Los sondeos envían solicitudes mínimas y pueden consumir algo de crédito. `--json` imprime los mismos resultados en JSON. `--fix` cambia el nombre de los ajustes retirados en la versión 1.0 y guarda el archivo anterior como `.env.bak`.
 
-**Una plataforma no se conecta.** Cuando la plataforma rechaza las credenciales, la página indica el motivo, y también lo hace `personagent connect <plataforma>` en un terminal. Compruébelas en la consola de la plataforma y, en Discord, confirme que Message Content Intent está activado. Puede solicitar un código QR nuevo cuando caduque y volver a intentar una descarga fallida de AstrBot. **Conexiones con plataformas**, en la vista **Aplicación**, muestra el estado de cada plataforma que personagent conecta por sí mismo. Los registros de todo lo que iniciaron la página o `personagent up` se encuentran en `runtime/desktop/` de la carpeta de personagent, y la vista **Aplicación** los muestra en **Registros**.
+**Una plataforma no se conecta.** Cuando la plataforma rechaza las credenciales, la página indica el motivo, y también lo hace `personagent connect <plataforma>` en un terminal. Compruébelas en la consola de la plataforma y, en Discord, confirme que Message Content Intent está activado. Puede solicitar un código QR nuevo cuando caduque y volver a intentar una descarga fallida de AstrBot. Una plataforma a la que no se puede acceder durante unos dos minutos se muestra como **Reintentando** junto con el motivo, y vuelve a conectarse por sí misma; en China continental, Telegram y Discord necesitan un proxy HTTP, configurado en los ajustes del sistema o en `HTTPS_PROXY`, seguido de un reinicio. Una plataforma que sigue rechazando las solicitudes del bot se indica de la misma manera. Debajo de cada plataforma conectada, la página indica a quién responde allí el personaje, con un enlace a los ajustes de respuesta que lo limitan. **Conexiones con plataformas**, en la vista **Aplicación**, muestra el estado de cada plataforma que personagent conecta por sí mismo. Los registros de todo lo que iniciaron la página o `personagent up` se encuentran en `runtime/desktop/` de la carpeta de personagent, y la vista **Aplicación** los muestra en **Registros**.
 
 **Se ejecuta pero nunca responde.** Las tres causas más habituales son:
 

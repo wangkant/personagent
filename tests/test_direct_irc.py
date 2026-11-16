@@ -109,6 +109,7 @@ def instant(monkeypatch):
     monkeypatch.setattr(irc, "backoff_sleep", no_wait)
     monkeypatch.setattr(irc, "_pause", no_wait)
     monkeypatch.setattr(irc, "NICK_WAIT_S", 0)
+    monkeypatch.setattr(irc, "IDENTIFY_WAIT_S", 0)
 
 
 # ---------------------------------------------------------------- check
@@ -186,7 +187,7 @@ def test_run_hands_channel_messages_and_dms_over_and_reconnects_after_a_drop(mon
     connect = connector(first, second)
     bot = irc.IRC(values(irc_password=PASSWORD), connect=connect)
     seen, states = [], []
-    bot.dropped = lambda: states.append("connecting")
+    bot.dropped = lambda cause=None: states.append("connecting")
 
     async def on_event(event, target):
         seen.append((event, target))
@@ -221,7 +222,7 @@ def test_a_taken_nick_is_waited_out_while_running_and_then_refused(monkeypatch):
     connect = connector(*[network(nick_taken=True)] * 3)
     states = []
     bot = irc.IRC(values(), connect=connect)
-    bot.dropped = lambda: states.append("connecting")
+    bot.dropped = lambda cause=None: states.append("connecting")
     with pytest.raises(base.Refused, match="nick_in_use"):
         run(bot.run(None, lambda: states.append("connected")))
     assert len(connect.opened) == 3 and states == ["connecting", "connecting"]

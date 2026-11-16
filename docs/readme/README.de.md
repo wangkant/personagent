@@ -30,7 +30,8 @@ personagent läuft auf Ihrem eigenen Computer und bewahrt alles, was es speicher
 <td width="220" valign="top"><strong>Er hat eine eigene Persönlichkeit.</strong></td>
 <td valign="top">
 Sieben fertige Persönlichkeiten. Drei davon sind Figuren, die die Community längst zeichnet: DeepSeek-chan, GPT-chan und Claude-chan, mit Porträts, die blinzeln, nachdenken und sprechen.<br>
-Sie können die Persona jederzeit umschreiben. Was die Figur gelernt hat, bleibt erhalten.
+Sie können die Persona jederzeit umschreiben. Was die Figur gelernt hat, bleibt erhalten.<br>
+Übernehmen Sie eine Tavern-Charakterkarte als einzelne Datei, oder beschreiben Sie eine Figur in einem Satz und lassen Sie die Persona entwerfen. Ihre eigene Figur lässt sich zum Teilen als Karte speichern.
 </td>
 </tr>
 <tr>
@@ -70,6 +71,7 @@ Auf eine Flut von Nachrichten kommt eine einzige Antwort.
 <td valign="top">
 Zweiundzwanzig Chat-Plattformen werden von einer einzigen Seite aus verbunden, per Scan mit dem Smartphone oder mit einigen eingefügten Werten. Die meisten unterstützen Gruppenchats ebenso wie Einzelchats.<br>
 Derselbe Agent antwortet in einem Fenster auf Ihrem Rechner sowie in Claude Code, Codex und DeepSeek Harness.<br>
+Jede Software, die eine OpenAI-kompatible Adresse annimmt, etwa Open WebUI oder SillyTavern, kann mit derselben Figur sprechen.<br>
 Jede weitere Plattform lässt sich über eine AstrBot-, Koishi- oder Matrix-Brücke oder einen selbst geschriebenen Konnektor anbinden.
 </td>
 </tr>
@@ -77,7 +79,7 @@ Jede weitere Plattform lässt sich über eine AstrBot-, Koishi- oder Matrix-Brü
 <td width="220" valign="top"><strong>Er funktioniert mit dem, was Sie haben.</strong></td>
 <td valign="top">
 Jedes OpenAI-kompatible Modell: die kostenlosen Modelle von OpenRouter, ein kostenpflichtiger Dienst oder ein Modell, das mit Ollama auf Ihrem eigenen Rechner läuft.<br>
-Ein Befehl öffnet ihn, auf Englisch, Chinesisch oder in acht weiteren Sprachen, und ein eingefügter Modellschlüssel startet den Chat.
+Eine Zeile installiert ihn mitsamt eigenem Python, auch auf einem Computer, auf dem nichts installiert ist. Die Seite gibt es auf Englisch, Chinesisch oder in acht weiteren Sprachen, und ein eingefügter Modellschlüssel startet den Chat; läuft bereits Ollama oder LM Studio, genügt ein Klick.
 </td>
 </tr>
 </table>
@@ -86,12 +88,23 @@ Auf Wunsch im Chat merkt er sich Dinge oder vergisst sie wieder (Nova ist der Na
 
 ## Erste Schritte
 
-```sh
-python -m pip install personagent
-personagent
+Vorab muss nichts installiert werden. Fügen Sie eine Zeile in ein Terminal ein.
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/wangkant/personagent/main/install.ps1 | iex
 ```
 
-Mit [uv](https://docs.astral.sh/uv/) startet `uvx personagent` das Programm ohne gesonderten Installationsschritt. Unter Windows können Sie auch das Quellcode-ZIP herunterladen und `start.bat` doppelklicken.
+macOS und Linux:
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/wangkant/personagent/main/install.sh | sh
+```
+
+Das Installationsprogramm bringt ein eigenes Python mit, installiert personagent und öffnet es; unter Windows legt es außerdem ein Symbol auf dem Desktop an. Sind PyPI oder GitHub nur langsam erreichbar, wechselt es selbstständig zu Spiegelservern in Festlandchina. Ein erneuter Aufruf aktualisiert personagent.
+
+Ist bereits Python 3.10 oder neuer installiert, erreichen Sie dasselbe mit `python -m pip install personagent` und anschließend `personagent`; mit [uv](https://docs.astral.sh/uv/) startet `uvx personagent` das Programm ohne gesonderten Installationsschritt. Unter Windows können Sie auch das Quellcode-ZIP herunterladen und `start.bat` doppelklicken; ist auf dem Computer kein Python vorhanden, lädt es dieses ebenfalls herunter.
 
 Unter Windows öffnet es sich in einem eigenen Fenster, unter macOS und Linux im Browser. Fügen Sie einen API-Schlüssel für das Modell ein und klicken Sie auf **Prüfen & Chat starten**. Die kostenlosen Modelle von OpenRouter sind vorausgewählt, brauchen aber ebenfalls einen Schlüssel: Er ist kostenlos und wird über **API-Schlüssel anfordern** auf der Seite bei OpenRouter erstellt. `personagent demo` spielt drei vorgefertigte Szenen ganz ohne Schlüssel ab. Die [Einstiegsanleitung](https://github.com/wangkant/personagent/blob/main/docs/start.de.md) erläutert die Seite Ansicht für Ansicht.
 
@@ -108,6 +121,8 @@ personagent ist kostenlos. Sie bezahlen den gewählten Modelldienst zu dessen ei
 | Erweitert | WeCom-App, Offizielles WeChat-Konto, QQ-Webhook, OneBot v11 (NapCat), Satori | Eine öffentliche Adresse oder zusätzliche Software auf diesem Computer |
 
 Verbundene Plattformen werden bei jedem Start von personagent automatisch mitgestartet. Die Plattformen mit Scan-Verbindung sowie Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK und Stoat verbindet personagent selbst; die übrigen laufen über ein [AstrBot](https://github.com/AstrBotDevs/AstrBot), das personagent herunterlädt und im Hintergrund betreibt. Auf einem Server ohne Bildschirm verbindet `personagent connect <platform>` jede dieser zehn Plattformen im Terminal, mit denselben Schritten und Prüfungen wie die Seite, und `personagent up` startet alles ohne Browser. Die Einrichtung für jede Plattform steht im [Benutzerhandbuch](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#in-einen-chat-bringen), und die vollständige Einrichtung von QQ in der [chinesischen Deployment-Anleitung](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md).
+
+Für alles andere gibt es auf derselben Seite **Andere Software**: Schalten Sie sie ein, kopieren Sie Adresse, Schlüssel und Modellnamen in eine beliebige Anwendung, die eine OpenAI-kompatible Adresse annimmt, und diese Anwendung spricht mit Ihrer Figur, mit demselben Gedächtnis wie überall sonst. Einzelheiten stehen im [Benutzerhandbuch](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#andere-software), und `personagent connect api` erledigt dasselbe im Terminal.
 
 Sie betreiben bereits AstrBot, Koishi oder Matrix? personagent kann als Agent dahinter laufen: siehe [Brücken, die Sie selbst betreiben](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#brücken-die-sie-selbst-betreiben), den [Satori-Konnektor](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.de.md) und den [Matrix-Konnektor](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.de.md).
 

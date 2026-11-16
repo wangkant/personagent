@@ -48,6 +48,7 @@ PA.strings({
     runtime_use_learning: "Learning (judging reactions and reviewing replies)",
     runtime_use_memory: "Memory tidy-up",
     runtime_use_check: "Model check at start-up",
+    runtime_use_persona: "Persona drafts",
     runtime_use_other: "Other",
   },
   zh: {
@@ -98,6 +99,7 @@ PA.strings({
     runtime_use_learning: "学习（评判反馈与评审回复）",
     runtime_use_memory: "整理记忆",
     runtime_use_check: "启动时检查模型",
+    runtime_use_persona: "起草人设",
     runtime_use_other: "其他",
   },
 });

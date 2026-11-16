@@ -190,7 +190,7 @@ const translations = {
     personaSaving: "正在保存…",
     personaUndo: "撤销修改",
     personaSaved: "人设已保存，角色已按新人设重新启动。",
-    invalid_persona: "人设不能为空，且不能超过 4000 字。",
+    invalid_persona: "人设不能为空，且不能超过 16000 字。",
     avatar_type: "仅支持 PNG、JPEG 或 WebP 格式的图片，请重新选择文件。",
     avatar_too_large: "图片超过 {size} MB，请选择较小的文件。",
     featuresSave: "保存功能设置",
@@ -401,6 +401,40 @@ const translations = {
       "Twitch 不接受此 Client ID 用于本次登录。请确认该开发者应用存在且 Client Type 为 Public，然后重新复制 Client ID。",
     session_expired_twitch: "Twitch 登录已失效。请点击「连接」并重新批准登录。",
     scan_failed_twitch: "Twitch 登录未完成、已被拒绝或链接已过期。请点击「连接」获取新的链接。",
+    unreachable: "personagent 无法连接该平台的服务器，正在持续重试。请检查本机的网络连接。在中国大陆，Telegram 和 Discord 只能通过代理访问：请在系统设置或 HTTPS_PROXY 环境变量中设置 HTTP 代理，然后重新启动 personagent。",
+    access_denied: "平台持续拒绝机器人的请求（拒绝访问），personagent 正在持续重试。Token 可能已被重置，或机器人缺少某项权限。请在平台的开发者后台检查该机器人，然后点击「重新设置」并填写当前的 Token。",
+    session_paused: "微信已将此次登录暂停约一小时。personagent 会等待并自动重新连接，无需任何操作。如果之后仍处于暂停状态，请断开微信并重新扫码。",
+    need_verifycode: "微信要求使用手机上显示的验证码确认此次登录，personagent 无法传递该验证码，因此未保存任何内容。请等待几分钟，然后重新获取二维码并扫码。",
+    verify_code_blocked: "由于验证码错误次数过多，微信已阻止此次登录，因此未保存任何内容。请稍后重新获取二维码并扫码。",
+    binded_redirect: "微信提示该账号已与此机器人绑定，因此未发放新的登录凭据。如果未显示微信已连接，请断开微信，等待几分钟后重新扫码。",
+    token_missing: "已保存的微信登录信息不完整。请断开微信后重新扫码。",
+    login_denied: "Twitch 登录已被拒绝，因此未保存任何内容。请重新连接，并在已登录角色 Twitch 账号的情况下，在 Twitch 页面点击 Authorize（授权）。",
+    invalid_intents: "平台拒绝了 personagent 申请接收的事件类型（无效的 intents）。这是 personagent 自身的问题，而非你的设置有误：请更新 personagent 后重新连接。",
+    invalid_shard: "Discord 拒绝了 personagent 请求的会话分片（无效的 shard）。这是 personagent 自身的问题，而非你的设置有误：请更新 personagent 后重新连接。",
+    invalid_api_version: "Discord 已不再接受 personagent 所用的网关版本。请更新 personagent 后重新连接。",
+    sharding_required: "该机器人加入的 Discord 服务器过多，无法在单个会话中服务；此时 Discord 要求分片连接，而 personagent 不支持这种方式。请使用加入服务器较少的机器人。",
+    sign_in_expired: "Matrix 登录已过期或已被退出。请使用机器人账号的用户 ID 和密码重新连接 Matrix：personagent 将保存一个在该会话被退出之前一直有效的登录凭据。从 Element 复制的访问令牌现在会在短时间内过期。",
+    token_short_lived: "该访问令牌为短期令牌（以 mat_ 开头），几分钟内即会失效，因此未保存任何内容。请将令牌一栏留空，改为填写机器人账号的用户 ID 和密码；personagent 只登录一次，且只保存登录后获得的凭据。",
+    login_rejected: "服务器不接受该用户 ID 和密码，因此未保存任何内容。请检查这两项，例如在 Element 中以机器人账号登录以确认。",
+    login_unsupported: "该服务器不接受程序以密码登录，因此未保存任何内容。请改为粘贴机器人账号的访问令牌。",
+    sign_in_missing: "请填写机器人账号的用户 ID 和密码，或填写其访问令牌。",
+    invite_declined: "机器人拒绝了一个来自其他 Matrix ID 的房间邀请。它只接受此处保存的 Matrix ID 发出的邀请；如果邀请是你本人发出的，请重新设置 Matrix 并检查你的 Matrix ID。",
+    retryingState: "正在重试",
+    download_stalled: "下载已有五分钟没有进展，因此已停止。请检查网络连接和代理设置，然后点击「连接」重试；personagent 也会尝试中国大陆的镜像。",
+    installStep_network: "正在检查能否访问 PyPI 和 GitHub…",
+    installStep_tools: "正在下载安装工具（uv）…",
+    installStep_astrbot: "正在下载 Python 和 AstrBot，此步骤可能需要几分钟。",
+    installStep_mirror: "首次尝试未成功，正在通过中国大陆的镜像重新下载，可能需要几分钟。",
+    installStep_prepare: "正在准备 AstrBot…",
+    reach_all: "在此平台上，角色会回复机器人所在的每个群聊以及每个私聊机器人的人，因此任何找到该机器人的人都可以使用你的模型服务。",
+    reach_groups_listed: "在此平台上，角色只回复回复设置中列出的群聊，以及每个私聊机器人的人。",
+    reach_people_listed: "在此平台上，角色会回复机器人所在的每个群聊，私聊则只回复回复设置中列出的人。",
+    reach_listed: "在此平台上，角色只回复回复设置中列出的群聊和人。",
+    reach_dm_all: "在此平台上，角色会回复每个向机器人发送消息的人。",
+    reach_dm_listed: "在此平台上，角色只回复回复设置中列出的人。",
+    reach_public_bot: "如需防止他人将机器人添加到他们的服务器，请在 Discord 开发者门户的 Bot 页面关闭 Public Bot。",
+    reachLimit: "限制回复对象",
+    reachChange: "更改回复对象",
     field_required: "请填写所有必填项。",
     invalid_field: "有一项格式不正确，请检查地址或端口。",
     invalid_platform: "暂不支持该平台。",
@@ -611,7 +645,7 @@ const translations = {
     personaSaving: "Saving…",
     personaUndo: "Undo changes",
     personaSaved: "Persona saved. The character restarted with it.",
-    invalid_persona: "The persona cannot be empty or longer than 4,000 characters.",
+    invalid_persona: "The persona cannot be empty or longer than 16,000 characters.",
     avatar_type: "Only PNG, JPEG or WebP pictures can be used. Choose another file.",
     avatar_too_large: "The picture is larger than {size} MB. Choose a smaller file.",
     featuresSave: "Save features",
@@ -841,6 +875,40 @@ const translations = {
     session_expired_twitch: "The Twitch sign-in has ended. Select Connect and approve the sign-in again.",
     scan_failed_twitch:
       "The Twitch sign-in did not finish, was declined, or the link expired. Select Connect to receive a new link.",
+    unreachable: "personagent cannot reach this platform's servers and keeps trying. Check this computer's network connection. In mainland China, Telegram and Discord can be reached only through a proxy: set an HTTP proxy in the system settings or in the HTTPS_PROXY environment variable, then restart personagent.",
+    access_denied: "The platform keeps refusing the bot's requests (access denied), and personagent keeps trying. The token may have been reset, or the bot may lack a permission. Check the bot in the platform's developer console, then select Set up again and enter its current token.",
+    session_paused: "WeChat has paused this login for about an hour. personagent waits and then reconnects by itself; nothing needs to be done. If it is still paused after that, disconnect WeChat and scan again.",
+    need_verifycode: "WeChat asked to confirm this login with a verification code shown on the phone, which personagent cannot pass on, so nothing was saved. Wait a few minutes, then get a new QR code and scan it again.",
+    verify_code_blocked: "WeChat blocked this login after too many incorrect verification codes, so nothing was saved. Wait a while, then get a new QR code and scan it again.",
+    binded_redirect: "WeChat reports that this account is already linked to this bot and issued no new login. If WeChat is not shown as connected, disconnect it, wait a few minutes and scan again.",
+    token_missing: "The saved WeChat login is incomplete. Disconnect WeChat and scan again.",
+    login_denied: "The Twitch sign-in was declined, so nothing was saved. Connect again and select Authorize on the Twitch page while signed in with the character's Twitch account.",
+    invalid_intents: "The platform refused the kinds of events personagent asked to receive (invalid intents). This is a fault in personagent, not in your settings: update personagent, then connect again.",
+    invalid_shard: "Discord refused the session layout personagent requested (invalid shard). This is a fault in personagent, not in your settings: update personagent, then connect again.",
+    invalid_api_version: "Discord no longer accepts the gateway version that personagent uses. Update personagent, then connect again.",
+    sharding_required: "This bot is in too many Discord servers to be served in one session; Discord then requires a sharded connection, which personagent does not support. Use a bot that is in fewer servers.",
+    sign_in_expired: "The Matrix sign-in has expired or was signed out. Connect Matrix again with the bot account's user ID and password: personagent then keeps a sign-in that lasts until that session is signed out. An access token copied from Element now expires after a short time.",
+    token_short_lived: "This access token is a short-lived one (it begins with mat_) and would stop working within minutes, so nothing was saved. Leave the token empty and enter the bot account's user ID and password instead; personagent signs in once and keeps only the sign-in it receives.",
+    login_rejected: "The homeserver did not accept this user ID and password, so nothing was saved. Check both, for example by signing in to the bot account in Element.",
+    login_unsupported: "This homeserver does not accept a password sign-in from programs, so nothing was saved. Paste an access token of the bot account instead.",
+    sign_in_missing: "Enter either the bot account's user ID and password, or its access token.",
+    invite_declined: "The bot declined a room invitation from a Matrix ID other than yours. It accepts invitations only from the Matrix ID saved here; if you sent the invitation yourself, set Matrix up again and check your Matrix ID.",
+    retryingState: "Retrying",
+    download_stalled: "The download made no progress for five minutes and was stopped. Check the network connection and proxy settings, then select Connect to try again; personagent tries the mirrors in mainland China as well.",
+    installStep_network: "Checking whether PyPI and GitHub can be reached…",
+    installStep_tools: "Downloading the installer (uv)…",
+    installStep_astrbot: "Downloading Python and AstrBot. This step can take several minutes.",
+    installStep_mirror: "The first attempt did not succeed; downloading again through mirrors in mainland China. This can take several minutes.",
+    installStep_prepare: "Preparing AstrBot…",
+    reach_all: "Here the character answers every group the bot is in and everyone who writes to the bot directly, so anyone who finds the bot can use your model service.",
+    reach_groups_listed: "Here the character answers only the groups listed in its reply settings, and everyone who writes to the bot directly.",
+    reach_people_listed: "Here the character answers every group the bot is in, and in direct messages only the people listed in its reply settings.",
+    reach_listed: "Here the character answers only the groups and people listed in its reply settings.",
+    reach_dm_all: "Here the character answers everyone who writes to the bot.",
+    reach_dm_listed: "Here the character answers only the people listed in its reply settings.",
+    reach_public_bot: "To keep others from adding the bot to their servers, turn off Public Bot on the Bot page of the Discord Developer Portal.",
+    reachLimit: "Limit who it answers",
+    reachChange: "Change who it answers",
     field_required: "Fill in every required field.",
     invalid_field: "One value is not valid. Check the address or port.",
     invalid_platform: "This app is not supported.",
@@ -1320,9 +1388,10 @@ let personaShown = null,
 function personaEdited() {
   const text = $("persona-text").value;
   const length = Array.from(text).length;
-  $("persona-count").textContent = `${length} / 4000`;
+  const limit = catalog?.personaLimit || 16000;
+  $("persona-count").textContent = `${length} / ${limit}`;
   // A long paste is kept whole and marked, not cut: saving says what to shorten.
-  $("persona-count").classList.toggle("over", length > 4000);
+  $("persona-count").classList.toggle("over", length > limit);
   $("persona-undo").hidden = personaShown === null || text === personaShown;
 }
 async function loadPersona() {
@@ -1590,6 +1659,7 @@ function renderConnected(connected, working) {
       {
         running: "running",
         connecting: "connectingState",
+        retrying: "retryingState",
         failed: "failedState",
       }[current] || "paused",
     );
@@ -1606,8 +1676,55 @@ function renderConnected(connected, working) {
     remove.disabled = working;
     remove.addEventListener("click", () => disconnect(kind));
     row.append(badge(kind, "small"), name, status, again, remove);
-    list.append(row);
+    list.append(row, connectedNote(kind, working));
   }
+}
+// Under a platform's row: why it is not connected, when it has a named cause,
+// and who the character answers there, with the way to the setting that limits it.
+function connectedNote(kind, working) {
+  const note = document.createElement("li");
+  note.className = "connected-note";
+  const detail = (state.platformDetail || {})[kind];
+  if (detail) {
+    const why = document.createElement("p");
+    why.className = "connected-why";
+    why.dataset.state = (state.platformStatus || {})[kind] || "";
+    why.textContent = tFor(detail, kind);
+    note.append(why);
+  }
+  note.append(reachLine(kind, working));
+  return note;
+}
+function reachLine(kind, working) {
+  const line = document.createElement("p");
+  line.className = "connected-reach";
+  const reach = (state.platformReach || {})[kind] || "all";
+  const open = reach === "all" || reach === "dm_all";
+  line.textContent = t(`reach_${reach}`) + (kind === "discord" ? " " + t("reach_public_bot") : "");
+  const limit = document.createElement("button");
+  limit.type = "button";
+  limit.className = "quiet";
+  limit.textContent = t(open ? "reachLimit" : "reachChange");
+  limit.setAttribute("aria-label", labelled(limit.textContent, platformName(kind)));
+  limit.disabled = working;
+  limit.addEventListener("click", openReplySettings);
+  line.append(" ", limit);
+  return line;
+}
+// The advanced settings' first group, which holds who the character answers.
+function openReplySettings() {
+  showView("settings");
+  let tries = 0;
+  // The settings panel draws its fields once its values arrive.
+  const reveal = () => {
+    const field = $("tuning-access-groups")?.closest(".tuning-field");
+    if (!field && tries++ < 40) return void setTimeout(reveal, 50);
+    const group = $("tuning-root").querySelector("details");
+    if (group) group.open = true;
+    (field || $("tuning-root")).scrollIntoView({ block: "center" });
+    field?.querySelector("input")?.focus({ preventScroll: true });
+  };
+  reveal();
 }
 // ---- the optional features, on the settings screen
 const GS_KEY = "personagent-getting-started-closed";
@@ -1783,6 +1900,10 @@ function renderStatus() {
   $("done-title").textContent = t("doneTitle", {
     platform: platformName(selected),
   });
+  // Who the character now answers there, said as soon as the platform connects.
+  $("done-reach").replaceChildren(
+    ...(done && state.platforms.includes(selected) ? [reachLine(selected, working)] : []),
+  );
   if (!active) return;
   const scan = job.stage === "scan";
   // A sign-in by link (Twitch) shows the link itself; its QR is for a phone.
@@ -1801,7 +1922,11 @@ function renderStatus() {
   $("progress-title").textContent = t(`${step}Title`, {
     platform: platformName(selected),
   });
-  $("progress-hint").textContent = t(`${step}Hint`);
+  // A first download says which step it is on: it can take several minutes.
+  $("progress-hint").textContent =
+    step === "install" && job.installStep
+      ? `${t("installHint")} ${t(`installStep_${job.installStep}`)}`
+      : t(`${step}Hint`);
   $("qr-link").hidden = !link;
   if (!scan) return;
   $("scan-help").textContent = t(`scanHelp_${selected}`);
@@ -1867,7 +1992,7 @@ const REASONS = {
   "answered together": "r_together",
 };
 // Platforms a chat can come from that Connect apps does not list.
-const CHAT_PLATFORMS = { qq: "QQ", matrix: "Matrix", satori: "Satori" };
+const CHAT_PLATFORMS = { qq: "QQ", matrix: "Matrix", satori: "Satori", api: "API" };
 function el(tag, cls, text) {
   const node = document.createElement(tag);
   if (cls) node.className = cls;
@@ -3135,6 +3260,8 @@ $("settings-form").addEventListener("submit", async (event) => {
     state = await api("config", {
       provider: $("provider").value,
       apiKey: $("api-key").value,
+      // Set by the detect panel: a key in the environment, read on the server.
+      apiKeyFrom: $("api-key").dataset.from || "",
       baseUrl: $("base-url").value,
       model: $("model").value,
       name: $("character-name").value,
@@ -3466,6 +3593,34 @@ window.PA = {
   // fn() after the page changes language.
   onLanguage(fn) {
     panelHooks.language.push(fn);
+  },
+  // A file's bytes to a route that takes them as they are; its JSON answer.
+  async upload(path, blob) {
+    const response = await fetch(`/api/${path}`, {
+      method: "POST",
+      headers: { "X-Personagent-Setup-Token": token, "Content-Type": "application/octet-stream" },
+      body: blob,
+      credentials: "omit",
+    });
+    const value = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(value.error || value.detail || "generic");
+    return value;
+  },
+  get catalog() {
+    return catalog;
+  },
+  // The Persona box: its text now, a draft put in without saving, or the saved text read again.
+  get personaText() {
+    return $("persona-text").value;
+  },
+  putPersona(text) {
+    $("persona-text").value = text;
+    $("persona-error").hidden = true;
+    personaEdited();
+  },
+  async reloadPersona() {
+    personaShown = null;
+    await loadPersona();
   },
   // After a panel changed what the page is built from (a reset, a restore):
   // read the state again, fill the forms from it and empty the chat on screen.

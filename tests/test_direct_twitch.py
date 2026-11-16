@@ -195,7 +195,7 @@ def test_run_subscribes_hands_over_chat_and_reconnects_after_a_drop(caplog):
         return next(sockets)
     bot = twitch.Twitch(VALUES, client=mock(server), connect=connect)
     states, seen = [], []
-    bot.dropped = lambda: states.append("connecting")
+    bot.dropped = lambda cause=None: states.append("connecting")
 
     async def on_event(event, target):
         seen.append((event, target))
@@ -284,17 +284,19 @@ def test_send_splits_mentions_and_skips_images():
     assert all(p["broadcaster_id"] == "300" for p in long)
 
 
-def test_send_waits_out_a_429_and_stops_on_a_dropped_message():
+def test_send_waits_out_a_429_and_skips_a_dropped_message():
     answers = iter([httpx.Response(429, headers={"ratelimit-reset": str(int(time.time()))}),
                     httpx.Response(200, json={"data": [{"is_sent": True}]}),
                     httpx.Response(200, json={"data": [{"is_sent": False,
-                                                        "drop_reason": {"code": "msg_duplicate"}}]})])
+                                                        "drop_reason": {"code": "msg_duplicate"}}]}),
+                    httpx.Response(200, json={"data": [{"is_sent": True}]})])
     server = Twitch(send=lambda body: next(answers))
     bot = twitch.Twitch(VALUES, client=mock(server))
     bot.bot_id = "900"
     sent = run(bot.send("300", [{"type": "text", "text": "one"}, {"type": "text", "text": "two"},
                                 {"type": "text", "text": "three"}]))
-    assert sent == 1 and len(server.posts) == 3
+    # The dropped message is skipped; the one after it still goes.
+    assert sent == 2 and len(server.posts) == 4
 
 
 def test_sending_keeps_under_the_chat_rate_limit(monkeypatch):

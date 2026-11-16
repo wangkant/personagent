@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
+import json
 import logging
+from pathlib import Path
 from typing import Any
 
 import httpx
 
-from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep,
+from ..storage import atomic_write_text
+from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep, send_failed,
                    has_content, media, plain_name, raw_id, split_text)
 
 logger = logging.getLogger("personagent.direct.telegram")
@@ -30,12 +34,39 @@ def utf16_len(text: str) -> int:
 class Telegram(Platform):
     kind = "telegram"
 
-    def __init__(self, values: dict, *, client: httpx.AsyncClient | None = None):
+    def __init__(self, values: dict, *, client: httpx.AsyncClient | None = None, state: Path | None = None):
         super().__init__(values)
         self.token = str(values.get("telegram_token") or "")
         self.client = client or httpx.AsyncClient(timeout=POLL_S + 15)
         self.username = ""
         self.names: dict[str, str] = {}
+        self.state_path = state
+        self.offset = self._load_offset()
+
+    @property
+    def owner(self) -> str:
+        """Which bot the saved offset belongs to: a digest of its token, never the token."""
+        return hashlib.sha256(self.token.encode("utf-8")).hexdigest()[:16]
+
+    def _load_offset(self) -> int:
+        try:
+            saved = json.loads(self.state_path.read_text(encoding="utf-8")) if self.state_path else {}
+        except (OSError, ValueError):
+            return 0
+        if not isinstance(saved, dict) or saved.get("owner") != self.owner:
+            return 0
+        offset = saved.get("offset")
+        return offset if isinstance(offset, int) and offset > 0 else 0
+
+    def _save_offset(self) -> None:
+        # Telegram drops what came before the offset, so a restart picks up where this one stopped.
+        if self.state_path is None:
+            return
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_text(self.state_path, json.dumps({"owner": self.owner, "offset": self.offset}))
+        except OSError as exc:
+            logger.warning("telegram: the update offset was not saved (%s)", type(exc).__name__)
 
     def _url(self, method: str) -> str:
         return f"{API}/bot{self.token}/{method}"
@@ -76,27 +107,30 @@ class Telegram(Platform):
         # A webhook left by another tool makes getUpdates fail with 409.
         await self.call("deleteWebhook", json={"drop_pending_updates": False})
         connected()
-        offset, failures = 0, 0
+        failures = 0
         while True:
             try:
                 updates = await self.call("getUpdates", json={
-                    "offset": offset, "timeout": POLL_S, "allowed_updates": ["message"]})
+                    "offset": self.offset, "timeout": POLL_S, "allowed_updates": ["message"]})
                 if failures:
                     connected()     # back after a drop
                 failures = 0
             except ConnectionError as exc:
                 logger.warning("telegram: %s", exc)
-                self.dropped()
+                self.dropped(exc)
                 await backoff_sleep(failures)
                 failures += 1
                 continue
+            before = self.offset
             for update in updates or []:
-                offset = max(offset, int(update.get("update_id", 0)) + 1)
+                self.offset = max(self.offset, int(update.get("update_id", 0)) + 1)
                 message = update.get("message")
                 if isinstance(message, dict):
                     event = await self.event(message)
                     if event:
                         await on_event(event, event["reply_handle"])
+            if self.offset != before:
+                self._save_offset()
 
     async def event(self, message: dict) -> dict | None:
         sender = message.get("from") or {}
@@ -203,8 +237,9 @@ class Telegram(Platform):
                 else:
                     continue
             except (ConnectionError, Refused) as exc:
-                logger.warning("telegram: sending stopped after %d item(s) (%s)", sent, exc)
-                break
+                if not send_failed(self.kind, item, exc, sent):
+                    break
+                continue
             sent += 1
         return sent
 

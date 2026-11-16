@@ -60,11 +60,14 @@ if (-not (Test-Path -LiteralPath $venvPy)) {
         }
         if (-not $tooOld) { $tooOld = "Python $version ($($found.Source))" }
     }
-    if (-not $py -and $tooOld) {
+    # install.ps1 beside this file can fetch a Python; a copy without it cannot.
+    $installer = Join-Path $PSScriptRoot 'install.ps1'
+    $canFetch = Test-Path -LiteralPath $installer
+    if (-not $py -and -not $canFetch -and $tooOld) {
         Write-Host "error: found $tooOld, but personagent needs Python $minPython or newer. Install a newer Python, then start this again." -ForegroundColor Red
         exit 1
     }
-    if (-not $py) {
+    if (-not $py -and -not $canFetch) {
         Write-Host "error: python / python3 / py not found. Install Python $minPython or newer, then start this again." -ForegroundColor Red
         exit 1
     }
@@ -72,9 +75,40 @@ if (-not (Test-Path -LiteralPath $venvPy)) {
         Write-Error "Incomplete .venv. Move it aside, then start this again."
         exit 1
     }
-    $pre = $py.Pre
-    & $py.Source @pre -m venv (Join-Path $PSScriptRoot '.venv')
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    if ($py) {
+        $pre = $py.Pre
+        & $py.Source @pre -m venv (Join-Path $PSScriptRoot '.venv')
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    } else {
+        # No usable Python here: uv brings one, as install.ps1 does.
+        if ($tooOld) { Write-Host "found $tooOld, which is older than Python $minPython." -ForegroundColor Yellow }
+        Write-Host "fetching Python (once, a few minutes)..." -ForegroundColor Yellow
+        $PersonagentInstallLib = $true
+        . $installer
+        $ProgressPreference = 'SilentlyContinue'
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        $fetchHelp = "Check the network connection and proxy settings, or install Python $minPython or newer yourself, then start this again."
+        try {
+            $uv = Get-PaUv -Indexes (@('https://pypi.org/simple') + $PersonagentIndexMirrors)
+        } catch {
+            Write-Host "error: Python could not be fetched ($($_.Exception.Message)). $fetchHelp" -ForegroundColor Red
+            exit 1
+        }
+        # --seed: the steps below install with the environment's own pip.
+        $venvArgs = @('venv', '--python', $PersonagentPython, '--seed', (Join-Path $PSScriptRoot '.venv'))
+        $code = Invoke-PaNative $uv $venvArgs
+        if ($code -ne 0 -and -not $env:UV_PYTHON_INSTALL_MIRROR) {
+            # GitHub is slow or closed from mainland China; the mirrors carry the same files.
+            Remove-Item -LiteralPath (Join-Path $PSScriptRoot '.venv') -Recurse -Force -ErrorAction SilentlyContinue
+            $env:UV_PYTHON_INSTALL_MIRROR = $PersonagentPythonMirror
+            if (-not $env:PIP_INDEX_URL) { $env:PIP_INDEX_URL = $PersonagentIndexMirrors[0] }
+            $code = Invoke-PaNative $uv $venvArgs
+        }
+        if ($code -ne 0) {
+            Write-Host "error: Python could not be fetched. $fetchHelp" -ForegroundColor Red
+            exit $code
+        }
+    }
 } else {
     # A .venv whose Python was uninstalled, or made with an older one, would fail
     # in pip and read as a network problem.

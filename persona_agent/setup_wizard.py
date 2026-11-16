@@ -335,7 +335,28 @@ _TEXT: dict[str, tuple[str, str]] = {
     "allowlists_empty": ("The plugin forwards no group or DM yet: add groups / dm_users in AstrBot's WebUI.",
                          "插件尚未放行任何群聊或私聊：请在 AstrBot 的 WebUI 中填写 groups / dm_users。"),
     "allowlists_kept": ("Kept the plugin's groups and dm_users.", "已保留插件现有的 groups 和 dm_users。"),
-    # platforms personagent connects itself
+    # the OpenAI-compatible API
+    "api_on": ("Other software can now talk to the character. Enter these three values in it:",
+               "其他软件现在可以与角色对话。请在其中填写以下三项："),
+    "api_address": ("Address (base URL):", "地址（Base URL）："),
+    "api_key": ("API key:", "API 密钥："),
+    "api_model": ("Model:", "模型："),
+    "api_key_replaced": ("This is a new key: the previous one no longer works.",
+                         "这是新的密钥，此前的密钥已失效。"),
+    "api_while_running": ("The address answers while personagent runs: with its window open, or with "
+                          "`personagent up` or `personagent run`.",
+                          "仅在 personagent 运行时可以访问该地址：保持其窗口打开，或运行 "
+                          "`personagent up` 或 `personagent run`。"),
+    "api_restart": ("personagent is running and reads this setting only when it starts: close its window "
+                    "and open it again, or stop and start `personagent up`.",
+                    "personagent 正在运行，此设置仅在启动时读取：请关闭其窗口后重新打开，或停止后重新运行 "
+                    "`personagent up`。"),
+    "api_removed": ("The OpenAI-compatible API is turned off. The key is kept, so turning it on again "
+                    "restores the same values.",
+                    "OpenAI 兼容接口已关闭。密钥仍保留，再次开启后沿用相同的三项。"),
+    "api_remove_and_key": ("--new-key cannot be combined with --remove.", "--new-key 不能与 --remove 同时使用。"),
+    "direct_list_api": ("Any other software that accepts an OpenAI-compatible address: `{cmd} api`.",
+                        "任何可填写 OpenAI 兼容地址的其他软件：`{cmd} api`。"),
     "direct_list_title": ("Chat platforms that personagent connects itself:",
                           "personagent 可直接连接的聊天平台："),
     "direct_on": ("connected", "已连接"),
@@ -547,6 +568,42 @@ _TEXT: dict[str, tuple[str, str]] = {
                                "the browser while Zulip is open, for example https://yourteam.zulipchat.com.",
                                "该地址不是 Zulip 组织的地址。请在打开 Zulip 时从浏览器地址栏复制，例如 "
                                "https://yourteam.zulipchat.com。"),
+    "refused_unreachable": ("personagent cannot reach this platform's servers and keeps trying. Check this computer's network connection. In mainland China, Telegram and Discord can be reached only through a proxy: set an HTTP proxy in the system settings or in the HTTPS_PROXY environment variable, then restart personagent.",
+        "personagent 无法连接该平台的服务器，正在持续重试。请检查本机的网络连接。在中国大陆，Telegram 和 Discord 只能通过代理访问：请在系统设置或 HTTPS_PROXY 环境变量中设置 HTTP 代理，然后重新启动 personagent。"),
+    "refused_access_denied": ("The platform keeps refusing the bot's requests (access denied), and personagent keeps trying. The token may have been reset, or the bot may lack a permission. Check the bot in the platform's developer console, then connect it again with its current token.",
+        "平台持续拒绝机器人的请求（拒绝访问），personagent 正在持续重试。Token 可能已被重置，或机器人缺少某项权限。请在平台的开发者后台检查该机器人，然后使用当前的 Token 重新连接。"),
+    "refused_session_paused": ("WeChat has paused this login for about an hour. personagent waits and then reconnects by itself; nothing needs to be done. If it is still paused after that, disconnect WeChat and scan again.",
+        "微信已将此次登录暂停约一小时。personagent 会等待并自动重新连接，无需任何操作。如果之后仍处于暂停状态，请断开微信并重新扫码。"),
+    "refused_need_verifycode": ("WeChat asked to confirm this login with a verification code shown on the phone, which personagent cannot pass on, so nothing was saved. Wait a few minutes, then get a new QR code and scan it again.",
+        "微信要求使用手机上显示的验证码确认此次登录，personagent 无法传递该验证码，因此未保存任何内容。请等待几分钟，然后重新获取二维码并扫码。"),
+    "refused_verify_code_blocked": ("WeChat blocked this login after too many incorrect verification codes, so nothing was saved. Wait a while, then get a new QR code and scan it again.",
+        "由于验证码错误次数过多，微信已阻止此次登录，因此未保存任何内容。请稍后重新获取二维码并扫码。"),
+    "refused_binded_redirect": ("WeChat reports that this account is already linked to this bot and issued no new login. If WeChat is not shown as connected, disconnect it, wait a few minutes and scan again.",
+        "微信提示该账号已与此机器人绑定，因此未发放新的登录凭据。如果未显示微信已连接，请断开微信，等待几分钟后重新扫码。"),
+    "refused_token_missing": ("The saved WeChat login is incomplete. Disconnect WeChat and scan again.",
+        "已保存的微信登录信息不完整。请断开微信后重新扫码。"),
+    "refused_login_denied": ("The Twitch sign-in was declined, so nothing was saved. Connect again and select Authorize on the Twitch page while signed in with the character's Twitch account.",
+        "Twitch 登录已被拒绝，因此未保存任何内容。请重新连接，并在已登录角色 Twitch 账号的情况下，在 Twitch 页面点击 Authorize（授权）。"),
+    "refused_invalid_intents": ("The platform refused the kinds of events personagent asked to receive (invalid intents). This is a fault in personagent, not in your settings: update personagent, then connect again.",
+        "平台拒绝了 personagent 申请接收的事件类型（无效的 intents）。这是 personagent 自身的问题，而非你的设置有误：请更新 personagent 后重新连接。"),
+    "refused_invalid_shard": ("Discord refused the session layout personagent requested (invalid shard). This is a fault in personagent, not in your settings: update personagent, then connect again.",
+        "Discord 拒绝了 personagent 请求的会话分片（无效的 shard）。这是 personagent 自身的问题，而非你的设置有误：请更新 personagent 后重新连接。"),
+    "refused_invalid_api_version": ("Discord no longer accepts the gateway version that personagent uses. Update personagent, then connect again.",
+        "Discord 已不再接受 personagent 所用的网关版本。请更新 personagent 后重新连接。"),
+    "refused_sharding_required": ("This bot is in too many Discord servers to be served in one session; Discord then requires a sharded connection, which personagent does not support. Use a bot that is in fewer servers.",
+        "该机器人加入的 Discord 服务器过多，无法在单个会话中服务；此时 Discord 要求分片连接，而 personagent 不支持这种方式。请使用加入服务器较少的机器人。"),
+    "refused_sign_in_expired": ("The Matrix sign-in has expired or was signed out. Connect Matrix again with the bot account's user ID and password: personagent then keeps a sign-in that lasts until that session is signed out. An access token copied from Element now expires after a short time.",
+        "Matrix 登录已过期或已被退出。请使用机器人账号的用户 ID 和密码重新连接 Matrix：personagent 将保存一个在该会话被退出之前一直有效的登录凭据。从 Element 复制的访问令牌现在会在短时间内过期。"),
+    "refused_token_short_lived": ("This access token is a short-lived one (it begins with mat_) and would stop working within minutes, so nothing was saved. Leave the token empty and enter the bot account's user ID and password instead; personagent signs in once and keeps only the sign-in it receives.",
+        "该访问令牌为短期令牌（以 mat_ 开头），几分钟内即会失效，因此未保存任何内容。请将令牌一栏留空，改为填写机器人账号的用户 ID 和密码；personagent 只登录一次，且只保存登录后获得的凭据。"),
+    "refused_login_rejected": ("The homeserver did not accept this user ID and password, so nothing was saved. Check both, for example by signing in to the bot account in Element.",
+        "服务器不接受该用户 ID 和密码，因此未保存任何内容。请检查这两项，例如在 Element 中以机器人账号登录以确认。"),
+    "refused_login_unsupported": ("This homeserver does not accept a password sign-in from programs, so nothing was saved. Paste an access token of the bot account instead.",
+        "该服务器不接受程序以密码登录，因此未保存任何内容。请改为粘贴机器人账号的访问令牌。"),
+    "refused_sign_in_missing": ("Enter either the bot account's user ID and password, or its access token.",
+        "请填写机器人账号的用户 ID 和密码，或填写其访问令牌。"),
+    "refused_invite_declined": ("The bot declined a room invitation from a Matrix ID other than yours. It accepts invitations only from the Matrix ID saved here; if you sent the invitation yourself, set Matrix up again and check your Matrix ID.",
+        "机器人拒绝了一个来自其他 Matrix ID 的房间邀请。它只接受此处保存的 Matrix ID 发出的邀请；如果邀请是你本人发出的，请重新设置 Matrix 并检查你的 Matrix ID。"),
     # finish
     "done": ("Setup complete", "设置完成"),
     "next": ("Next:", "接下来："),
@@ -977,6 +1034,24 @@ def own_avatar(home: Path) -> Path | None:
         if path.is_file() and not path.is_symlink():
             return path
     return None
+
+
+def write_own_avatar(home: Path, data: bytes) -> Path:
+    """Keep `data` as the home's one picture, avatar.<ext>; a ValueError when it is not one."""
+    kind = own_avatar_kind(data)
+    if not kind:
+        raise ValueError("avatar_type")
+    target = home / f"avatar.{kind}"
+    if target.is_symlink():
+        raise ValueError("avatar_type")
+    tmp = target.with_name(f"avatar.{secrets.token_hex(4)}.tmp")
+    tmp.write_bytes(data)
+    _replace(tmp, target)
+    # One picture: one left by an earlier choice of another type goes.
+    for other in OWN_AVATAR_TYPES:
+        if other != kind:
+            (home / f"avatar.{other}").unlink(missing_ok=True)
+    return target
 
 
 def kept_avatar(env_path: Path, key: str) -> str:
@@ -2227,6 +2302,7 @@ def list_platforms(home: Path) -> int:
     print()
     _say(t("direct_list_how", cmd=command("connect", home)))
     _say(t("direct_list_more", cmd=command("connect", home)))
+    _say(t("direct_list_api", cmd=command("connect", home)))
     return 0
 
 
@@ -2331,13 +2407,14 @@ def _shower(spec: connections.Platform, name: str, launcher: Launcher):
     return show
 
 
-def refusal(code: str, spec: connections.Platform, name: str) -> str:
-    """Why a platform was not connected, in words."""
+def refusal(code: str, spec: connections.Platform, name: str, lang: str | None = None) -> str:
+    """Why a platform was not connected, in words; in `lang`, else the terminal's."""
     short = spec.kind.split("_")[0]
-    for key in (f"refused_{code}_{short}", f"refused_{code}", "refused_platform_rejected"):
-        if key in _TEXT:
-            return t(key, name=name)
-    return t("refused_platform_rejected", name=name)
+    key = next((k for k in (f"refused_{code}_{short}", f"refused_{code}") if k in _TEXT),
+               "refused_platform_rejected")
+    if lang is None:
+        return t(key, name=name)
+    return langs.say(*_TEXT[key], lang).format(name=name)
 
 
 def _introduce(spec: connections.Platform, name: str, scan: bool) -> None:
@@ -2400,7 +2477,8 @@ def connect_platform(home: Path, kind: str, given: dict, *, remove: bool = False
                 values = direct_setup.sign_in(spec, values, _shower(spec, name, launcher))
             if not scan:
                 _say(t("direct_checking", name=name))
-                direct_setup.check(home, spec, values)
+                # And the verdict the page waits for: Discord refuses a missing intent only in a session.
+                values = direct_setup.check(home, spec, values, session=True) or values
         except RuntimeError as exc:
             sys.stdout.flush()
             print(t("direct_failed", name=name), file=sys.stderr)
@@ -2444,17 +2522,18 @@ def connect_parser(prog: str) -> argparse.ArgumentParser:
                                "wechat; without a target, list them. Or connect AstrBot: copy the plugin, "
                                "share a token, write the allowlists; with DATA_DIR nothing is asked. Or put "
                                "the character into a coding agent: claude-code, codex or dsh (DeepSeek "
-                               "Harness)."),
+                               "Harness). Or `api`: turn on the OpenAI-compatible API for any other "
+                               "software and print its address, key and model."),
         epilog=langs.term("AstrBot in Docker cannot reach 127.0.0.1 on this machine: give it host "
                "networking, or put personagent behind HTTPS and pass that address as --url."))
     p.add_argument("target", nargs="?", metavar="TARGET",
-                   help=langs.term("a chat platform, astrbot, claude-code, codex or dsh; "
+                   help=langs.term("a chat platform, astrbot, claude-code, codex, dsh or api; "
                                    "omit it to list the chat platforms"))
     react = p.add_argument("--react", action="store_true",
                            help=langs.term("claude-code, codex: also let the character react when a turn ends; "
                                 "sends the folder's name and the start of the coding agent's last message to your model service"))
     p.add_argument("--remove", action="store_true",
-                   help=langs.term("a chat platform, claude-code, codex or dsh: disconnect it again"))
+                   help=langs.term("a chat platform, claude-code, codex, dsh or api: disconnect it again"))
     p.add_argument("--no-input", action="store_true",
                    help=langs.term("a chat platform: ask nothing; give every required value as an option"))
     p.add_argument("--lang", choices=LANGS,
@@ -2469,7 +2548,9 @@ def connect_parser(prog: str) -> argparse.ArgumentParser:
                      f"{connections.say(item.label, shown)}")
             values.add_argument(_flag(item.key), dest=f"field_{item.key}", metavar="VALUE",
                                 help=label.replace("%", "%%"))
-    own = [react, p.add_argument("data_dir", nargs="?", metavar="DATA_DIR",
+    new_key = p.add_argument("--new-key", action="store_true",
+                             help=langs.term("api: replace the key; the previous one stops working"))
+    own = [react, new_key, p.add_argument("data_dir", nargs="?", metavar="DATA_DIR",
                                  help=langs.term("AstrBot's folder (its data folder or the one above it)"))]
     action = p.add_mutually_exclusive_group()
     own.append(action.add_argument("--install", action="store_true",
@@ -2587,10 +2668,12 @@ def _connect_main(argv: list[str], prog: str, chosen: str) -> int:
         used = _given(args, args.not_for_platforms)
         if used:
             coding = [option for option in used if option == "--react"]
-            astrbot = [option for option in used if option != "--react"]
+            api = [option for option in used if option == "--new-key"]
+            astrbot = [option for option in used if option not in ("--react", "--new-key")]
             lines = ([f"{', '.join(astrbot)}: used only with astrbot, not with a chat platform"] if astrbot else []) + \
                     ([f"{', '.join(coding)}: used only with claude-code and codex, not with a chat platform"]
-                     if coding else [])
+                     if coding else []) + \
+                    (["--new-key: used only with api, not with a chat platform"] if api else [])
             raise SystemExit("\n".join(langs.term(line) for line in lines))
     if args.target is None:
         if fields or args.remove or args.no_input:
@@ -2604,6 +2687,16 @@ def _connect_main(argv: list[str], prog: str, chosen: str) -> int:
         if args.remove and fields:
             raise SystemExit(langs.term("--remove does not accept platform values"))
         return connect_platform(home, kind, fields, remove=args.remove, no_input=args.no_input)
+    if args.target == "api":
+        stray = [option for option in _given(args, args.not_for_platforms) if option != "--new-key"]
+        if stray or fields or args.no_input:
+            raise SystemExit(langs.term(f"api takes only --new-key and --remove, not "
+                                        f"{', '.join(stray) or '--no-input or platform values'}"))
+        from persona_agent import chat_api
+
+        return chat_api.connect(home, remove=args.remove, replace_key=args.new_key)
+    if args.new_key:
+        raise SystemExit(langs.term("--new-key applies only to api"))
     if args.target not in ("astrbot", *CODING_TARGETS):
         print(t("direct_unknown", name=args.target, cmd=command("connect", home)), file=sys.stderr)
         return 2

@@ -8,7 +8,7 @@ import re
 import time
 from contextlib import asynccontextmanager
 
-from .access import ADMIN_MODE, PAGE_PLATFORM
+from .access import ADMIN_MODE, API_PLATFORM, PAGE_PLATFORM
 from . import channels
 from . import decision_log
 from . import transport
@@ -43,6 +43,9 @@ _REFUSED_DRAFT_RETRY_NOTE = (
 # A refusal or a PASS is the model's answer to these words: one reader gets a
 # second draft for it this often, so an induced refusal cannot double the spend.
 _DECLINED_RETRY_GAP_S = 300.0
+
+# Platforms whose caller waits on each message: no debounce, every failure reported.
+_ANSWERED_AT_ONCE = frozenset({PAGE_PLATFORM, API_PLATFORM})
 _DECLINED_RETRY_READERS = 4096
 
 _DM_HISTORY_MAX = 60
@@ -138,8 +141,9 @@ class DirectMessages:
             return await self._say_dm_memory_answer(
                 user_id, answer, background=background)
 
-        # The local page answers at once; elsewhere a burst becomes one turn.
-        debounce = (0.0 if channels.platform_of(pkey) == PAGE_PLATFORM
+        # The local page and the API answer each request at once; elsewhere a
+        # burst becomes one turn.
+        debounce = (0.0 if channels.platform_of(pkey) in _ANSWERED_AT_ONCE
                     else self.message_debounce_sec)
 
         sent_at = message_time(payload)
@@ -339,8 +343,8 @@ class DirectMessages:
                     history, is_admin=is_admin, pkey=pkey, **cue))
             except Exception as e:
                 logger.warning("[Agent] DM model call failed: %s", e)
-                # The page's chat reports every failure: there the admin checks the setup.
-                page = channels.platform_of(pkey) == PAGE_PLATFORM
+                # The page and the API report every failure: their caller turns it into an error.
+                page = channels.platform_of(pkey) in _ANSWERED_AT_ONCE
                 # Tell the waiting reader; not committed to the history.
                 if not proactive and (page or self._excuse_begin(pkey)):
                     delivered = False

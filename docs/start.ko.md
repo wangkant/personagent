@@ -4,7 +4,23 @@
 
 ## 열기
 
-PyPI에서 personagent를 설치하고 엽니다.
+미리 설치할 것은 없습니다. 설치 프로그램이 자체 Python을 함께 가져옵니다. 터미널에 한 줄을 붙여 넣으십시오.
+
+Windows에서는 Windows 키를 누르고 `PowerShell`을 입력한 후 Enter 키를 누르고 다음을 붙여 넣으십시오.
+
+```powershell
+irm https://raw.githubusercontent.com/wangkant/personagent/main/install.ps1 | iex
+```
+
+macOS에서는 터미널(응용 프로그램 > 유틸리티)을, Linux에서는 아무 터미널이나 열고 다음을 붙여 넣으십시오.
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/wangkant/personagent/main/install.sh | sh
+```
+
+처음 실행할 때는 몇 분 걸립니다. personagent를 설치하고 연 뒤, Windows에서는 바탕 화면과 시작 메뉴에 personagent 아이콘을, macOS에서는 바탕 화면에 `personagent.command`를, Linux에서는 애플리케이션 메뉴에 항목을 만듭니다. PyPI나 GitHub 접속이 느리면 설치 프로그램이 자동으로 중국 본토의 미러를 사용합니다. 명령 앞에 `PERSONAGENT_MIRROR=cn`을 붙이면 처음부터 미러를 사용하고, `off`로 하면 사용하지 않습니다. `raw.githubusercontent.com` 자체에 접속할 수 없다면 같은 두 파일이 `https://cdn.jsdelivr.net/gh/wangkant/personagent@main/install.ps1`과 `.../install.sh`에서도 제공됩니다. 업데이트하려면 같은 줄을 다시 실행하고, 프로그램을 제거하려면 `uv tool uninstall personagent`를 실행하십시오. personagent 폴더는 그대로 남습니다.
+
+Python 3.10 이상이 이미 설치되어 있다면 대신 PyPI에서 설치할 수도 있습니다.
 
 ```sh
 python -m pip install personagent
@@ -17,7 +33,7 @@ Windows에서는 페이지가 전용 창에서 열립니다. macOS와 Linux에�
 
 코딩 어시스턴트에게 설정을 맡길 수도 있습니다. [setup-for-agents.md](setup-for-agents.md)를 읽고 personagent를 설정해 달라고 요청하십시오.
 
-Windows에서는 소스 ZIP을 내려받아 압축을 풀고 `start.bat`을 더블 클릭해도 됩니다. 폴더 안에 전용 Python 환경을 만들고 같은 페이지를 엽니다. 처음 실행할 때는 바탕 화면과 시작 메뉴에 personagent 아이콘도 만듭니다.
+Windows에서는 소스 ZIP을 내려받아 압축을 풀고 `start.bat`을 더블 클릭해도 됩니다. 폴더 안에 전용 Python 환경을 만들고(컴퓨터에 Python이 없으면 먼저 Python을 가져옵니다) 같은 페이지를 엽니다. 처음 실행할 때는 바탕 화면과 시작 메뉴에 personagent 아이콘도 만듭니다.
 
 클론에서 실행하려면 전용 venv를 만드십시오. `python -m venv .venv`를 실행한 다음 `.venv/bin/python -m pip install -e .`와 `.venv/bin/python -m persona_agent`를 실행합니다. Windows의 인터프리터는 `.venv\Scripts\python.exe`이고, `start.bat`을 더블 클릭해도 됩니다.
 
@@ -25,11 +41,13 @@ Windows에서는 소스 ZIP을 내려받아 압축을 풀고 `start.bat`을 더�
 
 모델 서비스를 고르고 API 키를 붙여 넣은 뒤 **확인 후 채팅 시작**을 클릭하십시오. 처음에는 OpenRouter의 무료 모델과 따뜻한 경청자 캐릭터가 선택되어 있습니다. 이 모델들도 키가 필요합니다. 키는 무료이며 **API 키 발급**을 통해 OpenRouter에서 받을 수 있고, 한도는 하루 50회 요청입니다. 키를 확인할 때 보내는 작은 요청 한 번은 유료 서비스에서만 요금이 발생합니다. **모델 이름 및 주소**에는 모델 이름과 API 주소가, **이름, 성격 또는 언어 선택**에는 캐릭터의 이름, 성격, 대화에 쓰는 언어가 있습니다. 페이지 오른쪽 위의 언어 메뉴는 페이지 자체의 표시 언어만 바꿉니다.
 
+Ollama나 LM Studio가 이미 이 컴퓨터에서 실행 중이고 모델이 로드되어 있거나, 모델 서비스의 키가 환경 변수(예: `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`)에 이미 설정되어 있으면 페이지가 모델 서비스 위에 이를 알려 줍니다. **Ollama 사용** 또는 **이 키 사용**을 한 번 클릭하면 확인을 거쳐 채팅이 시작됩니다. 로컬 모델은 키가 필요 없으며, 어떤 데이터도 이 컴퓨터 밖으로 나가지 않습니다.
+
 키는 사용자의 컴퓨터에만 저장됩니다. 확인하려면 **표시**를 클릭하십시오. 채팅 메시지는 선택한 모델 서비스로 전송되고, 해당 서비스의 일반 요금이 적용됩니다.
 
 캐릭터는 페이지 안에서 답하며, 스티커와 이미지를 보내면 그것도 페이지에 표시됩니다. 캐릭터가 나중에 보내는 메시지(캐릭터가 먼저 시작하는 메시지 등)는 몇 초 안에 채팅에 표시됩니다. 설정이 저장되므로 다음 실행부터는 바로 채팅으로 들어갑니다.
 
-설정이 끝나면 **캐릭터 및 설정**에 **페르소나** 칸이 생기고, 캐릭터의 바탕이 되는 글이 들어 있습니다. 캐릭터가 어떤 사람이고 어떻게 말하는지 고쳐 쓴 뒤 **페르소나 저장**을 클릭하십시오. 변경은 바로 적용되고, 캐릭터가 배운 내용은 유지됩니다.
+설정이 끝나면 **캐릭터 및 설정**에 **페르소나** 칸이 생기고, 캐릭터의 바탕이 되는 글이 들어 있습니다. 캐릭터가 어떤 사람이고 어떻게 말하는지 고쳐 쓴 뒤 **페르소나 저장**을 클릭하십시오. 변경은 바로 적용되고, 캐릭터가 배운 내용은 유지됩니다. 아이디어에서 시작하려면 칸 위에서 캐릭터를 한 문장으로 설명하고 **초안 작성**을 클릭하십시오. 다른 사람이 Tavern 캐릭터 카드(PNG, JSON 또는 CHARX)로 공유한 캐릭터를 가져오려면 칸 아래의 **캐릭터 카드 가져오기**를 사용하십시오. 각 부분이 무엇이 되는지는 [가이드](guide.ko.md#캐릭터-카드와-초안)에서 설명합니다.
 
 그 아래 **추가 기능**에서 웹 검색, 이미지 이해, 가끔 먼저 발언하는 기능을 켤 수 있습니다. 검색은 기본적으로 DuckDuckGo를 쓰고, Tavily 키가 있으면 더 안정적입니다. 그 아래의 **고급 설정**에는 이전에는 `.env`에서만 변경할 수 있던 설정이 모여 있습니다. 플랫폼을 연결하기 전까지 **채팅** 화면에는 짧은 시작 안내 표시줄이 나타납니다.
 
@@ -48,7 +66,8 @@ Windows에서는 소스 ZIP을 내려받아 압축을 풀고 `start.bat`을 더�
 2. personagent는 QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat에 직접 연결합니다. 다른 플랫폼은 서드파티 브리지인 AstrBot을 거칩니다. 그중 하나를 처음 연결할 때 personagent가 AstrBot과 별도의 Python 3.12 런타임을 내려받으니, 끝날 때까지 페이지를 열어 두십시오. 그 뒤 AstrBot은 백그라운드에서 실행되고, 로그인할 대시보드는 없습니다.
 3. personagent는 저장하기 전에 플랫폼에 자격 증명을 확인합니다. 플랫폼이 거부하면 페이지에 알려 주고 아무것도 저장하지 않습니다.
 4. 연결된 플랫폼은 **플랫폼 연결** 맨 위에 표시되고, 거기서 다시 설정하거나 연결을 끊을 수 있습니다.
-5. 페이지를 쓰지 않을 때(예: 디스플레이가 없는 서버)는 터미널에서 `personagent connect <platform>`으로 QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat를 같은 단계와 확인을 거쳐 연결할 수 있습니다. `personagent connect`만 실행하면 이 플랫폼들을 나열합니다. 이 명령은 [전체 가이드](guide.ko.md#터미널에서-플랫폼-연결하기)에서 설명합니다.
+5. Open WebUI, SillyTavern, 스크립트 등 OpenAI 호환 주소를 입력할 수 있는 기타 소프트웨어에서는 **플랫폼 연결** 맨 아래의 **기타 소프트웨어**를 켜고, 그 주소, 키, 모델을 해당 앱에 복사하십시오. 자세한 내용은 [전체 가이드](guide.ko.md#기타-소프트웨어)에서 설명합니다.
+6. 페이지를 쓰지 않을 때(예: 디스플레이가 없는 서버)는 터미널에서 `personagent connect <platform>`으로 QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK, Stoat를 같은 단계와 확인을 거쳐 연결할 수 있습니다. `personagent connect`만 실행하면 이 플랫폼들을 나열합니다. 이 명령은 [전체 가이드](guide.ko.md#터미널에서-플랫폼-연결하기)에서 설명합니다.
 
 QQ 봇을 찾으려면 모바일 QQ에서 연락처 → 봇으로 이동하십시오. 일대일로 채팅하거나 사용자가 소유한 그룹에 추가하면 됩니다. 이 방법은 QQ 공식 봇 플랫폼을 쓰므로 개인 QQ 계정도 추가 소프트웨어도 필요 없습니다. 봇이 어디에 갈 수 있는지는 QQ가 정합니다. 봇이 인증되기 전에는 관리자가 소유한 그룹에만 들어갈 수 있고, 따로 설정할 샌드박스는 없습니다. 그룹 소유자가 그 그룹에 있는 봇의 프로필에서 모든 메시지 받기를 켜지 않으면, 그룹에서는 봇을 @한 메시지만 보입니다. 인증을 비롯한 계정 쪽 내용은 [QQ 봇 가이드](https://bot.q.qq.com/wiki/bot_new_product-intro/)에 있습니다.
 

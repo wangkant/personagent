@@ -13,8 +13,11 @@
     <link rel="stylesheet" href="/assets/panels/tuning.css" />
     <link rel="stylesheet" href="/assets/panels/learned.css" />
     <link rel="stylesheet" href="/assets/panels/agents.css" />
+    <link rel="stylesheet" href="/assets/panels/chatapi.css" />
     <link rel="stylesheet" href="/assets/panels/practice.css" />
+    <link rel="stylesheet" href="/assets/panels/cards.css" />
     <link rel="stylesheet" href="/assets/panels/lore.css" />
+    <link rel="stylesheet" href="/assets/panels/detect.css" />
     <script src="/assets/welcome.js" defer></script>
     <script src="/assets/panels/health.js" defer></script>
     <script src="/assets/panels/runtime.js" defer></script>
@@ -22,8 +25,11 @@
     <script src="/assets/panels/tuning.js" defer></script>
     <script src="/assets/panels/learned.js" defer></script>
     <script src="/assets/panels/agents.js" defer></script>
+    <script src="/assets/panels/chatapi.js" defer></script>
     <script src="/assets/panels/practice.js" defer></script>
+    <script src="/assets/panels/cards.js" defer></script>
     <script src="/assets/panels/lore.js" defer></script>
+    <script src="/assets/panels/detect.js" defer></script>
   </head>
   <body>
     <div class="shell">
@@ -270,6 +276,7 @@
               </button>
             </div>
           </div>
+          <div id="cards-root" class="panel-root side-card" hidden></div>
           <div id="lore-root" class="panel-root side-card" hidden></div>
           <div id="features-card" class="card side-card" hidden>
             <h2 data-t="featuresTitle">更多功能</h2>
@@ -500,6 +507,7 @@
               <div class="tiles" data-group="advanced"></div>
             </details>
             <div id="agents-root" class="panel-root"></div>
+            <div id="chatapi-root" class="panel-root"></div>
           </div>
           <div id="platform-panel" class="card platform-card" hidden>
             <button class="quiet back" id="panel-back" data-t="back">
@@ -555,6 +563,7 @@
             <div id="panel-done" hidden>
               <div class="success-mark" aria-hidden="true">✓</div>
               <h2 id="done-title"></h2>
+              <div id="done-reach"></div>
               <button class="secondary" id="panel-finish" data-t="backToList">
                 返回平台列表
               </button>

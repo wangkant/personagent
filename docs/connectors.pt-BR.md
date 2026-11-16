@@ -117,7 +117,7 @@ Estes campos opcionais ativam mais do agente:
 |---|---|
 | `connector_id` | Um id estável para esta instância do conector. A caixa de saída exige. |
 | `reply_handle` | O que o conector precisar para alcançar esta conversa depois sem uma mensagem recebida: o `unified_msg_origin` do AstrBot, um id de sala do Matrix ou um login do Satori mais um id de canal. O agente o trata como opaco, guarda por conversa e devolve nas entregas da caixa de saída. |
-| `capabilities` | O que o conector sabe fazer. `outbox` significa que ele consulta a caixa de saída e pode enviar por conta própria. `quote_text` significa que os segmentos de resposta trazem o texto citado. |
+| `capabilities` | O que o conector sabe fazer. `outbox` significa que ele consulta a caixa de saída e pode enviar por conta própria. `quote_text` significa que os segmentos de resposta trazem o texto citado. `text_only` significa que a conversa só consegue exibir texto: o agente é instruído a não usar figurinhas e não envia nenhuma, de modo que todo item de resposta é `text`. A API compatível com OpenAI o envia. |
 | `prefiltered` | `true` (o padrão) quando o conector aplicou a própria lista de permissão. `false` faz das listas do agente o único filtro. |
 | `proactive` | Marca um evento de conversa privada como uma deixa escrita pelo conector, não como palavras da pessoa. Veja "Falar primeiro sem a caixa de saída". |
 

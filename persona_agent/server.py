@@ -38,7 +38,7 @@ from persona_agent.paths import ROOT, runtime_dir
 from persona_agent.settings import AgentSettings
 from persona_agent.storage import (
     ALREADY_RUNNING, LockUnavailable, RuntimeInstanceLock, atomic_write_text)
-from persona_agent import dashboard
+from persona_agent import chat_api, dashboard
 
 
 class RollingLogThatSurvivesAFailedRotation(RotatingFileHandler):
@@ -84,8 +84,10 @@ def _validate_exposure_config(
     host: str,
     onebot_secret: str,
     connector_token: str,
+    api_enabled: bool = False,
+    api_key: str = "",
 ) -> None:
-    """Refuse a network bind whose connector endpoints are not authenticated.
+    """Refuse a network bind whose connector endpoints or chat API are not authenticated.
 
     QQ_ONEBOT_SECRET is not required: without it a network bind turns
     /v1/onebot off (_onebot_disabled).
@@ -97,6 +99,11 @@ def _validate_exposure_config(
             f"listening on {host} exposes personagent to the network, so set "
             "CONNECTOR_TOKEN (the token your connector sends) in .env first, "
             "or listen on 127.0.0.1")
+    if api_enabled and not api_key:
+        raise ValueError(
+            f"listening on {host} exposes the OpenAI-compatible API to the network, "
+            "so set CHAT_API_KEY in .env first (`personagent connect api` creates one), "
+            "turn the API off with CHAT_API_ENABLED=false, or listen on 127.0.0.1")
     if not onebot_secret:
         logger.info("[main] QQ_ONEBOT_SECRET is blank, so /v1/onebot is off "
                     "while personagent listens on %s", host)
@@ -237,6 +244,10 @@ AGENT_ENABLED = env_bool("AGENT_ENABLED", True)
 CONNECTOR_TOKEN = env_str("CONNECTOR_TOKEN")
 CONNECTOR_MAX_EVENT_AGE_S = env_int(
     "CONNECTOR_MAX_EVENT_AGE_S", 86_400, minimum=1, maximum=604_800)
+# The OpenAI-compatible API (chat_api.py): off unless switched on. Without a
+# key only programs on this computer may call it.
+CHAT_API_ENABLED = env_bool("CHAT_API_ENABLED", False)
+CHAT_API_KEY = env_str("CHAT_API_KEY")
 
 # ========== Logging ==========
 logger = logging.getLogger("bot")
@@ -685,7 +696,8 @@ async def lifespan(app: FastAPI):
     _configure_logging()
     # Report config mistakes before anything is wired up; never fatal.
     preflight.log_findings(preflight.check_config())
-    _validate_exposure_config(_LISTEN["host"], QQ_ONEBOT_SECRET, CONNECTOR_TOKEN)
+    _validate_exposure_config(_LISTEN["host"], QQ_ONEBOT_SECRET, CONNECTOR_TOKEN,
+                              CHAT_API_ENABLED, CHAT_API_KEY)
     runtime_lock = None
     if AGENT_ENABLED:
         # Claim the deployment before the agent reads any of its state.
@@ -740,6 +752,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="personagent", version=__version__, lifespan=lifespan)
 dashboard.install(app)
+chat_api.install(app)
 
 #: Where this process listens: SERVER_HOST / SERVER_PORT unless main() was given others.
 _LISTEN: dict = {"host": SERVER_HOST, "port": SERVER_PORT}
@@ -772,7 +785,11 @@ def _banner(host: str, port: int) -> str:
                       f"  home:       {ROOT}",
                       f"  agent:      {state}",
                       "  callers:    " + ("checked by CONNECTOR_TOKEN" if CONNECTOR_TOKEN else
-                                          "accepted from this computer only (CONNECTOR_TOKEN is blank)")])
+                                          "accepted from this computer only (CONNECTOR_TOKEN is blank)"),
+                      "  chat API:   " + (("off (CHAT_API_ENABLED=false)" if not CHAT_API_ENABLED else
+                                           f"http://{_url_host(host)}:{port}/v1, "
+                                           + ("checked by CHAT_API_KEY" if CHAT_API_KEY else
+                                              "this computer only (CHAT_API_KEY is blank)")))])
 
 
 # /health/details caches its probes for 60 s: each spends tokens and a
@@ -1141,7 +1158,8 @@ def startup_problem(host: str, port: int) -> str | None:
     if retired:
         return retired
     try:
-        _validate_exposure_config(host, QQ_ONEBOT_SECRET, CONNECTOR_TOKEN)
+        _validate_exposure_config(host, QQ_ONEBOT_SECRET, CONNECTOR_TOKEN,
+                                  CHAT_API_ENABLED, CHAT_API_KEY)
     except ValueError as exc:
         return str(exc)
     if AGENT_ENABLED:

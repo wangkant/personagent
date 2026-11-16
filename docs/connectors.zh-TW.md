@@ -117,7 +117,7 @@ QQ 是唯一的例外，為了相容性而保留。其 id 儲存時不帶前綴�
 |---|---|
 | `connector_id` | 此聯結器執行個體的固定 id。outbox 需要此欄位。 |
 | `reply_handle` | 聯結器日後在未收到訊息的情況下聯繫此對話所需的任何資訊：AstrBot 的 `unified_msg_origin`、Matrix 聊天室 id，或 Satori 登入資訊加頻道 id。agent 將其視為不透明的值，依對話儲存，並在 outbox 投遞時交回。 |
-| `capabilities` | 聯結器支援的功能。`outbox` 表示它會輪詢 outbox，並可主動傳送訊息。`quote_text` 表示回覆片段帶有被引用的文字。 |
+| `capabilities` | 聯結器支援的功能。`outbox` 表示它會輪詢 outbox，並可主動傳送訊息。`quote_text` 表示回覆片段帶有被引用的文字。`text_only` 表示該對話只能顯示文字：agent 會被告知不要使用貼圖，也不會傳送貼圖，因此每個回覆項目都是 `text`。OpenAI 相容 API 會傳送此項。 |
 | `prefiltered` | 聯結器已套用自己的允許清單時為 `true`（預設）。`false` 會讓 agent 的清單成為唯一的篩選條件。 |
 | `proactive` | 將私訊事件標記為聯結器撰寫的提示，而非該使用者所說的話。請參閱「不經 outbox 主動發言」。 |
 

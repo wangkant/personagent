@@ -4,7 +4,23 @@
 
 ## 開啟應用程式
 
-從 PyPI 安裝後開啟：
+無須事先安裝任何軟體：安裝程式自備 Python。在終端機中貼上一行指令即可。
+
+在 Windows 上，按下 Windows 鍵，輸入 `PowerShell` 並按 Enter，然後貼上：
+
+```powershell
+irm https://raw.githubusercontent.com/wangkant/personagent/main/install.ps1 | iex
+```
+
+在 macOS 上開啟「終端機」（位於「應用程式 > 工具程式」），在 Linux 上開啟任意終端機，然後貼上：
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/wangkant/personagent/main/install.sh | sh
+```
+
+首次執行需要幾分鐘。安裝程式會安裝並開啟 personagent；在 Windows 上還會在桌面和「開始」功能表中新增 personagent 圖示，在 macOS 上會在桌面放置 `personagent.command`，在 Linux 上會在應用程式選單中新增一個項目。PyPI 或 GitHub 連線緩慢時，安裝程式會自動改用中國大陸的鏡像站；在指令前設定 `PERSONAGENT_MIRROR=cn` 可從一開始就使用鏡像站，設定為 `off` 則一律不使用。如果無法連線到 `raw.githubusercontent.com`，可改用內容相同的 `https://cdn.jsdelivr.net/gh/wangkant/personagent@main/install.ps1` 和 `.../install.sh`。再次執行同一行指令即可更新；執行 `uv tool uninstall personagent` 可移除程式，personagent 資料夾會保留。
+
+若已安裝 Python 3.10 或更新版本，也可以改從 PyPI 安裝：
 
 ```sh
 python -m pip install personagent
@@ -17,7 +33,7 @@ personagent
 
 也可以交由 AI 程式設計助理處理：請它閱讀 [setup-for-agents.md](setup-for-agents.md)，再由它完成 personagent 的安裝與設定。
 
-在 Windows 上，也可以下載原始碼 ZIP，解壓縮後按兩下 `start.bat`。它會在資料夾中建立專用的 Python 環境，再開啟同一個本機頁面。首次執行時，還會在桌面和「開始」功能表中新增 personagent 圖示。
+在 Windows 上，也可以下載原始碼 ZIP，解壓縮後按兩下 `start.bat`。它會在資料夾中建立專用的 Python 環境（電腦上沒有 Python 時會先自動取得），再開啟同一個本機頁面。首次執行時，還會在桌面和「開始」功能表中新增 personagent 圖示。
 
 從 Git 儲存庫執行時，請為它另建一個虛擬環境：先執行 `python -m venv .venv`，再執行 `.venv/bin/python -m pip install -e .` 和 `.venv/bin/python -m persona_agent`。Windows 上的直譯器是 `.venv\Scripts\python.exe`，也可以直接按兩下 `start.bat`。
 
@@ -25,11 +41,13 @@ personagent
 
 選擇模型服務，填入 API 金鑰，再點選「驗證並開始聊天」。預設選取的是 OpenRouter 的免費模型和「溫和的傾聽者」這個角色。這些模型同樣需要金鑰：此金鑰不需付費，可透過「取得 API 金鑰」向 OpenRouter 申請，每天限 50 次請求；頁面提示驗證時會傳送一次很小的請求，這只在付費服務上產生少量費用。模型名稱和服務位址位於「進階設定」中，角色的名稱、個性和交談所用的語言位於「變更角色名稱、個性或語言」中。頁面右上角的語言選單只切換頁面本身的顯示語言。
 
+如果本機已在執行 Ollama 或 LM Studio 並已載入模型，或環境變數中已設定某個模型服務的金鑰（例如 `DEEPSEEK_API_KEY` 或 `OPENAI_API_KEY`），頁面會在模型服務上方顯示提示，點選一次「使用 Ollama」或「使用此金鑰」即可完成驗證並開始聊天。使用本機模型不需要金鑰，聊天內容不會離開本機。
+
 金鑰只儲存在本機，點選「顯示」即可核對。聊天訊息會傳送至你選擇的模型服務，並依該服務的一般價格計費。
 
 角色會直接在頁面中回覆，其傳送的貼圖和圖片也會顯示在頁面中。角色之後傳送的訊息（例如其主動發起的訊息）會在數秒內顯示在對話中。設定會自動儲存，下次開啟時將直接進入聊天。
 
-設定完成後，「角色與設定」中有一個「人設」欄位，內容即為角色目前使用的人設。修改角色的身分與說話方式後點選「儲存人設」，變更將立即生效，角色已學到的內容也會保留。
+設定完成後，「角色與設定」中有一個「人設」欄位，內容即為角色目前使用的人設。修改角色的身分與說話方式後點選「儲存人設」，變更將立即生效，角色已學到的內容也會保留。若想從一個構想開始，可在欄位上方用一句話描述角色，再點選「產生草稿」。若要匯入他人以 Tavern 角色卡（PNG、JSON 或 CHARX）形式分享的角色，請使用欄位下方的「匯入角色卡」；各部分會變成什麼，請參閱[使用手冊](guide.zh-TW.md#角色卡與草稿)。
 
 其下方是「更多功能」，可以開啟網路搜尋、辨識圖片和偶爾主動發言。網路搜尋預設使用 DuckDuckGo，填入 Tavily 的金鑰可提升穩定性。再往下的「進階設定」集中了以往只能在 `.env` 中修改的設定。連接第一個平台之前，「開始聊天」頁面上方會顯示「開始使用」提示。
 
@@ -48,7 +66,8 @@ personagent
 2. QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat 由 personagent 直接連線。其他平台透過第三方橋接程式 AstrBot 接入。首次連接這類平台時，personagent 會下載 AstrBot 和一個獨立的 Python 3.12 執行環境，下載完成前請保持頁面開啟。之後 AstrBot 會在背景執行，不需要另外登入管理後台。
 3. 儲存之前，personagent 會先向平台驗證憑證。平台拒絕時，頁面會顯示提示，且不會儲存任何內容。
 4. 已連接的平台會列在「連接平台」頁面頂端，可在該處重新設定或中斷連線。
-5. 不使用頁面時（例如在沒有顯示器的伺服器上），可以在終端機中執行 `personagent connect <平台>`，連接 QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 或 Stoat，操作步驟和驗證方式與頁面相同。單獨執行 `personagent connect` 會列出這些平台。此指令的說明請參閱[完整手冊](guide.zh-TW.md#在終端機中連接平台)。
+5. 對於其他任何可填寫 OpenAI 相容位址的軟體（例如 Open WebUI、SillyTavern 或自己撰寫的程式），請在「連接平台」底部開啟「其他軟體」，將其位址、金鑰和模型複製到該軟體中。詳情請參閱[完整手冊](guide.zh-TW.md#其他軟體)。
+6. 不使用頁面時（例如在沒有顯示器的伺服器上），可以在終端機中執行 `personagent connect <平台>`，連接 QQ、微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 或 Stoat，操作步驟和驗證方式與頁面相同。單獨執行 `personagent connect` 會列出這些平台。此指令的說明請參閱[完整手冊](guide.zh-TW.md#在終端機中連接平台)。
 
 QQ 機器人連接完成後，可在手機 QQ 的「聯絡人 → 機器人」中找到它，既可以私訊，也可以將它加入你擔任群主的群組。此方式使用 QQ 官方機器人平台，不需要個人 QQ 次要帳號，也不需要安裝其他軟體。機器人可以加入哪些群組由 QQ 決定：通過認證之前，它只能加入管理員擔任群主的群組，也不需要設定沙箱。在群組中，它預設只會收到 @ 它的訊息，群主可以在該群組的機器人資料頁開啟「接收全量訊息」。認證及其他帳號相關事項，請參閱 [QQ 機器人官方指南](https://bot.q.qq.com/wiki/bot_new_product-intro/)。
 

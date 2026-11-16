@@ -70,7 +70,8 @@ async def test_a_question_about_what_someone_said_finds_it_by_its_words(tmp: Pat
 async def test_nothing_in_the_log_either_keeps_the_admission(tmp: Path) -> None:
     agent = make_agent(tmp)
     now = time.time()
-    seed_log(agent, [(now - 40 * 3600, "7", "Ann", "hello")])
+    # Twenty days back is never last week; forty hours back is, on a Monday.
+    seed_log(agent, [(now - 20 * DAY, "7", "Ann", "hello")])
     agent.episode_store.add(ROOM, {"text": "Ann and Bo talked about films",
                                    "t0": now - 30 * DAY, "t1": now - 30 * DAY, "who": ["7"]})
     out = block(agent, "Luna what happened last week?")

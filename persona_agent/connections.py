@@ -127,15 +127,23 @@ PLATFORMS: tuple[Platform, ...] = (
                  ("Copy the token that BotFather sends, paste it into the bot token field here and "
                   "select Connect.",
                   "复制 BotFather 发来的 Token，粘贴到此处的「机器人 Token」一栏，然后点击「连接」。"),
-                 ("By default, a bot in a group sees only commands, replies to its messages and "
-                  "messages that mention it. For the character to follow the conversation, send "
-                  "/setprivacy to @BotFather, choose the bot and select Disable.",
-                  "默认情况下，群中的机器人只能看到命令、对其消息的回复以及提及它的消息。如需让角色跟上群聊"
-                  "内容，请向 @BotFather 发送 /setprivacy，选择该机器人，然后选择 Disable。"),
+                 ("By default a bot in a group runs in privacy mode. It then receives only commands "
+                  "meant for it (such as /start@yourbot), replies to its own messages and service "
+                  "messages, and no other messages of the group. For the character to follow the "
+                  "conversation, send /setprivacy to @BotFather, choose the bot and select Disable: the "
+                  "bot then receives every message. A bot that is an administrator of the group receives "
+                  "every message in either case.",
+                  "默认情况下，群中的机器人处于隐私模式，此时只能收到发给它的命令（例如 /start@yourbot）、"
+                  "对其消息的回复以及服务消息，收不到群中的其他消息。如需让角色跟上群聊内容，请向 "
+                  "@BotFather 发送 /setprivacy，选择该机器人，然后选择 Disable，此后机器人将收到全部消息。"
+                  "担任群管理员的机器人无论如何设置都会收到全部消息。"),
                  ("Add the bot to your group by its username. If you changed the privacy setting after "
-                  "adding it, remove the bot from the group and add it again.",
+                  "adding it, remove the bot from the group and add it again; the change takes effect "
+                  "only then. Once the bot is in your groups, you can send /setjoingroups to @BotFather "
+                  "and select Disable, so that no one can add it to other groups.",
                   "按用户名将机器人添加到你的群中。如果在添加之后才更改隐私设置，请将机器人移出该群后重新"
-                  "添加。"),
+                  "添加，更改此时才会生效。机器人加入你的群后，可向 @BotFather 发送 /setjoingroups 并选择 "
+                  "Disable，使其他人无法再将它添加到别的群。"),
              )),
     Platform("discord", ("Discord", "Discord"), KEY,
              (_token("discord_token", "Bot token", "机器人 Token"),),
@@ -150,14 +158,23 @@ PLATFORMS: tuple[Platform, ...] = (
                   "Privileged Gateway Intents.",
                   "在 Bot 页面重置并复制 Token，并在 Privileged Gateway Intents 中开启 Message Content "
                   "Intent（消息内容权限）。"),
+                 ("On the same page, turn Public Bot off unless other people should be able to add the "
+                  "bot to their servers. With Public Bot on, anyone who has the bot's invite link can add "
+                  "it, and the character answers there on your model service.",
+                  "在同一页面关闭 Public Bot（公开机器人），除非你希望其他人也能将机器人添加到他们的服务器。"
+                  "开启 Public Bot 时，任何获得邀请链接的人都可以添加该机器人，角色将在那里使用你的模型服务"
+                  "作答。"),
                  ("Paste the token into the bot token field here and select Connect.",
                   "将 Token 粘贴到此处的「机器人 Token」一栏，然后点击「连接」。"),
-                 ("On the OAuth2 page, open URL Generator, tick the bot scope and the View Channels and "
-                  "Send Messages permissions, then open the generated link and add the bot to your "
-                  "server. This requires the Manage Server permission on that server.",
-                  "在 OAuth2 页面打开 URL Generator，勾选 bot 范围以及 View Channels 和 Send Messages "
-                  "权限，然后打开生成的链接，将机器人添加到你的服务器。此操作须在该服务器上拥有「管理服务器」"
-                  "权限。"),
+                 ("On the OAuth2 page, open URL Generator, tick the bot scope and the permissions View "
+                  "Channels, Send Messages, Send Messages in Threads, Attach Files and Read Message "
+                  "History, then open the generated link and add the bot to your server. The link ends "
+                  "in permissions=274878008320. Adding a bot requires the Manage Server permission on "
+                  "that server.",
+                  "在 OAuth2 页面打开 URL Generator，勾选 bot 范围以及 View Channels、Send Messages、"
+                  "Send Messages in Threads、Attach Files 和 Read Message History 权限，然后打开生成的"
+                  "链接，将机器人添加到你的服务器。该链接以 permissions=274878008320 结尾。添加机器人须在该"
+                  "服务器上拥有「管理服务器」权限。"),
              )),
     Platform("kook", ("KOOK", "KOOK"), KEY,
              (_token("kook_bot_token", "Bot token", "机器人 Token"),),
@@ -186,13 +203,57 @@ PLATFORMS: tuple[Platform, ...] = (
              {"lark_connection_mode": "socket"},
              guide="https://open.feishu.cn/app",
              note=("Use long-connection event subscription; no public address needed.",
-                   "事件订阅方式请选择「长连接」，无需公网地址。")),
+                   "事件订阅方式请选择「长连接」，无需公网地址。"),
+             steps=(
+                 ("Sign in to the Feishu developer console at https://open.feishu.cn/app and create a "
+                  "custom app for your organization (企业自建应用). Store apps cannot use a long "
+                  "connection.",
+                  "登录飞书开发者后台 https://open.feishu.cn/app，创建一个企业自建应用。商店应用无法使用"
+                  "长连接。"),
+                 ("Open the app, select 添加应用能力 (Add app capability) and add the 机器人 (bot) "
+                  "capability.",
+                  "打开该应用，点击「添加应用能力」，添加「机器人」能力。"),
+                 ("In the app's permissions, add one scope for sending, such as im:message:send_as_bot, "
+                  "and the scopes for receiving: im:message.p2p_msg:readonly for direct messages and "
+                  "im:message.group_at_msg:readonly for group messages that mention the bot. Add "
+                  "im:message.group_msg as well if the character should read every group message.",
+                  "在应用的权限中添加一项发送消息的权限，例如 im:message:send_as_bot，以及接收消息的权限："
+                  "单聊消息为 im:message.p2p_msg:readonly，群聊中 @ 机器人的消息为 "
+                  "im:message.group_at_msg:readonly。如需让角色读取全部群消息，请再添加 "
+                  "im:message.group_msg。"),
+                 ("Under 凭证与基础信息 (Credentials and basic info), copy the App ID and the App Secret, "
+                  "paste them here and select Connect, so that personagent's connection is online.",
+                  "在「凭证与基础信息」中复制 App ID 和 App Secret，粘贴到此处并点击「连接」，使 "
+                  "personagent 的连接保持在线。"),
+                 ("Under 事件与回调 > 事件配置 (Events and callbacks > Event configuration), set the "
+                  "subscription mode to 使用长连接接收事件 (receive events through a long connection) and "
+                  "save; saving succeeds only while the connection is online. Then add the event "
+                  "im.message.receive_v1 (接收消息 v2.0).",
+                  "在「事件与回调 > 事件配置」中将订阅方式设为「使用长连接接收事件」并保存；只有在连接在线时"
+                  "才能保存成功。随后添加事件 im.message.receive_v1（接收消息 v2.0）。"),
+                 ("Create a version and publish it (创建版本并发布). Changes to the capabilities, "
+                  "permissions and events take effect only in a published version.",
+                  "创建版本并发布。对能力、权限和事件的更改只有在发布新版本后才会生效。"),
+                 ("To use the character in a group, open the group's settings, choose 群机器人 (group "
+                  "bots), and add the app's bot.",
+                  "如需在群中使用，请打开群设置，选择「群机器人」，然后添加该应用的机器人。"),
+             )),
     Platform("dingtalk", ("DingTalk", "钉钉"), KEY,
              (_plain("client_id", "Client ID", "Client ID"),
               _token("client_secret", "Client Secret", "Client Secret")),
              guide="https://open-dev.dingtalk.com/",
              note=("Use Stream mode for the robot; no public address needed.",
-                   "机器人消息接收方式请选择 Stream 模式，无需公网地址。")),
+                   "机器人消息接收方式请选择 Stream 模式，无需公网地址。"),
+             steps=(
+                 ("In the DingTalk developer console (open-dev.dingtalk.com), open the app that holds "
+                  "the robot and set the robot's message receiving mode to Stream mode.",
+                  "在钉钉开发者后台（open-dev.dingtalk.com）打开机器人所属的应用，将机器人的消息接收方式设为 "
+                  "Stream 模式。"),
+                 ("Copy the app's Client ID (AppKey) and Client Secret (AppSecret), paste them here and "
+                  "select Connect.",
+                  "复制该应用的 Client ID（AppKey）和 Client Secret（AppSecret），粘贴到此处，然后点击"
+                  "「连接」。"),
+             )),
     Platform("slack", ("Slack", "Slack"), KEY,
              (_token("bot_token", "Bot token (xoxb-…)", "Bot Token（xoxb-…）"),
               _token("app_token", "App token (xapp-…)", "App Token（xapp-…）")),
@@ -201,14 +262,44 @@ PLATFORMS: tuple[Platform, ...] = (
              note=("The link creates the app with Socket Mode, scopes and events set. Then add an "
                    "app-level token with connections:write, install the app, and paste both tokens.",
                    "以下链接将创建一个已配置 Socket Mode、权限和事件的 Slack 应用。随后请生成一个包含 "
-                   "connections:write 权限的 App-Level Token，将应用安装到工作区，再粘贴这两个 Token。")),
+                   "connections:write 权限的 App-Level Token，将应用安装到工作区，再粘贴这两个 Token。"),
+             steps=(
+                 ("Open the link below. It creates the app with Socket Mode, the bot scopes and the "
+                  "message events already set; choose your workspace and confirm.",
+                  "打开下方链接，将创建一个已设置 Socket Mode、机器人权限和消息事件的应用；选择你的工作区并"
+                  "确认。"),
+                 ("Under Basic Information, scroll to App-Level Tokens and generate an app-level token. "
+                  "Copy it (it begins with xapp-) into the app token field here.",
+                  "在 Basic Information 页面下滚至 App-Level Tokens，生成一个 App-Level Token，将其（以 "
+                  "xapp- 开头）复制到此处的 App Token 一栏。"),
+                 ("On the OAuth & Permissions page, select Install to Workspace. Then copy the bot token "
+                  "shown under OAuth Tokens (it begins with xoxb-) into the bot token field here.",
+                  "在 OAuth & Permissions 页面点击 Install to Workspace，然后将 OAuth Tokens 下显示的机器人 "
+                  "Token（以 xoxb- 开头）复制到此处的 Bot Token 一栏。"),
+                 ("Select Connect. Then, in each channel the character should join, type /invite "
+                  "followed by the bot's name.",
+                  "点击「连接」。随后在角色需要加入的每个频道中输入 /invite 加机器人的名称。"),
+             )),
     Platform("wecom_ai_bot", ("WeCom AI bot", "企业微信智能机器人"), KEY,
              (_plain("wecomaibot_ws_bot_id", "Bot ID", "Bot ID"),
               _token("wecomaibot_ws_secret", "Secret", "Secret")),
              {"wecom_ai_bot_connection_mode": "long_connection"},
              guide="https://work.weixin.qq.com/",
              note=("Choose long connection when creating the bot.",
-                   "创建机器人时请选择「长连接」。")),
+                   "创建机器人时请选择「长连接」。"),
+             steps=(
+                 ("In the WeCom admin console, open the configuration page of the AI bot (智能机器人), "
+                  "turn on API mode (API 模式) and choose long connection (长连接). API mode uses either "
+                  "a long connection or a callback address, not both.",
+                  "在企业微信管理后台进入智能机器人的配置页面，开启「API 模式」并选择「长连接」方式。API 模式"
+                  "只能在长连接与接收消息回调地址之间二选一。"),
+                 ("Copy the bot's BotID and the Secret for the long connection, paste them here and "
+                  "select Connect.",
+                  "复制该机器人的 BotID 和长连接专用的 Secret，粘贴到此处，然后点击「连接」。"),
+                 ("Do not connect the same bot from another program at the same time: WeCom keeps only "
+                  "the newest connection of a bot.",
+                  "请勿同时在其他程序中连接同一机器人：企业微信只保留该机器人最新的一个连接。"),
+             )),
     Platform("mattermost", ("Mattermost", "Mattermost"), KEY,
              (_plain("mattermost_url", "Server address", "服务器地址", kind="url"),
               _token("mattermost_bot_token", "Bot token", "机器人 Token")),
@@ -261,10 +352,14 @@ PLATFORMS: tuple[Platform, ...] = (
     Platform("matrix", ("Matrix", "Matrix"), KEY,
              (_plain("matrix_homeserver", "Homeserver address", "服务器地址", kind="url",
                      default="https://matrix.org"),
-              _token("matrix_token", "Access token of the bot account",
-                     "机器人账号的访问令牌（Access Token）"),
               _plain("matrix_owner", "Your own Matrix ID, for example @you:matrix.org",
-                     "你本人的 Matrix ID，例如 @you:matrix.org")),
+                     "你本人的 Matrix ID，例如 @you:matrix.org"),
+              Field("matrix_user", ("User ID of the bot account, for example @nova:matrix.org",
+                                    "机器人账号的用户 ID，例如 @nova:matrix.org"), secret=False, required=False),
+              Field("matrix_password", ("Password of the bot account (used once to sign in, not stored)",
+                                        "机器人账号的密码（仅用于登录一次，不会保存）"), required=False),
+              Field("matrix_token", ("Or: access token of the bot account",
+                                     "或：机器人账号的访问令牌（Access Token）"), required=False)),
              guide="https://docs.element.io/latest/element-support/frequently-asked-questions/",
              note=("Use a separate Matrix account for the bot. It joins only the rooms you invite it to, "
                    "and it cannot read end-to-end encrypted rooms, so invite it to a room with "
@@ -276,27 +371,31 @@ PLATFORMS: tuple[Platform, ...] = (
                   "on matrix.org or on any other homeserver. Do not use your own account.",
                   "为机器人另行注册一个 Matrix 账号，例如在 app.element.io 注册，可使用 matrix.org "
                   "或其他任意服务器。请勿使用你本人的账号。"),
-                 ("Open a private browser window, go to app.element.io and sign in with the bot account.",
-                  "打开浏览器的无痕（隐私）窗口，进入 app.element.io，并以机器人账号登录。"),
-                 ("Select the bot's avatar in the upper left corner, then choose All settings > Help & "
-                  "About. Under Advanced at the bottom, select Access Token, copy it and paste it into "
-                  "the access token field here.",
-                  "点击左上角的机器人头像，依次选择「所有设置」>「帮助与关于」。在页面底部的「高级」中"
-                  "点击「访问令牌（Access Token）」，复制后粘贴到此处的访问令牌一栏。"),
-                 ("Close the private window without signing out. Signing out invalidates the token.",
-                  "请直接关闭该无痕窗口，不要退出登录。退出登录会使该令牌失效。"),
                  ("In the homeserver field, keep https://matrix.org, or enter the address of the server "
                   "that hosts the bot account.",
                   "「服务器地址」保留 https://matrix.org，或填写机器人账号所在服务器的地址。"),
                  ("In the Matrix ID field, enter your personal Matrix ID, for example @you:matrix.org. "
-                  "It is shown in your own Element under All settings > Account.",
+                  "It is shown in your own Element under All settings > Account. The bot accepts "
+                  "invitations only from this ID: if it is mistyped, every invitation is declined.",
                   "在「你本人的 Matrix ID」一栏填写你日常使用的 Matrix ID，例如 @you:matrix.org。"
-                  "该 ID 可在你本人的 Element 中「所有设置」>「账户」处查看。"),
+                  "该 ID 可在你本人的 Element 中「所有设置」>「账户」处查看。机器人只接受来自该 ID 的邀请，"
+                  "如填写有误，所有邀请都会被拒绝。"),
+                 ("Enter the bot account's user ID and password. personagent signs in once, keeps the "
+                  "sign-in it receives, which lasts until that session is signed out, and does not store "
+                  "the password. Leave the access token field empty.",
+                  "填写机器人账号的用户 ID 和密码。personagent 只登录一次，保存登录后获得的凭据（在该会话被"
+                  "退出之前一直有效），不会保存密码。访问令牌一栏请留空。"),
+                 ("Only if the homeserver does not accept a password sign-in, paste an access token "
+                  "instead. A token copied from Element's Help & About on matrix.org now expires after "
+                  "a short time (it begins with mat_) and is not accepted.",
+                  "仅当服务器不接受密码登录时，才改为粘贴访问令牌。在 matrix.org 上从 Element「帮助与关于」"
+                  "中复制的令牌现在会在短时间内过期（以 mat_ 开头），因此不被接受。"),
                  ("Select Connect. Then, in your own Element, create a new room with end-to-end "
-                  "encryption turned off and invite the bot's Matrix ID. The bot accepts invitations "
-                  "only from your ID and declines encrypted rooms.",
+                  "encryption turned off and invite the bot's Matrix ID. A chat begun with Start chat "
+                  "in Element is encrypted, so the bot declines it.",
                   "点击「连接」。随后在你本人的 Element 中新建一个房间，创建时关闭「启用端到端加密」，"
-                  "再邀请机器人的 Matrix ID。机器人只接受来自你本人 ID 的邀请，并会拒绝加密房间。"),
+                  "再邀请机器人的 Matrix ID。在 Element 中通过「发起聊天」开始的对话是加密的，因此机器人"
+                  "会拒绝。"),
              )),
     Platform("twitch", ("Twitch", "Twitch"), KEY,
              (_plain("twitch_client_id", "Client ID of your Twitch application",
@@ -393,6 +492,15 @@ PLATFORMS: tuple[Platform, ...] = (
                  ("Close any other IRC client that uses the same nickname; otherwise the network "
                   "reports that the nickname is in use.",
                   "请关闭其他正在使用该昵称的 IRC 客户端，否则网络会提示昵称已被占用。"),
+                 ("To be recognised as the admin, add irc: followed by your own name in lower case to the "
+                  "admin accounts in the reply settings. On a network that reports services accounts, "
+                  "such as Libera.Chat, that name is your registered account, and the bot recognises you "
+                  "only while you are identified to it, so register your own nickname as well. On other "
+                  "networks it is your nickname, which anyone using that nickname would match.",
+                  "如需被识别为管理员，请在回复设置的管理员账号中添加 irc: 加你本人名字的小写形式。在会报告"
+                  "服务账号的网络（例如 Libera.Chat）上，该名字是你注册的账号，机器人仅在你已登录该账号时"
+                  "才识别你，因此请同样注册你本人的昵称。在其他网络上，该名字就是你的昵称，任何使用该昵称的"
+                  "人都会被识别为管理员。"),
              )),
     Platform("zulip", ("Zulip", "Zulip"), KEY,
              (_plain("zulip_site", "Organization address", "组织地址", kind="url"),

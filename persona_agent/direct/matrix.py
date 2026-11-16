@@ -20,7 +20,7 @@ from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 
-from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep,
+from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep, send_failed,
                    has_content, media, plain_name, raw_id, split_text)
 from ..storage import atomic_write_text
 
@@ -33,12 +33,15 @@ CALL_TIMEOUT_S = 30
 MAX_TEXT = 4000
 # After a long sleep, messages older than this are not answered.
 MAX_AGE_S = 600
-TYPING_MS = 30_000
+# Refreshed while a reply is written, so a sign left behind fades soon.
+TYPING_MS = 10_000
 RATE_LIMIT_MAX_S = 300
 RECENT_EVENTS = 1024
 HTML_FORMAT = "org.matrix.custom.html"
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 OWNER_ID = re.compile(r"^@[^:\s]+:\S+$")
+# Matrix Authentication Service access tokens, which are short lived (Element's FAQ).
+SHORT_LIVED = "mat_"
 # Lazy-loaded members keep the first sync small in big rooms; presence is unused.
 SYNC_FILTER = json.dumps({"presence": {"not_types": ["*"]},
                           "room": {"state": {"lazy_load_members": True},
@@ -263,6 +266,11 @@ class Matrix(Platform):
         self.base = str(values.get("matrix_homeserver") or "https://matrix.org").strip().rstrip("/")
         self.token = str(values.get("matrix_token") or "").strip()
         self.owner = str(values.get("matrix_owner") or "").strip()
+        # Used once to sign in; only the token and device id it brings back are kept.
+        self.user = str(values.get("matrix_user") or "").strip()
+        self._password = str(values.get("matrix_password") or "")
+        self.device_id = str(values.get("matrix_device_id") or "").strip()
+        self._running = False
         self.client = client or httpx.AsyncClient(timeout=POLL_MS / 1000 + 15)
         self.state_path = state
         self.display = ""
@@ -301,7 +309,8 @@ class Matrix(Platform):
                 await asyncio.sleep(_retry_after(response, body))
                 continue
             if response.status_code == 401 or code in ("M_UNKNOWN_TOKEN", "M_MISSING_TOKEN"):
-                raise Refused("token_rejected")
+                # A token that worked before has expired or was signed out.
+                raise Refused("sign_in_expired" if self._running else "token_rejected")
             if code == "M_USER_DEACTIVATED":
                 raise Refused("account_deactivated")
             if strict and (response.status_code in (404, 405) or answer is None):
@@ -334,9 +343,14 @@ class Matrix(Platform):
             raise Refused("homeserver_invalid")
         if not OWNER_ID.match(self.owner):
             raise Refused("owner_invalid")
-        if not self.token:
-            raise Refused("token_rejected")
         await self._discover()
+        if self._password and self.user and strict:
+            await self._password_login()
+        if not self.token:
+            raise Refused("sign_in_missing")
+        if strict and self.token.startswith(SHORT_LIVED):
+            # Element's access tokens from a next-generation sign-in expire within minutes.
+            raise Refused("token_short_lived")
         try:
             me = await self.call("GET", "/account/whoami", strict=strict)
         except ConnectionError as exc:
@@ -357,6 +371,49 @@ class Matrix(Platform):
         except ConnectionError:
             self.display = ""
         return plain_name(self.display, user_id)
+
+    async def _password_login(self) -> None:
+        """POST /login with m.login.password, once: the token and device id are
+        kept, the password is not. No refresh token is asked for, so the token
+        lasts until the device is signed out."""
+        try:
+            flows = _mapping((await self.client.get(self.base + CLIENT + "/login", timeout=CALL_TIMEOUT_S)).json())
+        except (httpx.HTTPError, ValueError):
+            flows = {}
+        types = {str(_mapping(f).get("type")) for f in flows.get("flows") or []}
+        if flows and "m.login.password" not in types:
+            raise Refused("login_unsupported")
+        body = {"type": "m.login.password", "identifier": {"type": "m.id.user", "user": self.user},
+                "password": self._password, "initial_device_display_name": "personagent"}
+        try:
+            response = await self.client.post(self.base + CLIENT + "/login", json=body, timeout=CALL_TIMEOUT_S)
+        except httpx.HTTPError as exc:
+            raise ConnectionError(f"login: {type(exc).__name__}") from None
+        try:
+            answer = _mapping(response.json())
+        except ValueError:
+            answer = {}
+        if response.status_code in (400, 401, 403):
+            if answer.get("errcode") == "M_USER_DEACTIVATED":
+                raise Refused("account_deactivated")
+            raise Refused("login_rejected")
+        if response.status_code >= 400 or not answer.get("access_token"):
+            raise ConnectionError(f"login: {response.status_code}")
+        self.token = str(answer["access_token"])
+        self.device_id = str(answer.get("device_id") or "")
+        self.user = str(answer.get("user_id") or self.user)
+        self._password = ""
+
+    def keep(self) -> dict:
+        """What is stored after the check: the token a password sign-in
+        brought, never the password."""
+        kept = {k: v for k, v in self.values.items() if k != "matrix_password"}
+        kept["matrix_token"] = self.token
+        if self.device_id:
+            kept["matrix_device_id"] = self.device_id
+        if self.user:
+            kept["matrix_user"] = self.user
+        return kept
 
     # ------------------------------------------------------------ state
 
@@ -384,6 +441,7 @@ class Matrix(Platform):
     # ------------------------------------------------------------ receiving
 
     async def run(self, on_event, connected) -> None:
+        self._running = True
         await self._login(strict=False)
         self._load()
         failures, announced = 0, False
@@ -399,7 +457,7 @@ class Matrix(Platform):
                     raise ConnectionError("sync: no next_batch")
             except ConnectionError as exc:
                 logger.warning("matrix: %s", exc)
-                self.dropped()
+                self.dropped(exc)
                 announced = False
                 await backoff_sleep(failures)
                 failures += 1
@@ -467,7 +525,9 @@ class Matrix(Platform):
         try:
             if inviter != self.owner:
                 # Only the owner decides where the bot talks; anyone else would spend their model budget.
-                logger.info("matrix: declined an invite from someone other than the owner")
+                logger.warning("matrix: declined an invite from a Matrix ID other than the owner's ID "
+                               "saved on the page; if you sent it yourself, check that ID under Reconnect")
+                self.notice("invite_declined")
                 await self.call("POST", path + "/leave", json={})
             elif encrypted:
                 logger.warning("matrix: declined an invite to an encrypted room; encryption is not supported")
@@ -504,8 +564,7 @@ class Matrix(Platform):
             return
         relates = _mapping(_mapping(source.get("content")).get("m.relates_to"))
         thread = str(relates.get("event_id") or "") if relates.get("rel_type") == "m.thread" else ""
-        if event["addressed"]:
-            await self._typing(room_id, True)
+        # The bridge puts the typing sign up, only where an answer is expected.
         await on_event(event, (room_id, thread, event["message_id"]))
 
     async def event(self, room_id: str, source: dict) -> dict | None:
@@ -677,6 +736,10 @@ class Matrix(Platform):
     async def typing(self, target: Any) -> None:
         await self._typing(self.place(target), True)
 
+    async def typing_done(self, target: Any) -> None:
+        # Matrix keeps the sign up for TYPING_MS unless told otherwise.
+        await self._typing(self.place(target), False)
+
     async def send(self, target: Any, items: list) -> int:
         if isinstance(target, str):
             target = (target, "", "")
@@ -708,8 +771,9 @@ class Matrix(Platform):
                     else:
                         continue
                 except (ConnectionError, Refused, ValueError) as exc:
-                    logger.warning("matrix: sending stopped after %d item(s) (%s)", sent, exc)
-                    break
+                    if not send_failed(self.kind, item, exc, sent):
+                        break
+                    continue
                 sent += 1
         finally:
             await self._typing(room_id, False)

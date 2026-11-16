@@ -558,8 +558,9 @@ def test_twitch_signs_in_by_link_then_checks_the_tokens_before_keeping_them(work
     assert workspace.job["error"] == "channel_not_found"
     assert direct_base.load_credentials(workspace.home) == {}
 
-    # The login itself: an app Twitch does not accept is named; any other end is a failed sign-in.
-    for code, error in (("app_rejected", "app_rejected"), ("denied", "scan_failed")):
+    # The login itself: a refused app or a denied login is named; any other end is a failed sign-in.
+    for code, error in (("app_rejected", "app_rejected"), ("login_denied", "login_denied"),
+                        ("rejected", "scan_failed")):
         async def failed(client, show, values, code=code):
             raise twitch.LoginFailed(code)
         monkeypatch.setattr(twitch, "login", failed)
@@ -1552,7 +1553,8 @@ def test_what_the_page_says_about_learned_items_and_its_person_is_in_every_langu
 
 def test_portuguese_names_logs_in_portuguese():
     strings = _language_strings("pt-BR")
-    found = [k for k, v in strings.items() if re.search(r"\b[Ll]ogs?\b(?! in)", v)]
+    # A file's name, such as agent.log, stays as written.
+    found = [k for k, v in strings.items() if re.search(r"(?<![./])\b[Ll]ogs?\b(?! in)", v)]
     assert found == []
 
 

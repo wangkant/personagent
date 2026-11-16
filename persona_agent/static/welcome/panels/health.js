@@ -532,10 +532,14 @@ PA.strings({
             ? "health_platform_connected"
             : p.state === "connecting"
               ? "health_platform_connecting"
-              : "health_platform_waiting";
+              : p.state === "retrying"
+                ? "retryingState"
+                : "health_platform_waiting";
         head.append(el("span", "feature-state", PA.t(word)));
         if (p.since) head.append(el("span", "health-ms", PA.t("health_since", { time: clock(p.since) })));
         main.append(head);
+        // Still retried, with a cause the page names (cannot be reached, access denied).
+        if (!p.failed && p.reason) main.append(el("p", "field-note", PA.t(p.reason)));
         if (p.failed)
           main.append(
             el("p", "field-note", PA.t(p.reason && p.reason !== "error" ? p.reason : "health_platform_error")),

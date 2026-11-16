@@ -1,0 +1,103 @@
+/* The chatapi panel. */
+#chatapi-root {
+  margin-top: 12px;
+}
+.chatapi.feature {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.chatapi-state.chatapi-on {
+  color: var(--ok);
+}
+#chatapi-root label.check.chatapi-switch {
+  margin-top: 0;
+}
+#chatapi-root .field-note,
+#chatapi-root .error,
+.chatapi-done,
+.chatapi-reply {
+  overflow-wrap: anywhere;
+}
+.chatapi-lead {
+  margin: 14px 0 6px;
+  color: var(--ink);
+}
+.chatapi-row {
+  display: grid;
+  grid-template-columns: minmax(96px, max-content) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.chatapi-label {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.chatapi-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font: 12.5px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  user-select: all;
+}
+.chatapi-actions {
+  display: flex;
+  gap: 2px;
+}
+.chatapi-buttons {
+  margin-top: 8px;
+}
+/* Text buttons line their words up with the text above, as .feature > .quiet does. */
+.chatapi-buttons > .quiet:first-child {
+  margin-left: -10px;
+}
+.chatapi-done {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin: 8px 0 0;
+}
+.chatapi-test {
+  margin-top: 18px;
+}
+.chatapi-test-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chatapi-test-line input {
+  flex: 1;
+  min-width: 0;
+}
+.chatapi-reply {
+  margin-top: 10px;
+  padding-left: 12px;
+  border-left: 2px solid var(--ok);
+}
+.chatapi-reply p {
+  margin: 0;
+  line-height: 1.6;
+}
+.chatapi-reply-head {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.chatapi-reply-text {
+  white-space: pre-wrap;
+  color: var(--ink);
+}
+.chatapi-howto {
+  margin-top: 18px;
+}
+@media (max-width: 560px) {
+  .chatapi-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .chatapi-label {
+    grid-column: 1 / -1;
+  }
+  .chatapi-test-line {
+    flex-wrap: wrap;
+  }
+}

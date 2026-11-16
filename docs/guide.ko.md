@@ -11,15 +11,16 @@
 5. [나만의 캐릭터로 만들기](#나만의-캐릭터로-만들기)
 6. [채팅에 넣기](#채팅에-넣기): [personagent가 직접 연결하는 플랫폼](#personagent가-직접-연결하는-플랫폼) · [기타 플랫폼](#기타-플랫폼관리형-astrbot-경유) · [직접 실행하는 브리지](#직접-실행하는-브리지) · [먼저 발언](#먼저-발언)
 7. [코딩 어시스턴트](#코딩-어시스턴트)
-8. [가르치기](#가르치기)
-9. [기억](#기억)
-10. [활동](#활동)
-11. [측정하기](#측정하기)
-12. [동작 방식](#동작-방식)
-13. [개인정보와 동의](#개인정보와-동의)
-14. [문제 해결](#문제-해결)
-15. [0.x에서 업그레이드](#0x에서-업그레이드)
-16. [현재 상태와 기타 문서](#현재-상태와-기타-문서)
+8. [기타 소프트웨어](#기타-소프트웨어)
+9. [가르치기](#가르치기)
+10. [기억](#기억)
+11. [활동](#활동)
+12. [측정하기](#측정하기)
+13. [동작 방식](#동작-방식)
+14. [개인정보와 동의](#개인정보와-동의)
+15. [문제 해결](#문제-해결)
+16. [0.x에서 업그레이드](#0x에서-업그레이드)
+17. [현재 상태와 기타 문서](#현재-상태와-기타-문서)
 
 ## 설치와 personagent 폴더
 
@@ -174,6 +175,7 @@ PyPI에 새 personagent가 있으면 채팅 보기에 pip, uvx, uv tool, pipx, G
 | `personagent learned` | 배운 것과 아직 관찰 중인 것을 표시하고, 원하면 개입 |
 | `personagent memory` | 기억하는 것을 나열하고, 항목 하나를 삭제하거나 복원 |
 | `personagent eval` | 발언, 페르소나, 학습, 기억 측정 |
+| `personagent character` | [캐릭터 카드 가져오기](#캐릭터-카드와-초안)(`import FILE`), 캐릭터를 카드로 저장(`export FILE.png` 또는 `.json`), 설명으로 작성한 페르소나 초안 출력(`draft "..."`) |
 
 모든 명령은 `--help`를 받습니다.
 
@@ -297,7 +299,7 @@ If you have not seen a film, say so instead of inventing an opinion.
   {"scenario": "a friend shares a video", "context": ["alex: the most cursed way to make instant noodles"], "reply": "watching cooking crimes at midnight is a choice"}
   ```
 
-**페르소나 길이와 `[style]` 블록.** **페르소나** 상자에는 최대 4,000자까지 입력할 수 있습니다. `persona.txt`의 `[style]` 블록은 개인 메시지의 규칙 여섯 가지를 바꾸며, 그룹 채팅에는 적용되지 않습니다. 각 줄은 `이름: 값` 형식입니다. 목록에 없는 값은 기본값(아래 각 항목의 첫 번째 값)을 유지하며 로그에 기록됩니다.
+**페르소나 길이와 `[style]` 블록.** **페르소나** 상자에는 최대 16,000자까지 입력할 수 있습니다. 답장할 때마다 페르소나 전체를 보내므로 짧을수록 비용이 적게 듭니다. `persona.txt`의 `[style]` 블록은 개인 메시지의 규칙 여섯 가지를 바꾸며, 그룹 채팅에는 적용되지 않습니다. 각 줄은 `이름: 값` 형식입니다. 목록에 없는 값은 기본값(아래 각 항목의 첫 번째 값)을 유지하며 로그에 기록됩니다.
 
 ```text
 [style]
@@ -309,6 +311,22 @@ vent: ask
 이름과 값은 `length`(short, medium, long), 누군가 하소연할 때의 `vent`(hold, ask, solve), 추천을 요청받았을 때의 `recs`(ask_back, offer), `good_news`(cheer, deadpan), 군말에 관한 `particles`(capped, free, none), `fatigue`(stock, own)입니다.
 
 이미지를 보게 하려면 `VISION_MODEL`, `VISION_API_KEY`, `VISION_BASE_URL`을 설정하거나 **추가 기능**에서 이미지 이해를 켜십시오. 선택한 모델이 이미지를 읽을 수 없으면 저장할 때 페이지가 그 사실을 알립니다. 이미지 이해가 꺼져 있거나 실패하여 캐릭터가 볼 수 없는 이미지는 그룹에서도 개인 메시지에서도 볼 수 없는 이미지로 캐릭터에게 전달되므로, 캐릭터는 이미지를 묘사하지 않고 그 이미지에 대해 묻습니다. 음성 메시지, 동영상, 파일, 전달된 메시지는 각각 그 종류 그대로 전달되며, 플랫폼이 음성 메시지의 텍스트 변환을 제공하면 그것도 함께 전달됩니다. 전달된 메시지의 내용은 원래 발언자의 말로 읽히므로, 그 안의 이름은 누구도 부르지 않고 기억 명령도 실행하지 않습니다. 다른 사람에 대한 멘션은 그 사람이 정한 이름과 함께 캐릭터에게 전달되며, 이 이름은 보낸 사람의 말로 간주되지 않으므로 캐릭터를 부르지도 않고 명령이 되지도 않습니다.
+
+### 캐릭터 카드와 초안
+
+**한 문장으로 초안 만들기.** **페르소나** 상자 위에서 캐릭터를 한두 문장으로 설명하고 **초안 작성**을 클릭하십시오. personagent는 모델 서비스로 요청을 한 번 보내고(앱 보기의 모델 사용량에서 **페르소나 초안**으로 집계됩니다), 초안을 상자에 넣습니다. 초안은 캐릭터의 언어로, 구체적인 습관 형태로 작성됩니다. **페르소나 저장**을 클릭하기 전까지 초안은 저장되지 않으며, **이전 텍스트 복원**으로 상자에 있던 내용을 되돌릴 수 있습니다. `personagent character draft "낱말 퍼즐을 좋아하는 은퇴한 등대지기"`는 터미널에 초안을 출력하고 아무것도 저장하지 않습니다.
+
+**캐릭터 카드 가져오기.** **페르소나** 상자 아래의 **캐릭터 카드**는 SillyTavern과 캐릭터 공유 사이트에서 쓰는 형식인 Tavern 캐릭터 카드를 받습니다. PNG 카드(V2 `chara` 또는 V3 `ccv3` 데이터, 둘 다 있으면 V3 우선), JSON 카드(V1, V2, V3), CHARX 파일입니다. 미리 보기를 확인하기 전에는 아무것도 바뀌지 않습니다. 미리 보기에는 각 부분이 체크박스와 함께 표시됩니다.
+
+- **이름**: 카드의 이름이 `PERSONA_NAME`이 되고, V3 별명은 `persona.card.json`의 `aliases`에 추가됩니다. 캐릭터가 배운 내용은 남지만 배울 때의 이름에서만 적용되므로, 새 이름으로는 새로 배우기 시작합니다. 이름을 되돌리면 이전에 배운 내용도 돌아옵니다. 사람과 채팅에 대한 기억은 어느 경우에도 유지됩니다.
+- **페르소나**: 카드의 설명, 성격, 상황, 지시(system prompt와 post-history instructions)를 합쳐 만듭니다. `{{char}}`와 `<BOT>`은 이름으로, `{{user}}`와 `<USER>`는 고급 설정의 **사용자 호칭**(비어 있으면 "사용자")으로 바뀝니다. 미리 보기에서 수정할 수 있습니다. 채울 수 없는 자리 표시자는 목록으로 표시됩니다. 카드의 지시는 마지막 부분에 따로 두고 표시해 둡니다. 롤플레이 프로그램용으로 작성되어 내레이션이나 별표로 감싼 동작을 자주 요구하므로, 삭제하는 편이 나을 수 있습니다. **페르소나** 상자에는 최대 16,000자까지 입력할 수 있으며, 답장할 때마다 페르소나 전체가 모델로 전송되므로 길수록 답장 한 번의 비용이 커집니다.
+- **예시 대화**: 카드의 `mes_example`은 `data/examples.<lang>.jsonl`이 되며, 직접 넣어 둔 파일과 마찬가지로 기본 제공 예시 대화 전체를 대체합니다.
+- **로어북**: 카드의 로어북은 로어북 섹션의 **파일 가져오기**와 같은 가져오기 과정을 거치며, 항목을 건너뛰는 이유도 같습니다. 정규식으로 일치하는 항목도 건너뜁니다. `data/lorebook.<lang>.json`이 됩니다.
+- **그림**: PNG 자체 또는 CHARX의 메인 아이콘이 캐릭터의 그림이 되며, 필요하면 축소됩니다.
+
+카드의 첫인사(`first_mes`와 대체 첫인사)는 표시되지만 사용되지 않습니다. 캐릭터에게는 정해진 첫인사가 없고 자기 방식으로 대화를 시작하기 때문입니다. 직접 작성한 페르소나와 직접 만든 예시 대화 및 로어북 파일은 대체되기 전에 `.bak` 파일로 보관되며, 날짜가 붙은 사본도 남습니다. 카드는 모든 크기에 제한을 두고 읽습니다. 파일당 최대 16MB, 카드 텍스트 최대 2MB이며, PNG 청크와 압축 파일 구성원의 수에 제한이 있고, 압축 파일 밖을 가리키는 구성원 경로는 허용되지 않으며, 그림은 최대 4,000만 화소입니다. 카드가 링크하는 것은 어떤 것도 내려받지 않습니다. `personagent character import FILE`은 터미널에서 같은 작업을 합니다. 미리 보기를 출력하고 무엇이든 바꾸기 전에 묻습니다. `--yes`는 질문을 건너뛰고, `--only name,persona`는 일부만 가져옵니다.
+
+**캐릭터 카드로 저장하기.** **PNG 카드로 저장** 또는 **JSON 카드로 저장**은 캐릭터를 V2 카드(PNG에는 V3 데이터도 포함)로 바탕 화면 또는 문서 폴더에 저장합니다. 이름과 별명, 페르소나, 직접 만든 예시 대화 및 로어북 파일, 그림(직접 지정한 그림, 없으면 선택한 초상화, 그것도 없으면 단색 정사각형)이 들어갑니다. API 키, 기억, 캐릭터가 배운 내용, 채팅에 있는 사람들의 이름은 포함되지 않으며, **사용자 호칭**은 `{{user}}`로 기록됩니다. 이 카드를 다시 가져오면 같은 캐릭터가 됩니다. `personagent character export FILE.png`는 터미널에서 같은 작업을 합니다.
 
 ## 채팅에 넣기
 
@@ -329,8 +347,8 @@ personagent는 다음 열 개 플랫폼을 하나의 백그라운드 프로세�
 | QQ | 모바일 QQ로 코드를 스캔하고 확인합니다. 공식 QQ 봇이 만들어지거나 이미 있는 봇을 사용하며, personagent가 키를 가져옵니다. **직접 입력으로 전환**은 [QQ 봇 페이지](https://q.qq.com/qqbot/openclaw/login.html)에서 만든 봇의 AppID와 AppSecret을 받습니다. |
 | WeChat(개인) | WeChat으로 코드를 스캔하고 로그인을 확인합니다. 연결은 Tencent의 iLink 봇 API를 쓰며 일대일 채팅만 처리합니다. WeChat은 이런 봇에 그룹 메시지를 전달하지 않기 때문입니다. |
 | Telegram | [@BotFather](https://t.me/BotFather)로 봇을 만들고 토큰을 붙여 넣습니다. |
-| Discord | [Developer Portal](https://discord.com/developers/applications)에서 봇 토큰을 복사하고 Message Content Intent를 켭니다. |
-| Matrix | 봇 전용 Matrix 계정을 따로 만드십시오. Element에서 봇 계정으로 로그인한 상태로 **All settings > Help & About > Advanced**에서 액세스 토큰을 복사한 뒤, 로그아웃하지 말고 해당 창을 닫으십시오. 이 토큰을 홈서버 주소, 본인의 Matrix ID와 함께 붙여 넣습니다. 그런 다음 본인 계정에서 종단 간 암호화를 끈 방에 봇을 초대하십시오. 봇은 본인 Matrix ID의 초대만 수락하며, 암호화된 방은 읽을 수 없습니다. |
+| Discord | [Developer Portal](https://discord.com/developers/applications)에서 봇 토큰을 복사하고 Message Content Intent를 켭니다. 다른 사람이 봇을 추가할 수 있어야 하는 경우가 아니라면 Public Bot을 끕니다. 초대할 때는 View Channels, Send Messages, Send Messages in Threads, Attach Files, Read Message History 권한을 줍니다(`permissions=274878008320`). |
+| Matrix | 봇 전용 Matrix 계정을 따로 만드십시오. 홈서버 주소, 본인의 Matrix ID, 봇 계정의 사용자 ID와 비밀번호를 입력합니다. personagent는 한 번만 로그인하여 받은 로그인 정보를 보관하며, 비밀번호는 저장하지 않습니다. 대신 액세스 토큰을 붙여 넣는 경우에는 만료되지 않는 토큰만 받아들입니다. matrix.org에서 Element로부터 복사한 토큰(`mat_`로 시작)은 몇 분 안에 만료되므로 거부됩니다. 그런 다음 본인 계정에서 종단 간 암호화를 끈 방에 봇을 초대하십시오. Element에서 Start chat으로 시작한 대화는 암호화되므로 거절됩니다. 봇은 본인 Matrix ID의 초대만 수락하므로, ID를 잘못 입력하면 모든 초대가 거절되며 페이지가 이를 알려 줍니다. |
 | Twitch | [Twitch 개발자 콘솔](https://dev.twitch.tv/console)에서 Client Type을 **Public**으로 지정한 무료 애플리케이션을 등록하십시오. 그 Client ID와 캐릭터가 채팅할 채널을 붙여 넣고 **연결**을 선택한 뒤, 캐릭터의 Twitch 계정으로 로그인한 브라우저에서 페이지에 표시된 링크를 통해 로그인을 승인하십시오. 캐릭터는 지정한 채널에서만 텍스트로 채팅합니다. Twitch 귓속말(다이렉트 메시지)은 지원하지 않으므로 **플랫폼 연결**의 타일에는 **채널 전용**이라고 표시됩니다. |
 | IRC | 서버(기본값은 Libera.Chat, OFTC는 `irc.oftc.net`), TLS 포트, 봇의 닉네임, 채널, 그리고 닉네임이 등록되어 있다면 NickServ 비밀번호를 입력하십시오. 봇은 TLS로 접속하여 지정한 채널에만 참여하고, 자기 닉네임으로 온 다이렉트 메시지에 답합니다. 텍스트만 지원합니다. Libera.Chat에서는 AI 봇이 참여하기 전에 각 채널 운영자의 허가를 받아야 합니다. |
 | Zulip | **Personal settings > Bots**에서 **Generic bot**을 추가한 뒤 조직 주소, 봇의 이메일, API 키를 붙여 넣으십시오. 봇은 구독한 채널과 자신에게 온 다이렉트 메시지만 읽습니다. 채널에서는 멘션되거나 인용되었을 때 답합니다. 조직의 모든 구성원이 봇에게 다이렉트 메시지를 보낼 수 있습니다. |
@@ -465,6 +483,61 @@ personagent connect dsh --remove
 ```json
 {"mcpServers": {"personagent": {"command": "personagent", "args": ["--home", "/path/to/home", "mcp"]}}}
 ```
+
+## 기타 소프트웨어
+
+OpenAI 호환 주소를 입력할 수 있는 앱이라면 무엇이든 캐릭터와 대화할 수 있습니다. Open WebUI나 SillyTavern 같은 채팅 프런트엔드, 자동화 도구, 직접 작성한 스크립트 등입니다. personagent는 OpenAI 채팅 API 형식으로 `GET /v1/models`와 `POST /v1/chat/completions`를 제공합니다. 기본값은 꺼짐입니다.
+
+**켜기.** 로컬 페이지에서는 **플랫폼 연결** 맨 아래의 **기타 소프트웨어**에 스위치가 있습니다. 처음 켤 때 키가 만들어집니다. 그러면 페이지에 다른 앱에 필요한 세 가지 값이 표시되고, 각 값 옆에 **복사**가 있습니다. 키는 **표시**를 선택할 때까지 숨겨져 있습니다. **테스트 메시지 보내기**는 다른 앱과 같은 방식으로 API를 통해 메시지를 보내고, 답장 또는 실패 이유를 보여 줍니다. **새 키 만들기**는 확인을 거쳐 키를 교체하며, 이전 키는 즉시 사용할 수 없게 됩니다. 둘 중 하나를 바꾸면 실행 중인 캐릭터가 다시 시작됩니다. 이 설정은 시작할 때만 읽기 때문입니다. 터미널에서는 다음과 같습니다.
+
+```bash
+personagent connect api            # 켜고, 키가 없으면 만들고, 세 가지 값을 출력합니다
+personagent connect api --new-key  # 키를 교체합니다
+personagent connect api --remove   # 끕니다. 키는 유지됩니다
+```
+
+**세 가지 값.**
+
+| 값 | 입력할 내용 |
+|---|---|
+| 주소(Base URL) | `http://127.0.0.1:<SERVER_PORT>/v1`, 기본값은 `http://127.0.0.1:8080/v1` |
+| API 키 | `CHAT_API_KEY`, `Authorization: Bearer <key>`로 전송됩니다 |
+| 모델 | `personagent`. 어떤 모델 이름이든 받아들이며, `/v1/models`에는 이것만 표시됩니다. |
+
+**자주 쓰는 앱에서.** Open WebUI에서는 관리자가 Settings > Connections를 열고 **Manage OpenAI API Connections**에서 **Add Connection**을 선택한 후 **URL**에 주소를, **API Key**에 키를 입력하고 **Save**를 선택합니다([Open WebUI 가이드](https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible)). SillyTavern에서는 API Connections를 열고 API 유형을 **Chat Completion**으로, **Chat Completion Source**를 **Custom (OpenAI-compatible)**으로 설정한 후 엔드포인트 URL에 주소를, API 키에 키를 입력하고 `personagent`를 선택한 다음 **Test Message**를 선택합니다([SillyTavern 가이드](https://docs.sillytavern.app/usage/api-connections/openai/)).
+
+**하는 일과 하지 않는 일.**
+
+- 캐릭터는 자신의 페르소나와 기억을 유지합니다. 앱의 시스템 프롬프트, 함께 보내는 이전 메시지, temperature 같은 설정은 무시됩니다. 역할이 `user`인 마지막 메시지만 새 메시지로 읽습니다. 앱이 답을 다시 생성하면 그 메시지를 다시 보내므로, 캐릭터는 같은 말을 두 번 들은 것으로 읽습니다.
+- 요청의 `user` 필드 값마다 플랫폼 `api`의 별도 대화가 되며, **활동**에 API 개인 메시지로 표시됩니다. `user`가 없으면 `X-Personagent-Conversation` 헤더가 대화를 지정하고, 둘 다 없으면 모든 요청이 `default`라는 하나의 대화를 공유합니다.
+- 답장은 텍스트입니다. 메시지에는 `image_url` 파트로 이미지를 붙일 수 있으며, `data:image/...;base64,` URL과 `http(s)` URL을 모두 쓸 수 있습니다. 캐릭터는 채팅 플랫폼의 이미지와 같은 방식으로 읽으며, 크기 제한(`VISION_MAX_IMAGE_BYTES`)도, 사용자 네트워크 내부 주소를 거부하는 것도 같습니다. 여기서 캐릭터는 스티커를 보내지 않습니다.
+- 캐릭터는 종종 짧은 메시지 여러 개로 답합니다. 일반 응답은 이를 줄바꿈으로 이어 붙이고, 스트리밍 응답(`"stream": true`)은 답장 전체가 준비된 후 메시지마다 한 조각씩 보내며, 생각하는 동안에는 연결 유지용 주석을 보냅니다. `usage`의 토큰 수는 항상 0입니다.
+- 호출하는 쪽은 캐릭터의 관리자가 아니므로, 기억 명령은 다른 사람이 쓸 때와 같은 방식으로만 동작합니다.
+- 오류는 OpenAI 형식 `{"error": {"message", "type", "code"}}`를 따릅니다. 키가 없거나 틀리면 401, 요청 형식이 잘못되면 400, API가 꺼져 있으면 404, 한도에 도달하면 429(`Retry-After` 포함), 모델 서비스가 실패하면 502, 캐릭터가 꺼져 있으면 503입니다.
+- 이 주소는 personagent가 실행 중일 때만 응답합니다. 창이 열려 있거나 `personagent up` 또는 `personagent run`으로 실행 중이어야 합니다.
+
+**스크립트에서.** curl을 사용하는 경우:
+
+```bash
+curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Authorization: Bearer $CHAT_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model": "personagent", "user": "me", "messages": [{"role": "user", "content": "안녕하세요"}]}'
+```
+
+표준 라이브러리만 쓰는 Python의 경우:
+
+```python
+import json, os, urllib.request
+body = {"model": "personagent", "user": "me", "messages": [{"role": "user", "content": "안녕하세요"}]}
+request = urllib.request.Request("http://127.0.0.1:8080/v1/chat/completions", json.dumps(body).encode(),
+    {"Authorization": "Bearer " + os.environ["CHAT_API_KEY"], "Content-Type": "application/json"})
+with urllib.request.urlopen(request, timeout=300) as response:
+    print(json.load(response)["choices"][0]["message"]["content"])
+```
+
+한 턴에 1분 이상 걸릴 수 있으므로 클라이언트의 타임아웃을 길게 설정하십시오.
+
+**다른 기기나 Docker에서.** personagent는 `127.0.0.1`에서 수신하므로 이 주소는 이 컴퓨터의 프로그램에서만 쓸 수 있습니다. Docker 컨테이너 안의 프로그램, 휴대폰, 다른 컴퓨터는 모두 다른 기기로 간주됩니다. 그곳에서 접속하려면 서비스를 네트워크 주소로 실행하거나(`personagent run --host 0.0.0.0`. 이 경우 `CONNECTOR_TOKEN`과 `CHAT_API_KEY`가 필수이며 키가 암호화되지 않은 채 전송되므로, 신뢰할 수 있는 네트워크에서만 하십시오), `127.0.0.1:<SERVER_PORT>` 앞에 HTTPS 리버스 프록시나 사설 터널을 두십시오. 어느 방법이든 키가 필요합니다. 키가 없으면 프록시를 거치거나 다른 주소에서 온 요청은 거부됩니다. `CHAT_API_ENABLED`와 `CHAT_API_KEY`는 `.env`에 있으며 서비스가 시작될 때 읽힙니다.
 
 ## 가르치기
 
@@ -808,7 +881,7 @@ personagent 폴더의 주요 파일과 폴더에 담긴 내용은 다음과 같�
 
 **터미널에서는 `personagent doctor`를 실행하십시오.** 설정을 확인하고 철자가 틀렸거나 이름이 바뀐 설정을 알려 줍니다. 그다음 personagent가 의존하는 각 서비스를 점검합니다. 점검은 아주 작은 요청을 보내며 크레딧이 조금 들 수 있습니다. `--json`은 같은 결과를 JSON으로 출력합니다. `--fix`는 1.0에서 폐지된 설정 이름을 바꾸고 이전 파일을 `.env.bak`으로 저장합니다.
 
-**플랫폼이 연결되지 않습니다.** 플랫폼이 자격 증명을 거부하면 페이지가 이유를 알려 주며, 터미널의 `personagent connect <platform>`도 마찬가지로 이유를 알려 줍니다. 플랫폼 콘솔에서 확인하고, Discord는 Message Content Intent가 켜져 있는지 확인하십시오. QR 코드가 만료되면 새로 요청할 수 있고, 실패한 AstrBot 내려받기는 다시 시도할 수 있습니다. 앱 보기의 **플랫폼 연결 상태**에는 personagent가 직접 연결하는 각 플랫폼의 상태가 표시됩니다. 페이지나 `personagent up`이 시작한 모든 것의 로그는 personagent 폴더의 `runtime/desktop/`에 있으며, 앱 보기의 **로그**에서도 확인할 수 있습니다.
+**플랫폼이 연결되지 않습니다.** 플랫폼이 자격 증명을 거부하면 페이지가 이유를 알려 주며, 터미널의 `personagent connect <platform>`도 마찬가지로 이유를 알려 줍니다. 플랫폼 콘솔에서 확인하고, Discord는 Message Content Intent가 켜져 있는지 확인하십시오. QR 코드가 만료되면 새로 요청할 수 있고, 실패한 AstrBot 내려받기는 다시 시도할 수 있습니다. 약 2분 동안 연결할 수 없는 플랫폼은 이유와 함께 **다시 시도하는 중**으로 표시되며, 복구되면 자동으로 연결됨 상태로 돌아옵니다. 중국 본토에서는 Telegram과 Discord에 HTTP 프록시가 필요하므로, 시스템 설정이나 `HTTPS_PROXY`에 설정한 후 다시 시작하십시오. 봇의 요청을 계속 거부하는 플랫폼도 같은 방식으로 이유가 표시됩니다. 연결된 각 플랫폼 아래에는 그곳에서 캐릭터가 누구에게 답장하는지가 표시되며, 이를 제한하는 답장 설정으로 가는 링크가 있습니다. 앱 보기의 **플랫폼 연결 상태**에는 personagent가 직접 연결하는 각 플랫폼의 상태가 표시됩니다. 페이지나 `personagent up`이 시작한 모든 것의 로그는 personagent 폴더의 `runtime/desktop/`에 있으며, 앱 보기의 **로그**에서도 확인할 수 있습니다.
 
 **실행되는데 답하지 않습니다.** 가장 흔한 원인 세 가지입니다.
 

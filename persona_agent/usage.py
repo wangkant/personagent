@@ -11,13 +11,15 @@ from pathlib import Path
 logger = logging.getLogger("agent")
 
 USAGE_FILE = "model_usage.json"
+# The page's own requests (a persona draft): the service rewrites its file from memory.
+PAGE_USAGE_FILE = "model_usage.page.json"
 # Today and the six days before it, plus one so a week never loses its first day.
 KEEP_DAYS = 8
 WEEK_DAYS = 7
 WRITE_EVERY_S = 60.0
 TOKENS = ("prompt_tokens", "completion_tokens", "cached_tokens")
 # What a call was for; anything else counts as "other".
-PURPOSES = ("reply", "gate", "search", "learning", "memory", "check", "other")
+PURPOSES = ("reply", "gate", "search", "learning", "memory", "check", "persona", "other")
 
 
 def purpose_of(label) -> str:
@@ -177,5 +179,23 @@ def summary(days: dict, now: float | None = None) -> dict:
                              key=lambda r: (-r["calls"], r["model"]))}
 
 
+def merged(*books: dict) -> dict:
+    """Several {day: {model: row}} added together row by row."""
+    out: dict = {}
+    for days in books:
+        for day, models in days.items():
+            for model, row in models.items():
+                into = out.setdefault(day, {}).setdefault(model, {})
+                for key, value in row.items():
+                    if key == "purposes" and isinstance(value, dict):
+                        mine = into.setdefault("purposes", {})
+                        for label, n in value.items():
+                            mine[label] = _count(mine.get(label)) + _count(n)
+                    elif not isinstance(value, (dict, list, str)):
+                        into[key] = _count(into.get(key)) + _count(value)
+    return out
+
+
 def read_summary(path: Path, now: float | None = None) -> dict:
-    return summary(load(path), now)
+    path = Path(path)
+    return summary(merged(load(path), load(path.with_name(PAGE_USAGE_FILE))), now)

@@ -117,7 +117,7 @@ Ces champs facultatifs activent davantage de fonctions de l'agent :
 |---|---|
 | `connector_id` | Un identifiant stable pour cette instance du connecteur. La boîte d'envoi l'exige. |
 | `reply_handle` | Tout ce dont le connecteur a besoin pour atteindre cette conversation plus tard sans message entrant : le `unified_msg_origin` d'AstrBot, un identifiant de salon Matrix, ou une connexion Satori plus un identifiant de canal. L'agent le traite comme opaque, le stocke par conversation et le rend dans les livraisons de la boîte d'envoi. |
-| `capabilities` | Ce que le connecteur sait faire. `outbox` signifie qu'il interroge la boîte d'envoi et peut envoyer de lui-même. `quote_text` signifie que les segments de réponse portent le texte cité. |
+| `capabilities` | Ce que le connecteur sait faire. `outbox` signifie qu'il interroge la boîte d'envoi et peut envoyer de lui-même. `quote_text` signifie que les segments de réponse portent le texte cité. `text_only` signifie que la conversation ne peut afficher que du texte : l'agent reçoit la consigne de ne pas utiliser d'autocollants et n'en envoie aucun, si bien que chaque élément de réponse est `text`. L'API compatible OpenAI l'envoie. |
 | `prefiltered` | `true` (par défaut) quand le connecteur a appliqué sa propre liste d'autorisation. `false` fait des listes de l'agent le seul filtre. |
 | `proactive` | Marque un événement de message privé comme un signal écrit par le connecteur, et non les mots de la personne. Voir « Parler en premier sans la boîte d'envoi ». |
 

@@ -117,7 +117,7 @@ QQ 是唯一的例外，为兼容而保留。其 id 存储时不带前缀（`123
 |---|---|
 | `connector_id` | 此连接器实例的稳定 id。outbox 需要该字段。 |
 | `reply_handle` | 连接器在未收到消息时也能联系到该会话所需的任何信息：AstrBot 的 `unified_msg_origin`、Matrix 房间 id，或 Satori 登录加频道 id。agent 把它当作不透明的值，按会话存储，并在 outbox 投递中交回。 |
-| `capabilities` | 连接器的能力。`outbox` 表示其轮询 outbox，并可主动发送。`quote_text` 表示回复片段带有被引用的文字。 |
+| `capabilities` | 连接器的能力。`outbox` 表示其轮询 outbox，并可主动发送。`quote_text` 表示回复片段带有被引用的文字。`text_only` 表示该对话只能显示文字：agent 会被告知不使用表情包，也不会发送表情包，因此每个回复项都是 `text`。OpenAI 兼容接口会发送此项。 |
 | `prefiltered` | 连接器应用了自己的允许列表时为 `true`（默认）。`false` 使 agent 的列表成为唯一的过滤器。 |
 | `proactive` | 将私聊事件标记为连接器编写的提示，而非此人说的话。见“不经 outbox 主动发起对话”。 |
 

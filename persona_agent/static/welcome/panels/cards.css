@@ -1,0 +1,114 @@
+/* The character card panel and the persona draft: parts of a preview on the page, no boxes. */
+.cards-card h2 {
+  margin-bottom: 4px;
+}
+.cards-card .field-note,
+.cards-card .error,
+.cards-quote {
+  overflow-wrap: anywhere;
+}
+.cards-card > .error,
+.cards-preview > .error {
+  margin: 0 0 12px;
+}
+.cards-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+}
+.cards-subtitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 22px 0 4px;
+}
+.cards-subtitle:focus {
+  outline: none;
+}
+.cards-subtitle:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.cards-preview {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+}
+.cards-part {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.cards-part .field-note {
+  margin: 6px 0 0;
+}
+.cards-part label.check {
+  margin: 0 0 6px;
+}
+.cards-picture-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.cards-picture {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 50%;
+  flex: none;
+}
+.cards-preview textarea {
+  width: 100%;
+  min-height: 180px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.cards-preview input:disabled,
+.cards-preview textarea:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.cards-count.over,
+.cards-warn {
+  color: var(--warn-text);
+}
+.cards-quote {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--ink);
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow: auto;
+}
+.cards-target {
+  max-width: 320px;
+}
+.cards-saved {
+  margin-top: 8px;
+}
+.cards-draft {
+  margin: 4px 0 14px;
+}
+.cards-draft > label {
+  margin-top: 4px;
+}
+.cards-draft .cards-tools {
+  margin-top: 8px;
+}
+.cards-draft .field-note {
+  margin: 6px 0 0;
+}
+.cards-draft .error {
+  margin: 8px 0 0;
+}
+@media (max-width: 480px) {
+  .cards-picture-row {
+    flex-direction: column;
+  }
+  .cards-target {
+    max-width: none;
+  }
+}

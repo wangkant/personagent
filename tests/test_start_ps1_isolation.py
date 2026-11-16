@@ -66,6 +66,23 @@ sys.exit(subprocess.call([sys.executable, *rest]))
 """
 
 
+#: uv: `venv ... DIR` builds DIR with a real Python and no pip; fails when told to.
+_UV = """\
+import os, subprocess, sys
+from pathlib import Path
+args = sys.argv[1:]
+with open(Path(__file__).with_name("uv-calls.log"), "a", encoding="utf-8") as log:
+    log.write(" ".join(args[:4]) + " mirror=" + os.environ.get("UV_PYTHON_INSTALL_MIRROR", "") + "\\n")
+if args[:1] != ["venv"]:
+    sys.exit(64)
+marker = Path(__file__).with_name("uv-fails-once")
+if marker.exists():
+    marker.unlink()
+    sys.exit(2)
+sys.exit(subprocess.call([sys.executable, "-m", "venv", "--without-pip", args[-1]]))
+"""
+
+
 @unittest.skipUnless(os.name == "nt", "Windows launcher")
 class StartPs1IsolationTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -298,6 +315,67 @@ class StartPs1IsolationTests(unittest.TestCase):
         self.assertEqual(self._calls(fakes, "old-python-calls.log"), ["-c"])
         self.assertIn("-3 -m venv", self._calls(fakes, "py-calls.log"), combined)
         self.assertTrue(self._server_started())
+
+    # -- no Python at all: install.ps1 beside start.ps1 fetches one with uv --
+    def _with_installer(self) -> Path:
+        shutil.copy2(ROOT / "install.ps1", self.repo / "install.ps1")
+        return self._fake_command("uv", _UV)
+
+    def test_a_machine_with_no_python_gets_one_through_uv(self) -> None:
+        fakes = self._with_installer()
+
+        result = self._run(path=self._path_with_fakes(fakes),
+                           pythonpath=str(self._fake_pip(exit_code=0)))
+        combined = result.stdout + result.stderr
+
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertNotIn("not found", combined)
+        self.assertEqual(self._calls(fakes, "uv-calls.log"), ["venv --python 3.12 --seed mirror="], combined)
+        self.assertTrue((self.repo / ".venv" / "Scripts" / "python.exe").is_file())
+        self.assertTrue(self._server_started())
+
+    def test_an_old_python_is_replaced_through_uv_instead_of_refused(self) -> None:
+        fakes = self._with_installer()
+        self._fake_command("python", _OLD_PYTHON)
+
+        result = self._run(path=self._path_with_fakes(fakes),
+                           pythonpath=str(self._fake_pip(exit_code=0)))
+        combined = result.stdout + result.stderr
+
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("Python 3.9.7", combined)
+        self.assertEqual(self._calls(fakes, "old-python-calls.log"), ["-c"])
+        self.assertTrue(self._server_started())
+
+    def test_a_failed_python_download_is_tried_again_through_the_mirror(self) -> None:
+        fakes = self._with_installer()
+        (fakes / "uv-fails-once").write_text("", encoding="ascii")
+
+        result = self._run(path=self._path_with_fakes(fakes),
+                           pythonpath=str(self._fake_pip(exit_code=0)))
+        combined = result.stdout + result.stderr
+
+        self.assertEqual(result.returncode, 0, combined)
+        calls = self._calls(fakes, "uv-calls.log")
+        self.assertEqual(len(calls), 2, combined)
+        self.assertTrue(calls[0].endswith("mirror="), calls)
+        self.assertIn("mirror=https://", calls[1])
+        self.assertTrue(self._server_started())
+
+    def test_no_python_and_an_incomplete_venv_fetches_nothing(self) -> None:
+        fakes = self._with_installer()
+        venv = self.repo / ".venv"
+        venv.mkdir()
+        (venv / "keep.txt").write_text("existing user files", encoding="utf-8")
+
+        result = self._run(path=self._path_with_fakes(fakes))
+        combined = result.stdout + result.stderr
+
+        self.assertNotEqual(result.returncode, 0, combined)
+        self.assertIn("Incomplete", combined)
+        self.assertEqual(self._calls(fakes, "uv-calls.log"), [])
+        self.assertEqual((venv / "keep.txt").read_text(encoding="utf-8"), "existing user files")
+        self.assertFalse(self._server_started())
 
     def test_a_venv_made_with_an_old_python_is_named_too(self) -> None:
         """What an earlier start left behind on a machine that had only 3.9."""

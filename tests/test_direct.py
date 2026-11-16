@@ -262,7 +262,7 @@ def test_qq_bind_refuses_an_answer_it_cannot_open_or_a_portal_error():
         qq.asyncio.sleep = real_sleep
 
 
-def test_weixin_keeps_context_tokens_and_echoes_them_when_replying(tmp_path):
+def test_weixin_keeps_context_tokens_and_echoes_them_when_replying(tmp_path, monkeypatch):
     sent = []
     updates = iter([{"ret": 0, "get_updates_buf": "c1", "msgs": [
         {"message_type": 1, "from_user_id": "u@im.wechat", "message_id": 8, "create_time_ms": 1790000000000,
@@ -286,8 +286,20 @@ def test_weixin_keeps_context_tokens_and_echoes_them_when_replying(tmp_path):
 
     async def on_event(event, target):
         seen.append((event, target))
-    with pytest.raises(base.Refused, match="session_expired"):
+    causes = []
+    bot.dropped = lambda cause=None: causes.append(cause)
+
+    class Stop(Exception):
+        pass
+
+    async def pause(seconds):
+        assert seconds == weixin.PAUSE_S
+        raise Stop()
+    monkeypatch.setattr(weixin, "_pause", pause)
+    # -14 pauses the session for an hour, as Tencent's protocol notes say, instead of ending the login.
+    with pytest.raises(Stop):
         run(bot.run(on_event, lambda: None))
+    assert isinstance(causes[-1], base.Paused) and str(causes[-1]) == "session_paused"
     event, target = seen[0]
     assert event["conversation_type"] == "dm" and event["text"] == "你好" and target == "u@im.wechat"
     assert json.loads(state.read_text(encoding="utf-8")) == {"owner": bot.owner, "cursor": "c1",
@@ -461,7 +473,8 @@ def test_a_send_that_fails_midway_reports_what_went_out():
         return httpx.Response(200, json={"ok": True, "result": {}})
     bot = telegram.Telegram({"telegram_token": "t"}, client=mock(handler))
     items = [{"type": "text", "text": "one"}, {"type": "text", "text": "two"}, {"type": "text", "text": "three"}]
-    assert run(bot.send("-100", items)) == 1
+    # One failed message does not take the rest of the reply with it.
+    assert run(bot.send("-100", items)) == 2 and len(calls) == 3
 
 
 def test_telegram_replies_in_the_forum_topic_and_keeps_long_names_inside_the_limit():
@@ -583,21 +596,23 @@ def test_telegram_and_wechat_report_connected_again_after_a_drop(tmp_path, monke
         return httpx.Response(200 if answer.get("ok") else 401, json=answer)
     states = []
     bot = telegram.Telegram({"telegram_token": "t"}, client=mock(tg))
-    bot.dropped = lambda: states.append("connecting")
+    bot.dropped = lambda cause=None: states.append("connecting")
     with pytest.raises(base.Refused):
         run(bot.run(None, lambda: states.append("connected")))
     assert states == ["connected", "connecting", "connected"]
 
-    wx_answers = iter([{"ret": 0}, None, {"ret": 0, "msgs": []}, {"ret": -14}])  # notifystart first
+    wx_answers = iter([{"ret": 0}, None, {"ret": 0, "msgs": []}, 401])  # notifystart first
 
     def wx(request):
         answer = next(wx_answers)
         if answer is None:
             raise httpx.ConnectError("down", request=request)
+        if answer == 401:
+            return httpx.Response(401, json={})
         return httpx.Response(200, json=answer)
     states.clear()
     bot = weixin.Weixin({"weixin_oc_token": "bt"}, state=tmp_path / "s.json", client=mock(wx))
-    bot.dropped = lambda: states.append("connecting")
+    bot.dropped = lambda cause=None: states.append("connecting")
     with pytest.raises(base.Refused):
         run(bot.run(None, lambda: states.append("connected")))
     assert states == ["connecting", "connected"]
@@ -632,7 +647,7 @@ async def test_a_platform_that_cannot_load_does_not_stop_the_others(tmp_path, mo
     ran = []
 
     class Bridge:
-        def __init__(self, platform, agent, status):
+        def __init__(self, platform, agent, status, **kwargs):
             self.platform = platform
 
         async def run(self, stop):

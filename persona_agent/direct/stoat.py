@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep,
+from .base import (MAX_INLINE_IMAGE_BYTES, Platform, Refused, Unsupported, backoff_sleep, send_failed,
                    has_content, media, plain_name, raw_id, split_text, tagged_segments)
 
 logger = logging.getLogger("personagent.direct.stoat")
@@ -164,6 +164,7 @@ class Stoat(Platform):
         url = ws + ("&" if "?" in ws else "?") + "version=1&format=json"
         failures = 0
         while True:
+            cause = None
             try:
                 if await self._session(url, on_event, connected):
                     failures = 0
@@ -172,7 +173,8 @@ class Stoat(Platform):
                 raise
             except Exception as exc:
                 logger.warning("stoat: events connection dropped (%s)", type(exc).__name__)
-            self.dropped()
+                cause = exc
+            self.dropped(cause)
             await backoff_sleep(failures)
             failures += 1
 
@@ -416,8 +418,9 @@ class Stoat(Platform):
                 else:
                     continue
             except (ConnectionError, Refused, KeyError, TypeError, ValueError) as exc:
-                logger.warning("stoat: sending stopped after %d item(s) (%s)", sent, type(exc).__name__)
-                break
+                if not send_failed(self.kind, item, exc, sent):
+                    break
+                continue
             reply = ""
             sent += 1
         return sent

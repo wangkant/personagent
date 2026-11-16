@@ -30,7 +30,8 @@ personagent はあなた自身のコンピューターで動き、保存する�
 <td width="220" valign="top"><strong>独自のキャラクターを持っています。</strong></td>
 <td valign="top">
 既成のキャラクターが 7 つあります。そのうち DeepSeekちゃん、GPTちゃん、Claudeちゃんの 3 つは、コミュニティですでに描かれてきたキャラクターです。立ち絵はまばたきし、考え、話します。<br>
-ペルソナはいつでも書き直せます。キャラクターが学んだことは残ります。
+ペルソナはいつでも書き直せます。キャラクターが学んだことは残ります。<br>
+Tavern キャラクターカードを 1 つのファイルとして取り込むことも、キャラクターを 1 文で説明してペルソナの下書きを作らせることもできます。自分のキャラクターは、共有用のカードとして保存できます。
 </td>
 </tr>
 <tr>
@@ -70,6 +71,7 @@ personagent はあなた自身のコンピューターで動き、保存する�
 <td valign="top">
 22 のチャットプラットフォームを 1 つのページから、スマートフォンでのスキャンかいくつかの値を貼り付けるだけで連携できます。その多くはグループチャットにも DM にも対応します。<br>
 同じエージェントが、あなたのコンピューター上のウィンドウでも、Claude Code、Codex、DeepSeek Harness の中でも応答します。<br>
+Open WebUI や SillyTavern など、OpenAI 互換のアドレスを入力できるソフトウェアからも、同じキャラクターと会話できます。<br>
 その他のプラットフォームは、AstrBot、Koishi、Matrix のブリッジ、または自分で書くコネクターを通じて追加できます。
 </td>
 </tr>
@@ -77,7 +79,7 @@ personagent はあなた自身のコンピューターで動き、保存する�
 <td width="220" valign="top"><strong>お手持ちの環境で動作します。</strong></td>
 <td valign="top">
 OpenAI 互換の任意のモデルを使えます。OpenRouter の無料モデル、有料サービス、または Ollama で自分のコンピューター上で動かすモデルです。<br>
-コマンド 1 つで開き、表示は英語、中国語、ほか 8 つの言語から選べます。モデルのキーを 1 つ貼り付ければチャットを始められます。
+何もインストールされていないコンピューターでも、1 行で自前の Python ごとインストールできます。ページの表示は英語、中国語、ほか 8 つの言語から選べ、モデルのキーを 1 つ貼り付ければチャットを始められます。Ollama や LM Studio がすでに動いていれば、クリック 1 回で始められます。
 </td>
 </tr>
 </table>
@@ -86,12 +88,23 @@ OpenAI 互換の任意のモデルを使えます。OpenRouter の無料モデ�
 
 ## はじめに
 
-```sh
-python -m pip install personagent
-personagent
+事前に何かをインストールする必要はありません。ターミナルに 1 行貼り付けるだけです。
+
+Windows（PowerShell）：
+
+```powershell
+irm https://raw.githubusercontent.com/wangkant/personagent/main/install.ps1 | iex
 ```
 
-[uv](https://docs.astral.sh/uv/) があれば、`uvx personagent` で個別のインストールなしに実行できます。Windows では、ソースの ZIP をダウンロードして `start.bat` をダブルクリックする方法もあります。
+macOS と Linux：
+
+```sh
+curl -LsSf https://raw.githubusercontent.com/wangkant/personagent/main/install.sh | sh
+```
+
+インストーラーは自前の Python を用意し、personagent をインストールして開きます。Windows ではデスクトップにアイコンも作成します。PyPI や GitHub への接続が遅い場合は、自動的に中国本土のミラーに切り替えます。もう一度実行すると personagent を更新します。
+
+Python 3.10 以降がすでにインストールされている場合は、`python -m pip install personagent` のあとに `personagent` を実行しても同じです。[uv](https://docs.astral.sh/uv/) があれば、`uvx personagent` で個別のインストールなしに実行できます。Windows では、ソースの ZIP をダウンロードして `start.bat` をダブルクリックする方法もあります。コンピューターに Python がない場合は、`start.bat` が Python も取得します。
 
 Windows では専用のウィンドウで開き、macOS と Linux ではブラウザーで開きます。モデルの API キーを貼り付けて **確認してチャットを開始** をクリックします。最初から選ばれている OpenRouter の無料モデルにもキーが必要です。キーは無料で、ページの **API キーを取得** から OpenRouter で取得できます。`personagent demo` はキーなしで、台本どおりの 3 つの場面を再生します。[はじめに](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)では、ページを画面ごとに説明しています。
 
@@ -108,6 +121,8 @@ personagent 自体は無料です。料金は、選んだモデルサービス�
 | 上級 | WeCom アプリ、WeChat 公式アカウント、QQ Webhook、OneBot v11 (NapCat)、Satori | 公開アドレス、またはこのコンピューター上の他のソフトウェア |
 
 連携中のプラットフォームは personagent を起動するたびに再び起動します。スキャンで連携するプラットフォームと Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK、Stoat とは personagent が直接連携し、それ以外は personagent がダウンロードしてバックグラウンドで動かす [AstrBot](https://github.com/AstrBotDevs/AstrBot) を経由します。ディスプレイのないサーバーでは、personagent が直接連携するこれらのプラットフォームと、ターミナルから `personagent connect <platform>` を使ってページと同じ手順と確認で連携でき、`personagent up` でブラウザーなしですべてを起動できます。プラットフォームごとの設定方法は[ユーザーガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#チャットに入れる)に、QQ をゼロから連携する詳しい手順は、[中国語版のデプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-CN.md)にのみ掲載しています。
+
+それ以外のものには、同じページの **その他のソフトウェア** があります。有効にして、アドレス、キー、モデル名を OpenAI 互換のアドレスを入力できるアプリにコピーすれば、そのアプリからキャラクターと会話でき、記憶もほかの場所と共通です。詳しくは[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#その他のソフトウェア)を参照してください。ターミナルからは `personagent connect api` で同じ操作ができます。
 
 すでに AstrBot、Koishi、Matrix を運用している場合は、personagent をその背後でエージェントとして動かすことができます。[自分で動かすブリッジ](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#自分で動かすブリッジ)、[Satori コネクター](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ja.md)、[Matrix コネクター](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ja.md)を参照してください。
 

@@ -16,7 +16,7 @@ from . import channels
 from . import paths
 from . import chatlangs
 from . import decision_log
-from .connector import (ConnectorSink, current_sink,
+from .connector import (TEXT_ONLY, ConnectorSink, current_sink,
                       event_connector, event_prefiltered,
                       synthesize_onebot_payload)
 from .messages import message_time
@@ -373,11 +373,13 @@ class Turns:
         # A native platform's ids are bare inside; outbound mentions are
         # namespaced again (see message_to_reply_item).
         sink_platform = str(payload.get("_platform", "") or "")
+        connector = event_connector(event)
         sink = ConnectorSink(
             platform=sink_platform,
             native=sink_platform in self.connector_qq_platforms,
             bot_id=self._self_mention_id(),
             prefiltered=event_prefiltered(event),
+            text_only=TEXT_ONLY in connector["capabilities"],
         )
         tok = current_sink.set(sink)
         # An argument, not a payload flag: /v1/onebot accepts arbitrary JSON.
@@ -397,7 +399,6 @@ class Turns:
                     self._connector_inflight.pop(route_key, None)
                 self._trim_connector_convs()
         # Only an admitted turn may leave a handle behind.
-        connector = event_connector(event)
         if (route_key and sink.owned
                 and (connector["reply_handle"] or connector["connector_id"])):
             dm = payload.get("message_type") == "private"

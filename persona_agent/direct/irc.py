@@ -12,7 +12,7 @@ import ssl
 import time
 from typing import Any
 
-from .base import Platform, Refused, Unsupported, backoff_sleep, raw_id
+from .base import Platform, Refused, Unsupported, backoff_sleep, send_failed, raw_id
 
 logger = logging.getLogger("personagent.direct.irc")
 
@@ -32,6 +32,10 @@ MAX_LINE = 512
 # :nick!~user@host with USERLEN 10 and a 63-byte host, used until we see our own.
 PREFIX_GUESS = 1 + 1 + 1 + 10 + 1 + 63 + 1
 SASL_CHUNK = 400
+# Without SASL, how long to wait for NickServ to confirm before joining anyway.
+IDENTIFY_WAIT_S = 15
+IDENTIFIED_WORDS = ("you are now identified", "you are successfully identified", "now recognized",
+                    "password accepted")
 JOIN_FAILED = {"403", "405", "471", "473", "474", "475", "477", "489"}
 BANNED_WORDS = ("k-lined", "g-lined", "z-lined", "d-lined", "k-line", "g-line", "banned", "akill")
 FORMATTING = re.compile(r"\x03(\d{1,2}(,\d{1,2})?)?|\x04([0-9a-fA-F]{6}(,[0-9a-fA-F]{6})?)?|[\x02\x0f\x11\x16\x1d\x1e\x1f]")
@@ -65,6 +69,19 @@ def parse(line: str) -> tuple[str, str, list[str]]:
         line = line.lstrip(" ")
     command = params.pop(0).upper() if params else ""
     return source, command, params
+
+
+def tags(line: str) -> dict[str, str]:
+    """The IRCv3 message tags of one line, unescaped."""
+    if not line.startswith("@"):
+        return {}
+    found = {}
+    for item in line[1:].partition(" ")[0].split(";"):
+        key, _, value = item.partition("=")
+        value = re.sub(r"\\(.)", lambda m: {":": ";", "s": " ", "r": "\r", "n": "\n"}.get(m.group(1), m.group(1)),
+                       value)
+        found[key] = value
+    return found
 
 
 def split_bytes(text: str, limit: int) -> list[str]:
@@ -131,6 +148,9 @@ class IRC(Platform):
         self._next_line_at = 0.0
         self._authed = False
         self._identified = False
+        # The server tags each message with its sender's services account.
+        self.accounts = False
+        self._join_pending = False
         self._pinged = False
         self._ids = itertools.count(1)
         self._tag = str(int(time.time()))
@@ -221,6 +241,7 @@ class IRC(Platform):
         if not self.wanted_nick or any(c in self.wanted_nick for c in " ,:!@*?#&\x00\x07"):
             raise Refused("nick_invalid")
         self._authed, self._pinged, self._identified = False, False, False
+        self.accounts = False
         self.nick = self.wanted_nick
         caps: dict[str, str] = {}
         await self._write(writer, "CAP LS 302")
@@ -246,14 +267,17 @@ class IRC(Platform):
                     if more:
                         continue
                     mechanisms = caps.get("sasl", "").upper().split(",")
-                    if self._password and "sasl" in caps and (not caps["sasl"] or "PLAIN" in mechanisms):
-                        await self._write(writer, "CAP REQ :sasl")
-                    else:
-                        await self._write(writer, "CAP END")
-                elif sub == "ACK" and "sasl" in params[-1].split():
-                    await self._write(writer, "AUTHENTICATE PLAIN")
+                    sasl = self._password and "sasl" in caps and (not caps["sasl"] or "PLAIN" in mechanisms)
+                    requested = (["sasl"] if sasl else []) + (["account-tag"] if "account-tag" in caps else [])
+                    await self._write(writer, f"CAP REQ :{' '.join(requested)}" if requested else "CAP END")
+                elif sub == "ACK":
+                    acked = params[-1].split()
+                    self.accounts = self.accounts or "account-tag" in acked
+                    await self._write(writer, "AUTHENTICATE PLAIN" if "sasl" in acked else "CAP END")
                 elif sub == "NAK":
-                    await self._write(writer, "CAP END")
+                    # A refused request takes none of its caps: SASL alone is asked again.
+                    retry = "sasl" in params[-1].split() and len(params[-1].split()) > 1
+                    await self._write(writer, "CAP REQ :sasl" if retry else "CAP END")
             elif command == "AUTHENTICATE" and params and params[0] == "+":
                 for chunk in self._sasl_chunks():
                     await self._write(writer, f"AUTHENTICATE {chunk}")
@@ -305,13 +329,17 @@ class IRC(Platform):
                     raise
                 nick_tries += 1
                 logger.warning("irc: the nickname is taken; trying again (%d)", nick_tries)
-                self.dropped()
+                self.dropped(None)
                 await asyncio.sleep(NICK_WAIT_S)
                 continue
             except (ConnectionError, OSError, asyncio.IncompleteReadError) as exc:
                 logger.warning("irc: connection dropped (%s)", exc if isinstance(exc, ConnectionError)
                                else type(exc).__name__)
-            self.dropped()
+                self.dropped(exc)
+                await backoff_sleep(failures)
+                failures += 1
+                continue
+            self.dropped(None)
             await backoff_sleep(failures)
             failures += 1
 
@@ -322,16 +350,40 @@ class IRC(Platform):
                 await asyncio.wait_for(self._register(reader, writer), REGISTER_TIMEOUT_S)
             except asyncio.TimeoutError:
                 raise ConnectionError("registration timed out") from None
-            if self.channels:
-                await self._write(writer, "JOIN " + ",".join(self.channels))
             self._writer = writer
+            joining = None
+            if self._password and not self._authed and self.channels:
+                # A channel for registered users refuses a join before NickServ has identified us.
+                self._join_pending = True
+                joining = asyncio.create_task(self._join_later(writer))
+            else:
+                await self._join(writer)
             connected()
-            while True:
-                line = await self._read(reader, writer)
-                await self._handle(line, writer, on_event)
+            try:
+                while True:
+                    line = await self._read(reader, writer)
+                    await self._handle(line, writer, on_event)
+            finally:
+                if joining is not None:
+                    joining.cancel()
         finally:
             self._writer = None
             await self._hang_up(writer)
+
+    async def _join(self, writer) -> None:
+        self._join_pending = False
+        if self.channels:
+            await self._write(writer, "JOIN " + ",".join(self.channels))
+
+    async def _join_later(self, writer) -> None:
+        """Join once identified, or after IDENTIFY_WAIT_S without a word from services."""
+        await asyncio.sleep(IDENTIFY_WAIT_S)
+        if self._join_pending:
+            logger.warning("irc: services did not confirm the identification; joining anyway")
+            try:
+                await self._join(writer)
+            except ConnectionError:
+                pass
 
     async def _handle(self, line: str, writer, on_event) -> None:
         source, command, params = parse(line)
@@ -363,25 +415,40 @@ class IRC(Platform):
             self.mask = self.mask.partition("@")[0] + "@" + params[1]
         elif command == "KICK" and len(params) >= 2 and self.lower(params[1]) == self.bot_id:
             logger.warning("irc: kicked from %s; not rejoining until the next connection", params[0])
+        elif command == "900" and self._join_pending:
+            await self._join(writer)
         elif (command == "NOTICE" and self.lower(nick) == "nickserv" and self._password
-              and not self._authed and not self._identified
-              and source.partition("@")[2].lower().startswith("services.")):
-            # Networks without SASL (OFTC) take the password from NickServ; only
-            # the real services host gets it, never a user who took the nick.
-            self._identified = True
-            await self._write(writer, f"PRIVMSG NickServ :IDENTIFY {self._password}")
+              and not self._authed and source.partition("@")[2].lower().startswith("services.")):
+            if not self._identified:
+                # Networks without SASL (OFTC) take the password from NickServ; only
+                # the real services host gets it, never a user who took the nick.
+                self._identified = True
+                await self._write(writer, f"PRIVMSG NickServ :IDENTIFY {self._password}")
+            elif self._join_pending and any(w in (params[-1] if params else "").lower()
+                                            for w in IDENTIFIED_WORDS):
+                await self._join(writer)
         elif command == "INVITE":
             logger.info("irc: ignored an invite; only the configured channels are joined")
         elif command in JOIN_FAILED and len(params) >= 2:
             logger.warning("irc: could not join %s (%s)", params[1], command)
         elif command == "PRIVMSG" and len(params) >= 2 and nick and not mine:
-            event = self.event(source, params[0], params[1])
+            event = self.event(source, params[0], params[1], tags(line).get("account"))
             if event:
                 await on_event(event, event["reply_handle"])
 
     # ------------------------------------------------------------ events
 
-    def event(self, source: str, to: str, text: str) -> dict | None:
+    def sender_id(self, nick: str, account: str | None) -> str:
+        """Who sent a message. Where the server reports services accounts, the
+        account, so that a nick alone, which anyone may take, never passes for
+        the admin's id; a sender not logged in is marked with "~"."""
+        if not self.accounts:
+            return self.lower(nick)
+        if account and account != "*":
+            return self.lower(account)
+        return "~" + self.lower(nick)
+
+    def event(self, source: str, to: str, text: str, account: str | None = None) -> dict | None:
         nick, _, host = source.partition("!")
         if not nick or not host or self.lower(nick) == self.bot_id:
             return None                 # servers and services, or our own echo
@@ -398,7 +465,7 @@ class IRC(Platform):
         text = FORMATTING.sub("", text).strip()
         if not text:
             return None
-        uid = self.lower(nick)
+        uid = self.sender_id(nick, account)
         self.names[uid] = nick
         addressed = is_dm
         own = self.lower(self.nick)
@@ -412,7 +479,7 @@ class IRC(Platform):
         segments: list[dict] = [{"type": "text", "text": text}]
         if addressed and not is_dm:
             segments.append({"type": "mention", "user_id": self.bot_id, "name": self.nick})
-        handle = uid if is_dm else self.lower(to)
+        handle = self.lower(nick) if is_dm else self.lower(to)
         return {"conversation_type": "dm" if is_dm else "group",
                 **({} if is_dm else {"conversation_id": handle}),
                 "sender_id": uid, "sender_name": nick,
@@ -474,8 +541,9 @@ class IRC(Platform):
                     for piece in split_bytes(line, self._budget(target)):
                         await self._say(target, piece)
             except ConnectionError as exc:
-                logger.warning("irc: sending stopped after %d item(s) (%s)", sent, exc)
-                break
+                if not send_failed(self.kind, item, exc, sent):
+                    break
+                continue
             sent += 1
         if skipped:
             logger.info("irc: %d image(s) not sent; IRC carries text only", skipped)

@@ -177,9 +177,11 @@ def test_values_are_asked_in_a_terminal_with_the_catalog_labels(home, monkeypatc
     platform = stand_in(monkeypatch)
     monkeypatch.setattr(sw.langs, "interactive", lambda: True)
     prompts = []
-    answers = iter(["", "@me:example.org"])
+    answers = iter(["", "@me:example.org", ""])
     monkeypatch.setattr("builtins.input", lambda prompt: prompts.append(prompt) or next(answers))
-    monkeypatch.setattr(sw, "_read_secret", lambda prompt: prompts.append(prompt) or "syt_token")
+    # The password is left empty; the token is pasted.
+    secrets = iter(["", "syt_token"])
+    monkeypatch.setattr(sw, "_read_secret", lambda prompt: prompts.append(prompt) or next(secrets))
     check("exit 0", sw.connect_main(["matrix"]) == 0)
     out = capsys.readouterr().out
     spec = conn.platform("matrix")
@@ -190,7 +192,8 @@ def test_values_are_asked_in_a_terminal_with_the_catalog_labels(home, monkeypatc
     check("the note is shown", spec.note[0] in out)
     check("the default homeserver was taken",
           saved(home)["matrix"] == {"matrix_homeserver": "https://matrix.org", "matrix_token": "syt_token",
-                                    "matrix_owner": "@me:example.org"}, str(saved(home)))
+                                    "matrix_owner": "@me:example.org", "matrix_user": "",
+                                    "matrix_password": ""}, str(saved(home)))
     check("the page's check ran once", len(platform.checked) == 1)
 
 
