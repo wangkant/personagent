@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-11-16
+
 Beside the mature assistants: a connected platform answers only the chats its admin approves, OpenRouter signs in without a pasted key, the character uses tools from MCP servers, and personagent runs on a server or in Docker with its page behind a password.
 
 Starting from nothing: one line installs personagent on a computer with no Python, the setup page offers the model the computer already has, a shared character card becomes a character with one file, and any software that speaks to an OpenAI-style address can talk to the character.
@@ -724,7 +726,8 @@ An unsupported character degraded to a missing glyph instead of silencing the re
 
 The first release: learning from real reactions, the JSON reply protocol, the whitelist reply validator, few-shot retrieval over read-only seeds and a learned `runtime/`, the platform-neutral gateway with an AstrBot forwarder, the sticker pipeline, opt-in proactive mode, a cheap gate model before the reply model, and the SSRF guard. 0.1.1 stopped a single positive signal from banking an example and let a rejection withdraw a learned one.
 
-[Unreleased]: https://github.com/wangkant/personagent/compare/v1.4.4...HEAD
+[Unreleased]: https://github.com/wangkant/personagent/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/wangkant/personagent/compare/v1.4.4...v1.5.0
 [1.4.4]: https://github.com/wangkant/personagent/compare/v1.4.3...v1.4.4
 [1.4.3]: https://github.com/wangkant/personagent/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/wangkant/personagent/compare/v1.4.1...v1.4.2

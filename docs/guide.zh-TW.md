@@ -979,7 +979,7 @@ personagent 資料夾中的主要檔案和資料夾及其儲存的內容如下�
 
 ## 專案狀態和其他文件
 
-personagent 1.4.4 已發布至 PyPI。CI 在 Linux 上以 Python 3.10–3.14、在 Windows 上以 Python 3.12 執行測試，另有數項作業會安裝套件，實際執行指令和本機頁面，並在 Linux、macOS 和 Windows 上開啟應用程式視窗。
+personagent 1.5.0 已發布至 PyPI。CI 在 Linux 上以 Python 3.10–3.14、在 Windows 上以 Python 3.12 執行測試，另有數項作業會安裝套件，實際執行指令和本機頁面，並在 Linux、macOS 和 Windows 上開啟應用程式視窗。
 
 OneBot 直連入口（`/v1/onebot`）已棄用，於 1.x 期間保留。`tools/` 中的腳本供從原始碼執行時使用，說明請參閱[工具腳本](tools.zh-TW.md)。
 

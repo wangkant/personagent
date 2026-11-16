@@ -959,7 +959,7 @@ personagent 폴더의 주요 파일과 폴더에 담긴 내용은 다음과 같�
 
 ## 현재 상태와 기타 문서
 
-personagent 1.4.4은 PyPI에 있습니다. CI는 Linux의 Python 3.10–3.14와 Windows의 Python 3.12에서 테스트를 실행합니다. 추가 CI 작업이 패키지를 설치하고 명령과 로컬 페이지를 구동하며, Linux, macOS, Windows에서 앱 창을 엽니다.
+personagent 1.5.0은 PyPI에 있습니다. CI는 Linux의 Python 3.10–3.14와 Windows의 Python 3.12에서 테스트를 실행합니다. 추가 CI 작업이 패키지를 설치하고 명령과 로컬 페이지를 구동하며, Linux, macOS, Windows에서 앱 창을 엽니다.
 
 직접 OneBot 경로(`/v1/onebot`)는 폐지 예정이지만 1.x 동안 유지됩니다. `tools/`의 스크립트는 클론에서 실행하는 용도이며 [tools.md](tools.ko.md)에서 설명합니다.
 
