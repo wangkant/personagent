@@ -1,0 +1,55 @@
+/* The sign-in page: one column on the page's own fields and buttons. */
+.signin-body {
+  min-height: 100vh;
+  background: var(--bg);
+}
+.signin-page {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+}
+.signin-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 56px;
+}
+.signin-top .brand {
+  padding: 0;
+  margin: 0;
+}
+.signin-top select {
+  width: auto;
+  height: 32px;
+  font-size: 13px;
+}
+.signin-form h1 {
+  margin-bottom: 8px;
+}
+.signin-form .lead {
+  margin-bottom: 8px;
+}
+.signin-form .primary.full {
+  margin-top: 18px;
+}
+.signin-status {
+  font-size: 13px;
+  color: var(--ok);
+  margin: 14px 0 0;
+}
+.signin-warn {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+  padding: 9px 12px;
+  border-radius: 7px;
+  margin-top: 18px;
+}
+@media (max-width: 480px) {
+  .signin-page {
+    padding: 16px 16px 40px;
+  }
+  .signin-top {
+    margin-bottom: 36px;
+  }
+}

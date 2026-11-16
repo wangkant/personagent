@@ -579,7 +579,8 @@ PA.strings({
       open.disabled = opening === "home";
       open.textContent = PA.t(opening === "home" ? "health_opening" : "health_open_home");
       open.addEventListener("click", () => openFolder("home", open));
-      bar.append(open);
+      // A folder opens on the computer personagent runs on, not on another device.
+      if (!PA.state?.remote) bar.append(open);
       box.append(bar);
       if (openError.home) box.append(alertNode("health-open-home-error", openError.home));
     }
@@ -596,6 +597,7 @@ PA.strings({
     moreButton.textContent = PA.t("health_log_more");
     moreButton.disabled = logLoading;
     openLogs.disabled = opening === "logs";
+    openLogs.hidden = Boolean(PA.state?.remote);
     openLogs.textContent = PA.t(opening === "logs" ? "health_opening" : "health_open_logs");
     const names = data ? data.logs.map((l) => l.name) : [];
     const none = !names.length;

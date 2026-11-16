@@ -17,7 +17,7 @@ from ..window import ACTIONS
 # Error codes this panel raises as ValueError, which the page may show.
 ERRORS: frozenset[str] = frozenset({
     "background_unavailable", "window_unavailable", "update_none", "update_by_hand", "update_tool_missing",
-    "update_clone_changed", "update_not_started"})
+    "update_clone_changed", "update_not_started", "update_service", "update_remote"})
 LOG_TAIL = 60
 # The key the app window's own page sends to draw and use the window's bar.
 WINDOW_HEADER = "X-Personagent-Window"
@@ -61,10 +61,16 @@ def mount(app, workspace, body) -> None:
             return None
         return {"ok": bool(done.get("ok")), "from": str(done.get("from") or "")}
 
-    def summary() -> dict:
+    def summary(request: Request) -> dict:
         window = getattr(app.state, "window", None)
         found = updates.notice(workspace.home, always=True)
         kind, commands = updates.plan()
+        remote = bool(getattr(request.state, "remote", False))
+        headless = bool(getattr(app.state, "headless", False))
+        blocked = updates.blocked(kind, commands) if found else ""
+        # The helper quits this process and opens the app window: not for a service or another device.
+        if found and not blocked and (headless or remote):
+            blocked = "update_service" if headless else "update_remote"
         last = updates._read(workspace.home)
         checked = last.get("checked")
         return {
@@ -73,7 +79,8 @@ def mount(app, workspace, body) -> None:
             "canHide": bool(window is not None and window.can_hide),
             "update": found and {"version": found["version"], "url": found["url"],
                                  "command": found["command"]},
-            "updateBlocked": updates.blocked(kind, commands) if found else "",
+            "updateBlocked": blocked,
+            "headless": headless, "remote": remote,
             "checked": checked if isinstance(checked, (int, float)) else None,
             # The last attempt did not reach PyPI: "up to date" would be a guess.
             "checkFailed": bool(last.get("failed")),
@@ -89,8 +96,8 @@ def mount(app, workspace, body) -> None:
         return memory.with_name(usage.USAGE_FILE)
 
     @app.get("/api/runtime")
-    async def runtime():
-        return await asyncio.to_thread(summary)
+    async def runtime(request: Request):
+        return await asyncio.to_thread(summary, request)
 
     @app.post("/api/runtime/background")
     async def background(request: Request):
@@ -99,7 +106,7 @@ def mount(app, workspace, body) -> None:
         if on and not (window is not None and window.can_hide):
             raise ValueError("background_unavailable")
         save_app_settings(desktop, background=on)
-        return await asyncio.to_thread(summary)
+        return await asyncio.to_thread(summary, request)
 
     def own_window(request: Request):
         """The frameless window, for the page inside it and nobody else: a
@@ -143,7 +150,7 @@ def mount(app, workspace, body) -> None:
     async def check(request: Request):
         await body(request)
         await asyncio.to_thread(updates.check, workspace.home, 10.0)
-        return await asyncio.to_thread(summary)
+        return await asyncio.to_thread(summary, request)
 
     @app.post("/api/runtime/update")
     async def update(request: Request):
@@ -152,6 +159,8 @@ def mount(app, workspace, body) -> None:
             raise ValueError("update_none")
         kind, commands = updates.plan()
         refusal = await asyncio.to_thread(updates.blocked, kind, commands)
+        if not refusal and getattr(app.state, "headless", False):
+            refusal = "update_service"
         if refusal:
             raise ValueError(refusal)
         # The helper first: if it cannot start, the app must be left as it was.

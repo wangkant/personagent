@@ -20,7 +20,7 @@ CODES = ("en", "zh", "zh-TW", "ja", "ko", "es", "fr", "de", "pt-BR", "ru")
 #: Keys every `Spec.replies` carries, and the placeholders in each.
 REPLY_KEYS = ("remember_what", "not_instructions", "noted", "forget_what",
               "nothing_to_forget", "forgotten", "empty", "recall_head",
-              "said", "about", "from")
+              "said", "about", "from", "approval_dm", "approval_group")
 
 #: Keys of `Spec.learned_text` (the "what have you learned" summary) and the
 #: fields each must use. English builds its own, with plurals, in views.py.
@@ -88,7 +88,7 @@ class Spec:
     first_person: str = ""
     # -- what the agent says ---------------------------------------------------
     #: One tuple of variants per `REPLY_KEYS` entry; "about" and "from" take
-    #: {name}. Plain chat text: the character policy checks them like replies.
+    #: {name}, "approval_dm" {code}. Plain chat text: the character policy checks them like replies.
     replies: dict = field(default_factory=dict)
     #: Sent when a model call fails on a direct question.
     failure_excuses: tuple = ()

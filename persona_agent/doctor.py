@@ -85,6 +85,9 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
             "services": [json_row(r) for r in results],
             "direct_platforms": direct_platforms(home.find_home()),
             "chat_api": chat_api_state(),
+            "approvals": approvals_state(home.find_home()),
+            "tools": tools_state(home.find_home()),
+            "page": page_state(),
             "update": update_notice(),
             "model_use": _snake_case_use(model_use()),
         }, ensure_ascii=False, indent=2))
@@ -126,6 +129,12 @@ def main(argv: list[str] | None = None, prog: str | None = None) -> int:
     print(f"[{mark}] {_pad(langs.term('Directly connected platforms'), 34)}{_pad('', 11)} {'':7}  {detail}")
     mark, detail = chat_api_row(chat_api_state())
     print(f"[{mark}] {_pad(langs.term('OpenAI-compatible API'), 34)}{_pad('', 11)} {'':7}  {langs.term(detail)}")
+    mark, detail = approvals_row(approvals_state(home.find_home()))
+    print(f"[{mark}] {_pad(langs.term('Approval of new chats'), 34)}{_pad('', 11)} {'':7}  {detail}")
+    mark, detail = tools_row(tools_state(home.find_home()))
+    print(f"[{mark}] {_pad(langs.term('Tools (MCP servers)'), 34)}{_pad('', 11)} {'':7}  {detail}")
+    mark, detail = page_row(page_state())
+    print(f"[{mark}] {_pad(langs.term('The page'), 34)}{_pad('', 11)} {'':7}  {detail}")
     print("-" * 64)
     print("  " + langs.term(model_use_line(model_use())))
     print("=" * 64)
@@ -310,6 +319,92 @@ def chat_api_row(state: dict) -> tuple[str, str]:
     if state["key"]:
         return "  OK ", "on, guarded by CHAT_API_KEY"
     return "  OK ", "on, without a key: only programs on this computer may call it"
+
+
+def approvals_state(found: Path) -> dict:
+    """Which platforms ask for approval of new chats, and how many requests wait on each."""
+    from persona_agent import approvals
+    from persona_agent.config_env import env_str
+
+    try:
+        waiting = approvals.waiting_counts(found)
+    except OSError:
+        waiting = {}
+    return {"platforms": sorted(approvals.policy({"ACCESS_APPROVAL_PLATFORMS": env_str("ACCESS_APPROVAL_PLATFORMS")})),
+            "waiting": waiting}
+
+
+def approvals_row(state: dict) -> tuple[str, str]:
+    """The table's mark and words for `approvals_state`."""
+    from persona_agent import connections
+    from persona_agent.setup_wizard import command
+
+    if not state["platforms"]:
+        return "  -  ", langs.term("off: no platform asks; the reply settings alone decide who is answered")
+    lang = langs.terminal_lang()
+
+    def name(kind: str) -> str:
+        try:
+            return connections.say(connections.platform(kind).name, lang)
+        except ValueError:
+            return kind
+    names = ", ".join(name(p) for p in state["platforms"])
+    count = str(sum(state["waiting"].values()))
+    listing = command("access")
+    if count == "0":
+        return "  OK ", langs.term(f"on for {names}; no request is waiting", keep=(names,))
+    return "  OK ", langs.term(f"on for {names}; {count} waiting, see `{listing}`", keep=(names, count, listing))
+def tools_state(found: Path) -> dict:
+    """The tool servers in the home, the tools switched on, and, while the
+    service runs, the servers it could not start. No server is started."""
+    from persona_agent import mcp_tools, services
+
+    counts = mcp_tools.enabled_counts(found)
+    status = mcp_tools.read_status(found)
+    pid = status.get("pid")
+    line = services._command_line(pid) if isinstance(pid, int) and pid > 0 else ""
+    running = "persona" in line
+    configured = set(mcp_tools.load_config(found)["mcpServers"])
+    servers = status.get("servers") if isinstance(status.get("servers"), dict) else {}
+    failing = sorted(name for name, row in servers.items()
+                     if running and name in configured and isinstance(row, dict) and row.get("state") == "failed")
+    return {**counts, "running": running, "failing": failing}
+
+
+def tools_row(state: dict) -> tuple[str, str]:
+    """The table's mark and words for `tools_state`."""
+    if not state["servers"]:
+        return "  -  ", langs.term("none added; `personagent tools add` adds a server")
+    counted = langs.term(f"servers: {state['servers']}, tools on: {state['tools_on']}")
+    if state["failing"]:
+        names = ", ".join(state["failing"])
+        return " FAIL", counted + langs.term(f"; not starting: {names}", keep=(names,))
+    if not state["running"]:
+        return "  -  ", counted + langs.term("; state unknown: personagent is not running")
+    return "  OK ", counted
+def page_state() -> dict:
+    """Where the page listens and whether a password guards it there; never the password."""
+    from persona_agent import pageaccess
+
+    settings = pageaccess.read(home.find_home())
+    return {"host": settings.host, "port": settings.port or None, "remote": settings.remote,
+            "password": bool(settings.password),
+            "hashed": pageaccess.is_hashed(settings.password),
+            "problems": [key for level, key, _ in pageaccess.problems(settings) if level == "ERROR"]}
+
+
+def page_row(state: dict) -> tuple[str, str]:
+    """The table's mark and words for `page_state`."""
+    if not state["remote"]:
+        return "  -  ", langs.term("this computer only (PAGE_HOST); other devices cannot reach it")
+    where = state["host"] + (f":{state['port']}" if state["port"] else "")
+    if not state["password"]:
+        return " FAIL", langs.term(f"listens on {where} without a password, so it will not start; "
+                                   f"run `personagent page password`")
+    if state["problems"]:
+        return " FAIL", langs.term(f"{', '.join(state['problems'])} must be corrected before it can listen "
+                                   f"on {where}; see the configuration lines above")
+    return "  OK ", langs.term(f"listens on {where} for other devices, guarded by the page password")
 
 
 def activity_off() -> str:

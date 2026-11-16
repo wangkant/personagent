@@ -22,6 +22,10 @@ COMMANDS = {
                  "Put personagent on the desktop and in the Start menu (Windows)"),
     "up": ("persona_agent.services", "main",
            "Start personagent and its connected chat platforms together"),
+    "service": ("persona_agent.service", "main",
+                "Keep `personagent up` running after a reboot: install, restart, remove or check it"),
+    "page": ("persona_agent.pageaccess", "main",
+             "Set the password that lets other devices sign in to the page"),
     "init": ("persona_agent.setup_wizard", "main",
              "Set up a home: model, key, character, language"),
     "character": ("persona_agent.character", "main",
@@ -34,6 +38,8 @@ COMMANDS = {
             "Start the service the connectors talk to"),
     "connect": ("persona_agent.setup_wizard", "connect_main",
                 "Connect a chat platform, AstrBot, a coding assistant or other software (api)"),
+    "tools": ("persona_agent.mcp_tools", "main",
+              "Give the character tools from MCP servers: list, add, remove, check, call"),
     "mcp": ("persona_agent.coding", "mcp_main",
             "Serve the character over MCP (run by coding assistants, not by hand)"),
     "hook": ("persona_agent.coding", "hook_main",
@@ -44,13 +50,15 @@ COMMANDS = {
                 "Review, promote or roll back what it learned"),
     "memory": ("persona_agent.memory_admin", "main",
                "Look at what it remembers, forget an item or bring one back"),
+    "access": ("persona_agent.approvals", "main",
+               "Approve or decline new chats on the platforms that ask for approval"),
     "eval": ("persona_agent.evals", "main",
              "Measure speaking, persona, learning and memory on labelled cases"),
 }
 
 
 #: Commands that only read an existing home: a mistyped --home must not pass for an empty one.
-READ_A_HOME = ("memory", "learned", "doctor")
+READ_A_HOME = ("memory", "learned", "doctor", "access")
 
 
 def _missing_home() -> str:

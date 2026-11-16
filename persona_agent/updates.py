@@ -16,6 +16,8 @@ from .config_env import env_bool
 from .storage import atomic_write_text
 
 PYPI_URL = "https://pypi.org/pypi/personagent/json"
+# A container is updated by pulling the new image, never from inside.
+CONTAINER_UPDATE = "docker compose pull && docker compose up -d"
 RELEASE_URL = "https://github.com/wangkant/personagent/releases/tag/v{version}"
 CHECK_EVERY_S = 24 * 3600
 RETRY_AFTER_S = 3600
@@ -128,8 +130,11 @@ def refresh_soon(home: Path) -> None:
 def how_to_update() -> tuple[str, bool]:
     """The command that updates this installation ('' for an unpacked source
     ZIP; a clone's has two lines), and whether it also starts personagent."""
+    from .pageaccess import in_container
     from .setup_wizard import _program, _quote
 
+    if in_container():
+        return CONTAINER_UPDATE, False
     if homes.is_checkout():
         if not (homes.CHECKOUT / ".git").exists():
             return "", False
@@ -156,7 +161,11 @@ def plan() -> tuple[str, list[list[str]]]:
     """How this installation came to be, and the commands that update it for
     the app to run after it quits. A source ZIP and uvx have none: the first
     is replaced by hand, the second fetches the new version when started."""
+    from .pageaccess import in_container
+
     python = _python()
+    if in_container():
+        return "container", []
     if homes.is_checkout():
         if not (homes.CHECKOUT / ".git").exists():
             return "zip", []
@@ -219,9 +228,11 @@ def notice(home: Path, latest: str | None = None, *, always: bool = False) -> di
     latest = str(_read(home).get("latest") or "") if latest is None else latest
     if not newer(latest):
         return None
+    from .pageaccess import in_container
+
     command, opens = how_to_update()
     return {"version": latest, "command": command, "opens": opens,
-            "url": RELEASE_URL.format(version=latest)}
+            "url": RELEASE_URL.format(version=latest), "container": in_container()}
 
 
 def line(found: dict | None, sub: str = "") -> str:
@@ -230,6 +241,9 @@ def line(found: dict | None, sub: str = "") -> str:
     if not found:
         return ""
     head = f"personagent {found['version']} is available."
+    if found.get("container"):
+        return (f"{head} This copy runs in a container: where it was started, pull the new image and "
+                f"start the container again:\n  {found['command']}")
     if not found["command"]:
         return f"{head} Download the new source from {found['url']}"
     if found["opens"]:

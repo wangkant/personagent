@@ -94,6 +94,8 @@ def test_a_reply_goes_out_one_message_at_a_time_with_the_sign_up(tmp_path, monke
         await asyncio.gather(*made._tasks)
     run(scenario())
     # 9 characters: 1.9 s. 30 characters: 5.4 s, so the sign is put up again after 4 s.
+    # To a tenth: the wait for the agent, a few hundredths on a slow machine, comes off the first pause.
+    log = [(step[0], round(step[1], 1)) if step[0] == "sleep" else step for step in log]
     assert log == [("typing", "-100"), ("sleep", 1.9), ("send", "-100", "on my way"),
                    ("typing", "-100"), ("sleep", 4.0), ("typing", "-100"), ("sleep", 1.4),
                    ("send", "-100", "x" * 30)]

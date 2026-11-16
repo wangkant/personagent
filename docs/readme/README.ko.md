@@ -70,6 +70,7 @@ Tavern 캐릭터 카드를 파일 하나로 가져오거나, 캐릭터를 한 �
 <td width="220" valign="top"><strong>모든 플랫폼에 연결됩니다.</strong></td>
 <td valign="top">
 채팅 플랫폼 22개를 한 페이지에서 휴대폰 스캔 한 번이나 값 몇 개를 붙여 넣어 연결합니다. 대부분은 그룹 채팅과 개인 메시지를 모두 지원합니다.<br>
+연결한 플랫폼은 사용자가 승인한 대화에만 답장합니다. 낯선 사람은 짧은 코드를 받고, 사용자가 페이지에서 승인합니다. 그곳에서 **본인입니다**를 고르면 사용자가 관리자도 됩니다.<br>
 같은 에이전트가 사용자의 컴퓨터에 있는 창에서도, Claude Code, Codex, DeepSeek Harness 안에서도 답합니다.<br>
 Open WebUI나 SillyTavern처럼 OpenAI 호환 주소를 입력할 수 있는 소프트웨어라면 같은 캐릭터와 대화할 수 있습니다.<br>
 그 밖의 플랫폼은 AstrBot, Koishi, Matrix 브리지 또는 직접 작성한 커넥터를 통해 추가할 수 있습니다.
@@ -79,7 +80,21 @@ Open WebUI나 SillyTavern처럼 OpenAI 호환 주소를 입력할 수 있는 소
 <td width="220" valign="top"><strong>지금 가진 환경에서 작동합니다.</strong></td>
 <td valign="top">
 OpenAI 호환 모델이라면 무엇이든 사용할 수 있습니다. OpenRouter의 무료 모델, 유료 서비스, 또는 Ollama로 사용자의 컴퓨터에서 실행하는 모델입니다.<br>
-아무것도 설치되지 않은 컴퓨터에서도 한 줄로 자체 Python과 함께 설치됩니다. 페이지는 영어, 중국어 또는 다른 8개 언어로 볼 수 있고, 모델 키 하나만 붙여 넣으면 채팅을 시작합니다. Ollama나 LM Studio가 이미 실행 중이면 한 번 클릭하면 됩니다.
+아무것도 설치되지 않은 컴퓨터에서도 한 줄로 자체 Python과 함께 설치됩니다. 페이지는 영어, 중국어 또는 다른 8개 언어로 볼 수 있고, 브라우저에서 OpenRouter로 로그인하거나 모델 키 하나만 붙여 넣으면 채팅을 시작합니다. Ollama나 LM Studio가 이미 실행 중이면 한 번 클릭하면 됩니다.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>주어진 도구를 씁니다.</strong></td>
+<td valign="top">
+MCP 서버 README에 있는 블록을 붙여 넣으면, 캐릭터가 그 서버의 도구로 정보를 찾거나 작업을 할 수 있습니다. 답장 하나에 도구 하나를 쓰며, 자기 말투로 답합니다.<br>
+각 도구에는 스위치가 있고, 사용을 요청할 수 있는 사람을 고를 수 있습니다. 사용자만, 또는 캐릭터가 답장하는 모든 사람입니다.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>필요한 곳에서 실행됩니다.</strong></td>
+<td valign="top">
+내 컴퓨터의 창에서도, 서버, NAS, Docker에서도 실행되며, `personagent service install`로 계속 실행되게 할 수 있습니다.<br>
+페이지 비밀번호를 설정하면 같은 페이지를 휴대폰이나 다른 컴퓨터에서 로그인하여 열 수 있습니다.
 </td>
 </tr>
 </table>
@@ -106,7 +121,7 @@ curl -LsSf https://raw.githubusercontent.com/wangkant/personagent/main/install.s
 
 Python 3.10 이상이 이미 설치되어 있다면 `python -m pip install personagent`를 실행한 후 `personagent`를 실행해도 되고, [uv](https://docs.astral.sh/uv/)가 있다면 `uvx personagent`로 별도 설치 없이 실행할 수 있습니다. Windows에서는 소스 ZIP을 내려받아 `start.bat`을 더블클릭해도 되며, 컴퓨터에 Python이 없으면 이 스크립트가 Python도 가져옵니다.
 
-Windows에서는 전용 창에서 열리고, macOS와 Linux에서는 브라우저에서 열립니다. 모델 API 키를 붙여 넣고 **확인 후 채팅 시작**을 누르십시오. 미리 선택된 OpenRouter의 무료 모델도 키가 필요합니다. 키는 무료이며, 페이지의 **API 키 발급**을 통해 OpenRouter에서 받을 수 있습니다. `personagent demo`는 키 없이 대본이 있는 장면 세 개를 보여 줍니다. [시작 가이드](https://github.com/wangkant/personagent/blob/main/docs/start.ko.md)가 페이지를 화면별로 안내합니다.
+Windows에서는 전용 창에서 열리고, macOS와 Linux에서는 브라우저에서 열립니다. **OpenRouter로 로그인**을 누르고 브라우저에서 승인하거나, 모델 API 키를 붙여 넣고 **확인 후 채팅 시작**을 누르십시오. 미리 선택된 OpenRouter의 무료 모델도 계정이나 키가 필요하지만, 둘 다 무료입니다. `personagent demo`는 키 없이 대본이 있는 장면 세 개를 보여 줍니다. [시작 가이드](https://github.com/wangkant/personagent/blob/main/docs/start.ko.md)가 페이지를 화면별로 안내합니다.
 
 personagent는 무료입니다. 비용은 선택한 모델 서비스에, 그 서비스의 요금대로 냅니다. 메시지 하나가 모델 요청 여러 번으로 이어질 수 있습니다. 답장 외에도 캐릭터는 때때로 그룹에서 말할지 판단하거나, 답장이 어떻게 받아들여졌는지 판단하거나, 기억을 정리합니다. OpenRouter의 무료 모델은 하루 50회까지 요청할 수 있고, 일부 무료 제공자는 받은 내용을 보관합니다. Ollama는 키 없이 사용자의 컴퓨터에서 모델을 실행합니다.
 
@@ -125,6 +140,16 @@ personagent는 무료입니다. 비용은 선택한 모델 서비스에, 그 서
 그 밖의 모든 것에는 같은 페이지의 **기타 소프트웨어**가 있습니다. 켜고 주소, 키, 모델 이름을 OpenAI 호환 주소를 입력할 수 있는 앱에 복사하면, 그 앱에서 캐릭터와 대화할 수 있으며 기억도 다른 곳과 같습니다. 자세한 내용은 [가이드](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#기타-소프트웨어)에 있으며, 터미널에서는 `personagent connect api`로 같은 작업을 할 수 있습니다.
 
 이미 AstrBot, Koishi, Matrix를 운영 중입니까? personagent를 그 뒤에서 에이전트로 실행할 수 있습니다. [직접 실행하는 브리지](https://github.com/wangkant/personagent/blob/main/docs/guide.ko.md#직접-실행하는-브리지), [Satori 커넥터](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ko.md), [Matrix 커넥터](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ko.md)를 참고하십시오.
+
+## 서버에서
+
+```sh
+personagent page password --random   # 페이지 비밀번호 출력
+PAGE_HOST=0.0.0.0 personagent up      # 서비스, 플랫폼, 페이지(포트 8090) 시작
+personagent service install           # 재부팅 후에도 계속 실행(Linux, macOS)
+```
+
+아무 기기에서나 `http://<서버 주소>:8090/`을 열고 페이지 비밀번호로 로그인하십시오. 비밀번호가 없으면 페이지는 이 컴퓨터 밖으로 수신하지 않습니다. 암호화되지 않은 HTTP는 거쳐 가는 네트워크에 비밀번호를 드러내므로, 집 네트워크 밖에서는 SSH 터널, Tailscale 또는 HTTPS 리버스 프록시를 쓰십시오. Docker에서는 저장소 클론에서 `docker compose up -d`를 실행하면 빌드하고 시작하며, `docker compose logs`에 첫 시작 때 만든 비밀번호가 표시됩니다. 이미지는 릴리스마다 `ghcr.io/wangkant/personagent`에 게시됩니다. 각 단계는 [배포 가이드](https://github.com/wangkant/personagent/blob/main/docs/deploy.ko.md#서버-nas-또는-docker에서-실행하기)에 있습니다.
 
 ## 코딩 어시스턴트
 

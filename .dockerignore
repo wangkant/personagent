@@ -1,0 +1,13 @@
+# Only what the package is built from goes into the build: never a home's
+# .env, persona, memory, logins or backups that a checkout may hold.
+*
+!pyproject.toml
+!README.md
+!LICENSE
+!.gitignore
+!.env.example
+!persona_agent
+!data
+!integrations/astrbot/astrbot_plugin_personagent
+**/__pycache__
+**/*.pyc

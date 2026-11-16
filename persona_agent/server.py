@@ -38,7 +38,7 @@ from persona_agent.paths import ROOT, runtime_dir
 from persona_agent.settings import AgentSettings
 from persona_agent.storage import (
     ALREADY_RUNNING, LockUnavailable, RuntimeInstanceLock, atomic_write_text)
-from persona_agent import chat_api, dashboard
+from persona_agent import approvals, chat_api, dashboard
 
 
 class RollingLogThatSurvivesAFailedRotation(RotatingFileHandler):
@@ -708,6 +708,8 @@ async def lifespan(app: FastAPI):
             raise RuntimeError(_ALREADY_RUNNING.format(home=ROOT)) from None
         try:
             agent = Agent(AgentSettings.from_env())
+            # An approval on the page or in the terminal reaches the running service through .env.
+            agent.settings_env = approvals.LiveEnv(ROOT / ".env")
             # The ledger is authoritative: repair stale views before serving.
             agent._rebuild_promoted_views(strict=True)
         except MemoryFileDamaged as error:
@@ -720,6 +722,8 @@ async def lifespan(app: FastAPI):
             runtime_lock.release()
             runtime_lock = None
             raise
+        # The admin's tool servers start beside it; one that fails is reported, not fatal.
+        agent.tool_hub.start()
         _spawn(agent.probe_models())
         _spawn(agent.check_missed_mentions())
         _spawn(agent.loop_check_missed())

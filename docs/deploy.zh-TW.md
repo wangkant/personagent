@@ -58,12 +58,13 @@ personagent
 - **personagent 直接連線**：QQ、個人微信、Telegram、Discord、Matrix、Twitch、IRC、Zulip、VK 和 Stoat。個人微信以手機微信掃描登入（使用騰訊的 iLink 機器人介面），僅支援私訊，因為微信不會將群組訊息轉交給這類機器人。Telegram 需要貼上 @BotFather 提供的 Token；Discord 需要貼上機器人 Token，並開啟 Message Content Intent。其餘六個平台需要填寫的內容與使用限制，請參閱[使用手冊](guide.zh-TW.md#personagent-直接連線的平台)。
 - **透過託管的 AstrBot 連線**：其餘平台。首次連接這類平台時，personagent 會下載 AstrBot 和獨立的 Python 3.12，並在背景執行。它沒有網頁管理後台，也不需要另外登入帳號。只需貼上一至兩項即可連接的平台有：KOOK、飛書（長連線）、釘釘（Stream 模式）、Slack（Socket Mode，頁面上的連結會預先填好應用程式設定）、企業微信智慧機器人（長連線）、Mattermost、Misskey。「進階」分組中的平台需要公開網址或本機的其他軟體：企業微信應用、微信公眾號、QQ（Webhook）、OneBot v11（NapCat）、Satori。暫不提供 LINE。
 
-已連接的平台預設會回覆所有群組與私訊。如果只想在部分群組中回覆，請在「角色與設定」→「進階設定」→「回覆、管理員與回覆範圍」中點選「從最近的聊天中選擇」，為要保留的群組勾選「在此群組中回覆」，或直接在「僅在以下群組中回覆」中填寫，然後儲存，詳見[管好它](#管好它)。頁面會將其儲存為 `.env` 中的 `ACCESS_GROUPS`，私訊則對應 `ACCESS_DM_USERS`（格式均為 `平台:ID`）。
+在頁面上或使用 `personagent connect <平台>` 連接的平台，新對話須經核准：角色只回覆管理員以及管理員核准過的人和群組，其他人會收到一則附有簡短代碼的固定訊息，其申請在「連接平台」或 `personagent access` 中等候處理（見[管好它](#管好它)）。在此版本之前設定的 personagent 資料夾，或已改為「新對話無須核准即回覆」的平台，會回覆所有群組與私訊。如果只想在部分群組中回覆，請在「角色與設定」→「進階設定」→「回覆、管理員與回覆範圍」中點選「從最近的聊天中選擇」，為要保留的群組勾選「在此群組中回覆」，或直接在「僅在以下群組中回覆」中填寫，然後儲存，詳見[管好它](#管好它)。頁面會將其儲存為 `.env` 中的 `ACCESS_GROUPS`，私訊則對應 `ACCESS_DM_USERS`（格式均為 `平台:ID`）。
 
 ## 管好它
 
 以下操作都在本機頁面中完成。相關設定位於「角色與設定」→「進階設定」，點選「儲存進階設定」後生效。括號中為各項在 `.env` 中的設定名稱；直接修改 `.env` 後，需重新啟動 personagent 才會生效。
 
+- **核准新對話。** 在 `ACCESS_APPROVAL_PLATFORMS` 列出的平台上（從此版本起連接的平台都會加入），不在下列兩份名單中的對話不會交由模型回覆。私訊會收到一則附有六位代碼的固定訊息，每天最多一次；未經核准的群組只在有人點名角色時收到說明，每天最多一次。申請會顯示在「連接平台」中，可選擇「核准」「拒絕」，私訊還可選擇「這是我」，後者同時將該帳號加入 `ADMIN_IDS`。在伺服器上，`personagent access` 會列出申請，`personagent access approve CODE`（或 `decline`、`admin`）可處理其中一則。核准會將 ID 加入 `ACCESS_DM_USERS` 或 `ACCESS_GROUPS`，正在執行的服務會立即從 `.env` 讀取這項變更。申請三天後過期，每個平台最多保留二十則。`personagent access policy <平台> open`（或頁面上的「新對話無須核准即回覆」）可關閉某個平台的核准。
 - **將自己設為管理員。** 先私訊角色一次，再在「回覆、管理員與回覆範圍」中點選「從最近的聊天中選擇」，在自己的帳號旁點選「這是我」（`ADMIN_IDS`）。以掃描連接的 QQ 官方機器人看到的是 openid，而非 QQ 號碼，因此請以這種方式設定。
 - **只在部分群組中回覆。** 在同一清單中為要保留的群組勾選「在此群組中回覆」，或在「僅在以下群組中回覆」（`ACCESS_GROUPS`）中填寫群組編號。某個平台一旦列出任一群組，角色在該平台的其他群組中便不再回覆。經掃描連接的 QQ 官方機器人所在群組，編號形如 `qq_official:<id>`，在 QQ 中無法直接看到：請先在該群組中 @ 機器人一次，再透過「從最近的聊天中選擇」勾選。
 - **暫停全部回覆。** 關閉「回覆、管理員與回覆範圍」中的第一項「回覆訊息」（`AGENT_ENABLED`），儲存前會先確認。角色仍保持連線，但在重新開啟之前不回覆任何訊息。
@@ -233,6 +234,122 @@ CONNECTOR_QQ_PLATFORMS=aiocqhttp
 
 服務本身不提供頁面。`GET /` 會傳回一段簡短說明，指向本機頁面和 `personagent learned`；以往的 `?token=` 連結現在也會開啟這段說明。本機頁面只繫結 127.0.0.1。在沒有本機頁面的伺服器上，可使用 `personagent learned` 檢視角色學到的內容、正在觀察的內容及原因，並可立即啟用、擱置、撤回某項，或恢復由角色或時限擱置、由角色或規則停止使用的內容；`personagent memory` 可列出角色記住的內容，並刪除或還原某一項。
 
+### 在伺服器、NAS 或 Docker 中執行
+
+personagent 可以在沒有顯示器的機器上執行。為此提供了三項功能：頁面可在密碼保護下供其他裝置存取；`personagent service install` 讓它在重新開機後繼續執行；官方映像檔可在 Docker 中執行全部內容。
+
+#### 從零部署到伺服器
+
+1. 在伺服器上安裝 personagent（請見[安裝和 personagent 資料夾](guide.zh-TW.md#安裝和-personagent-資料夾)；一行安裝指令可在 SSH 中使用）。
+2. 設定頁面密碼。密碼需輸入兩次，輸入時不會顯示，`.env` 中只會儲存其雜湊值：
+
+   ```
+   personagent page password
+   ```
+
+   無人看管的伺服器可使用 `personagent page password --random`，產生一組密碼並只顯示一次。
+3. 允許其他裝置存取頁面。在 `<home>/.env` 中加入：
+
+   ```
+   PAGE_HOST=0.0.0.0
+   ```
+
+4. 啟動：`personagent up`。它會顯示本機使用的連結和其他裝置使用的位址，連接埠預設為 8090，可用 `PAGE_PORT` 變更。在手機或另一台電腦上開啟該位址，登入後填入模型金鑰並連接平台；平台的 QR 碼會顯示在頁面上。儲存金鑰後，角色即會啟動。
+5. 保持執行：`personagent service install`。
+
+#### 從其他裝置存取頁面
+
+| 設定 | 含義 |
+|---|---|
+| `PAGE_HOST` | 頁面監聽的位址。留空或 `127.0.0.1`：僅限本機，與先前一樣透過帶有權杖的連結開啟。`0.0.0.0` 或 `::`：其他裝置也可存取。也可填寫本機的某個具體位址，此時頁面會同時監聽 `127.0.0.1`，供本機連結使用。 |
+| `PAGE_PORT` | 頁面的連接埠。留空時，僅限本機則自動選擇空閒的連接埠，允許其他裝置存取則為 8090。 |
+| `PAGE_PASSWORD` | 其他裝置登入所用的密碼：至少 12 個字元，其中至少 5 個互不相同。`personagent page password` 會儲存其雜湊值；也可在環境變數中直接提供明文（Docker）。 |
+| `PAGE_ALLOWED_HOSTS` | 頁面接受的主機名稱，例如 `nas.local` 或 Tailscale 名稱。以數字形式輸入的位址和本機自身的名稱一律可用。 |
+
+與其他設定一樣，環境變數優先於 `.env`。設定 `PAGE_HOST`、`PAGE_PORT` 或 `PAGE_PASSWORD` 任一項後，`personagent up` 會同時提供頁面；未設定時可使用 `personagent up --page`。`personagent start --no-browser` 的含義不變：顯示連結，不開啟任何視窗；`up` 正在提供頁面時，顯示的是該頁面的連結。
+
+**拒絕啟動的情況。** 允許其他裝置存取時，若沒有密碼或密碼強度不足，頁面都不會啟動，並會說明是哪一項設定以及如何修正；`personagent doctor` 和頁面的「應用程式」檢視也會顯示相同的內容。`doctor` 中有一行專門說明頁面監聽的位址，以及是否受密碼保護。
+
+**登入。** 不在本機的裝置會先看到登入頁。密碼正確後，裝置會取得一個工作階段 Cookie（HttpOnly、SameSite=Strict，經由 HTTPS 存取時帶有 Secure），有效期 7 天；點選頁面頂端的「登出」、變更密碼或 personagent 重新啟動後，工作階段即結束。每次輸錯密碼都會等待一秒；同一位址在 15 分鐘內輸錯 5 次，該位址將被暫停登入 15 分鐘。密碼以固定時間比較，不會寫入記錄檔，也不會顯示。頁面的介面只接受帶有頁面自身請求標頭的工作階段，並拒絕來自其他網站的請求（`Origin`、`Sec-Fetch-Site`）以及未獲允許的主機名稱，因此其他網頁無法利用該工作階段，也無法以自己的網域名稱存取頁面。
+
+**本機不受影響。** 本機瀏覽器以帶有權杖的連結開啟頁面時，無須密碼。經由代理伺服器轉送的請求即使來自本機，也會視為其他裝置。
+
+**其他裝置無法執行的操作。** 開啟資料夾、桌面圖示、登入後自動啟動、應用程式視窗本身的按鈕、「結束」以及從頁面更新，作用的都是執行 personagent 的那台電腦，因此頁面在其他裝置上會隱藏這些操作，介面也會拒絕。備份、還原和重設可以使用，相關檔案會保存在那台電腦上。
+
+#### 安全地存取頁面
+
+頁面使用未加密的 HTTP。在你無法掌控的網路中，密碼和工作階段可能在傳輸途中遭到讀取，請使用以下其中一種方式：
+
+- **SSH 通道。** `PAGE_HOST` 留空，設定 `PAGE_PORT=8090`，然後執行 `personagent up`。在你自己的電腦上執行：
+
+  ```
+  ssh -L 8090:127.0.0.1:8090 you@server
+  ```
+
+  然後開啟 `personagent up` 顯示的連結（帶有 `#token=`），或在伺服器上執行 `personagent start --no-browser` 重新顯示連結。此方式無須密碼：對頁面而言，通道就是本機。
+- **Tailscale 或 ZeroTier。** 兩者都會加密裝置之間的通訊。設定 `PAGE_HOST=0.0.0.0`（或伺服器的 Tailscale 位址）和頁面密碼；若以伺服器的 Tailscale 名稱存取，請將其加入 `PAGE_ALLOWED_HOSTS`。
+- **啟用 HTTPS 的反向代理伺服器**（Caddy、nginx 或 NAS 內建的反向代理）。保持 `PAGE_HOST=127.0.0.1`，設定頁面密碼，並將對外的網域名稱加入 `PAGE_ALLOWED_HOSTS`。經由代理存取的請求會看到登入頁，伺服器本機的連結仍可使用。Caddy 設定範例：
+
+  ```
+  personagent.example.com {
+      reverse_proxy 127.0.0.1:8090
+  }
+  ```
+
+  使用 nginx 時，請轉送主機名稱和通訊協定：
+
+  ```
+  location / {
+      proxy_pass http://127.0.0.1:8090;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header X-Forwarded-Proto $scheme;
+  }
+  ```
+
+  此時所有請求都來自代理伺服器的位址，因此任何人輸錯 5 次密碼，都會讓所有人暫停登入 15 分鐘。
+
+personagent 本身不提供 TLS，也不建立通道。
+
+#### 保持執行：`personagent service`
+
+```
+personagent service install     # 寫入服務並啟動
+personagent service status
+personagent service restart     # 更新後使用
+personagent service remove
+```
+
+加上 `--dry-run` 只會顯示將寫入的檔案和將執行的指令，不會實際執行。服務會以目前安裝自帶的 Python 為此 personagent 資料夾執行 `personagent up`，失敗後自動重新啟動，並將輸出寫入 `<home>/runtime/desktop/service.log`，該檔案僅目前使用者可讀取。在 `up` 無法持續執行的情況下不會安裝服務：設定尚未完成（已設定為從其他裝置完成設定的頁面除外）、頁面允許其他裝置存取卻沒有密碼，或透過 uvx 執行（其副本是暫時的）。
+
+- **Linux：** systemd 使用者單元 `~/.config/systemd/user/personagent.service`（其他 personagent 資料夾會加上後綴），透過 `systemctl --user enable --now` 啟用。使用者服務會在使用者登出後停止，且只在登入時啟動，除非開啟了 lingering：`install` 會執行 `loginctl enable-linger`，若不被允許，則會顯示需要執行的 `sudo` 指令。開啟 lingering 後，服務會在開機時啟動。結束代碼 2（設定未完成、頁面沒有密碼、此 personagent 資料夾已有其他 personagent 在執行）不會觸發重新啟動。不提供系統層級的服務：使用者單元以你的身分執行，較為安全。
+- **macOS：** LaunchAgent `~/Library/LaunchAgents/com.github.wangkant.personagent.plist`，透過 `launchctl bootstrap gui/<uid>` 載入。它只在你登入期間執行，因此為他人提供服務的 Mac 請開啟自動登入。
+- **Windows：** 使用應用程式本身的登入後自動啟動（與「應用程式」檢視中的開關相同）：登入 Windows 後，personagent 會在通知區域圖示背後啟動。失敗後不會自動重新啟動，也不支援 `restart`。
+
+#### Docker
+
+```
+docker compose up -d
+docker compose logs personagent      # 首次啟動產生的頁面密碼
+```
+
+儲存庫中的 `compose.yaml` 會執行 `ghcr.io/wangkant/personagent`，頁面使用 8090 連接埠，personagent 資料夾位於磁碟區 `personagent-data`（掛載於 `/data`）。不使用 Compose 時：
+
+```
+docker run -d --name personagent --init --restart unless-stopped \
+  -p 8090:8090 -v personagent-data:/data ghcr.io/wangkant/personagent
+```
+
+首次執行：開啟 `http://<伺服器>:8090/`，以記錄中的密碼登入，填入模型金鑰並連接平台；QR 碼會顯示在頁面上。映像檔會以非特權使用者執行 `personagent up`，並設定 `PAGE_HOST=0.0.0.0` 和 `PAGE_PORT=8090`。如需自行指定密碼，請在環境變數中提供 `PAGE_PASSWORD`；未提供時，首次啟動會產生一組密碼，只將其雜湊值儲存在 `/data/.env` 中，並只顯示一次。其他設定也都可以透過環境變數提供。`docker exec -it personagent personagent page password` 可變更密碼，`docker exec personagent personagent doctor` 可檢查設定。將連接埠對應為 `127.0.0.1:8090:8090`，頁面便只能經由 SSH 通道或同一台主機上的代理伺服器存取。使用繫結掛載時，該目錄必須允許使用者 1000 寫入。
+
+容器中不具備的功能：
+
+- **應用程式視窗、通知區域圖示和桌面圖示。** 容器中沒有顯示器，這些功能都由頁面提供。
+- **從頁面更新。** 映像檔需透過拉取新映像檔來更新：`docker compose pull && docker compose up -d`。更新通知會說明這一點。
+- **託管的 AstrBot** 可以使用：它需要 glibc（映像檔基於 Debian）、可寫入的 personagent 資料夾（`/data`），以及可連線到 PyPI 和 GitHub 或其鏡像站（`PERSONAGENT_MIRROR`）的對外網路。它會下載到磁碟區中，約占數百 MB。
+
+映像檔的健康檢查會存取頁面的 `/health`。每次發布都會推送 amd64 和 arm64 映像檔，標籤為版本號碼和 `latest`。
+
 ### 主機需求
 
 1. **可寫入的 personagent 資料夾。** 啟動時會鎖定 `<home>/.personagent.instance.lock`，該檔案位於 `runtime/` 之外。personagent 資料夾為唯讀時無法啟動。
@@ -293,6 +410,7 @@ AstrBot 位於另一台機器時，請從[最新 Release](https://github.com/wan
 - `CONNECTOR_TOKEN` 用於驗證每個請求。請求帶有 `X-Personagent-Token` 請求標頭，另附以權杖為金鑰、對 `timestamp.nonce.body` 計算的 HMAC-SHA256，防重送機制會拒絕重複的 nonce。遭攔截的請求無法重送或竄改。權杖同時也是簽章金鑰，因此不得寫入記錄檔，外洩後須更換。同一主機上為選用，跨主機時必須設定。
 - `ADMIN_IDS` 以 `<platform>:<id>` 列出管理員的帳號（`telegram:12345`、`discord:4242`）。不帶前綴的 ID 或 `qq:<id>` 為 QQ 號碼。`ADMIN_NAME` 設定管理員的稱呼。所列的帳號均屬於同一人，此人在群組與私訊中會得到較親近的對待，可以管理機器人記住的群組內容，也可以獨自教導它。經由 AstrBot 時，平台名稱為 AstrBot 顯示的配接器名稱，在聊天中傳送 `/sid` 即可查看 ID。
 - `ACCESS_GROUPS` 和 `ACCESS_DM_USERS` 讓 personagent 自行管控各平台，格式同為 `<platform>:<id>`。每個平台分別管控。沒有項目的平台交由聯結器決定；只要有一個項目，該平台就只開放所列的項目。personagent 拒絕的回合不會被接管，因此 AstrBot 內建的模型可能會回覆。
+- `ACCESS_APPROVAL_PLATFORMS` 列出平台名稱（此處為 AstrBot 的轉接器名稱）；在這些平台上，即使上述兩份名單沒有該平台的項目也同樣生效。不在名單中的對話會等候管理員核准，並被接管，因此 AstrBot 內建的模型也不會回覆；外掛程式的 `groups` 和 `dm_users` 仍會先決定哪些訊息會轉給 personagent。
 
 AstrBot 位於 Docker 中或另一台主機上時，請參閱[使用手冊](guide.zh-TW.md#你自己執行的橋接)。
 
@@ -337,7 +455,7 @@ AstrBot 位於 Docker 中或另一台主機上時，請參閱[使用手冊](guid
 
 ### 對外開放服務位址
 
-聯結器和 personagent 位於同一台機器時，請保持 `SERVER_HOST=127.0.0.1`。容器只有在共用主機的網路命名空間或使用主機網路時，才視為同一台機器。本機頁面和 `personagent up` 一律繫結 `127.0.0.1`。其他情況下：
+聯結器和 personagent 位於同一台機器時，請保持 `SERVER_HOST=127.0.0.1`。容器只有在共用主機的網路命名空間或使用主機網路時，才視為同一台機器。由本機頁面或 `personagent up` 啟動的角色服務一律繫結 `127.0.0.1`；頁面本身則依 `PAGE_HOST` 監聽（請見[從其他裝置存取頁面](#從其他裝置存取頁面)）。其他情況下：
 
 1. 設定 `SERVER_HOST=0.0.0.0`（或 `--host 0.0.0.0`）和 `CONNECTOR_TOKEN`。未設定權杖時，啟動會拒絕繫結網路位址。此處不要求 `QQ_ONEBOT_SECRET`，但未設定時，已棄用的 `/v1/onebot` 在網路繫結下會關閉。傳送至該端點的每個請求都會收到 403 `onebot_disabled`，記錄檔會說明一次原因。
 2. 在前端部署 HTTPS 反向代理伺服器或私人通道。此處的每個聯結器都只會向本機位址或已設定權杖的 HTTPS 位址傳送。AstrBot 外掛程式會將其他情況記錄為 `refusing unsafe personagent_url`，Satori 和 Matrix 聯結器則會拒絕啟動。
@@ -377,7 +495,7 @@ AstrBot 位於 Docker 中或另一台主機上時，請參閱[使用手冊](guid
 2. **角色服務未啟動。** `personagent run` 的啟動資訊會顯示 `agent: OFF`，並說明原因和解決方式。未設定 `LLM_API_KEY` 時，請在本機頁面新增金鑰（或設定 `LLM_API_KEY`）並重新啟動。`AGENT_ENABLED=false` 時，請在 `<home>/.env` 中改為 `true` 並重新啟動。在此之前，每個事件都會收到 `owned: false`，第一個事件會記錄一行內容相同的 ERROR。
 3. **AstrBot 內建的模型代為回覆。** 外掛程式已改用備用方式，原因是請求失敗、personagent 拒絕了此訊息（第 5 項），或角色服務未啟動（第 2 項）。AstrBot 的記錄檔會顯示 `refusing unsafe personagent_url`、`agent refused the request (403): <message>`（或其他狀態，請參閱下表）或 `timed out waiting for the agent`。`timeout_s` 必須涵蓋防彈跳時間和回合內的模型呼叫，還須計入訊息抵達時仍在思考的那一回合。無論群組或私訊，一個回合的所有模型呼叫共用 1.5 × `LLM_TIMEOUT_S`，因此請讓 3 × `LLM_TIMEOUT_S` 低於此值。其預設值（420）涵蓋角色服務的預設值（3 × 120 = 360 秒）。調高 `LLM_TIMEOUT_S` 時也須一併調高此值。
 4. **未點名它。** 在群組中，它會回應自己的名稱（`PERSONA_NAME`）或 @。其他情況下，它要等訊息累積足夠（`CHAT_TRIGGER_COUNT`，預設 30 則）才會考慮發言，且仍可能不發言。在其所在時區的 02:00 至 07:00，它大多不參與未點名它的聊天。時區由 `PERSONA_TZ_OFFSET_HOURS` 設定。留空時，`AGENT_LANG` 為 `zh` 或 `zh-TW` 時採用 UTC+8，其他語言採用本機時區。personagent 啟動後，在某個平台的第一則訊息到達起兩分鐘內，距傳送時已超過 10 分鐘才到達的群組訊息視為積壓訊息：只作為上下文保留，不予回覆，服務記錄檔會加以記錄。「動態」會顯示近期每個回合的原因。如需離線觀察相同的判斷，請執行 `personagent chat --trigger 4`。
-5. **personagent 本身的允許清單。** `ACCESS_GROUPS` 和 `ACCESS_DM_USERS` 在每種方式下均會生效，不帶前綴 ID 的 QQ 私訊還須來自管理員或列有項目。被攔下的訊息不會被接管，因此經由 AstrBot 時，其內建的模型可能會回覆。personagent 會對每個被拒絕的對話以 INFO 記錄一次，並註明拒絕它的設定。
+5. **personagent 本身的允許清單。** `ACCESS_GROUPS` 和 `ACCESS_DM_USERS` 在每種方式下均會生效，不帶前綴 ID 的 QQ 私訊還須來自管理員或列有項目。被攔下的訊息不會被接管，因此經由 AstrBot 時，其內建的模型可能會回覆。personagent 會對每個被拒絕的對話以 INFO 記錄一次，並註明拒絕它的設定。在 `ACCESS_APPROVAL_PLATFORMS` 列出的平台上，不在名單中的對話會改為等候核准：`personagent access` 會列出它，記錄檔中會寫有「waiting for the admin's approval」。
 6. **模型呼叫失敗。** 金鑰遭拒（401 或 403）或餘額耗盡（402 或配額用盡）時，會記錄一行 ERROR，註明服務商主機和應修改的設定。執行 `personagent doctor`，它會向每個模型介面傳送一個很小的請求並顯示狀態，也能找出錯誤的 `LLM_BASE_URL` 或 `LLM_MODEL`。主模型逾時或連線中斷，且 `LLM_FALLBACK_MODEL` 指定了不同的模型時，本次呼叫會立即改用備用模型，因此本回合仍能在時限內作答。服務方在正常回應中傳回的錯誤（如 OpenRouter 的上游故障）依相應的 HTTP 錯誤處理。模型無法使用期間，角色被點名時會傳送一句符合人設的簡短致歉，每個對話每五分鐘最多一次；「動態」會將這一回合標為「模型未作出回應」。
 7. **設定名稱有誤。** 啟動記錄檔和 `personagent doctor` 會列出 `.env.example` 無法識別的所有鍵，以及任何以 `#` 開頭的值。
 8. **`.env` 含有 BOM。** 第一項設定的名稱帶有 BOM，因此程式無法讀取該設定。啟動時和 `personagent doctor` 都會回報此問題。請將檔案重新儲存為不含 BOM 的 UTF-8。

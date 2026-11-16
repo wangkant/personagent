@@ -67,6 +67,9 @@ SPEC = Spec(
         "said": ("dijiste: ",),
         "about": ("sobre {name}: ",),
         "from": ("de {name}: ",),
+        # Fixed lines, no model: a chat waiting for the admin's approval.
+        "approval_dm": ("Aquí no puedo responder hasta que mi administrador apruebe este chat. El código de tu solicitud es {code}. Pásaselo a mi administrador, por favor.",),
+        "approval_group": ("Mi administrador todavía no ha aprobado este grupo, así que aquí no puedo responder.",),
     },
     failure_excuses=("uf, se me colgó todo un segundo",
                      "espera, la conexión va fatal",

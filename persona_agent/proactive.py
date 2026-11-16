@@ -53,6 +53,13 @@ class Proactive:
         return (not self.proactive_platforms
                 or channels.platform_of(key) in self.proactive_platforms)
 
+    def _route_platform(self, key: str) -> str:
+        """The platform a conversation's messages came in on, as its events named it."""
+        route = self._background_route(key)
+        if isinstance(route, dict) and route.get("platform"):
+            return str(route["platform"])
+        return channels.platform_of(key)
+
     async def _maybe_proactive_groups(self) -> bool:
         """At most one proactive group message per tick. Returns True if sent."""
         if self._only_when_called():
@@ -61,11 +68,16 @@ class Proactive:
         groups = list(self.buffers.keys()) or list(self._group_allowlist())
         random.shuffle(groups)
         paused = self._paused_groups()
+        waiting_on, allowed = self._approval_platforms(), self._group_allowlist()
         for gid in groups:
             # DMs are the DM pass's; an unreachable room costs no model call.
             if (channels.is_dm(gid) or gid in paused
                     or not self._proactive_platform_ok(gid)
                     or self._background_route(gid) is None):
+                continue
+            # A group that still needs the admin's approval hears nothing unprompted.
+            if access.awaits_group_approval(gid, self._route_platform(gid), allowed, waiting_on,
+                                            via_connector=True):
                 continue
             last_act = self.last_activity_at.get(gid, 0.0)
             # Only a group active this run, and quiet long enough.
@@ -175,6 +187,9 @@ class Proactive:
             if route != "onebot" and access.dm_refusal(
                     uid, admins, allowed, via_connector=True,
                     prefiltered=route.get("prefiltered", True)):
+                continue
+            if access.awaits_dm_approval(uid, self._route_platform(pkey), admins, allowed,
+                                         self._approval_platforms(), via_connector=True):
                 continue
             last_act = self.last_dm_activity_at.get(uid, 0.0)
             # Don't cold-DM someone who never messaged the bot.

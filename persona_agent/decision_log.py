@@ -1,6 +1,7 @@
 """Recent speak decisions per conversation, in memory for the dashboard."""
 from __future__ import annotations
 
+import contextvars
 import threading
 import time
 from collections import OrderedDict, deque
@@ -13,6 +14,33 @@ _REASON_CHARS = 80
 # Outcomes of a call: each person who called gets their own row.
 _PER_PERSON = frozenset({"model failed", "blocked", "delivery failed",
                          "answered together"})
+
+
+# What the turn under way looked up (a web search, a tool by name); a list
+# shared by reference, so a task the turn starts adds to the same one.
+_LOOKUPS: contextvars.ContextVar = contextvars.ContextVar("turn_lookups", default=None)
+
+
+def start_turn() -> list:
+    lookups: list = []
+    _LOOKUPS.set(lookups)
+    return lookups
+
+
+def note_lookup(kind: str, name: str = "") -> None:
+    lookups = _LOOKUPS.get()
+    if lookups is not None:
+        lookups.append({"kind": kind, "name": name})
+
+
+def _take_lookup() -> dict:
+    """The turn's last lookup, once: the next turn starts with none."""
+    lookups = _LOOKUPS.get()
+    if not lookups:
+        return {}
+    last = lookups[-1]
+    lookups.clear()
+    return {"kind": _clip(last.get("kind"), 16), "name": _clip(last.get("name"), 120)}
 
 
 def _clip(text, limit: int) -> str:
@@ -39,6 +67,10 @@ class DecisionLog:
                "excerpt": _clip(excerpt, EXCERPT_CHARS),
                "answered": _clip(answered, EXCERPT_CHARS) if spoke else "",
                "sender": _clip(sender, NAME_CHARS), "count": 1}
+        if spoke:
+            lookup = _take_lookup()
+            if lookup:
+                row["lookup"] = lookup
         with self._lock:
             rows = self._rows.pop(key, None)
             if rows is None:

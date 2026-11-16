@@ -1,0 +1,207 @@
+/* The tools panel: servers as sections on the page, their tools as rows. */
+#tools-root .field-note,
+#tools-root .error,
+.tools-where,
+.tools-tool-desc,
+.tools-done {
+  overflow-wrap: anywhere;
+}
+.tools-warning {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--warn-text);
+  background: var(--warn-soft);
+  border-radius: 7px;
+  padding: 9px 12px;
+  margin: 0 0 12px;
+}
+#tools-root .tools-server {
+  padding: 16px 0;
+}
+.tools-server-head {
+  flex-wrap: wrap;
+}
+.tools-state.is-running {
+  color: var(--ok);
+}
+.tools-state.is-failed {
+  color: var(--error);
+}
+.tools-where {
+  margin: 2px 0 6px;
+  font: 12.5px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color: var(--muted);
+}
+.tools-server-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 0 -10px;
+}
+.tools-pre {
+  white-space: pre-wrap;
+}
+.tools-done {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ok);
+  margin: 8px 0 0;
+}
+.tools-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.tools-tool {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.tools-tool-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.tools-tool-name {
+  font: 13px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.tools-tool-title {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.tools-tool-desc {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+.tools-tool-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 8px;
+}
+.tools-tool-controls label.check {
+  font-size: 13px;
+}
+.tools-who-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#tools-root label.tools-who-label {
+  margin: 0;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+#tools-root select.tools-who {
+  width: auto;
+  height: 32px;
+  font-size: 13px;
+}
+.tools-try {
+  margin-top: 10px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line-strong);
+  max-width: 620px;
+}
+.tools-try > label:first-child {
+  margin-top: 0;
+}
+.tools-try label.check {
+  margin-top: 12px;
+}
+.tools-try textarea,
+.tools-field textarea {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  font: 12.5px/1.6 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  resize: vertical;
+}
+.tools-try-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+}
+.tools-result {
+  margin-top: 10px;
+  padding-left: 12px;
+  border-left: 2px solid var(--ok);
+}
+.tools-result.is-error {
+  border-left-color: var(--error);
+}
+.tools-result-head {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.tools-result-text {
+  margin: 4px 0 0;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12.5px/1.6 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color: var(--ink);
+}
+.tools-add {
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.tools-lead {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.tools-starters {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.tools-starter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--text);
+}
+.tools-field .field-note {
+  margin: 6px 0 0;
+}
+.tools-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+#tools-root label.check input[type="radio"] {
+  border-radius: 50%;
+}
+#tools-root label.check input[type="radio"]:checked {
+  background: var(--ink);
+  box-shadow: inset 0 0 0 3px var(--bg);
+}
+@media (max-width: 560px) {
+  .tools-starter {
+    flex-wrap: wrap;
+  }
+  .tools-who-wrap {
+    flex-wrap: wrap;
+  }
+}

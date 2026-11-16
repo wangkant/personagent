@@ -54,6 +54,9 @@ SPEC = Spec(
         "said": ("你說過：",),
         "about": ("關於{name}：",),
         "from": ("來自{name}：",),
+        # Fixed lines, no model: a chat waiting for the admin's approval.
+        "approval_dm": ("要等我的管理員核准，我才能在這裡回覆\n這次申請的代碼是 {code}，麻煩轉告我的管理員",),
+        "approval_group": ("我的管理員還沒核准這個群組，所以我暫時不能在這裡回覆",),
     },
     failure_excuses=("等我一下，網路有點卡",
                      "訊號不太好，稍等",

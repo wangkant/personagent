@@ -1,0 +1,100 @@
+/* The signin panel: sign in with OpenRouter, above the key field. */
+.signin-box {
+  margin: 0 0 16px;
+}
+.signin-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 10px;
+  background: var(--side);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.signin-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+.signin-use {
+  flex-shrink: 0;
+}
+.signin-use.primary {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+.signin-use[aria-busy="true"] {
+  cursor: progress;
+}
+.signin-link {
+  display: inline-block;
+  margin: 8px 0 0 14px;
+  font-size: 12.5px;
+}
+.signin-error {
+  margin-top: 8px;
+}
+.signin-hint {
+  margin: 8px 0 0;
+}
+@media (max-width: 560px) {
+  .signin-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+/* The page the browser shows once OpenRouter sends it back. */
+.signin-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--bg);
+}
+.signin-result {
+  max-width: 460px;
+  text-align: center;
+  line-height: 1.7;
+  color: var(--text);
+}
+.signin-result h1 {
+  margin: 14px 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.signin-result p {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+.signin-mark {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.signin-mark-failed {
+  background: var(--error);
+}
+/* From another device: the code OpenRouter shows is pasted here. */
+.signin-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0 14px;
+}
+.signin-code label {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.signin-code input {
+  flex: 1;
+  min-width: 0;
+}

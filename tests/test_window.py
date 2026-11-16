@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import signal
 import sys
@@ -618,7 +619,8 @@ def test_shortcut_is_a_command(monkeypatch, capsys, tmp_path) -> None:
 def test_windows_writes_the_link_and_takes_it_away(tmp_path) -> None:
     home = tmp_path / "home"
     home.mkdir()
-    folder = tmp_path / "Desktop 桌面"
+    # Three scripts at once: no system code page spells this folder's name.
+    folder = tmp_path / "Desktop 桌面 바탕 デスク"
     folder.mkdir()
     assert shortcut.run(shortcut.script(home, folders=[folder])) == ""
     assert (folder / shortcut.LINK).is_file()
@@ -626,6 +628,20 @@ def test_windows_writes_the_link_and_takes_it_away(tmp_path) -> None:
     assert not (folder / shortcut.LINK).exists()
     failed = shortcut.run(shortcut.script(home, folders=[tmp_path / "missing"]))
     assert failed and "CLIXML" not in failed, "the reason is a sentence, not PowerShell's envelope"
+
+
+@pytest.mark.skipif(not shortcut.WINDOWS, reason="Windows writes .lnk files")
+def test_windows_reads_a_link_in_a_folder_no_code_page_spells(tmp_path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    folders = [tmp_path / name for name in ("桌面 바탕", "プログラム 程序", "起動 시작")]
+    for folder in folders:
+        folder.mkdir()
+    monkeypatch.setenv(shortcut.DIRS_ENV, os.pathsep.join(map(str, folders)))
+    assert shortcut.status(home) == {"desktop": "off", "programs": "off", "startup": "off"}
+    assert shortcut.run(shortcut.script(home)) == ""
+    assert shortcut.status(home) == {"desktop": "on", "programs": "on", "startup": "off"}
+    assert not list(Path(os.environ.get("PUBLIC") or tmp_path).glob("personagent-*.lnk")), "no copy is left behind"
 
 
 # -- the page's own chat ----------------------------------------------------

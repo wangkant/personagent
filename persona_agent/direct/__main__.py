@@ -42,6 +42,11 @@ def admits(home: Path):
                                     identity.native_platforms)
         if group in identity.paused_groups:
             return False
+        # A group still waiting for approval hears at most one fixed line, never a written reply.
+        if access.awaits_group_approval(group, str(event.get("platform") or ""), identity.groups,
+                                        access.approval_platforms(values.get(access.APPROVAL_SETTING)),
+                                        via_connector=True):
+            return False
         return not access.group_refusal(group, identity.groups, via_connector=True)
     return answered
 

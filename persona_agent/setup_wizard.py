@@ -138,6 +138,26 @@ _TEXT: dict[str, tuple[str, str]] = {
     "key_keep": ("API key (Enter keeps {masked})",
                  "API key（按回车键保留 {masked}）"),
     "key_got": ("key {masked}", "已记录 {masked}"),
+    "signin_ask": ("Sign in with an OpenRouter account instead of pasting a key?",
+                   "是否使用 OpenRouter 账号登录，而不是粘贴密钥？"),
+    "signin_open": ("Open this address in a browser on any device, sign in and approve:",
+                    "请在任意设备的浏览器中打开以下地址，登录并批准："),
+    "signin_note": ("OpenRouter creates a key for personagent, which is kept on this computer. Until you remove it "
+                    "at openrouter.ai/keys, the key can spend the credit of your OpenRouter account. The free "
+                    "models need no credit.",
+                    "OpenRouter 会为 personagent 创建一个密钥，保存在本机。在 openrouter.ai/keys 删除该密钥之前，"
+                    "它可以使用你的 OpenRouter 账户余额。免费模型无需余额。"),
+    "signin_code": ("Code shown on the page (press Enter to paste a key instead)",
+                    "页面上显示的代码（直接按回车键则改为粘贴密钥）"),
+    "signin_ok": ("Signed in. OpenRouter created a key for personagent.",
+                  "登录成功，OpenRouter 已为 personagent 创建密钥。"),
+    "signin_code_invalid": ("That is not a code from the OpenRouter page.", "这不是 OpenRouter 页面上显示的代码。"),
+    "signin_code_rejected": ("OpenRouter did not accept the code; it may have expired after ten minutes.",
+                             "OpenRouter 未接受该代码，代码可能已超过十分钟失效。"),
+    "signin_exchange_failed": ("OpenRouter did not return a key.", "OpenRouter 未返回密钥。"),
+    "signin_unreachable": ("personagent could not reach OpenRouter to collect the key.",
+                           "personagent 无法连接 OpenRouter 以获取密钥。"),
+    "signin_paste": ("Paste a key instead.", "请改为粘贴密钥。"),
     "testing": ("Testing the key with one tiny request to {url}",
                 "正在通过一个很小的请求测试密钥：{url}"),
     "test_ok": ("It works.", "测试通过。"),
@@ -432,6 +452,11 @@ _TEXT: dict[str, tuple[str, str]] = {
                           "personagent 窗口中连接该平台。"),
     "direct_saved": ("{name} is connected. Its values are saved in {path}.",
                      "{name} 已连接，相关信息已保存至 {path}。"),
+    "direct_approval": ("New chats on {name} wait for your approval: whoever writes to the bot receives a short "
+                        "code, and `{list}` shows the requests. To answer everyone without approval instead, "
+                        "run `{open}`.",
+                        "{name} 上的新对话需经你批准：向机器人发送消息的人会收到一个简短代码，使用 `{list}` "
+                        "可查看申请。如需不经批准即回复所有人，请运行 `{open}`。"),
     "direct_released": ("{name} was also connected through AstrBot. That connection has been removed, "
                         "so that the bot is not served twice.",
                         "{name} 此前也已通过 AstrBot 连接。该连接已移除，以免同一机器人被重复接入。"),
@@ -1703,7 +1728,33 @@ def _require_scheme(base_url: str) -> None:
         raise SystemExit(langs.term("--base-url needs https:// or http:// in front, such as https://api.deepseek.com"))
 
 
+def sign_in_openrouter() -> str:
+    """OpenRouter's flow without a callback: its page shows a code to type here.
+    Works with no browser on this computer. '' when it gave no key."""
+    from . import openrouter_signin as osr
+
+    verifier = osr.new_verifier()
+    _say(t("signin_open"))
+    _say("  " + osr.authorize_url(verifier))
+    _say(t("signin_note"))
+    code = ask(t("signin_code"))
+    if not code:
+        return ""
+    try:
+        key = osr.exchange(code, verifier)
+    except osr.SignInError as error:
+        _say(t(str(error)) + " " + t("signin_paste"))
+        return ""
+    _say(t("signin_ok"))
+    return key
+
+
 def _ask_key(provider: Provider, current: dict, same: bool) -> str:
+    if provider.key == "openrouter" and not (same and current["LLM_API_KEY"]) and ask_yn(t("signin_ask")):
+        api_key = sign_in_openrouter()
+        if api_key:
+            _say(t("key_got", masked=mask_secret(api_key)))
+            return api_key
     visible = provider.needs_key and ask_yn(t("key_visible"), default_yes=False)
     if not provider.needs_key:
         return current["LLM_API_KEY"] if same and current["LLM_API_KEY"] else "ollama"
@@ -2437,7 +2488,7 @@ def connect_platform(home: Path, kind: str, given: dict, *, remove: bool = False
                      no_input: bool = False, launcher: Launcher | None = None) -> int:
     """`personagent connect <platform>`: what the page's Connect and
     Disconnect do, with the same checks and the same saved form."""
-    from persona_agent import direct_setup
+    from persona_agent import access, approvals, direct_setup
     from persona_agent.direct import base as direct_base
 
     spec = connections.platform(kind)
@@ -2490,8 +2541,11 @@ def connect_platform(home: Path, kind: str, given: dict, *, remove: bool = False
             print(t("direct_failed", name=name), file=sys.stderr)
             print(t("direct_unexpected", error=type(exc).__name__), file=sys.stderr)
             return 1
+        # Connected for the first time: new chats there wait for the admin.
+        fresh = kind not in direct_setup.stored(home) and kind not in _via_astrbot(home)
         released = direct_setup.store(home, spec, values)
         direct_setup.clear_state(home, kind)
+        asks = fresh and kind not in access.NOTHING_TO_APPROVE and approvals.set_policy(home, kind, True)
     except (KeyboardInterrupt, EOFError):
         print()
         _say(t("direct_stopped"))
@@ -2503,6 +2557,9 @@ def connect_platform(home: Path, kind: str, given: dict, *, remove: bool = False
     _say(t("direct_saved", name=name, path=direct_base.credentials_path(home)))
     if released:
         _say(t("direct_released", name=name))
+    if asks:
+        _say(t("direct_approval", name=name, list=command("access", home),
+               open=command(f"access policy {kind} open", home)))
     if not env_get(home / ".env", "LLM_API_KEY"):
         _say(t("direct_no_key"))
         for line in launcher.shown("init --terminal"):

@@ -9,7 +9,7 @@ import random
 import time
 from typing import Callable, Optional
 
-from . import access
+from . import access, approvals
 from .decision import (BLOCKED, EMPTY_DRAFT_RETRY_NOTE, PASS, SEND,
                        SLEEP_WINDOW, STICKY_CALL, choose_group_mode, pacing_skip)
 from . import channels
@@ -361,6 +361,9 @@ class Turns:
             return {"handled": False, "owned": True, "replies": []}
         payload = synthesize_onebot_payload(
             event, self._self_mention_id(), self.connector_qq_platforms)
+        # A group's own name, where the platform gives one, for the waiting list.
+        if isinstance(event.get("conversation_name"), str):
+            payload["_conversation_name"] = event["conversation_name"][:128]
         # When it was said, in OneBot's field, for the window and for a backlog.
         if message_time({"time": event.get("sent_at")}) is not None:
             payload["time"] = message_time({"time": event.get("sent_at")})
@@ -420,22 +423,79 @@ class Turns:
         if sink is not None:
             sink.owned = True
 
+    def _live(self, key: str, startup):
+        """A setting as .env says it now, when an approval or the policy has
+        changed it since the start; else `startup`."""
+        env = getattr(self, "settings_env", None)
+        value = env.get(key) if env is not None else None
+        return startup if value is None else value
+
     def _admins(self) -> frozenset[str]:
         """Every admin account (ADMIN_IDS), canonical; re-read since it is edited live."""
         return access.parse_ids(
-            self.admin_ids, native_platforms=self.connector_qq_platforms,
+            self._live("ADMIN_IDS", self.admin_ids),
+            native_platforms=self.connector_qq_platforms,
         ) | access.page_owner(paths.runtime_dir())
 
     def _dm_allowlist(self) -> frozenset[str]:
         """ACCESS_DM_USERS, canonical."""
         return access.parse_ids(
-            self.access_dm_users,
+            self._live("ACCESS_DM_USERS", self.access_dm_users),
             native_platforms=self.connector_qq_platforms)
 
     def _group_allowlist(self) -> frozenset[str]:
         """ACCESS_GROUPS, canonical."""
         return access.parse_ids(
-            self.access_groups, native_platforms=self.connector_qq_platforms)
+            self._live("ACCESS_GROUPS", self.access_groups),
+            native_platforms=self.connector_qq_platforms)
+
+    def _approval_platforms(self) -> frozenset[str]:
+        """ACCESS_APPROVAL_PLATFORMS: where new chats wait for the admin."""
+        return access.approval_platforms(self._live(
+            access.APPROVAL_SETTING, getattr(self, "access_approval_platforms", ())))
+
+    def _approvals(self) -> approvals.Store:
+        store = self.__dict__.get("_approval_store")
+        if store is None:
+            store = self._approval_store = approvals.Store(
+                approvals.path_in(self.memory_file.parent))
+        return store
+
+    async def _hold_for_approval(self, kind: str, chat_id: str, user_id: str,
+                                 platform: str, payload: dict) -> bool:
+        """A chat the admin has not approved: no model turn, nothing kept. It
+        joins the waiting list, and now and then hears one fixed line saying so;
+        in a group, only when the message is addressed to the character."""
+        # Claimed, so a connector's own model does not answer the stranger either.
+        self._claim_connector_turn()
+        key = channels.dm_routing_key(user_id) if kind == "dm" else chat_id
+        self._log_refusal(key, access.UNAPPROVED)
+        # Only the words as written: no picture is read, no link fetched.
+        words = " ".join(
+            str((seg.get("data") or {}).get("text") or "")
+            for seg in payload.get("message", []) or []
+            if isinstance(seg, dict) and seg.get("type") == "text")
+        if kind == "group" and not (self._is_at_me(payload) or self._quotes_me(payload)
+                                    or self._names_me(words)):
+            return False
+        sender = payload.get("sender") or {}
+        name = (str(payload.get("_conversation_name") or "") if kind == "group"
+                else str(sender.get("card") or sender.get("nickname") or ""))
+        try:
+            code, tell = await asyncio.to_thread(
+                self._approvals().note, platform=platform, kind=kind, chat_id=chat_id,
+                name=name, words=words)
+        except Exception as exc:
+            logger.warning("[Agent] the approval request was not kept: %s", type(exc).__name__)
+            return False
+        if not tell:
+            return False
+        lines = chatlangs.spec(self.chat_lang).replies
+        if kind == "dm":
+            sent = await self._send_dm(user_id, lines["approval_dm"][0].format(code=code))
+        else:
+            sent = await self._send_group(chat_id, lines["approval_group"][0])
+        return bool(sent.success)
 
     def _paused_groups(self) -> frozenset[str]:
         """ACCESS_PAUSED_GROUPS, canonical."""
@@ -535,6 +595,8 @@ class Turns:
         budget; past it the work is abandoned and the turn fails like any
         other model failure."""
         budget = self.llm_timeout_s * _TURN_BUDGET_CALLS
+        # What the work looks up is shown beside the reply it led to.
+        decision_log.start_turn()
         try:
             return await asyncio.wait_for(model_work, budget)
         except asyncio.TimeoutError:
@@ -573,10 +635,21 @@ class Turns:
         sink = current_sink.get()
         via_connector = sink is not None
         prefiltered = getattr(sink, "prefiltered", True)
+        # The event's own platform: a native connector's ids are bare, like QQ's.
+        platform = (str(getattr(sink, "platform", "") or "") if via_connector
+                    else channels.NATIVE_PLATFORM)
+        waiting_on = self._approval_platforms()
         if message_type == "private":
             admins = self._admins()
+            allowed = self._dm_allowlist()
+            if access.awaits_dm_approval(user_id, platform, admins, allowed, waiting_on,
+                                         via_connector=via_connector):
+                if proactive:
+                    self._claim_connector_turn()
+                    return False
+                return await self._hold_for_approval("dm", user_id, user_id, platform, payload)
             refusal = access.dm_refusal(
-                user_id, admins, self._dm_allowlist(),
+                user_id, admins, allowed,
                 via_connector=via_connector, prefiltered=prefiltered)
             if refusal:
                 self._log_refusal(channels.dm_routing_key(user_id), refusal)
@@ -596,8 +669,12 @@ class Turns:
         group_id = str(payload.get("group_id", "")).strip()
         if not group_id:
             return False
+        groups = self._group_allowlist()
+        if access.awaits_group_approval(group_id, platform, groups, waiting_on,
+                                        via_connector=via_connector, user_id=user_id):
+            return await self._hold_for_approval("group", group_id, user_id, platform, payload)
         refusal = access.group_refusal(
-            group_id, self._group_allowlist(),
+            group_id, groups,
             via_connector=via_connector, prefiltered=prefiltered,
             user_id=user_id)
         if refusal:

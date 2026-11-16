@@ -29,7 +29,7 @@ from pathlib import Path
 
 import httpx
 
-from persona_agent import access, candidates, channels, evidence, home, langs, paths, promotion
+from persona_agent import access, candidates, channels, decision_log, evidence, home, langs, paths, promotion
 from persona_agent.access import ADMIN_MODE
 from persona_agent.agent import Agent
 from persona_agent.connector import ConnectorSink, current_sink
@@ -161,6 +161,8 @@ _TEXT = {
         "why_memory": "  a memory command from {who}, no model call",
         "why_dm": "  answered {who} in a one-to-one chat",
         "why_retry": '  it is its retry for "{text}"',
+        "why_searched": "  it searched the web first",
+        "why_tool": "  it used the tool {name} first",
         "why_prompt_none": "  learned material in its prompt: none",
         "why_prompt": "  learned material in its prompt:",
         "why_ledger_none": ("  the ledger has nothing about it yet; reply with its "
@@ -269,6 +271,8 @@ _TEXT = {
         "why_memory": "  来自{who}的记忆指令，未调用模型",
         "why_dm": "  在私聊中回复{who}",
         "why_retry": "  这是对「{text}」的重试回复",
+        "why_searched": "  回复前进行了联网搜索",
+        "why_tool": "  回复前使用了工具 {name}",
         "why_prompt_none": "  提示词中的学习结果：无",
         "why_prompt": "  提示词中的学习结果：",
         "why_ledger_none": "  学习记录中尚无相关条目；在消息中提及角色名称或使用 /reply 回复，即可进行教学",
@@ -479,6 +483,8 @@ class Turn:
     retry_of: str = ""
     offered: list = field(default_factory=list)
     conv: str = ""
+    #: A web search or a tool the reply drew on: {"kind", "name"}.
+    lookup: dict = field(default_factory=dict)
 
 
 def _awaiting_fix(agent: Agent, conv: str) -> dict | None:
@@ -706,6 +712,7 @@ class Trial:
 
         self._gate_verdict = None
         blocks: list[str] = []
+        lookups = decision_log.start_turn()
         try:
             with _patched(agent, _examples_for_prompt=_collecting(blocks)):
                 reply, intent, auto_mem = await agent._think(conv, mode, text)
@@ -714,6 +721,7 @@ class Trial:
             agent.counters[conv] = turn.count
             turn.failure = describe_failure(e)
             return turn
+        turn.lookup = dict(lookups[-1]) if lookups else {}
         if mode in GATED_MODES and self._gate_verdict is False:
             turn.quiet = "gate_pass"
             if mode == "followup":
@@ -821,6 +829,8 @@ class Trial:
             return turn
         turn.reply = "\n".join(said)
         turn.sent = str(recorded[-1].get("reply") or "") if recorded else turn.reply
+        rows = decision_log.LOG.recent(conv)
+        turn.lookup = dict(rows[0].get("lookup") or {}) if rows and rows[0].get("spoke") else {}
         if awaiting and _awaiting_fix(agent, conv) is None:
             turn.retry_of = str(awaiting.get("reply") or "")
         turn.offered = self.offered(conv, blocks)
@@ -1039,6 +1049,10 @@ def why_lines(lang: str, trial: Trial, name: str) -> list[str]:
                      .format(who=turn.speaker))
     if turn.retry_of:
         lines.append(t["why_retry"].format(text=clip(turn.retry_of, 60)))
+    if turn.lookup.get("kind") == "search":
+        lines.append(t["why_searched"])
+    elif turn.lookup.get("kind") == "tool":
+        lines.append(t["why_tool"].format(name=turn.lookup.get("name", "")))
     if not turn.memory:
         if turn.offered:
             lines.append(t["why_prompt"])

@@ -1,0 +1,82 @@
+/* The approvals panel, inside the connected platforms. */
+#platforms-dot.attention {
+  background: var(--warn);
+}
+#approvals-root {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.approvals-head h3 {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  margin: 0;
+}
+.approvals-hint {
+  margin: 4px 0 6px;
+}
+.approvals-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.approval-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.approval-item:last-child {
+  border-bottom: none;
+}
+.approval-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+.approval-who strong {
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.approval-meta {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.approval-words {
+  margin: 4px 0 0 31px;
+  color: var(--muted);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  margin: 6px 0 0 21px;
+}
+.approval-actions button[aria-busy="true"] {
+  cursor: progress;
+}
+#approvals-root .error {
+  margin: 8px 0;
+}
+.approvals-declined {
+  margin-top: 10px;
+}
+/* Only declined chats: the panel's own line already separates them. */
+#approvals-root > .approvals-declined:first-child {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+.approvals-declined .field-note {
+  margin: 6px 0 2px;
+}
+@media (max-width: 560px) {
+  .approval-words,
+  .approval-actions {
+    margin-left: 0;
+  }
+}

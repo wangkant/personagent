@@ -45,6 +45,9 @@ SPEC = Spec(
         "said": ("you said: ",),
         "about": ("about {name}: ",),
         "from": ("from {name}: ",),
+        # Fixed lines, no model: a chat waiting for the admin's approval.
+        "approval_dm": ("My administrator has to approve this chat before I can reply here. The code of this request is {code}. Please pass it on to my administrator.",),
+        "approval_group": ("My administrator has not approved this group yet, so I cannot reply here.",),
     },
     failure_excuses=("ugh, hanging here for a sec",
                      "hold on, connection's wonky",

@@ -12,7 +12,7 @@ from typing import Optional
 
 from .access import ADMIN_MODE
 from .llm import purpose
-from .search import SEARCH_CONTEXT_LINES, SearchHint
+from .search import SEARCH_CONTEXT_LINES, SearchHint, caller_for_mode, tool_caller
 from .textproc import (
     SLEEP_PASS_PROB,
     SUB_TRIGGER_PASS_PROB,
@@ -121,7 +121,7 @@ class ReplyDecision:
         self.model_calls.append(time.time())
         # A retry fixes the draft's form; a second search would be a second call.
         enable_search = mode in ("called", ADMIN_MODE, "followup") and not retry_note
-        with purpose("reply"):
+        with purpose("reply"), tool_caller(caller_for_mode(mode)):
             raw = await self._call_llm(
                 system=system,
                 messages=[{"role": "user", "content": prompt.user}],

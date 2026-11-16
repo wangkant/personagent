@@ -173,11 +173,11 @@ def test_adding_and_removing_links_writes_only_their_folders(client, workspace, 
     ran = fake_windows(monkeypatch, [])
     answer = post(client, "/shortcut", {"which": "login", "on": True})
     assert answer.status_code == 200 and answer.json()["supported"] is True
-    made = [s for s in ran if "CreateShortcut((Join-Path" in s][-1]
+    made = [s for s in ran if "Save-Link $final" in s][-1]
     assert str(tmp_path / "links" / "startup") in made and "Desktop" not in made
     assert f'--home "{workspace.home}"' in made
     post(client, "/shortcut", {"which": "icon", "on": True})
-    made = [s for s in ran if "CreateShortcut((Join-Path" in s][-1]
+    made = [s for s in ran if "Save-Link $final" in s][-1]
     assert str(tmp_path / "links" / "desktop") in made and str(tmp_path / "links" / "programs") in made
     assert "startup" not in made
     post(client, "/shortcut", {"which": "icon", "on": False})

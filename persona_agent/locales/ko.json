@@ -464,5 +464,18 @@
 "The homeserver did not accept this user ID and password, so nothing was saved. Check both, for example by signing in to the bot account in Element.": "홈서버가 이 사용자 ID와 비밀번호를 받아들이지 않아 아무것도 저장하지 않았습니다. 예를 들어 Element에서 봇 계정으로 로그인하여 둘 다 확인하십시오.",
 "This homeserver does not accept a password sign-in from programs, so nothing was saved. Paste an access token of the bot account instead.": "이 홈서버는 프로그램의 비밀번호 로그인을 받아들이지 않으므로 아무것도 저장하지 않았습니다. 대신 봇 계정의 액세스 토큰을 붙여 넣으십시오.",
 "Enter either the bot account's user ID and password, or its access token.": "봇 계정의 사용자 ID와 비밀번호 또는 액세스 토큰 중 하나를 입력하십시오.",
-"The bot declined a room invitation from a Matrix ID other than yours. It accepts invitations only from the Matrix ID saved here; if you sent the invitation yourself, set Matrix up again and check your Matrix ID.": "봇이 사용자 본인이 아닌 Matrix ID에서 온 방 초대를 거절했습니다. 봇은 여기에 저장된 Matrix ID의 초대만 수락합니다. 직접 초대를 보냈다면 Matrix를 다시 설정하고 Matrix ID를 확인하십시오."
+"The bot declined a room invitation from a Matrix ID other than yours. It accepts invitations only from the Matrix ID saved here; if you sent the invitation yourself, set Matrix up again and check your Matrix ID.": "봇이 사용자 본인이 아닌 Matrix ID에서 온 방 초대를 거절했습니다. 봇은 여기에 저장된 Matrix ID의 초대만 수락합니다. 직접 초대를 보냈다면 Matrix를 다시 설정하고 Matrix ID를 확인하십시오.",
+"Sign in with an OpenRouter account instead of pasting a key?": "키를 붙여 넣는 대신 OpenRouter 계정으로 로그인하시겠습니까?",
+"Open this address in a browser on any device, sign in and approve:": "아무 기기의 브라우저에서 다음 주소를 열고 로그인한 후 승인하십시오:",
+"OpenRouter creates a key for personagent, which is kept on this computer. Until you remove it at openrouter.ai/keys, the key can spend the credit of your OpenRouter account. The free models need no credit.": "OpenRouter가 personagent용 키를 만들며, 이 키는 이 컴퓨터에 보관됩니다. openrouter.ai/keys에서 삭제하기 전까지 이 키로 OpenRouter 계정의 크레딧을 사용할 수 있습니다. 무료 모델에는 크레딧이 필요 없습니다.",
+"Code shown on the page (press Enter to paste a key instead)": "페이지에 표시된 코드(Enter 키만 누르면 대신 키를 붙여 넣습니다)",
+"Signed in. OpenRouter created a key for personagent.": "로그인했습니다. OpenRouter가 personagent용 키를 만들었습니다.",
+"That is not a code from the OpenRouter page.": "OpenRouter 페이지에 표시된 코드가 아닙니다.",
+"OpenRouter did not accept the code; it may have expired after ten minutes.": "OpenRouter가 코드를 받아들이지 않았습니다. 10분이 지나 만료되었을 수 있습니다.",
+"OpenRouter did not return a key.": "OpenRouter가 키를 반환하지 않았습니다.",
+"personagent could not reach OpenRouter to collect the key.": "personagent가 키를 받기 위해 OpenRouter에 연결할 수 없습니다.",
+"Paste a key instead.": "대신 키를 붙여 넣으십시오.",
+"New chats on {name} wait for your approval: whoever writes to the bot receives a short code, and `{list}` shows the requests. To answer everyone without approval instead, run `{open}`.": "{name}의 새 대화는 사용자의 승인을 기다립니다. 봇에게 메시지를 보낸 사람은 짧은 코드를 받으며, `{list}`(으)로 요청을 볼 수 있습니다. 대신 승인 없이 모두에게 답장하려면 `{open}`을(를) 실행하십시오.",
+"  it searched the web first": "  답장 전에 웹 검색을 했습니다",
+"  it used the tool {name} first": "  답장 전에 도구 {name}을(를) 사용했습니다"
 }

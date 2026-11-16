@@ -548,7 +548,9 @@ def _decision_view(row: dict) -> dict:
     return {"ts": row.get("ts", 0.0), "mode": row.get("mode", ""),
             "spoke": bool(row.get("spoke")), "reason": row.get("reason", ""),
             "excerpt": row.get("excerpt", ""), "count": int(row.get("count") or 1),
-            "answered": row.get("answered", ""), "sender": row.get("sender", "")}
+            "answered": row.get("answered", ""), "sender": row.get("sender", ""),
+            # A web search or a tool the reply drew on, by name; never what it was given or gave.
+            "lookup": dict(row.get("lookup") or {})}
 
 
 # ------------------------------------------------------------------ memory --

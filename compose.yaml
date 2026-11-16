@@ -1,0 +1,24 @@
+# personagent on a server or NAS. Start it with `docker compose up -d`, read
+# the page password the first start prints with `docker compose logs`, then
+# open http://<this computer's address>:8090/ and sign in. docs/deploy.md has
+# the rest, and the safe ways to reach the page from outside your network.
+services:
+  personagent:
+    image: ghcr.io/wangkant/personagent:latest
+    # To build from this folder instead: docker compose build
+    build: .
+    init: true
+    restart: unless-stopped
+    ports:
+      # "127.0.0.1:8090:8090" keeps the page to this computer and an SSH tunnel.
+      - "8090:8090"
+    volumes:
+      - personagent-data:/data
+    # environment:
+    #   Your own page password instead of the generated one (12 characters or more):
+    #   PAGE_PASSWORD: "change-this-to-a-long-password"
+    #   Names the page answers to besides addresses typed as numbers:
+    #   PAGE_ALLOWED_HOSTS: "nas.local"
+
+volumes:
+  personagent-data:

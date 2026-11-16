@@ -163,7 +163,7 @@ def test_the_fixed_lines_the_character_says_are_no_tells() -> None:
         lines = [line for group in spec.replies.values() for line in group]
         lines += list(spec.failure_excuses)
         for line in lines:
-            _out, why = TP._sanitize_reply_with_reason(line.format(name="Kay"), "en")
+            _out, why = TP._sanitize_reply_with_reason(line.format(name="Kay", code="K7M4QD"), "en")
             check(f"{code}: {line!r} is not taken for assistant phrasing",
                   why != "assistant_tell", why)
 

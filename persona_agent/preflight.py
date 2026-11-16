@@ -227,6 +227,14 @@ def _chat_api_findings(configured: dict) -> list["Finding"]:
     return findings
 
 
+def _page_findings(configured: dict, environ) -> list["Finding"]:
+    """Where the page listens and whether a password guards it there, as the page reads them."""
+    from . import pageaccess
+
+    settings = pageaccess.from_values(configured, environ)
+    return [Finding(level, key, sentence) for level, key, sentence in pageaccess.problems(settings)]
+
+
 class Finding:
     """One problem, at one level, about one key."""
 
@@ -463,6 +471,7 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
                 break
 
     findings.extend(_chat_api_findings(configured))
+    findings.extend(_page_findings(configured, os.environ if env is None else {}))
 
     order = {"ERROR": 0, "WARN": 1, "INFO": 2}
     findings.sort(key=lambda f: (order.get(f.level, 3), f.key))

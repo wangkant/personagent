@@ -1252,10 +1252,13 @@ def _table(js, code, name):
 
 
 def _page_strings(code):
-    """The page's sentences in en or zh: welcome.js and every panel carry theirs inline."""
-    scripts = [welcome.ASSETS / "welcome.js",
+    """The page's sentences in en or zh: welcome.js, the password page and every
+    panel carry theirs inline, and the page OpenRouter sends a browser back to has its own."""
+    from persona_agent.panels import signin
+
+    scripts = [welcome.ASSETS / "welcome.js", welcome.ASSETS / "signin.js",
                *(welcome.ASSETS / "panels" / f"{name}.js" for name in welcome.PANELS)]
-    strings = {}
+    strings = {f"signin_page_{key}": pair[code == "zh"] for key, pair in signin.PAGE_TEXT.items()}
     for script in scripts:
         table = _table(script.read_text(encoding="utf-8"), code, script.name)
         again = strings.keys() & table.keys()
@@ -1358,8 +1361,12 @@ def test_no_page_sentence_says_a_learned_item_waits_for_the_reader(code):
         strings = _page_strings(code)
     else:
         strings = json.loads((welcome.ASSETS / "i18n" / f"{code}.json").read_text(encoding="utf-8"))["strings"]
+    # A new chat on a platform that asks for approval does wait for the admin: those sentences say so.
+    about_chats = ("approval", "reach_approval", "reach_dm_approval", "reach_channels_approval",
+                   "tuning_h_access_approval_platforms")
     found = [(key, text) for key, text in strings.items()
-             if any(phrase in text.lower() for phrase in WAITS_FOR_THE_READER[code])]
+             if not key.startswith(about_chats)
+             and any(phrase in text.lower() for phrase in WAITS_FOR_THE_READER[code])]
     assert found == []
 
 
@@ -1590,8 +1597,11 @@ def test_the_setup_card_sends_the_characters_language_not_the_pages():
     html = (welcome.ASSETS / "index.html").read_text(encoding="utf-8")
     assert '<select id="character-lang">' in html and 'data-t="characterLangNote"' in html
     submit = js.split('$("settings-form").addEventListener("submit"')[1].split("\n});\n")[0]
-    assert 'lang: $("character-lang").value || lang,' in submit
-    assert "\n      lang,\n" not in submit
+    # The form's values, the signin panel's save too, come from one function.
+    assert "...formValues()," in submit
+    values = js.split("function formValues() {")[1].split("\n}\n")[0]
+    assert 'lang: $("character-lang").value || lang,' in values
+    assert "\n    lang,\n" not in values
 
 
 def test_the_page_chat_names_its_person_and_an_earlier_page_chat_says_its_learning_is_out_of_use(

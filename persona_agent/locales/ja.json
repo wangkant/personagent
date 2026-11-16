@@ -469,5 +469,18 @@
 "The homeserver did not accept this user ID and password, so nothing was saved. Check both, for example by signing in to the bot account in Element.": "ホームサーバーがこのユーザー ID とパスワードを受け付けなかったため、何も保存されていません。たとえば Element でボットのアカウントにサインインして、両方を確認してください。",
 "This homeserver does not accept a password sign-in from programs, so nothing was saved. Paste an access token of the bot account instead.": "このホームサーバーはプログラムからのパスワードによるサインインを受け付けないため、何も保存されていません。代わりにボットのアカウントのアクセストークンを貼り付けてください。",
 "Enter either the bot account's user ID and password, or its access token.": "ボットのアカウントのユーザー ID とパスワード、またはアクセストークンのどちらかを入力してください。",
-"The bot declined a room invitation from a Matrix ID other than yours. It accepts invitations only from the Matrix ID saved here; if you sent the invitation yourself, set Matrix up again and check your Matrix ID.": "ボットは、あなた以外の Matrix ID からのルームへの招待を辞退しました。ボットはここに保存された Matrix ID からの招待のみを受け付けます。ご自身で招待した場合は、Matrix を再設定して Matrix ID を確認してください。"
+"The bot declined a room invitation from a Matrix ID other than yours. It accepts invitations only from the Matrix ID saved here; if you sent the invitation yourself, set Matrix up again and check your Matrix ID.": "ボットは、あなた以外の Matrix ID からのルームへの招待を辞退しました。ボットはここに保存された Matrix ID からの招待のみを受け付けます。ご自身で招待した場合は、Matrix を再設定して Matrix ID を確認してください。",
+"Sign in with an OpenRouter account instead of pasting a key?": "キーを貼り付ける代わりに、OpenRouter アカウントでサインインしますか？",
+"Open this address in a browser on any device, sign in and approve:": "任意のデバイスのブラウザーで次のアドレスを開き、サインインして承認してください：",
+"OpenRouter creates a key for personagent, which is kept on this computer. Until you remove it at openrouter.ai/keys, the key can spend the credit of your OpenRouter account. The free models need no credit.": "OpenRouter が personagent 用のキーを作成し、このコンピューターに保存されます。openrouter.ai/keys で削除するまで、このキーは OpenRouter アカウントのクレジットを使用できます。無料モデルにクレジットは不要です。",
+"Code shown on the page (press Enter to paste a key instead)": "ページに表示されたコード（Enter キーだけを押すと、代わりにキーを貼り付けます）",
+"Signed in. OpenRouter created a key for personagent.": "サインインしました。OpenRouter が personagent 用のキーを作成しました。",
+"That is not a code from the OpenRouter page.": "これは OpenRouter のページに表示されたコードではありません。",
+"OpenRouter did not accept the code; it may have expired after ten minutes.": "OpenRouter がコードを受け付けませんでした。10 分が経過して期限切れになった可能性があります。",
+"OpenRouter did not return a key.": "OpenRouter からキーが返されませんでした。",
+"personagent could not reach OpenRouter to collect the key.": "personagent が OpenRouter に接続できず、キーを受け取れませんでした。",
+"Paste a key instead.": "代わりにキーを貼り付けてください。",
+"New chats on {name} wait for your approval: whoever writes to the bot receives a short code, and `{list}` shows the requests. To answer everyone without approval instead, run `{open}`.": "{name} の新しいチャットはあなたの承認を待ちます。ボットにメッセージを送った人には短いコードが届き、`{list}` で申請を確認できます。代わりに承認なしで全員に返信するには、`{open}` を実行してください。",
+"  it searched the web first": "  返信の前にウェブ検索をしました",
+"  it used the tool {name} first": "  返信の前にツール {name} を使いました"
 }

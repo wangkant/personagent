@@ -2,7 +2,8 @@ name: Release
 
 # A v* tag must sit on main and pass the test suite; it then builds once,
 # publishes that build to PyPI (trusted publishing), then creates the GitHub
-# Release with the same files plus the AstrBot plugin as a zip. A manual run
+# Release with the same files plus the AstrBot plugin as a zip, and pushes the
+# container image to ghcr.io/wangkant/personagent. A manual run
 # from a branch only builds and uploads the artifacts; run it from a tag to release.
 on:
   push:
@@ -103,6 +104,62 @@ jobs:
           path: dist/
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+
+  image:
+    # The container image of the tagged source, one architecture per runner,
+    # checked the way CI checks it before anything is pushed.
+    needs: [build, pypi]
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/wangkant/personagent
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and smoke-test the image
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          docker build --label "org.opencontainers.image.version=$VERSION" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "$IMAGE:$VERSION-$ARCH" .
+          python3 tools/docker_smoke.py --image "$IMAGE:$VERSION-$ARCH"
+      - name: Push it to the GitHub Container Registry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:${GITHUB_REF_NAME#v}-$ARCH"
+
+  image-tags:
+    # One version tag and `latest` over both architectures.
+    needs: image
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    env:
+      IMAGE: ghcr.io/wangkant/personagent
+    steps:
+      - name: Tag the release and latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker buildx imagetools create -t "$IMAGE:$VERSION" -t "$IMAGE:latest" \
+            "$IMAGE:$VERSION-amd64" "$IMAGE:$VERSION-arm64"
 
   github-release:
     needs: [build, pypi]

@@ -79,6 +79,9 @@ SPEC = Spec(
         "said": ("tu as dit : ",),
         "about": ("sur {name} : ",),
         "from": ("de {name} : ",),
+        # Fixed lines, no model: a chat waiting for the admin's approval.
+        "approval_dm": ("Je ne peux pas répondre ici tant que mon administrateur n'a pas validé cette conversation. Le code de ta demande est {code} : transmets-le-lui, s'il te plaît.",),
+        "approval_group": ("Mon administrateur n'a pas encore validé ce groupe, donc je ne peux pas répondre ici.",),
     },
     failure_excuses=("attends, ça rame un peu",
                      "deux secondes, la connexion fait des siennes",

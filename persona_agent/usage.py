@@ -19,7 +19,7 @@ WEEK_DAYS = 7
 WRITE_EVERY_S = 60.0
 TOKENS = ("prompt_tokens", "completion_tokens", "cached_tokens")
 # What a call was for; anything else counts as "other".
-PURPOSES = ("reply", "gate", "search", "learning", "memory", "check", "persona", "other")
+PURPOSES = ("reply", "gate", "search", "tools", "learning", "memory", "check", "persona", "other")
 
 
 def purpose_of(label) -> str:

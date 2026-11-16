@@ -179,7 +179,8 @@ class Telegram(Platform):
         if not has_content(segments, self.bot_id):
             return None
         return {"conversation_type": "dm" if is_dm else "group",
-                **({} if is_dm else {"conversation_id": str(chat.get("id"))}),
+                **({} if is_dm else {"conversation_id": str(chat.get("id")),
+                                     "conversation_name": plain_name(chat.get("title"))}),
                 "sender_id": uid, "sender_name": name,
                 "message_id": str(message.get("message_id")), "sent_at": int(message.get("date") or 0),
                 "addressed": addressed, "text": text, "segments": segments,

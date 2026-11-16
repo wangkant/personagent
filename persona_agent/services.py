@@ -592,20 +592,30 @@ def _memory_problem(home: Path) -> str:
 
 
 def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
-    argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         prog=prog, description=langs.term("Start personagent and its connected platforms together"),
         epilog=langs.term("It listens on 127.0.0.1 at SERVER_PORT in .env (8080 by default; when that port "
                           "is taken, a free one is picked and saved there). Each process writes its log to "
                           "runtime/desktop/ in the home. Press Ctrl+C, or end this process, to stop "
-                          "everything.")).parse_args(argv)
+                          "everything."))
+    parser.add_argument("--page", action="store_true",
+                        help=langs.term("also serve the page, without a window or a browser; the default once "
+                                        "PAGE_HOST, PAGE_PORT or PAGE_PASSWORD is set"))
+    args = parser.parse_args(argv)
     home = homes.find_home()
     for stream in (sys.stdout, sys.stderr):
         # Under nohup or a service manager the lines must not wait in a buffer.
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(line_buffering=True)
+    from . import pageaccess
+    if args.page or pageaccess.read(home).wanted or pageaccess.in_container():
+        from .welcome import serve_headless
+        return serve_headless(home)
     if not env_get(home / ".env", "LLM_API_KEY"):
         from .setup_wizard import command
         print(langs.term(f"Finish the setup first: {command('start', home)}"))
+        print(langs.term(f"On a computer without a display, `{command('up --page', home)}` serves the setup "
+                         f"page instead; docs/deploy.md shows how to open it from another device."))
         return 2
     damaged = _memory_problem(home)
     if damaged:

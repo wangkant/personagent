@@ -45,7 +45,7 @@ La página local configura el conector directo. Los otros tres utilizan los mism
 | Personas cuyos mensajes directos se reenvían | `SATORI_DM_USERS` | `MATRIX_DM_USERS` | `dm_users` |
 | El servidor de la plataforma | `SATORI_URL` | `MATRIX_URL` | El propio de AstrBot |
 
-Una lista de grupos o de mensajes directos vacía no reenvía nada de ese tipo. `*` lo reenvía todo y marca los eventos con `"prefiltered": false`, lo que deja la decisión a `ACCESS_GROUPS` y `ACCESS_DM_USERS` del agente. El README de cada conector enumera sus demás ajustes.
+Una lista de grupos o de mensajes directos vacía no reenvía nada de ese tipo. `*` lo reenvía todo y marca los eventos con `"prefiltered": false`, lo que deja la decisión a `ACCESS_GROUPS` y `ACCESS_DM_USERS` del agente (y, en una plataforma incluida en `ACCESS_APPROVAL_PLATFORMS`, a la aprobación de los chats nuevos por parte del administrador). El README de cada conector enumera sus demás ajustes.
 
 ## Direcciones
 
@@ -91,7 +91,7 @@ Cada solicitud contiene un mensaje y devuelve las respuestas a dicho mensaje.
 }
 ```
 
-Los campos obligatorios son `platform`, `conversation_type` (`group` o `dm`), `sender_id`, `message_id` y `sent_at`, además de `conversation_id` para los grupos. `sent_at` es el momento en que la plataforma registró el mensaje, en segundos unix (también se acepta una cadena de dígitos, y la fracción se descarta). El personaje ve cada mensaje con esa hora. Un mensaje de grupo que tiene más de 10 minutos de antigüedad al llegar, dentro de los dos minutos siguientes al primer mensaje de la plataforma desde que se inició el agente, es un mensaje acumulado que se entrega tras un reinicio: se conserva como contexto y no se responde. Pasados esos dos minutos, un `sent_at` antiguo ya no retiene un mensaje, de modo que se sigue respondiendo a un conector cuyo reloj va atrasado. Envíe los id sin procesar de la plataforma. El agente añade el prefijo.
+Los campos obligatorios son `platform`, `conversation_type` (`group` o `dm`), `sender_id`, `message_id` y `sent_at`, además de `conversation_id` para los grupos. `sent_at` es el momento en que la plataforma registró el mensaje, en segundos unix (también se acepta una cadena de dígitos, y la fracción se descarta). El personaje ve cada mensaje con esa hora. Un mensaje de grupo que tiene más de 10 minutos de antigüedad al llegar, dentro de los dos minutos siguientes al primer mensaje de la plataforma desde que se inició el agente, es un mensaje acumulado que se entrega tras un reinicio: se conserva como contexto y no se responde. Pasados esos dos minutos, un `sent_at` antiguo ya no retiene un mensaje, de modo que se sigue respondiendo a un conector cuyo reloj va atrasado. Envíe los id sin procesar de la plataforma. El agente añade el prefijo. Un evento de grupo puede incluir `conversation_name`, el nombre del grupo cuando la plataforma lo proporciona; el administrador lo ve cuando el grupo espera aprobación.
 
 El conector define `addressed`. Su valor es verdadero cuando el mensaje menciona al bot, responde a uno de los mensajes del bot o va dirigido al bot según las propias reglas de la plataforma. El agente también detecta por sí mismo su nombre en el texto. Interpreta una cita de su propio mensaje, o una @mención al bot, como una reacción de la que puede aprender, por lo que debe definir `addressed` en las respuestas al bot. Una cita del mensaje de otro miembro nunca es una reacción al bot. Una mención al bot dentro de un mensaje reenviado no se dirige al bot, por lo que no debe definir `addressed` para ella.
 

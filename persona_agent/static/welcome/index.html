@@ -18,6 +18,10 @@
     <link rel="stylesheet" href="/assets/panels/cards.css" />
     <link rel="stylesheet" href="/assets/panels/lore.css" />
     <link rel="stylesheet" href="/assets/panels/detect.css" />
+    <link rel="stylesheet" href="/assets/panels/signin.css" />
+    <link rel="stylesheet" href="/assets/panels/models.css" />
+    <link rel="stylesheet" href="/assets/panels/approvals.css" />
+    <link rel="stylesheet" href="/assets/panels/tools.css" />
     <script src="/assets/welcome.js" defer></script>
     <script src="/assets/panels/health.js" defer></script>
     <script src="/assets/panels/runtime.js" defer></script>
@@ -30,6 +34,10 @@
     <script src="/assets/panels/cards.js" defer></script>
     <script src="/assets/panels/lore.js" defer></script>
     <script src="/assets/panels/detect.js" defer></script>
+    <script src="/assets/panels/signin.js" defer></script>
+    <script src="/assets/panels/models.js" defer></script>
+    <script src="/assets/panels/approvals.js" defer></script>
+    <script src="/assets/panels/tools.js" defer></script>
   </head>
   <body>
     <div class="shell">
@@ -86,7 +94,7 @@
               <option value="ru">Русский</option></select
             ><span class="status-pill" id="service-status" data-t="localReady"
               >本地应用已就绪</span
-            ><button type="button" class="quiet" id="exit" data-t="exit">退出</button>
+            ><button type="button" class="quiet" id="exit" data-t="exit">退出</button><button type="button" class="quiet" id="sign-out" data-t="signOut" hidden>退出登录</button>
           </div>
           <div class="window-controls" id="window-controls" hidden>
             <button type="button" id="window-minimize" aria-label="Minimize" data-t-aria="winMin" data-t-title="winMin">
@@ -362,6 +370,7 @@
               </button>
             </div>
           </div>
+          <div id="tools-root" class="panel-root side-card" hidden></div>
           <div id="tuning-root" class="panel-root side-card" hidden></div>
         </section>
         <section id="chat-view" class="page chat-page" hidden>
@@ -483,6 +492,7 @@
               </div>
             </div>
             <ul id="connected-list"></ul>
+            <div id="approvals-root" hidden></div>
             <div id="services-error" class="error" role="alert" hidden></div>
           </div>
           <div id="platform-groups">

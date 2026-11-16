@@ -64,7 +64,9 @@ dependencies = [
 # pywebview alone brings no toolkit on Linux, so Qt comes with it there.
 app = ["pywebview>=6,<7; sys_platform != 'linux'", "pywebview[qt]>=6,<7; sys_platform == 'linux'"]
 # What CI installs on top of the runtime dependencies.
-dev = ["pytest>=8,<10", "ruff>=0.6,<1"]
+# mcp: the official SDK, only so the tests can run personagent's own MCP client
+# against its servers; it supports Python 3.10 to 3.14, the same range as here.
+dev = ["pytest>=8,<10", "ruff>=0.6,<1", "mcp>=2.3,<3"]
 
 [project.scripts]
 personagent = "persona_agent.cli:main"

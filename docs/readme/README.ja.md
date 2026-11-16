@@ -70,6 +70,7 @@ Tavern キャラクターカードを 1 つのファイルとして取り込む�
 <td width="220" valign="top"><strong>すべてのプラットフォームと連携します。</strong></td>
 <td valign="top">
 22 のチャットプラットフォームを 1 つのページから、スマートフォンでのスキャンかいくつかの値を貼り付けるだけで連携できます。その多くはグループチャットにも DM にも対応します。<br>
+連携したプラットフォームでは、あなたが承認したチャットにだけ返信します。知らない人には短いコードが届き、あなたはそれをページで承認します。そこで **自分です** を選ぶと、あなたが管理者にもなります。<br>
 同じエージェントが、あなたのコンピューター上のウィンドウでも、Claude Code、Codex、DeepSeek Harness の中でも応答します。<br>
 Open WebUI や SillyTavern など、OpenAI 互換のアドレスを入力できるソフトウェアからも、同じキャラクターと会話できます。<br>
 その他のプラットフォームは、AstrBot、Koishi、Matrix のブリッジ、または自分で書くコネクターを通じて追加できます。
@@ -79,7 +80,21 @@ Open WebUI や SillyTavern など、OpenAI 互換のアドレスを入力でき�
 <td width="220" valign="top"><strong>お手持ちの環境で動作します。</strong></td>
 <td valign="top">
 OpenAI 互換の任意のモデルを使えます。OpenRouter の無料モデル、有料サービス、または Ollama で自分のコンピューター上で動かすモデルです。<br>
-何もインストールされていないコンピューターでも、1 行で自前の Python ごとインストールできます。ページの表示は英語、中国語、ほか 8 つの言語から選べ、モデルのキーを 1 つ貼り付ければチャットを始められます。Ollama や LM Studio がすでに動いていれば、クリック 1 回で始められます。
+何もインストールされていないコンピューターでも、1 行で自前の Python ごとインストールできます。ページの表示は英語、中国語、ほか 8 つの言語から選べ、ブラウザーで OpenRouter にサインインするか、モデルのキーを 1 つ貼り付ければチャットを始められます。Ollama や LM Studio がすでに動いていれば、クリック 1 回で始められます。
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>与えたツールを使います。</strong></td>
+<td valign="top">
+MCP サーバーの README にあるブロックを貼り付けると、キャラクターはそのサーバーのツールを通じて調べものや操作ができます。1 回の返信につき 1 つのツールを使い、自分の口調で答えます。<br>
+各ツールにはスイッチがあり、使用のきっかけにできる人を選べます。あなただけか、キャラクターが返信するすべての人です。
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>必要な場所で動きます。</strong></td>
+<td valign="top">
+自分のコンピューターのウィンドウでも、サーバー、NAS、Docker でも動き、`personagent service install` で動かし続けられます。<br>
+ページのパスワードを設定すれば、同じページをスマートフォンや別のコンピューターからサインインして開けます。
 </td>
 </tr>
 </table>
@@ -106,7 +121,7 @@ curl -LsSf https://raw.githubusercontent.com/wangkant/personagent/main/install.s
 
 Python 3.10 以降がすでにインストールされている場合は、`python -m pip install personagent` のあとに `personagent` を実行しても同じです。[uv](https://docs.astral.sh/uv/) があれば、`uvx personagent` で個別のインストールなしに実行できます。Windows では、ソースの ZIP をダウンロードして `start.bat` をダブルクリックする方法もあります。コンピューターに Python がない場合は、`start.bat` が Python も取得します。
 
-Windows では専用のウィンドウで開き、macOS と Linux ではブラウザーで開きます。モデルの API キーを貼り付けて **確認してチャットを開始** をクリックします。最初から選ばれている OpenRouter の無料モデルにもキーが必要です。キーは無料で、ページの **API キーを取得** から OpenRouter で取得できます。`personagent demo` はキーなしで、台本どおりの 3 つの場面を再生します。[はじめに](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)では、ページを画面ごとに説明しています。
+Windows では専用のウィンドウで開き、macOS と Linux ではブラウザーで開きます。**OpenRouter でサインイン** を押してブラウザーで承認するか、モデルの API キーを貼り付けて **確認してチャットを開始** をクリックします。最初から選ばれている OpenRouter の無料モデルにもアカウントかキーが必要ですが、どちらも無料です。`personagent demo` はキーなしで、台本どおりの 3 つの場面を再生します。[はじめに](https://github.com/wangkant/personagent/blob/main/docs/start.ja.md)では、ページを画面ごとに説明しています。
 
 personagent 自体は無料です。料金は、選んだモデルサービスに、そのサービスの料金で支払います。1 件のメッセージで複数回のモデルリクエストが発生することがあります。返信のほかに、グループで発言するかどうかの判断、返信がどう受け止められたかの判断、記憶の整理を行うことがあるためです。OpenRouter の無料モデルは 1 日 50 リクエストまで使え、無料のプロバイダーの中には受け取った内容を保持するところもあります。Ollama ならキーなしで自分のコンピューター上でモデルを動かせます。
 
@@ -125,6 +140,16 @@ personagent 自体は無料です。料金は、選んだモデルサービス�
 それ以外のものには、同じページの **その他のソフトウェア** があります。有効にして、アドレス、キー、モデル名を OpenAI 互換のアドレスを入力できるアプリにコピーすれば、そのアプリからキャラクターと会話でき、記憶もほかの場所と共通です。詳しくは[ガイド](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#その他のソフトウェア)を参照してください。ターミナルからは `personagent connect api` で同じ操作ができます。
 
 すでに AstrBot、Koishi、Matrix を運用している場合は、personagent をその背後でエージェントとして動かすことができます。[自分で動かすブリッジ](https://github.com/wangkant/personagent/blob/main/docs/guide.ja.md#自分で動かすブリッジ)、[Satori コネクター](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.ja.md)、[Matrix コネクター](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.ja.md)を参照してください。
+
+## サーバーで動かす
+
+```sh
+personagent page password --random   # ページのパスワードを表示
+PAGE_HOST=0.0.0.0 personagent up      # サービス、プラットフォーム、ページ（ポート 8090）を起動
+personagent service install           # 再起動後も動かし続ける（Linux、macOS）
+```
+
+任意のデバイスで `http://<サーバーのアドレス>:8090/` を開き、ページのパスワードでサインインします。パスワードがないと、ページはこのコンピューターの外に向けて待ち受けません。暗号化されていない HTTP では、通過するネットワークにパスワードが見えてしまうため、家庭内のネットワークの外では SSH トンネル、Tailscale、または HTTPS のリバースプロキシを使ってください。Docker では、リポジトリのクローンで `docker compose up -d` を実行するとビルドして起動し、`docker compose logs` に初回起動時に作られたパスワードが表示されます。イメージはリリースごとに `ghcr.io/wangkant/personagent` で公開されます。各手順は[デプロイガイド](https://github.com/wangkant/personagent/blob/main/docs/deploy.ja.md#サーバーnasdocker-で動かす)にあります。
 
 ## コーディングアシスタント
 

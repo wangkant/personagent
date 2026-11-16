@@ -84,6 +84,9 @@ SPEC = Spec(
         "said": ("あなたの言葉：",),
         "about": ("{name}について：",),
         "from": ("{name}から：",),
+        # Fixed lines, no model: a chat waiting for the admin's approval.
+        "approval_dm": ("管理者の承認をもらうまで、ここでは返信できないんです\n申請コードは {code} です\n管理者に伝えてもらえますか",),
+        "approval_group": ("このグループはまだ管理者の承認をもらっていないので、ここでは返信できないんです",),
     },
     failure_excuses=("ごめん、ちょっと固まってる",
                      "待って、回線が変かも",

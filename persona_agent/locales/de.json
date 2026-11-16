@@ -469,5 +469,18 @@
 "Any other software that accepts an OpenAI-compatible address: `{cmd} api`.": "Jede andere Software, die eine OpenAI-kompatible Adresse annimmt: `{cmd} api`.",
 "personagent demo: short scenes played with scripted answers": "personagent demo: kurze Szenen mit vorgegebenen Antworten",
 "personagent demo: the same scenes, played by your model ({model})": "personagent demo: dieselben Szenen, gespielt von Ihrem Modell ({model})",
-"unknown command {cmd}; /help lists the commands": "unbekannter Befehl {cmd}; /help zeigt die Befehle"
+"unknown command {cmd}; /help lists the commands": "unbekannter Befehl {cmd}; /help zeigt die Befehle",
+"Sign in with an OpenRouter account instead of pasting a key?": "Mit einem OpenRouter-Konto anmelden, statt einen Schlüssel einzufügen?",
+"Open this address in a browser on any device, sign in and approve:": "Öffnen Sie diese Adresse in einem Browser auf einem beliebigen Gerät, melden Sie sich an und geben Sie den Zugriff frei:",
+"OpenRouter creates a key for personagent, which is kept on this computer. Until you remove it at openrouter.ai/keys, the key can spend the credit of your OpenRouter account. The free models need no credit.": "OpenRouter erstellt einen Schlüssel für personagent, der auf diesem Computer gespeichert wird. Bis Sie ihn unter openrouter.ai/keys entfernen, kann der Schlüssel das Guthaben Ihres OpenRouter-Kontos verbrauchen. Die kostenlosen Modelle benötigen kein Guthaben.",
+"Code shown on the page (press Enter to paste a key instead)": "Auf der Seite angezeigter Code (Eingabetaste drücken, um stattdessen einen Schlüssel einzufügen)",
+"Signed in. OpenRouter created a key for personagent.": "Angemeldet. OpenRouter hat einen Schlüssel für personagent erstellt.",
+"That is not a code from the OpenRouter page.": "Das ist kein Code von der OpenRouter-Seite.",
+"OpenRouter did not accept the code; it may have expired after ten minutes.": "OpenRouter hat den Code nicht angenommen; möglicherweise ist er nach zehn Minuten abgelaufen.",
+"OpenRouter did not return a key.": "OpenRouter hat keinen Schlüssel zurückgegeben.",
+"personagent could not reach OpenRouter to collect the key.": "personagent konnte OpenRouter nicht erreichen, um den Schlüssel abzuholen.",
+"Paste a key instead.": "Fügen Sie stattdessen einen Schlüssel ein.",
+"New chats on {name} wait for your approval: whoever writes to the bot receives a short code, and `{list}` shows the requests. To answer everyone without approval instead, run `{open}`.": "Neue Chats auf {name} warten auf Ihre Freigabe: Wer dem Bot schreibt, erhält einen kurzen Code, und `{list}` zeigt die Anfragen. Um stattdessen allen ohne Freigabe zu antworten, führen Sie `{open}` aus.",
+"  it searched the web first": "  hat zuvor im Web gesucht",
+"  it used the tool {name} first": "  hat zuvor das Werkzeug {name} verwendet"
 }

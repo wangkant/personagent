@@ -31,7 +31,7 @@ _TRUE, _FALSE = ("1", "true", "yes", "on"), ("0", "false", "no", "off")
 class Field:
     key: str
     section: str
-    kind: str  # text, ids, model, url, secret, int, float, bool, choice, tz
+    kind: str  # text, ids, platforms, model, url, secret, int, float, bool, choice, tz
     default: object = ""
     low: float | None = None
     high: float | None = None
@@ -50,6 +50,8 @@ FIELDS: tuple[Field, ...] = (
     Field("ADMIN_IDS", "who", "ids"),
     Field("ACCESS_GROUPS", "who", "ids"),
     Field("ACCESS_DM_USERS", "who", "ids"),
+    # The running service reads it from .env as it changes (approvals.LiveEnv).
+    Field("ACCESS_APPROVAL_PLATFORMS", "who", "platforms", live=True),
     Field("PERSONA_TZ_OFFSET_HOURS", "talk", "tz"),
     Field("CHAT_ONLY_WHEN_CALLED", "talk", "bool", False),
     Field("CHAT_TRIGGER_COUNT", "talk", "int", 30, 1, 10_000),
@@ -205,6 +207,11 @@ def clean(field: Field, value, natives=()) -> str:
         return text
     if kind == "ids":
         return _ids(field.key, value, natives)
+    if kind == "platforms":
+        names = [n.lower() for n in access.split_ids(str(value or "").replace("，", ","))]
+        if len(names) > 100 or any(not _PLATFORM.fullmatch(n) or len(n) > 64 for n in names):
+            raise _bad(field.key)
+        return ",".join(dict.fromkeys(names))
     if kind == "url":
         return _url(field.key, value)
     if kind in ("model", "secret"):

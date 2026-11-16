@@ -469,5 +469,18 @@
 "The homeserver did not accept this user ID and password, so nothing was saved. Check both, for example by signing in to the bot account in Element.": "伺服器不接受此使用者 ID 和密碼，因此未儲存任何內容。請檢查這兩項，例如在 Element 中以機器人帳號登入確認。",
 "This homeserver does not accept a password sign-in from programs, so nothing was saved. Paste an access token of the bot account instead.": "此伺服器不接受程式以密碼登入，因此未儲存任何內容。請改為貼上機器人帳號的存取權杖。",
 "Enter either the bot account's user ID and password, or its access token.": "請填寫機器人帳號的使用者 ID 和密碼，或其存取權杖。",
-"The bot declined a room invitation from a Matrix ID other than yours. It accepts invitations only from the Matrix ID saved here; if you sent the invitation yourself, set Matrix up again and check your Matrix ID.": "機器人拒絕了來自其他 Matrix ID 的聊天室邀請。它只接受此處儲存的 Matrix ID 發出的邀請；若邀請是你本人發出的，請重新設定 Matrix 並檢查你的 Matrix ID。"
+"The bot declined a room invitation from a Matrix ID other than yours. It accepts invitations only from the Matrix ID saved here; if you sent the invitation yourself, set Matrix up again and check your Matrix ID.": "機器人拒絕了來自其他 Matrix ID 的聊天室邀請。它只接受此處儲存的 Matrix ID 發出的邀請；若邀請是你本人發出的，請重新設定 Matrix 並檢查你的 Matrix ID。",
+"Sign in with an OpenRouter account instead of pasting a key?": "要使用 OpenRouter 帳號登入，而不是貼上金鑰嗎？",
+"Open this address in a browser on any device, sign in and approve:": "請在任一裝置的瀏覽器中開啟以下位址，登入並核准：",
+"OpenRouter creates a key for personagent, which is kept on this computer. Until you remove it at openrouter.ai/keys, the key can spend the credit of your OpenRouter account. The free models need no credit.": "OpenRouter 會為 personagent 建立一組金鑰，並儲存在本機。在你於 openrouter.ai/keys 刪除該金鑰之前，它可以使用你 OpenRouter 帳號中的餘額。免費模型不需要餘額。",
+"Code shown on the page (press Enter to paste a key instead)": "頁面上顯示的代碼（直接按 Enter 則改為貼上金鑰）",
+"Signed in. OpenRouter created a key for personagent.": "登入成功，OpenRouter 已為 personagent 建立金鑰。",
+"That is not a code from the OpenRouter page.": "這不是 OpenRouter 頁面上顯示的代碼。",
+"OpenRouter did not accept the code; it may have expired after ten minutes.": "OpenRouter 不接受該代碼，代碼可能已超過十分鐘而失效。",
+"OpenRouter did not return a key.": "OpenRouter 未傳回金鑰。",
+"personagent could not reach OpenRouter to collect the key.": "personagent 無法連線到 OpenRouter 以取得金鑰。",
+"Paste a key instead.": "請改為貼上金鑰。",
+"New chats on {name} wait for your approval: whoever writes to the bot receives a short code, and `{list}` shows the requests. To answer everyone without approval instead, run `{open}`.": "{name} 上的新對話須經你核准：傳訊息給機器人的人會收到一組簡短代碼，使用 `{list}` 可查看申請。如需改為不經核准即回覆所有人，請執行 `{open}`。",
+"  it searched the web first": "  回覆前進行了網路搜尋",
+"  it used the tool {name} first": "  回覆前使用了工具 {name}"
 }

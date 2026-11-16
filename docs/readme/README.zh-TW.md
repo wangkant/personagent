@@ -70,6 +70,7 @@ personagent 在你自己的電腦上執行，儲存的所有內容都留在本�
 <td width="220" valign="top"><strong>連接你的所有平台</strong></td>
 <td valign="top">
 二十二個聊天平台都能在同一個頁面中連接，只需以手機掃描一次或填寫幾項；其中多數同時支援群組與私訊。<br>
+已連接的平台只回覆你核准過的對話：陌生人會收到一組簡短代碼，由你在頁面上核准；在那裡點選「這是我」，還會讓你成為管理員。<br>
 同一個 AI 代理也會在你電腦上的視窗中回覆，並可在 Claude Code、Codex 和 DeepSeek Harness 中使用。<br>
 任何可填寫 OpenAI 相容位址的軟體（例如 Open WebUI 或 SillyTavern）都能與同一個角色對話。<br>
 其他平台可透過 AstrBot、Koishi 或 Matrix 橋接接入，也可自行撰寫聯結器。
@@ -79,7 +80,21 @@ personagent 在你自己的電腦上執行，儲存的所有內容都留在本�
 <td width="220" valign="top"><strong>沿用你現有的資源</strong></td>
 <td valign="top">
 可使用任何相容 OpenAI 的模型：OpenRouter 的免費模型、付費服務，或以 Ollama 在你電腦上執行的模型。<br>
-在未安裝任何軟體的電腦上，一行指令即可完成安裝，並自備 Python。頁面提供中文、英文及另外八種語言；填入一個模型金鑰即可開始聊天，若已在執行 Ollama 或 LM Studio，只需點選一次。
+在未安裝任何軟體的電腦上，一行指令即可完成安裝，並自備 Python。頁面提供中文、英文及另外八種語言；在瀏覽器中透過 OpenRouter 登入，或填入一個模型金鑰，即可開始聊天，若已在執行 Ollama 或 LM Studio，只需點選一次。
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>使用你提供的工具</strong></td>
+<td valign="top">
+貼上 MCP 伺服器 README 中的設定，角色即可透過該伺服器的工具查詢資料或執行操作，每則回覆使用一個工具，並以自己的口吻回答。<br>
+每個工具都有開關，並可選擇誰能觸發使用：只有你，或角色回覆的任何人。
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>在你需要的地方執行</strong></td>
+<td valign="top">
+可以在你自己的電腦上以視窗執行，也可以在伺服器、NAS 或 Docker 中執行，並以 `personagent service install` 保持執行。<br>
+設定頁面密碼後，同一個頁面也能從手機或另一台電腦登入開啟。
 </td>
 </tr>
 </table>
@@ -106,7 +121,7 @@ curl -LsSf https://raw.githubusercontent.com/wangkant/personagent/main/install.s
 
 若已安裝 Python 3.10 或更新版本，也可以執行 `python -m pip install personagent`，再執行 `personagent`；若已安裝 [uv](https://docs.astral.sh/uv/)，`uvx personagent` 無須另行安裝即可執行。在 Windows 上，也可以下載原始碼 ZIP，再按兩下 `start.bat`；電腦上沒有 Python 時，它也會一併取得。
 
-在 Windows 上，它會在獨立的視窗中開啟；在 macOS 和 Linux 上則在瀏覽器中開啟。貼上模型 API 金鑰，再點選「驗證並開始聊天」。預設選取的 OpenRouter 免費模型同樣需要金鑰：此金鑰無須付費，可透過頁面上的「取得 API 金鑰」向 OpenRouter 申請。`personagent demo` 無須金鑰，會播放三段預先編寫的場景。[入門指南](https://github.com/wangkant/personagent/blob/main/docs/start.zh-TW.md)逐一說明了頁面中的各個畫面。
+在 Windows 上，它會在獨立的視窗中開啟；在 macOS 和 Linux 上則在瀏覽器中開啟。點選「透過 OpenRouter 登入」並在瀏覽器中核准，或貼上模型 API 金鑰，再點選「驗證並開始聊天」。預設選取的 OpenRouter 免費模型同樣需要帳號或金鑰，兩者都無須付費。`personagent demo` 無須金鑰，會播放三段預先編寫的場景。[入門指南](https://github.com/wangkant/personagent/blob/main/docs/start.zh-TW.md)逐一說明了頁面中的各個畫面。
 
 personagent 本身免費。費用支付給你選擇的模型服務，依該服務的價格計算。一則訊息可能產生不只一次模型請求：除了回覆本身，角色有時還會判斷是否在群組中發言、評估回覆得到的反應，或整理記憶。OpenRouter 的免費模型每天可請求 50 次，部分免費服務商會保留收到的內容；Ollama 在你自己的電腦上執行模型，不需要金鑰。
 
@@ -125,6 +140,16 @@ personagent 本身免費。費用支付給你選擇的模型服務，依該服�
 其他軟體則可使用同一頁面上的「其他軟體」：開啟後，將位址、金鑰和模型名稱複製到任何可填寫 OpenAI 相容位址的軟體中，該軟體即可與你的角色對話，記憶與其他各處相同。詳情請參閱[使用手冊](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#其他軟體)；在終端機中執行 `personagent connect api` 也可完成相同設定。
 
 若已在執行 AstrBot、Koishi 或 Matrix，personagent 可以接在其後方，僅作為 AI 代理運作：請參閱[你自己執行的橋接](https://github.com/wangkant/personagent/blob/main/docs/guide.zh-TW.md#你自己執行的橋接)、[Satori 聯結器](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.zh-TW.md)和 [Matrix 聯結器](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.zh-TW.md)。
+
+## 在伺服器上執行
+
+```sh
+personagent page password --random   # 產生並顯示頁面密碼
+PAGE_HOST=0.0.0.0 personagent up      # 啟動服務、已連接的平台和頁面（連接埠 8090）
+personagent service install           # 重新開機後自動執行（Linux、macOS）
+```
+
+在任一裝置上開啟 `http://<伺服器位址>:8090/`，並以頁面密碼登入。沒有密碼時，頁面不會在本機以外的位址監聽。未加密的 HTTP 會讓密碼暴露在所經過的網路上，因此在家用網路以外，請使用 SSH 通道、Tailscale 或啟用 HTTPS 的反向代理伺服器。使用 Docker 時，在儲存庫的複本中執行 `docker compose up -d` 即可建置並啟動，`docker compose logs` 會顯示首次啟動時產生的密碼；每次發布都會將映像檔推送至 `ghcr.io/wangkant/personagent`。各步驟請見[部署教學](https://github.com/wangkant/personagent/blob/main/docs/deploy.zh-TW.md#在伺服器nas-或-docker-中執行)。
 
 ## 程式設計助理
 

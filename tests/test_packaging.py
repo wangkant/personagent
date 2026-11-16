@@ -62,7 +62,8 @@ def test_the_workflows_take_pytest_and_ruff_from_the_dev_extra() -> None:
     extra = re.search(r"^dev = \[(.*?)\]", _pyproject(), re.MULTILINE).group(1)
     tools = [re.match(r"[A-Za-z0-9_.-]+", spec).group(0)
              for spec in re.findall(r'"([^"]+)"', extra)]
-    assert tools == ["pytest", "ruff"], tools
+    # mcp: the official SDK the tool tests run personagent's own client against.
+    assert tools == ["pytest", "ruff", "mcp"], tools
     for name in ("ci.yml", "release.yml"):
         text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
         assert 'python -m pip install -e ".[dev]"' in text, name

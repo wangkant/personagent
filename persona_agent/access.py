@@ -10,6 +10,9 @@ as "qq:<id>", and a CONNECTOR_QQ_PLATFORMS id as "<that platform>:<id>".
   answered, a QQ DM still needs the admin or an entry, and a forwarded
   platform is left to the connector unless it sent ``prefiltered: false``.
 * ACCESS_PAUSED_GROUPS: admitted groups where the agent stays silent for now.
+* ACCESS_APPROVAL_PLATFORMS: platforms where the two lists apply even while
+  empty: a sender or group in neither gets no model turn but a request the
+  admin approves (approvals.py), which adds it to the list.
 
 Imports only channels, so settings, preflight and the tools share it without
 an import cycle.
@@ -93,25 +96,15 @@ PAGE_OWNER_FILE = "page.owner"
 PAGE_PLATFORM = "browser"
 #: The platform of conversations held through the OpenAI-compatible API (chat_api).
 API_PLATFORM = "api"
-_page_owner: dict = {}
-
-
 def page_owner(runtime: Path) -> frozenset[str]:
-    """The page chat's sender as an admin id, or nothing; read again when the file changes."""
-    path = runtime / PAGE_OWNER_FILE
+    """The page chat's sender as an admin id, or nothing. Read each time: the file is
+    one short line, and its time cannot tell two writes inside one clock tick apart."""
     try:
-        stamp = path.stat().st_mtime_ns
-    except OSError:
+        sender = (runtime / PAGE_OWNER_FILE).read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
         return frozenset()
-    if _page_owner.get("key") != (str(path), stamp):
-        try:
-            sender = path.read_text(encoding="utf-8").strip()
-        except (OSError, UnicodeDecodeError):
-            sender = ""
-        usable = 8 <= len(sender) <= 64 and all(c.isascii() and (c.isalnum() or c in "-_") for c in sender)
-        _page_owner.update(key=(str(path), stamp),
-                           ids=frozenset({f"{PAGE_PLATFORM}:{sender}"}) if usable else frozenset())
-    return _page_owner["ids"]
+    usable = 8 <= len(sender) <= 64 and all(c.isascii() and (c.isalnum() or c in "-_") for c in sender)
+    return frozenset({f"{PAGE_PLATFORM}:{sender}"}) if usable else frozenset()
 
 
 def is_admin(user_id, admins: Iterable[str]) -> bool:
@@ -176,6 +169,44 @@ def dm_refusal(user_id, admins: Iterable[str], allowed: Iterable[str], *,
         return ""
     return (f"ACCESS_DM_USERS has no {platform} entries and the connector "
             f"did not filter (prefiltered=false)")
+
+
+#: The platforms where new chats wait for the admin's approval.
+APPROVAL_SETTING = "ACCESS_APPROVAL_PLATFORMS"
+#: Why a chat there is not answered yet, as the log says it.
+UNAPPROVED = f"waiting for the admin's approval ({APPROVAL_SETTING})"
+#: Platforms whose connection joins only the channels typed into its form,
+#: so every group there was chosen by the admin already.
+CHANNELS_LISTED_AT_CONNECT = frozenset({"twitch", "irc"})
+#: ...and of those, the ones without direct messages: approval holds nothing there.
+NOTHING_TO_APPROVE = frozenset({"twitch"})
+#: Never subject to approval: whoever sits at the page, and callers holding the API key.
+NEVER_APPROVED = frozenset({PAGE_PLATFORM, API_PLATFORM})
+
+
+def approval_platforms(value) -> frozenset[str]:
+    """ACCESS_APPROVAL_PLATFORMS as a set of lowercase platform names."""
+    return frozenset(p.lower() for p in split_ids(value)) - NEVER_APPROVED
+
+
+def awaits_dm_approval(user_id, platform: str, admins: Iterable[str], allowed: Iterable[str],
+                       platforms: Iterable[str], *, via_connector: bool) -> bool:
+    """Whether a DM sender is held for approval rather than answered or refused.
+    `platform` is the event's (a native connector's, for its bare ids)."""
+    uid = str(user_id or "")
+    if not uid or platform not in platforms or (not via_connector and ":" in uid):
+        return False
+    return not (is_admin(uid, admins) or uid in allowed)
+
+
+def awaits_group_approval(group_id, platform: str, allowed: Iterable[str],
+                          platforms: Iterable[str], *, via_connector: bool, user_id="") -> bool:
+    """Whether a group is held for approval rather than answered or refused."""
+    gid = str(group_id or "")
+    if (not gid or platform not in platforms or platform in CHANNELS_LISTED_AT_CONNECT
+            or (not via_connector and (":" in gid or ":" in str(user_id or "")))):
+        return False
+    return gid not in allowed
 
 
 class Identity:

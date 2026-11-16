@@ -5,6 +5,11 @@ PA.strings({
     runtime_bgCheck: "Keep running after the window is closed",
     runtime_bgHint: "The window moves to the notification area at the bottom right, and the character keeps answering. Open or quit personagent from its icon there.",
     runtime_bgOnlyWindow: "This is available in the app window on Windows. Here, personagent stops when it is closed.",
+    runtime_bgService: "personagent runs here without a window (personagent up, a service or a container) and keeps running after this page is closed.",
+    runtime_bgRemote: "Running in the background is set on the computer personagent runs on.",
+    runtime_update_container: "This copy runs in a container and is updated by pulling the new image. Where the container was started, run:",
+    runtime_update_service: "personagent runs here without a window, so it is not updated from this page. On the computer it runs on, run this command, then start personagent again (personagent service restart, when it runs as a service):",
+    runtime_update_remote: "Updating closes and reopens the app on the computer personagent runs on, so it is done there. On that computer, run:",
     runtime_bgHide: "Move to the background now",
     runtime_bgSaved: "Saved. Closing the window now keeps personagent running.",
     runtime_bgOff: "Saved. Closing the window now quits personagent.",
@@ -45,6 +50,7 @@ PA.strings({
     runtime_use_reply: "Replies",
     runtime_use_gate: "Deciding whether to speak in groups",
     runtime_use_search: "Web searches",
+    runtime_use_tools: "Deciding whether to use a tool",
     runtime_use_learning: "Learning (judging reactions and reviewing replies)",
     runtime_use_memory: "Memory tidy-up",
     runtime_use_check: "Model check at start-up",
@@ -60,6 +66,11 @@ PA.strings({
     runtime_bgSaved: "已保存。关闭窗口后 personagent 将继续运行。",
     runtime_bgOff: "已保存。关闭窗口即退出 personagent。",
     runtime_background_unavailable: "当前环境不支持通知区域图标。",
+    runtime_bgService: "personagent 在此处以无窗口方式运行（personagent up、系统服务或容器），关闭此页面后仍会继续运行。",
+    runtime_bgRemote: "后台运行需在运行 personagent 的电脑上设置。",
+    runtime_update_container: "此副本运行在容器中，需通过拉取新镜像进行更新。请在启动该容器的位置运行：",
+    runtime_update_service: "personagent 在此处以无窗口方式运行，因此无法通过此页面更新。请在运行它的电脑上运行以下命令，然后重新启动 personagent（如作为系统服务运行，请运行 personagent service restart）：",
+    runtime_update_remote: "更新时需关闭并重新打开运行 personagent 的电脑上的应用，因此请在该电脑上进行。请在该电脑上运行：",
     runtime_verTitle: "版本与更新",
     runtime_verNow: "当前版本：{version}。",
     runtime_verLatest: "已是最新版本。",
@@ -96,6 +107,7 @@ PA.strings({
     runtime_use_reply: "回复",
     runtime_use_gate: "判断是否在群聊中发言",
     runtime_use_search: "联网搜索",
+    runtime_use_tools: "判断是否使用工具",
     runtime_use_learning: "学习（评判反馈与评审回复）",
     runtime_use_memory: "整理记忆",
     runtime_use_check: "启动时检查模型",
@@ -107,7 +119,7 @@ PA.strings({
   const root = PA.$("runtime-root");
   // Refusals this panel has its own sentence for; any other code is the page's.
   const OWN = new Set(["background_unavailable", "update_none", "update_tool_missing",
-    "update_clone_changed", "update_not_started"]);
+    "update_clone_changed", "update_not_started", "update_service", "update_remote"]);
   let info = null,
     busy = "",
     logLines = null,
@@ -145,7 +157,8 @@ PA.strings({
     const card = make("div", "card side-card runtime-card");
     card.append(make("h2", "", PA.t("runtime_bgTitle")));
     if (!info.canHide) {
-      card.append(make("p", "field-note", PA.t("runtime_bgOnlyWindow")));
+      const why = info.remote ? "runtime_bgRemote" : info.headless ? "runtime_bgService" : "runtime_bgOnlyWindow";
+      card.append(make("p", "field-note", PA.t(why)));
       return card;
     }
     const label = make("label", "check");
@@ -228,7 +241,7 @@ PA.strings({
     card.append(line, make("p", "field-note", when));
     if (info.update && info.updateBlocked) {
       const why = info.updateBlocked === "update_by_hand"
-        ? `runtime_update_${info.updateKind === "uvx" ? "uvx" : "zip"}`
+        ? `runtime_update_${["uvx", "container"].includes(info.updateKind) ? info.updateKind : "zip"}`
         : `runtime_${info.updateBlocked}`;
       card.append(make("p", "field-note", PA.t(why)));
       if (info.update.command) {

@@ -154,6 +154,199 @@ the character or a rule took out of use.
 `personagent memory` lists what it remembers and forgets or restores an
 item.
 
+## On a server, a NAS or in Docker
+
+personagent runs well on a machine without a display. Three things make that
+work: the page answers other devices behind a password, `personagent service
+install` keeps it running after a reboot, and an image runs it all in Docker.
+
+### A server from zero
+
+1. Install personagent on the server ([Install and the home folder](guide.md#install-and-the-home-folder);
+   the one-line installers work over SSH).
+2. Set a page password. It is typed twice and not shown, and only its hash is
+   saved in `.env`:
+
+   ```
+   personagent page password
+   ```
+
+   On a server with no one at the keyboard, `personagent page password --random`
+   makes one and prints it once.
+3. Let other devices reach the page. Add to `<home>/.env`:
+
+   ```
+   PAGE_HOST=0.0.0.0
+   ```
+
+4. Start it: `personagent up`. It prints the link for this computer and the
+   address for other devices, port 8090 unless `PAGE_PORT` says otherwise.
+   Open that address on a phone or another computer, sign in, paste the model
+   key and connect the platforms. A platform's QR code shows on the page. The
+   character starts as soon as the key is saved.
+5. Keep it running: `personagent service install`.
+
+### The page from another device
+
+| Setting | Means |
+|---|---|
+| `PAGE_HOST` | Where the page listens. Blank or `127.0.0.1`: this computer only, through the link with its token, as before. `0.0.0.0` or `::`: other devices too. A specific address of this computer also works; the page then listens on `127.0.0.1` as well, for the link. |
+| `PAGE_PORT` | The page's port. Blank: a free one on loopback, 8090 beyond it. |
+| `PAGE_PASSWORD` | What other devices sign in with: 12 characters or more, 5 of them different. `personagent page password` saves its hash; a plain value from the environment (Docker) works too. |
+| `PAGE_ALLOWED_HOSTS` | Host names the page answers to, such as `nas.local` or a Tailscale name. Addresses typed as numbers and this computer's own name always work. |
+
+As for every setting, the environment wins over `.env`. Once any of
+`PAGE_HOST`, `PAGE_PORT` or `PAGE_PASSWORD` is set, `personagent up` serves
+the page as well; `personagent up --page` does so without them.
+`personagent start --no-browser` keeps its meaning: it prints the link and
+opens nothing, and while `up` serves the page it prints that page's link.
+
+**Refusals.** Beyond loopback the page will not start without a password, or
+with a weak one; it says which setting and how to fix it, and
+`personagent doctor` and the page's App view show the same. `doctor` has a
+row for the page: where it listens and whether a password guards it.
+
+**Signing in.** A device that is not this computer gets a sign-in page. The
+right password gives it a session cookie (HttpOnly, SameSite=Strict, Secure
+behind HTTPS) that lasts 7 days, until **Sign out** at the top of the page,
+until the password changes, or until personagent restarts. Each wrong
+password waits a second; five from one address within 15 minutes shut that
+address out for 15 minutes. The password is compared in constant time and is
+never logged or shown. The page's API accepts a session only with the page's
+own header and refuses requests from another site (`Origin`,
+`Sec-Fetch-Site`) and to a host name that is not allowed, so a web page
+cannot use the session or reach the page under a name of its own.
+
+**On this computer nothing changes.** A browser here that opens the link with
+the token is let in without a password. A request through a proxy counts as
+another device, even from this computer.
+
+**What another device cannot do.** Opening a folder, the desktop icon, start
+at sign-in, the app window's buttons, Quit and updating from the page act on
+the computer personagent runs on, so the page hides them there and the API
+refuses them. Backups, restores and resets work, and their files stay on that
+computer.
+
+### Reaching the page safely
+
+The page speaks plain HTTP. On a network you do not control, the password
+and the session can be read in transit, so use one of these:
+
+- **An SSH tunnel.** Leave `PAGE_HOST` blank, set `PAGE_PORT=8090` and run
+  `personagent up`. From your own computer:
+
+  ```
+  ssh -L 8090:127.0.0.1:8090 you@server
+  ```
+
+  then open the link `personagent up` printed (with `#token=`), or run
+  `personagent start --no-browser` on the server to print it again. No
+  password is needed: to the page, the tunnel is this computer.
+- **Tailscale or ZeroTier.** Both encrypt the traffic between your devices.
+  Set `PAGE_HOST=0.0.0.0` (or the server's Tailscale address) and the page
+  password, and add the server's Tailscale name to `PAGE_ALLOWED_HOSTS` if
+  you use it.
+- **A reverse proxy with HTTPS** (Caddy, nginx, a NAS's own). Keep
+  `PAGE_HOST=127.0.0.1`, set the page password and list the public name in
+  `PAGE_ALLOWED_HOSTS`. A request through the proxy then gets the sign-in
+  page, while the link on the server itself still works. With Caddy:
+
+  ```
+  personagent.example.com {
+      reverse_proxy 127.0.0.1:8090
+  }
+  ```
+
+  With nginx, pass the host and the scheme on:
+
+  ```
+  location / {
+      proxy_pass http://127.0.0.1:8090;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header X-Forwarded-Proto $scheme;
+  }
+  ```
+
+  Every caller then comes from the proxy's address, so five wrong passwords
+  from anyone pause sign-in for everyone for 15 minutes.
+
+personagent does not terminate TLS or open tunnels itself.
+
+### Keep it running: `personagent service`
+
+```
+personagent service install     # write the service and start it
+personagent service status
+personagent service restart     # after an update
+personagent service remove
+```
+
+Add `--dry-run` to print the file and the commands without running them.
+The service runs `personagent up` for this home with this installation's own
+Python, starts it again after a failure, and writes its output to
+`<home>/runtime/desktop/service.log`, readable by your user only. It is not
+installed while `up` could not stay up: before the setup is finished (unless
+the page is set up for another device), with a page that lacks a password,
+or under uvx, whose copy is temporary.
+
+- **Linux:** a systemd user unit, `~/.config/systemd/user/personagent.service`
+  (another home gets a suffix), enabled with `systemctl --user enable --now`.
+  A user's services stop when the user logs out and start only at login,
+  unless lingering is on: `install` runs `loginctl enable-linger`, and when
+  that is not allowed it prints the `sudo` command to run. With lingering, the
+  service starts at boot. Exit code 2 (setup not finished, a page without a
+  password, another personagent on this home) is not restarted. There is no
+  system-wide variant: the user unit runs as you, which is the safer choice.
+- **macOS:** a LaunchAgent, `~/Library/LaunchAgents/com.github.wangkant.personagent.plist`,
+  loaded with `launchctl bootstrap gui/<uid>`. It runs while you are logged
+  in, so on a Mac that serves others turn on automatic login.
+- **Windows:** the app's own start at sign-in (the same switch as on the
+  App view): personagent opens behind its notification-area icon when you
+  sign in. It is not restarted after a failure; `restart` is not available.
+
+### Docker
+
+```
+docker compose up -d
+docker compose logs personagent      # the page password the first start made
+```
+
+`compose.yaml` in the repository runs `ghcr.io/wangkant/personagent` with
+the page on port 8090 and the home in the volume `personagent-data`
+(mounted at `/data`). Without Compose:
+
+```
+docker run -d --name personagent --init --restart unless-stopped \
+  -p 8090:8090 -v personagent-data:/data ghcr.io/wangkant/personagent
+```
+
+First run: open `http://<server>:8090/`, sign in with the password from the
+log, paste a model key and connect the platforms; QR codes show on the page.
+The image runs `personagent up` as an unprivileged user with
+`PAGE_HOST=0.0.0.0` and `PAGE_PORT=8090`. Give `PAGE_PASSWORD` in the
+environment to choose your own password; without one, the first start
+makes one, saves only its hash in `/data/.env` and prints it once. Any other
+setting can be given in the environment too. `docker exec -it personagent
+personagent page password` changes the password, and `docker exec
+personagent personagent doctor` checks the setup. Map the port as
+`127.0.0.1:8090:8090` to keep the page to an SSH tunnel or a proxy on the
+same host. A bind mount must be writable by user 1000.
+
+What a container does not have:
+
+- **The app window, the notification-area icon and the desktop icon.** There
+  is no display; the page does all of it.
+- **Updating from the page.** The image is updated by pulling a new one:
+  `docker compose pull && docker compose up -d`. The update notice says so.
+- **The managed AstrBot** works: it needs glibc (the image is Debian), a
+  writable home (`/data`) and outbound access to PyPI and GitHub, or their
+  mirrors (`PERSONAGENT_MIRROR`). It is downloaded into the volume, several
+  hundred megabytes.
+
+The image's health check asks the page's `/health`. Images are published for
+amd64 and arm64 with each release, tagged with the version and `latest`.
+
 ## What the host must provide
 
 1. **A writable home.** Startup takes a lock at
@@ -210,9 +403,15 @@ Mattermost and Misskey ask for one or two values. The Advanced group needs a
 public address or other software: WeCom app, WeChat Official Account, QQ
 webhook, OneBot v11 (NapCat) and Satori. LINE is not offered.
 
-On both paths, a connected platform answers every group and DM the platform
-delivers to the bot. To limit it, use **Reply only in these groups** on the
-page (see [Keeping it in check](#keeping-it-in-check)). The page saves it as
+On both paths, a platform connected from the page or with `personagent
+connect <platform>` asks for approval of new chats: the character answers the
+admin and the people and groups the admin approved, and anyone else gets one
+fixed message with a short code and waits under **Connect apps** or in
+`personagent access` (see [Keeping it in check](#keeping-it-in-check)). A home
+set up before this version, or a platform switched to **Answer new chats
+without approval**, answers every group and DM the platform delivers to the
+bot. To limit it, use **Reply only in these groups** on the
+page. The page saves it as
 `ACCESS_GROUPS`, and `ACCESS_DM_USERS` does the same for private messages;
 once either lists an entry for a platform, that platform is restricted to its
 entries (see [personagent's own allowlists](#through-an-astrbot-you-already-run)). Ids
@@ -228,6 +427,21 @@ Everything below is done on the local page. The settings are under
 **Save advanced settings**. Each control's setting in `.env` is named in brackets; a change
 made in `.env` itself takes effect after personagent restarts.
 
+- **Approve new chats.** On a platform listed in
+  `ACCESS_APPROVAL_PLATFORMS` (every platform connected from this version
+  on), a chat in neither list below gets no reply from the model. A private
+  message receives one fixed line with a six-character code, at most once a
+  day; an unapproved group hears at most one line a day, and only when
+  someone addresses the character. The request waits on **Connect apps**
+  with **Approve**, **Decline** and, for a private message, **This is me**,
+  which also adds the account to `ADMIN_IDS`. On a server,
+  `personagent access` lists the requests and `personagent access approve
+  CODE` (or `decline`, `admin`) decides one. Approving adds the id to
+  `ACCESS_DM_USERS` or `ACCESS_GROUPS`, and the running service reads the
+  change from `.env` at once. Requests expire after three days; at most
+  twenty wait per platform. `personagent access policy <platform> open` (or
+  **Answer new chats without approval** on the page) turns approval off for
+  a platform.
 - **Make yourself the admin.** Send the character one private message, then
   under **Replies, admin and access** click **Choose from recent chats** and click
   **This is me** (`ADMIN_IDS`) next to your account. This is the way on the official QQ
@@ -349,6 +563,11 @@ plugins in its WebUI. On the personagent side:
   separately. A platform with no entries is left to the connector, and a
   single entry restricts that platform to its entries. A turn personagent
   refuses goes back unclaimed, so AstrBot's own model may answer it.
+- `ACCESS_APPROVAL_PLATFORMS` names the platforms (AstrBot's adapter names
+  here) where the two lists apply even while they have no entries for the
+  platform. A chat in neither is held for the admin's approval and claimed,
+  so AstrBot's own model stays quiet too; the plugin's `groups` and
+  `dm_users` still decide first what reaches personagent.
 
 For AstrBot in Docker or on another host, see
 [the user guide](guide.md#bridges-you-run-yourself).
@@ -451,8 +670,9 @@ See [Speaking first without the outbox](connectors.md#speaking-first-without-the
 
 Keep `SERVER_HOST=127.0.0.1` when the connector and personagent share a
 machine. A container counts as the same machine only with the host's network
-namespace or host networking. The local page and `personagent up` always
-bind to `127.0.0.1`. Otherwise:
+namespace or host networking. The agent started by the local page or
+`personagent up` always binds to `127.0.0.1`; the page itself follows
+`PAGE_HOST` ([The page from another device](#the-page-from-another-device)). Otherwise:
 
 1. Set `SERVER_HOST=0.0.0.0` (or `--host 0.0.0.0`) and `CONNECTOR_TOKEN`.
    Startup refuses a network bind without the token. It does not require
@@ -603,7 +823,10 @@ and why it stayed quiet. On a server, read the service log, and use
    on every path, and a bare-id QQ DM also needs the admin or an entry. A
    message they turn away goes back unclaimed, so through AstrBot its own
    model may answer it. personagent logs each refused conversation once, at
-   INFO, with the setting that refused it.
+   INFO, with the setting that refused it. On a platform listed in
+   `ACCESS_APPROVAL_PLATFORMS`, a chat in neither list waits for approval
+   instead: `personagent access` lists it, and the log says "waiting for the
+   admin's approval".
 6. **The model call fails.** A rejected key (401 or 403) or an empty balance
    (402 or an exhausted quota) logs one ERROR line naming the provider host
    and the setting to fix. Run `personagent doctor`. It sends a tiny request

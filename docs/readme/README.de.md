@@ -70,6 +70,7 @@ Auf eine Flut von Nachrichten kommt eine einzige Antwort.
 <td width="220" valign="top"><strong>Er verbindet sich mit all Ihren Plattformen.</strong></td>
 <td valign="top">
 Zweiundzwanzig Chat-Plattformen werden von einer einzigen Seite aus verbunden, per Scan mit dem Smartphone oder mit einigen eingefügten Werten. Die meisten unterstützen Gruppenchats ebenso wie Einzelchats.<br>
+Eine verbundene Plattform antwortet nur in Chats, die Sie freigeben: Wer Ihnen unbekannt ist, erhält einen kurzen Code, und Sie geben ihn auf der Seite frei, wo **Das bin ich** Sie zudem zum Administrator macht.<br>
 Derselbe Agent antwortet in einem Fenster auf Ihrem Rechner sowie in Claude Code, Codex und DeepSeek Harness.<br>
 Jede Software, die eine OpenAI-kompatible Adresse annimmt, etwa Open WebUI oder SillyTavern, kann mit derselben Figur sprechen.<br>
 Jede weitere Plattform lässt sich über eine AstrBot-, Koishi- oder Matrix-Brücke oder einen selbst geschriebenen Konnektor anbinden.
@@ -79,7 +80,21 @@ Jede weitere Plattform lässt sich über eine AstrBot-, Koishi- oder Matrix-Brü
 <td width="220" valign="top"><strong>Er funktioniert mit dem, was Sie haben.</strong></td>
 <td valign="top">
 Jedes OpenAI-kompatible Modell: die kostenlosen Modelle von OpenRouter, ein kostenpflichtiger Dienst oder ein Modell, das mit Ollama auf Ihrem eigenen Rechner läuft.<br>
-Eine Zeile installiert ihn mitsamt eigenem Python, auch auf einem Computer, auf dem nichts installiert ist. Die Seite gibt es auf Englisch, Chinesisch oder in acht weiteren Sprachen, und ein eingefügter Modellschlüssel startet den Chat; läuft bereits Ollama oder LM Studio, genügt ein Klick.
+Eine Zeile installiert ihn mitsamt eigenem Python, auch auf einem Computer, auf dem nichts installiert ist. Die Seite gibt es auf Englisch, Chinesisch oder in acht weiteren Sprachen, und die Anmeldung mit OpenRouter im Browser oder ein eingefügter Modellschlüssel startet den Chat; läuft bereits Ollama oder LM Studio, genügt ein Klick.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>Er nutzt die Werkzeuge, die Sie ihm geben.</strong></td>
+<td valign="top">
+Fügen Sie den Block aus dem README eines MCP-Servers ein, und die Figur kann über die Werkzeuge dieses Servers Dinge nachschlagen oder handeln, ein Werkzeug pro Antwort, und antwortet dabei mit ihrer eigenen Stimme.<br>
+Jedes Werkzeug hat einen Schalter und eine Auswahl, wer seine Verwendung auslösen darf: nur Sie oder jeder, dem die Figur antwortet.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>Er läuft dort, wo Sie ihn brauchen.</strong></td>
+<td valign="top">
+Auf Ihrem eigenen Computer in einem Fenster oder auf einem Server, einem NAS oder in Docker, dauerhaft in Betrieb gehalten durch `personagent service install`.<br>
+Ist ein Seitenpasswort festgelegt, öffnet sich dieselbe Seite auch auf einem Smartphone oder einem anderen Computer, geschützt durch eine Anmeldung.
 </td>
 </tr>
 </table>
@@ -106,7 +121,7 @@ Das Installationsprogramm bringt ein eigenes Python mit, installiert personagent
 
 Ist bereits Python 3.10 oder neuer installiert, erreichen Sie dasselbe mit `python -m pip install personagent` und anschließend `personagent`; mit [uv](https://docs.astral.sh/uv/) startet `uvx personagent` das Programm ohne gesonderten Installationsschritt. Unter Windows können Sie auch das Quellcode-ZIP herunterladen und `start.bat` doppelklicken; ist auf dem Computer kein Python vorhanden, lädt es dieses ebenfalls herunter.
 
-Unter Windows öffnet es sich in einem eigenen Fenster, unter macOS und Linux im Browser. Fügen Sie einen API-Schlüssel für das Modell ein und klicken Sie auf **Prüfen & Chat starten**. Die kostenlosen Modelle von OpenRouter sind vorausgewählt, brauchen aber ebenfalls einen Schlüssel: Er ist kostenlos und wird über **API-Schlüssel anfordern** auf der Seite bei OpenRouter erstellt. `personagent demo` spielt drei vorgefertigte Szenen ganz ohne Schlüssel ab. Die [Einstiegsanleitung](https://github.com/wangkant/personagent/blob/main/docs/start.de.md) erläutert die Seite Ansicht für Ansicht.
+Unter Windows öffnet es sich in einem eigenen Fenster, unter macOS und Linux im Browser. Klicken Sie auf **Mit OpenRouter anmelden** und geben Sie den Zugriff im Browser frei, oder fügen Sie einen API-Schlüssel für das Modell ein und klicken Sie auf **Prüfen & Chat starten**. Die kostenlosen Modelle von OpenRouter sind vorausgewählt, brauchen aber ebenfalls ein Konto oder einen Schlüssel; beides ist kostenlos. `personagent demo` spielt drei vorgefertigte Szenen ganz ohne Schlüssel ab. Die [Einstiegsanleitung](https://github.com/wangkant/personagent/blob/main/docs/start.de.md) erläutert die Seite Ansicht für Ansicht.
 
 personagent ist kostenlos. Sie bezahlen den gewählten Modelldienst zu dessen eigenen Preisen. Eine Nachricht kann mehr als eine Modellanfrage auslösen: Neben der Antwort entscheidet die Figur bisweilen, ob sie sich in einer Gruppe äußert, beurteilt, wie eine Antwort aufgenommen wurde, oder ordnet ihr Gedächtnis. Die kostenlosen Modelle von OpenRouter erlauben 50 Anfragen pro Tag, und manche kostenlosen Anbieter speichern, was sie erhalten; Ollama führt ein Modell ganz ohne Schlüssel auf Ihrem eigenen Computer aus.
 
@@ -125,6 +140,16 @@ Verbundene Plattformen werden bei jedem Start von personagent automatisch mitges
 Für alles andere gibt es auf derselben Seite **Andere Software**: Schalten Sie sie ein, kopieren Sie Adresse, Schlüssel und Modellnamen in eine beliebige Anwendung, die eine OpenAI-kompatible Adresse annimmt, und diese Anwendung spricht mit Ihrer Figur, mit demselben Gedächtnis wie überall sonst. Einzelheiten stehen im [Benutzerhandbuch](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#andere-software), und `personagent connect api` erledigt dasselbe im Terminal.
 
 Sie betreiben bereits AstrBot, Koishi oder Matrix? personagent kann als Agent dahinter laufen: siehe [Brücken, die Sie selbst betreiben](https://github.com/wangkant/personagent/blob/main/docs/guide.de.md#brücken-die-sie-selbst-betreiben), den [Satori-Konnektor](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.de.md) und den [Matrix-Konnektor](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.de.md).
+
+## Auf einem Server
+
+```sh
+personagent page password --random   # prints a password for the page
+PAGE_HOST=0.0.0.0 personagent up      # the service, the platforms and the page on port 8090
+personagent service install           # keep it running after a reboot (Linux, macOS)
+```
+
+Öffnen Sie `http://<Adresse des Servers>:8090/` auf einem beliebigen Gerät und melden Sie sich mit dem Seitenpasswort an. Ohne Passwort lauscht die Seite nur auf dem Computer selbst. Unverschlüsseltes HTTP legt das Passwort gegenüber jedem Netzwerk offen, das es durchquert; nutzen Sie daher außerhalb eines Heimnetzes einen SSH-Tunnel, Tailscale oder einen Reverse-Proxy mit HTTPS. In Docker baut und startet `docker compose up -d` in einem Klon des Repositorys alles, und `docker compose logs` zeigt das beim ersten Start erzeugte Passwort; Images werden mit jedem Release unter `ghcr.io/wangkant/personagent` veröffentlicht. Die [Deployment-Anleitung](https://github.com/wangkant/personagent/blob/main/docs/deploy.de.md#auf-einem-server-einem-nas-oder-in-docker) beschreibt jeden Schritt.
 
 ## Programmierassistenten
 

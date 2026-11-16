@@ -532,6 +532,8 @@ class _Trial:
                "reason": self._reason(lang, turn, what),
                "retryOf": self.chat.clip(turn.retry_of, 80),
                "learning": self._trace(lang, turn), "offered": [], "ledger": [], "candidates": []}
+        if what in ("named", "admin", "joined") and turn.lookup:
+            out["lookup"] = {"kind": turn.lookup.get("kind", ""), "name": turn.lookup.get("name", "")}
         if what in ("named", "admin", "joined"):
             out["offered"] = [{"reply": self.chat.clip(r.get("reply"), 80),
                                "better": self.chat.clip(r.get("better"), 80)} for r in turn.offered]

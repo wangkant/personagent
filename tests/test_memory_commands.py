@@ -172,7 +172,7 @@ def test_memory_replies_follow_the_language(tmp: Path) -> None:
     for lang, table in _COMMAND_REPLIES.items():
         for key, lines in table.items():
             for line in lines:
-                shown = line.format(name="阿杰") + "x"
+                shown = line.format(name="阿杰", code="K7M4QD") + "x"
                 check(f"{lang}/{key}: {line!r} survives the character policy",
                       TextProcessing._sanitize_reply(shown, lang, a.reply_style)
                       == shown)

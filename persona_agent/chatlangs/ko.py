@@ -82,6 +82,9 @@ SPEC = Spec(
         "said": ("네가 한 말: ",),
         "about": ("{name} 관련: ",),
         "from": ("출처 {name}: ",),
+        # Fixed lines, no model: a chat waiting for the admin's approval.
+        "approval_dm": ("관리자가 승인해 줘야 여기서 답장할 수 있어요\n신청 코드: {code}\n관리자에게 전해 주세요",),
+        "approval_group": ("이 그룹은 아직 관리자 승인을 받지 못해서 여기서는 답장할 수 없어요",),
     },
     failure_excuses=("잠깐만, 렉 걸렸어",
                      "어 잠시만, 인터넷이 이상해",

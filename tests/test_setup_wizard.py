@@ -345,7 +345,8 @@ def test_a_first_run_in_english(monkeypatch, tmp_path, capsys) -> None:
     check("first run: where the key comes from", "openrouter.ai/keys" in out)
     check("first run: the chat is handed over",
           any(c[0] == "chat" and c[1][-1] == "chat" for c in calls), repr(calls))
-    check("first run: nine questions including key visibility", len(script.prompts) == 9,
+    # Signing in with OpenRouter is offered first; Enter at its code falls back to the paste.
+    check("first run: eleven questions including sign-in and key visibility", len(script.prompts) == 11,
           "\n".join(script.prompts))
     check("first run: no English-only jargon left",
           "OpenAI-compatible" not in "".join(script.prompts))

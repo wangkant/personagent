@@ -61,6 +61,122 @@ Chaque appel nécessite l'en-tête `X-Personagent-Dashboard-Token` avec le jeton
 
 Le service ne sert aucune page. `GET /` répond par une courte note qui renvoie vers la page locale et vers `personagent learned`, et c'est aussi ce qu'ouvre désormais un ancien lien `?token=`. La page locale n'écoute que sur 127.0.0.1. Sur un serveur sans page locale, `personagent learned` affiche ce que le personnage a appris, ce qu'il observe et pourquoi, et vous permet d'adopter un élément, de l'écarter, de l'annuler, ou de rétablir ce que le personnage ou le délai a écarté et ce que le personnage ou une règle a retiré du service. `personagent memory` liste ce dont il se souvient, et oublie ou restaure un élément.
 
+## Sur un serveur, un NAS ou dans Docker
+
+personagent fonctionne bien sur une machine sans écran. Trois éléments le permettent : la page répond aux autres appareils derrière un mot de passe, `personagent service install` la maintient en fonctionnement après un redémarrage, et une image exécute l'ensemble dans Docker.
+
+### Un serveur en partant de zéro
+
+1. Installez personagent sur le serveur ([Installation et dossier personagent](guide.fr.md#installation-et-dossier-personagent) ; les programmes d'installation en une ligne fonctionnent via SSH).
+2. Définissez un mot de passe de la page. Il est saisi deux fois sans être affiché, et seule son empreinte est enregistrée dans `.env` :
+
+   ```
+   personagent page password
+   ```
+
+   Sur un serveur sans personne au clavier, `personagent page password --random` en génère un et l'affiche une seule fois.
+3. Rendez la page accessible aux autres appareils. Ajoutez à `<home>/.env` :
+
+   ```
+   PAGE_HOST=0.0.0.0
+   ```
+
+4. Démarrez-le : `personagent up`. Il affiche le lien pour cet ordinateur et l'adresse pour les autres appareils, sur le port 8090 sauf si `PAGE_PORT` en indique un autre. Ouvrez cette adresse sur un téléphone ou un autre ordinateur, connectez-vous, collez la clé de modèle et connectez les plateformes. Le code QR d'une plateforme s'affiche dans la page. Le personnage démarre dès que la clé est enregistrée.
+5. Maintenez-le en fonctionnement : `personagent service install`.
+
+### La page depuis un autre appareil
+
+| Réglage | Signification |
+|---|---|
+| `PAGE_HOST` | Où la page écoute. Vide ou `127.0.0.1` : cet ordinateur uniquement, via le lien muni de son jeton, comme auparavant. `0.0.0.0` ou `::` : les autres appareils aussi. Une adresse précise de cet ordinateur fonctionne également ; la page écoute alors aussi sur `127.0.0.1`, pour le lien. |
+| `PAGE_PORT` | Le port de la page. Vide : un port libre sur l'interface de bouclage, 8090 au-delà. |
+| `PAGE_PASSWORD` | Ce avec quoi les autres appareils se connectent : 12 caractères ou plus, dont 5 différents. `personagent page password` enregistre son empreinte ; une valeur en clair provenant de l'environnement (Docker) fonctionne aussi. |
+| `PAGE_ALLOWED_HOSTS` | Les noms d'hôte auxquels la page répond, comme `nas.local` ou un nom Tailscale. Les adresses saisies sous forme numérique et le nom propre de cet ordinateur fonctionnent toujours. |
+
+Comme pour tout réglage, l'environnement l'emporte sur `.env`. Dès que `PAGE_HOST`, `PAGE_PORT` ou `PAGE_PASSWORD` est défini, `personagent up` sert aussi la page ; `personagent up --page` le fait sans eux. `personagent start --no-browser` garde son sens : il affiche le lien sans rien ouvrir, et tant que `up` sert la page, il affiche le lien de cette page.
+
+**Refus.** Au-delà de l'interface de bouclage, la page ne démarre pas sans mot de passe, ni avec un mot de passe faible ; elle indique quel réglage est en cause et comment le corriger, et `personagent doctor` ainsi que la vue **Application** de la page affichent la même chose. `doctor` comporte une ligne pour la page : où elle écoute et si un mot de passe la protège.
+
+**Connexion.** Un appareil autre que cet ordinateur reçoit une page de connexion. Le bon mot de passe lui donne un cookie de session (HttpOnly, SameSite=Strict, Secure derrière HTTPS) valable 7 jours, jusqu'à **Se déconnecter** en haut de la page, jusqu'au changement du mot de passe ou jusqu'au redémarrage de personagent. Chaque mauvais mot de passe impose une attente d'une seconde ; cinq depuis une même adresse en 15 minutes bloquent cette adresse pendant 15 minutes. Le mot de passe est comparé en temps constant et n'est jamais journalisé ni affiché. L'API de la page n'accepte une session qu'avec l'en-tête propre à la page et refuse les requêtes provenant d'un autre site (`Origin`, `Sec-Fetch-Site`) et celles adressées à un nom d'hôte non autorisé : une page web ne peut donc ni utiliser la session ni atteindre la page sous un nom qui lui serait propre.
+
+**Sur cet ordinateur, rien ne change.** Un navigateur de cet ordinateur qui ouvre le lien muni du jeton est admis sans mot de passe. Une requête passant par un proxy compte comme provenant d'un autre appareil, même depuis cet ordinateur.
+
+**Ce qu'un autre appareil ne peut pas faire.** Ouvrir un dossier, l'icône du Bureau, le démarrage à l'ouverture de session, les boutons de la fenêtre de l'application, Quitter et la mise à jour depuis la page agissent sur l'ordinateur où s'exécute personagent : la page les masque donc sur un autre appareil et l'API les refuse. Les sauvegardes, restaurations et réinitialisations fonctionnent, et leurs fichiers restent sur cet ordinateur.
+
+### Accéder à la page en toute sécurité
+
+La page utilise le HTTP simple. Sur un réseau que vous ne contrôlez pas, le mot de passe et la session peuvent être lus en transit ; utilisez donc l'une de ces solutions :
+
+- **Un tunnel SSH.** Laissez `PAGE_HOST` vide, définissez `PAGE_PORT=8090` et lancez `personagent up`. Depuis votre propre ordinateur :
+
+  ```
+  ssh -L 8090:127.0.0.1:8090 you@server
+  ```
+
+  puis ouvrez le lien qu'a affiché `personagent up` (avec `#token=`), ou lancez `personagent start --no-browser` sur le serveur pour l'afficher à nouveau. Aucun mot de passe n'est nécessaire : pour la page, le tunnel est cet ordinateur.
+- **Tailscale ou ZeroTier.** Tous deux chiffrent le trafic entre vos appareils. Définissez `PAGE_HOST=0.0.0.0` (ou l'adresse Tailscale du serveur) et le mot de passe de la page, et ajoutez le nom Tailscale du serveur à `PAGE_ALLOWED_HOSTS` si vous l'utilisez.
+- **Un proxy inverse en HTTPS** (Caddy, nginx, celui d'un NAS). Gardez `PAGE_HOST=127.0.0.1`, définissez le mot de passe de la page et indiquez le nom public dans `PAGE_ALLOWED_HOSTS`. Une requête passant par le proxy reçoit alors la page de connexion, tandis que le lien sur le serveur lui-même fonctionne toujours. Avec Caddy :
+
+  ```
+  personagent.example.com {
+      reverse_proxy 127.0.0.1:8090
+  }
+  ```
+
+  Avec nginx, transmettez l'hôte et le schéma :
+
+  ```
+  location / {
+      proxy_pass http://127.0.0.1:8090;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_set_header X-Forwarded-Proto $scheme;
+  }
+  ```
+
+  Toutes les requêtes proviennent alors de l'adresse du proxy : cinq mauvais mots de passe, de qui que ce soit, suspendent la connexion pour tout le monde pendant 15 minutes.
+
+personagent ne termine pas lui-même le TLS et n'ouvre pas de tunnels.
+
+### Le maintenir en fonctionnement : `personagent service`
+
+```
+personagent service install     # write the service and start it
+personagent service status
+personagent service restart     # after an update
+personagent service remove
+```
+
+Ajoutez `--dry-run` pour afficher le fichier et les commandes sans les exécuter. Le service exécute `personagent up` pour ce dossier personagent avec le Python propre à cette installation, le redémarre après une défaillance et écrit sa sortie dans `<home>/runtime/desktop/service.log`, lisible par votre seul utilisateur. Il n'est pas installé tant que `up` ne pourrait pas rester actif : avant la fin de la configuration (sauf si la page est configurée pour un autre appareil), avec une page sans mot de passe, ou sous uvx, dont la copie est temporaire.
+
+- **Linux :** une unité utilisateur systemd, `~/.config/systemd/user/personagent.service` (un autre dossier personagent reçoit un suffixe), activée avec `systemctl --user enable --now`. Les services d'un utilisateur s'arrêtent quand il se déconnecte et ne démarrent qu'à sa connexion, sauf si le mode « linger » est activé : `install` lance `loginctl enable-linger` et, si ce n'est pas autorisé, affiche la commande `sudo` à exécuter. Avec ce mode, le service démarre au démarrage du système. Le code de sortie 2 (configuration non terminée, page sans mot de passe, autre personagent sur ce dossier) n'entraîne pas de redémarrage. Il n'existe pas de variante à l'échelle du système : l'unité utilisateur s'exécute sous votre compte, ce qui est le choix le plus sûr.
+- **macOS :** un LaunchAgent, `~/Library/LaunchAgents/com.github.wangkant.personagent.plist`, chargé avec `launchctl bootstrap gui/<uid>`. Il s'exécute tant que votre session est ouverte : sur un Mac qui sert d'autres personnes, activez l'ouverture de session automatique.
+- **Windows :** le démarrage à l'ouverture de session propre à l'application (le même interrupteur que dans la vue **Application**) : personagent s'ouvre derrière son icône de la zone de notification lorsque vous ouvrez votre session. Il n'est pas redémarré après une défaillance ; `restart` n'est pas disponible.
+
+### Docker
+
+```
+docker compose up -d
+docker compose logs personagent      # the page password the first start made
+```
+
+`compose.yaml` dans le dépôt exécute `ghcr.io/wangkant/personagent` avec la page sur le port 8090 et le dossier personagent dans le volume `personagent-data` (monté sur `/data`). Sans Compose :
+
+```
+docker run -d --name personagent --init --restart unless-stopped \
+  -p 8090:8090 -v personagent-data:/data ghcr.io/wangkant/personagent
+```
+
+Premier lancement : ouvrez `http://<server>:8090/`, connectez-vous avec le mot de passe figurant dans le journal, collez une clé de modèle et connectez les plateformes ; les codes QR s'affichent dans la page. L'image exécute `personagent up` sous un utilisateur non privilégié, avec `PAGE_HOST=0.0.0.0` et `PAGE_PORT=8090`. Indiquez `PAGE_PASSWORD` dans l'environnement pour choisir votre propre mot de passe ; sinon, le premier démarrage en génère un, n'enregistre que son empreinte dans `/data/.env` et l'affiche une seule fois. Tout autre réglage peut aussi être indiqué dans l'environnement. `docker exec -it personagent personagent page password` change le mot de passe, et `docker exec personagent personagent doctor` vérifie la configuration. Publiez le port sous la forme `127.0.0.1:8090:8090` pour réserver la page à un tunnel SSH ou à un proxy sur le même hôte. Un montage de dossier (bind mount) doit être accessible en écriture à l'utilisateur 1000.
+
+Ce dont un conteneur ne dispose pas :
+
+- **La fenêtre de l'application, l'icône de la zone de notification et l'icône du Bureau.** Il n'y a pas d'écran ; la page fait tout cela.
+- **La mise à jour depuis la page.** L'image se met à jour en en récupérant une nouvelle : `docker compose pull && docker compose up -d`. L'avis de mise à jour l'indique.
+- **L'AstrBot géré** fonctionne : il nécessite glibc (l'image est basée sur Debian), un dossier personagent accessible en écriture (`/data`) et un accès sortant à PyPI et GitHub, ou à leurs miroirs (`PERSONAGENT_MIRROR`). Il est téléchargé dans le volume, soit plusieurs centaines de mégaoctets.
+
+Le contrôle de santé de l'image interroge `/health` de la page. Des images sont publiées pour amd64 et arm64 à chaque version, étiquetées avec le numéro de version et `latest`.
+
 ## Ce que l'hôte doit fournir
 
 1. **Un dossier personagent accessible en écriture.** Le démarrage prend un verrou sur `<home>/.personagent.instance.lock`, hors de `runtime/`. Avec un dossier personagent en lecture seule, le démarrage échoue.
@@ -88,12 +204,13 @@ Sur un serveur sans écran, connectez depuis un terminal les plateformes que per
 
 **Via l'AstrBot géré.** Toutes les autres plateformes passent par un AstrBot que personagent télécharge, avec son propre runtime Python 3.12, et exécute sans interface. Il n'a pas de tableau de bord et ne nécessite pas de seconde connexion. KOOK, Feishu/Lark (connexion longue), DingTalk (mode Stream), Slack (Socket Mode, et le lien du guide préremplit l'application), bot IA WeCom (connexion longue), Mattermost et Misskey demandent une ou deux valeurs. Le groupe Avancé nécessite une adresse publique ou un autre logiciel : application WeCom, compte officiel WeChat, webhook QQ, OneBot v11 (NapCat) et Satori. LINE n'est pas proposé.
 
-Sur les deux voies, une plateforme connectée répond à chaque groupe et message privé que la plateforme transmet au bot. Pour le limiter, utilisez **Répondre uniquement dans ces groupes** sur la page (voir [Garder le contrôle](#garder-le-contrôle)). La page l'enregistre sous `ACCESS_GROUPS`, et `ACCESS_DM_USERS` joue le même rôle pour les messages privés ; dès que l'un des deux contient une entrée pour une plateforme, cette plateforme est limitée à ses entrées (voir [les listes d'autorisation de personagent](#via-un-astrbot-que-vous-exécutez-déjà)). Les identifiants arrivent sous la forme `<platform>:<id>`, par exemple `qq_official:<openid>`, `weixin_oc:<id>`, `telegram:<id>` et `discord:<id>`. Le bot QQ officiel voit des openids, pas des numéros QQ. Connecter une plateforme directement supprime la connexion AstrBot de cette même plateforme.
+Sur les deux voies, une plateforme connectée depuis la page ou avec `personagent connect <platform>` demande l'approbation des nouvelles discussions : le personnage répond à l'administrateur ainsi qu'aux personnes et aux groupes que l'administrateur a approuvés, et toute autre personne reçoit un message fixe avec un code court et attend dans **Connecter des plateformes** ou dans `personagent access` (voir [Garder le contrôle](#garder-le-contrôle)). Un dossier personagent configuré avant cette version, ou une plateforme passée à **Répondre aux nouvelles discussions sans approbation**, répond à chaque groupe et message privé que la plateforme transmet au bot. Pour le limiter, utilisez **Répondre uniquement dans ces groupes** sur la page. La page l'enregistre sous `ACCESS_GROUPS`, et `ACCESS_DM_USERS` joue le même rôle pour les messages privés ; dès que l'un des deux contient une entrée pour une plateforme, cette plateforme est limitée à ses entrées (voir [les listes d'autorisation de personagent](#via-un-astrbot-que-vous-exécutez-déjà)). Les identifiants arrivent sous la forme `<platform>:<id>`, par exemple `qq_official:<openid>`, `weixin_oc:<id>`, `telegram:<id>` et `discord:<id>`. Le bot QQ officiel voit des openids, pas des numéros QQ. Connecter une plateforme directement supprime la connexion AstrBot de cette même plateforme.
 
 ## Garder le contrôle
 
 Tout ce qui suit se fait sur la page locale. Les réglages se trouvent sous **Personnage et réglages** → **Réglages avancés** et s'appliquent lorsque vous cliquez sur **Enregistrer les réglages avancés**. Le nom de chaque réglage dans `.env` figure entre parenthèses ; une modification faite directement dans `.env` prend effet au redémarrage de personagent.
 
+- **Approuver les nouvelles discussions.** Sur une plateforme listée dans `ACCESS_APPROVAL_PLATFORMS` (toute plateforme connectée à partir de cette version), une discussion qui ne figure dans aucune des deux listes ci-dessous ne reçoit aucune réponse du modèle. Un message privé reçoit une ligne fixe avec un code de six caractères, au plus une fois par jour ; un groupe non approuvé entend au plus une ligne par jour, et seulement lorsque quelqu'un s'adresse au personnage. La demande attend dans **Connecter des plateformes** avec **Approuver**, **Refuser** et, pour un message privé, **C'est moi**, qui ajoute aussi le compte à `ADMIN_IDS`. Sur un serveur, `personagent access` liste les demandes et `personagent access approve CODE` (ou `decline`, `admin`) en tranche une. L'approbation ajoute l'identifiant à `ACCESS_DM_USERS` ou à `ACCESS_GROUPS`, et le service en cours lit aussitôt la modification dans `.env`. Les demandes expirent au bout de trois jours ; au plus vingt attendent par plateforme. `personagent access policy <platform> open` (ou **Répondre aux nouvelles discussions sans approbation** sur la page) désactive l'approbation pour une plateforme.
 - **Vous désigner comme administrateur.** Envoyez un message privé au personnage, puis, sous **Réponses, administrateur et accès**, cliquez sur **Choisir parmi les discussions récentes** et sur **C'est moi** (`ADMIN_IDS`) à côté de votre compte. C'est la méthode à suivre avec le bot QQ officiel, qui voit un openid et non votre numéro QQ.
 - **Ne répondre que dans certains groupes.** Dans la même liste, cochez **Répondre dans ce groupe** pour chaque groupe à conserver, ou saisissez les identifiants sous **Répondre uniquement dans ces groupes** (`ACCESS_GROUPS`). Dès qu'un groupe d'une plateforme est listé, le personnage ne répond plus dans les autres groupes de cette plateforme. Un groupe où se trouve le bot QQ officiel connecté par code QR a un identifiant de la forme `qq_official:<id>`, que QQ n'affiche pas : mentionnez le bot une fois dans ce groupe, puis choisissez le groupe avec **Choisir parmi les discussions récentes**.
 - **Suspendre toutes les réponses.** Désactivez **Répondre aux messages** (`AGENT_ENABLED`), le premier réglage de **Réponses, administrateur et accès** ; l'enregistrement demande une confirmation. Le personnage reste connecté et ne répond à rien tant que vous ne le réactivez pas.
@@ -135,6 +252,7 @@ Le plugin refuse par défaut. Remplissez `groups`, et `dm_users` pour les messag
 - `CONNECTOR_TOKEN` authentifie chaque requête. La requête porte l'en-tête `X-Personagent-Token` et un HMAC-SHA256, avec le jeton comme clé, sur `timestamp.nonce.body`, et une protection contre le rejeu rejette les nonces réutilisés. Une requête capturée ne peut être ni rejouée ni modifiée. Le jeton sert aussi de clé de signature ; ne le consignez donc jamais dans les journaux et remplacez-le en cas de fuite. Il est facultatif sur un seul hôte et obligatoire entre hôtes.
 - `ADMIN_IDS` liste les comptes de l'administrateur sous la forme `<platform>:<id>` (`telegram:12345`, `discord:4242`). Un identifiant seul ou `qq:<id>` est un numéro QQ. `ADMIN_NAME` définit le nom de l'administrateur. Tous les comptes listés appartiennent à une seule personne, envers qui le personnage adopte un ton plus proche en groupe et en message privé, qui peut gérer ce que le bot retient d'un groupe et peut lui enseigner seule. Via AstrBot, la plateforme est le nom d'adaptateur qu'affiche AstrBot, et `/sid` dans une discussion affiche un identifiant.
 - `ACCESS_GROUPS` et `ACCESS_DM_USERS` permettent à personagent de restreindre lui-même une plateforme, sous la même forme `<platform>:<id>`. Chaque plateforme est restreinte séparément. Une plateforme sans entrée est laissée au connecteur, et une seule entrée limite cette plateforme à ses entrées. Un tour que personagent refuse repart sans être pris en charge, donc le modèle d'AstrBot peut y répondre.
+- `ACCESS_APPROVAL_PLATFORMS` nomme les plateformes (ici avec les noms d'adaptateur d'AstrBot) où les deux listes s'appliquent même lorsqu'elles n'ont aucune entrée pour la plateforme. Une discussion qui ne figure dans aucune est retenue pour l'approbation de l'administrateur et prise en charge, si bien que le modèle d'AstrBot reste lui aussi silencieux ; `groups` et `dm_users` du plugin décident toujours en premier de ce qui atteint personagent.
 
 Pour AstrBot dans Docker ou sur un autre hôte, voir [le guide d'utilisation](guide.fr.md#ponts-que-vous-exécutez-vous-même).
 
@@ -179,7 +297,7 @@ Pour parler en premier en message privé sans la boîte d'envoi, votre propre pl
 
 ## Exposer les endpoints
 
-Gardez `SERVER_HOST=127.0.0.1` quand le connecteur et personagent partagent une machine. Un conteneur compte comme la même machine seulement avec l'espace de noms réseau de l'hôte ou le réseau hôte. La page locale et `personagent up` écoutent toujours sur `127.0.0.1`. Sinon :
+Gardez `SERVER_HOST=127.0.0.1` quand le connecteur et personagent partagent une machine. Un conteneur compte comme la même machine seulement avec l'espace de noms réseau de l'hôte ou le réseau hôte. L'agent démarré par la page locale ou par `personagent up` écoute toujours sur `127.0.0.1` ; la page elle-même suit `PAGE_HOST` ([La page depuis un autre appareil](#la-page-depuis-un-autre-appareil)). Sinon :
 
 1. Définissez `SERVER_HOST=0.0.0.0` (ou `--host 0.0.0.0`) et `CONNECTOR_TOKEN`. Le démarrage refuse une écoute réseau sans le jeton. Il n'exige pas `QQ_ONEBOT_SECRET`, mais sans lui le `/v1/onebot` obsolète est désactivé sur une écoute réseau. Chaque requête vers lui reçoit 403 `onebot_disabled`, et le journal indique pourquoi une fois.
 2. Placez devant un proxy inverse HTTPS ou un tunnel privé. Tous les connecteurs de ce dépôt n'envoient que vers le bouclage, ou vers HTTPS avec un jeton défini. Le plugin AstrBot journalise tout le reste comme `refusing unsafe personagent_url`, et les connecteurs Satori et Matrix refusent de démarrer.
@@ -219,7 +337,7 @@ Les causes sont listées de la plus courante à la moins courante. Quand la page
 2. **L'agent est désactivé.** La bannière de `personagent run` affiche `agent: OFF`, avec la raison et la solution. Sans `LLM_API_KEY`, ajoutez une clé sur la page locale (ou définissez `LLM_API_KEY`) et redémarrez. Avec `AGENT_ENABLED=false`, mettez-le à `true` dans `<home>/.env` et redémarrez. D'ici là, chaque événement reçoit `owned: false`, et le premier journalise une seule ligne ERROR avec le même conseil.
 3. **Le modèle d'AstrBot répond à la place.** Le plugin s'est rabattu parce que la requête a échoué, que personagent a écarté le message (point 5) ou que l'agent est désactivé (point 2). Le journal d'AstrBot affiche `refusing unsafe personagent_url`, `agent refused the request (403): <message>` (ou un autre statut, voir le tableau ci-dessous) ou `timed out waiting for the agent`. `timeout_s` doit couvrir l'anti-rebond et les appels au modèle du tour, ainsi que le tour qui réfléchissait à l'arrivée du message. Les appels au modèle d'un tour se partagent 1,5 × `LLM_TIMEOUT_S`, dans un groupe comme en message privé ; maintenez donc 3 × `LLM_TIMEOUT_S` en dessous de cette valeur. Sa valeur par défaut (420) couvre celle de l'agent (3 × 120 = 360 s). Augmentez-la quand vous augmentez `LLM_TIMEOUT_S`.
 4. **Il n'a pas été appelé.** Dans un groupe, il répond à son nom (`PERSONA_NAME`) ou à un @. Sinon, il attend assez de conversation (`CHAT_TRIGGER_COUNT`, 30 messages par défaut) et peut quand même passer. De 02:00 à 07:00 dans son fuseau horaire, il reste le plus souvent en retrait des discussions où il n'a pas été appelé. Le fuseau horaire est `PERSONA_TZ_OFFSET_HOURS`. Laissé vide, c'est UTC+8 quand `AGENT_LANG` vaut `zh` ou `zh-TW`, et sinon le décalage de cette machine. Un message de groupe qui arrive plus de 10 minutes après son envoi, dans les deux minutes qui suivent le premier message de sa plateforme depuis le démarrage, fait partie d'un arriéré : il est conservé comme contexte et ne reçoit pas de réponse, et le journal du service l'indique. Activité montre la raison de chaque tour récent. Pour observer la même décision hors ligne, exécutez `personagent chat --trigger 4`.
-5. **Les listes d'autorisation de personagent.** `ACCESS_GROUPS` et `ACCESS_DM_USERS` s'appliquent sur toutes les voies, et un message privé QQ à identifiant nu nécessite aussi l'administrateur ou une entrée. Un message qu'elles écartent repart sans être pris en charge, donc via AstrBot son modèle peut y répondre. personagent journalise chaque conversation refusée une fois, en INFO, avec le réglage qui l'a refusée.
+5. **Les listes d'autorisation de personagent.** `ACCESS_GROUPS` et `ACCESS_DM_USERS` s'appliquent sur toutes les voies, et un message privé QQ à identifiant nu nécessite aussi l'administrateur ou une entrée. Un message qu'elles écartent repart sans être pris en charge, donc via AstrBot son modèle peut y répondre. personagent journalise chaque conversation refusée une fois, en INFO, avec le réglage qui l'a refusée. Sur une plateforme listée dans `ACCESS_APPROVAL_PLATFORMS`, une discussion qui ne figure dans aucune des deux listes attend plutôt l'approbation : `personagent access` l'affiche, et le journal indique « waiting for the admin's approval ».
 6. **L'appel au modèle échoue.** Une clé rejetée (401 ou 403) ou un solde vide (402 ou quota épuisé) journalise une ligne ERROR qui nomme l'hôte du fournisseur et le réglage à corriger. Exécutez `personagent doctor`. Il envoie une toute petite requête à chaque endpoint de modèle et affiche le statut, ce qui détecte aussi un `LLM_BASE_URL` ou `LLM_MODEL` erroné. Lorsque le modèle principal dépasse le délai ou que la connexion est coupée, et que `LLM_FALLBACK_MODEL` désigne un autre modèle, l'appel passe immédiatement au modèle de secours, de sorte que le tour reçoit tout de même une réponse dans le temps imparti. Une erreur qu'un fournisseur envoie à l'intérieur d'une réponse normale, comme les défaillances en amont d'OpenRouter, est traitée comme l'erreur HTTP correspondante. Tant que le modèle est hors service, le personnage envoie une courte excuse, dans son propre style, lorsqu'il est appelé, au plus une fois par conversation toutes les cinq minutes ; Activité affiche le tour avec la mention « le modèle n'a pas répondu ».
 7. **Un réglage mal orthographié.** Le journal de démarrage et `personagent doctor` listent chaque clé que `.env.example` ne connaît pas, et toute valeur commençant par `#`.
 8. **Un BOM sur `.env`.** Le nom du premier réglage porte le BOM et n'atteint jamais le processus. Le démarrage et `personagent doctor` le signalent. Réenregistrez le fichier en UTF-8 sans BOM.

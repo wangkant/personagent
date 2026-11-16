@@ -60,9 +60,10 @@ def test_the_lines_a_language_says_pass_the_character_policy(code: str) -> None:
     for key, lines in spec.replies.items():
         check(f"{code}/{key}: some lines", bool(lines) and isinstance(lines, tuple))
         for line in lines:
-            want = {"name"} if key in ("about", "from") else set()
+            want = ({"name"} if key in ("about", "from") else {"code"} if key == "approval_dm"
+                    else set())
             check(f"{code}/{key}: {line!r} fields", _fields(line) == want)
-            shown = line.format(name="Kay") + "x"
+            shown = line.format(name="Kay", code="K7M4QD") + "x"
             check(f"{code}/{key}: {line!r} survives the policy", _passes(shown))
     check(f"{code}: failure lines", bool(spec.failure_excuses))
     for line in spec.failure_excuses:

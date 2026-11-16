@@ -45,7 +45,7 @@ curl http://127.0.0.1:8080/health
 | 要轉送其私訊的使用者 | `SATORI_DM_USERS` | `MATRIX_DM_USERS` | `dm_users` |
 | 平台的伺服器 | `SATORI_URL` | `MATRIX_URL` | AstrBot 本身的設定 |
 
-群組或私訊清單為空時，該類別一律不轉送。`*` 會轉送該類別的全部內容，並將事件標記為 `"prefiltered": false`，交由 agent 的 `ACCESS_GROUPS` 和 `ACCESS_DM_USERS` 決定。其餘設定請參閱各聯結器的 README。
+群組或私訊清單為空時，該類別一律不轉送。`*` 會轉送該類別的全部內容，並將事件標記為 `"prefiltered": false`，交由 agent 的 `ACCESS_GROUPS` 和 `ACCESS_DM_USERS` 決定（在 `ACCESS_APPROVAL_PLATFORMS` 列出的平台上，還包括管理員對新對話的核准）。其餘設定請參閱各聯結器的 README。
 
 ## 位址
 
@@ -91,7 +91,7 @@ QQ 是唯一的例外，為了相容性而保留。其 id 儲存時不帶前綴�
 }
 ```
 
-必填欄位為 `platform`、`conversation_type`（`group` 或 `dm`）、`sender_id`、`message_id` 和 `sent_at`，群組另需 `conversation_id`。`sent_at` 是平台為訊息標記的時間，單位為 unix 秒數（也接受純數字字串，小數部分會被捨去）。角色看到的每則訊息都附有這一時間。agent 啟動後，在某個平台的第一則訊息到達起兩分鐘內，如果群組訊息到達時已超過 10 分鐘，即視為重新啟動後補送的積壓訊息：只作為上下文保留，不予回覆。兩分鐘之後，較早的 `sent_at` 不再使訊息被擱下，因此時鐘偏慢的聯結器傳來的訊息仍會得到回覆。請傳送平台的原始 id，前綴由 agent 加上。
+必填欄位為 `platform`、`conversation_type`（`group` 或 `dm`）、`sender_id`、`message_id` 和 `sent_at`，群組另需 `conversation_id`。`sent_at` 是平台為訊息標記的時間，單位為 unix 秒數（也接受純數字字串，小數部分會被捨去）。角色看到的每則訊息都附有這一時間。agent 啟動後，在某個平台的第一則訊息到達起兩分鐘內，如果群組訊息到達時已超過 10 分鐘，即視為重新啟動後補送的積壓訊息：只作為上下文保留，不予回覆。兩分鐘之後，較早的 `sent_at` 不再使訊息被擱下，因此時鐘偏慢的聯結器傳來的訊息仍會得到回覆。請傳送平台的原始 id，前綴由 agent 加上。群組事件可以帶有 `conversation_name`，即平台提供的群組名稱；群組等候核准時，管理員會看到這個名稱。
 
 `addressed` 由聯結器設定。訊息提及機器人、回覆機器人的某則訊息，或依平台本身的規則屬於對機器人發言時，其值為 true。agent 本身也會留意文字中出現的名稱。它會將對自己訊息的引用或對機器人的 @ 視為可供學習的反應，因此回覆機器人的訊息須設定 `addressed`。對其他成員訊息的引用一律不視為對機器人的反應。轉傳訊息中對機器人的提及不算對機器人發言，因此請勿為此設定 `addressed`。
 

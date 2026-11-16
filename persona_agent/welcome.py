@@ -34,7 +34,7 @@ from dotenv import dotenv_values
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from . import __version__, access, candidates, channels, home as homes, langs
+from . import __version__, access, approvals, candidates, channels, home as homes, langs, pageaccess
 from . import connections as conn
 from . import direct  # noqa: F401  tests reach the platforms through welcome.direct
 from .direct import base as direct_base
@@ -55,7 +55,7 @@ PAGE_LANGUAGES = ("zh-TW", "ja", "ko", "es", "fr", "de", "pt-BR", "ru")
 # persona_agent/panels with `mount(app, workspace, body)`, and a script and a
 # stylesheet of the same name under ASSETS/panels.
 PANELS = ("health", "runtime", "desk", "tuning", "learned", "agents", "chatapi", "practice", "cards", "lore",
-          "detect")
+          "detect", "signin", "models", "approvals", "tools")
 TOKEN_HEADER = "x-personagent-setup-token"
 # Bytes; a chat message may be 8000 characters, three bytes each in Chinese.
 MAX_BODY = 32_768
@@ -95,6 +95,21 @@ OUTBOX_IDLE_S = 3.0
 
 # The name the page's chat sends; the page shows the admin's name or its own word instead.
 PAGE_SENDER = "you"
+LOOPBACK = ("localhost", "127.0.0.1", "::1")
+FORWARDED = ("x-forwarded-host", "forwarded", "x-forwarded-for")
+# What acts on the computer the page runs on itself: a folder opened there,
+# its desktop icon, the app window, quitting it. Refused to another device.
+LOCAL_ONLY = frozenset({
+    ("POST", "/api/show"), ("POST", "/api/exit"), ("POST", "/api/window"),
+    ("POST", "/api/desk/open"), ("POST", "/api/desk/shortcut"), ("GET", "/api/desk/shortcuts"),
+    ("POST", "/api/health/open"), ("POST", "/api/runtime/background"), ("POST", "/api/runtime/hide"),
+    ("POST", "/api/runtime/update"),
+    # A card is saved into a folder of this computer.
+    ("POST", "/api/cards/export")})
+SIGNIN_ASSETS = ("signin.js", "signin.css")
+# Seconds between the headless page's checks that the character still runs.
+KEEP_RUNNING_S = 5.0
+KEEP_RUNNING_MAX_S = 300.0
 
 
 def _connector_type():
@@ -157,9 +172,15 @@ def _card_aliases(home: Path, values: dict) -> tuple:
 def reach(kind: str, values: dict) -> str:
     """Who the character answers on one platform under the reply settings:
     "all", "groups_listed", "people_listed" or "listed"; "dm_all" and
-    "dm_listed" on a platform without groups."""
+    "dm_listed" on a platform without groups. Where new chats wait for the
+    admin: "approval", "dm_approval", or "channels_approval" where the
+    groups are the channels typed in at connecting."""
     from . import access
 
+    if approval_applies(kind) and kind in access.approval_platforms(values.get(access.APPROVAL_SETTING)):
+        if kind in access.CHANNELS_LISTED_AT_CONNECT:
+            return "channels_approval"
+        return "approval" if conn.platform(kind).groups else "dm_approval"
     identity = access.identity_from_env(values)
     groups = bool(access.entries_on(kind, identity.groups))
     people = bool(access.entries_on(kind, identity.dm_users))
@@ -167,6 +188,12 @@ def reach(kind: str, values: dict) -> str:
         return "dm_listed" if people else "dm_all"
     return ("listed" if groups and people else "groups_listed" if groups
             else "people_listed" if people else "all")
+
+
+def approval_applies(kind: str) -> bool:
+    """Whether a platform has chats approval could hold: not Twitch, whose
+    only chats are the channels typed in at connecting."""
+    return kind not in access.NOTHING_TO_APPROVE
 
 
 def chat_failure(error: BaseException) -> str:
@@ -220,10 +247,14 @@ class Workspace:
         self._future = None
         self._closed = False
         self._cancelled = False
+        # Stopped from the page: the headless page does not start it again by itself.
+        self.held = False
         # Set when a job took a platform away from AstrBot, which then needs a restart.
         self._astrbot_changed = False
         # A platform whose saved state belongs to a login that just ended.
         self._stale_state = ""
+        # A platform the running job connects for the first time.
+        self._new_platform = ""
         self._history_path = self.home / "runtime" / "desktop" / "browser-chat.json"
         self._pictures = self._history_path.with_name("chat-pictures")
         saved = sw._read_json(self._history_path)
@@ -301,11 +332,22 @@ class Workspace:
                     "ownAvatar": self._own_avatar_version(own_picture),
                     "platforms": platforms, "platformStatus": status, "platformDetail": details,
                     "platformReach": {kind: reach(kind, values) for kind in platforms},
+                    # Where new chats wait for the admin, and how many wait now.
+                    "platformApproval": {kind: kind in access.approval_platforms(
+                        values.get(access.APPROVAL_SETTING)) for kind in platforms if approval_applies(kind)},
+                    "approvalsWaiting": self._waiting_counts(platforms),
                     "agentRunning": self.services.running("agent"),
                     # "Reply to messages" is off: running, yet it answers nobody.
                     "repliesOff": not env_bool("AGENT_ENABLED", True, env=values),
                     "platformRunning": self.services.running("astrbot") or direct_on, "job": job,
                     "features": self._features(values)}
+
+    def _waiting_counts(self, platforms: list[str]) -> dict:
+        try:
+            counts = approvals.waiting_counts(self.home)
+        except OSError:
+            return {}
+        return {kind: n for kind, n in counts.items() if kind in platforms}
 
     @staticmethod
     def _own_avatar_version(path: Path | None) -> str:
@@ -796,6 +838,8 @@ class Workspace:
             else:
                 raise ValueError("invalid_action")
             own = bool(args) and conn.is_direct(kind)
+            # A platform connected for the first time starts out asking for approval of new chats.
+            self._new_platform = kind if action in ("scan", "connect") and not self._connected(kind) else ""
             stage = ("start" if action in ("start", "disconnect") else
                      "prepare" if own and action == "scan" else "check" if own else "install")
             self.job = {"state": "working", "stage": stage, "error": "", "action": action,
@@ -817,6 +861,9 @@ class Workspace:
                 self._disconnect(*args)
             if self._closed or self._cancelled:
                 raise RuntimeError("cancelled")
+            # Written before anything starts, so no message gets past it; the running service reads it at once.
+            if self._new_platform and approval_applies(self._new_platform):
+                approvals.set_policy(self.home, self._new_platform, True)
             self._stage("start")
             self.services.start_agent()
             if self._closed:
@@ -868,6 +915,10 @@ class Workspace:
         finally:
             if self._closed:
                 self.services.close()
+
+    def _connected(self, kind: str) -> bool:
+        return (kind in direct_base.load_credentials(self.home)
+                or kind in conn.connected(AstrBotInstallation(self.home).root / "data"))
 
     def _stage(self, stage: str) -> None:
         self.job = {**self.job, "stage": stage}
@@ -1327,8 +1378,16 @@ def _activity_chat(raw: dict) -> dict:
                         # Whatever message a row quotes here was written by the page's person.
                         **flag("self", page and bool(d.get("sender") or d.get("answered")
                                                      or not d.get("spoke"))),
-                        "count": int(d.get("count") or 1)}
+                        "count": int(d.get("count") or 1),
+                        **_lookup(d.get("lookup"))}
                        for d in (raw.get("decisions") or [])[:ACTIVITY_RECENT]][::-1]}
+
+
+def _lookup(raw) -> dict:
+    """What a reply drew on: a web search, or a tool by name."""
+    if not isinstance(raw, dict) or not raw or raw.get("kind") not in ("search", "tool"):
+        return {}
+    return {"lookup": {"kind": raw["kind"], "name": str(raw.get("name") or "")[:120]}}
 
 
 def _expands(text: str) -> bool:
@@ -1392,46 +1451,134 @@ def _endpoint(value) -> str:
     return base
 
 
-def create_app(home: Path, token: str, *, workspace: Workspace | None = None) -> FastAPI:
+def _local_caller(request: Request, host: str | None) -> bool:
+    """A caller on this computer, addressing it by a loopback name, through no proxy."""
+    client = request.client.host if request.client else ""
+    return (pageaccess.is_loopback(client) and host in LOOPBACK
+            and not any(request.headers.get(key) for key in FORWARDED))
+
+
+async def _fail_wait() -> None:
+    # Slowed, so guessing costs time even before the address is shut out.
+    await asyncio.sleep(pageaccess.FAIL_DELAY_S)
+
+
+def _secure_request(request: Request) -> bool:
+    # Behind a proxy that ends TLS only the browser's side says https.
+    return (request.url.scheme == "https"
+            or request.headers.get("x-forwarded-proto", "").strip().lower() == "https"
+            or request.headers.get("origin", "").startswith("https://"))
+
+
+async def keep_running(workspace: Workspace) -> None:
+    """The headless page keeps the character running, as `up` does: started
+    once it is set up, started again after it stopped, waiting longer after
+    each start that failed. A stop from the page holds until Start."""
+    failures, retry_at, started, wait = 0, 0.0, False, 0.0
+    while not workspace._closed:
+        await asyncio.sleep(wait)
+        wait = KEEP_RUNNING_S
+        try:
+            ready = await asyncio.to_thread(lambda: bool(workspace.config().get("LLM_API_KEY")))
+            future = workspace._future
+            if (future is not None and not future.done()) or workspace.held or not ready:
+                continue
+            if workspace.services.running("agent"):
+                failures, started = 0, False
+                continue
+            if started:
+                # What this loop started is not running: the next try waits longer.
+                failures += 1
+                retry_at = time.monotonic() + min(KEEP_RUNNING_S * 2 ** failures, KEEP_RUNNING_MAX_S)
+                started = False
+            if time.monotonic() < retry_at:
+                continue
+            await asyncio.to_thread(workspace.start_job, "start")
+            started = True
+        except ValueError:
+            continue
+        except Exception:
+            traceback.print_exc()
+            wait = KEEP_RUNNING_MAX_S
+
+
+def create_app(home: Path, token: str, *, workspace: Workspace | None = None,
+               gate: pageaccess.Gate | None = None, headless: bool = False) -> FastAPI:
+    """The page. With `gate` it also admits callers from other devices that
+    signed in with the page password; `headless` is the page `up` serves."""
     workspace = workspace or Workspace(home)
 
     @asynccontextmanager
     async def lifespan(app):
-        later = asyncio.create_task(workspace.outbox_loop())
+        later = [asyncio.create_task(workspace.outbox_loop())]
+        if headless:
+            later.append(asyncio.create_task(keep_running(workspace)))
         try:
-            if workspace.summary()["platforms"] and workspace.config().get("LLM_API_KEY"):
+            if not headless and workspace.summary()["platforms"] and workspace.config().get("LLM_API_KEY"):
                 workspace.start_job("start")
             yield
         finally:
-            later.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await later
+            for task in later:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
             for stop in app.state.closers:
                 await asyncio.to_thread(stop)
             await asyncio.to_thread(workspace.close)
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.workspace = workspace
+    app.state.gate = gate
+    app.state.headless = headless
     # What a panel started outside the workspace's services; called before those stop.
     app.state.closers = []
 
-    @app.middleware("http")
-    async def boundary(request: Request, call_next):
+    def refuse(code: str = "forbidden", status: int = 403) -> JSONResponse:
+        return JSONResponse({"error": code}, status_code=status)
+
+    def judge(request: Request) -> JSONResponse | None:
+        """None when the request may go on; sets whether it came from another device."""
+        request.state.remote = request.state.signed_in = False
+        path = request.url.path
         try:
             host = urlsplit("//" + request.headers.get("host", "")).hostname
         except ValueError:
-            return JSONResponse({"error": "forbidden"}, status_code=403)
-        if host not in ("localhost", "127.0.0.1", "::1"):
-            return JSONResponse({"error": "forbidden"}, status_code=403)
-        if request.url.path.startswith("/api/"):
-            if not secrets.compare_digest(request.headers.get(TOKEN_HEADER, "").encode(), token.encode()):
-                return JSONResponse({"error": "forbidden"}, status_code=403)
-            origin = request.headers.get("origin")
-            if origin and origin.rstrip("/") != str(request.base_url).rstrip("/"):
-                return JSONResponse({"error": "forbidden"}, status_code=403)
-            if any(request.headers.get(key) for key in ("x-forwarded-host", "forwarded", "x-forwarded-for")):
-                return JSONResponse({"error": "forbidden"}, status_code=403)
-        response = await call_next(request)
+            return refuse()
+        if gate is None or _local_caller(request, host):
+            if host not in LOOPBACK:
+                return refuse()
+            if path.startswith("/auth/"):
+                return refuse("not_found", 404)
+            if path.startswith("/api/"):
+                if not secrets.compare_digest(request.headers.get(TOKEN_HEADER, "").encode(), token.encode()):
+                    return refuse()
+                origin = request.headers.get("origin")
+                if origin and origin.rstrip("/") != str(request.base_url).rstrip("/"):
+                    return refuse()
+                if any(request.headers.get(key) for key in FORWARDED):
+                    return refuse()
+            return None
+        # Another device: only at an address the owner configured, and only signed in.
+        request.state.remote = True
+        if not pageaccess.host_allowed(request.headers.get("host", ""), gate.settings().allowed):
+            return refuse()
+        if path.startswith(("/api/", "/auth/")):
+            fetched = request.headers.get("sec-fetch-site", "")
+            if fetched and fetched not in ("same-origin", "none"):
+                return refuse()
+            if not pageaccess.same_origin(request.headers.get("origin", ""), request.headers.get("host", "")):
+                return refuse()
+        request.state.signed_in = gate.session(request.cookies.get(pageaccess.COOKIE))
+        if path.startswith("/api/"):
+            if not request.state.signed_in or request.headers.get(pageaccess.SESSION_HEADER) != "1":
+                return refuse("signin_required", 401)
+            if (request.method, path) in LOCAL_ONLY:
+                return refuse("local_only")
+        return None
+
+    @app.middleware("http")
+    async def boundary(request: Request, call_next):
+        response = judge(request) or await call_next(request)
         # Only the portraits set their own: they never change while the page runs.
         response.headers.setdefault("Cache-Control", "no-store")
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -1472,12 +1619,55 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
         return JSONResponse({"error": error if known else "generic"}, status_code=400)
 
     @app.get("/")
-    async def index():
+    async def index(request: Request):
+        # Another device sees the sign-in page until it has signed in.
+        if request.state.remote and not request.state.signed_in:
+            return FileResponse(ASSETS / "signin.html")
         return FileResponse(ASSETS / "index.html")
+
+    @app.get("/health")
+    async def health():
+        # For a container's health check: that the page answers, nothing more.
+        return {"ok": True}
+
+    @app.post("/auth/signin")
+    async def sign_in(request: Request):
+        address = request.client.host if request.client else ""
+        wait = gate.limiter.wait(address)
+        if wait:
+            return JSONResponse({"error": "signin_locked", "seconds": wait}, status_code=429)
+        payload = await body(request, 4096)
+        attempt = payload.get("password")
+        stored = gate.settings().password
+        ok = isinstance(attempt, str) and bool(stored) and await asyncio.to_thread(
+            pageaccess.verify, stored, attempt)
+        if not ok:
+            left = gate.limiter.failed(address)
+            await _fail_wait()
+            if not left:
+                return JSONResponse({"error": "signin_locked", "seconds": pageaccess.LOCK_S}, status_code=429)
+            return JSONResponse({"error": "signin_wrong", "left": left}, status_code=401)
+        gate.limiter.succeeded(address)
+        response = JSONResponse({"ok": True})
+        response.set_cookie(pageaccess.COOKIE, gate.sessions.create(pageaccess.fingerprint(stored)),
+                            max_age=pageaccess.SESSION_S, path="/", httponly=True, samesite="strict",
+                            secure=_secure_request(request))
+        return response
+
+    @app.post("/auth/signout")
+    async def sign_out(request: Request):
+        await body(request, 1024)
+        if not request.state.signed_in or request.headers.get(pageaccess.SESSION_HEADER) != "1":
+            return JSONResponse({"error": "signin_required"}, status_code=401)
+        gate.sessions.end(request.cookies.get(pageaccess.COOKIE, ""))
+        response = JSONResponse({"ok": True})
+        response.delete_cookie(pageaccess.COOKIE, path="/", httponly=True, samesite="strict",
+                               secure=_secure_request(request))
+        return response
 
     @app.get("/assets/{name}")
     async def asset(name: str):
-        if name not in ("welcome.js", "welcome.css"):
+        if name not in ("welcome.js", "welcome.css", *SIGNIN_ASSETS):
             raise HTTPException(404)
         return FileResponse(ASSETS / name)
 
@@ -1504,9 +1694,13 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
         return FileResponse(path, media_type="image/webp", headers={"Cache-Control": "max-age=86400"})
 
     @app.get("/api/state")
-    async def state():
+    async def state(request: Request):
         summary = await asyncio.to_thread(workspace.summary)
         summary["modelUnreachable"] = summary["agentRunning"] and await workspace.model_unreachable()
+        # What the page hides or words differently: another device, no window, a container.
+        summary["remote"] = bool(request.state.remote)
+        summary["headless"] = headless
+        summary["container"] = pageaccess.in_container()
         return summary
 
     @app.get("/api/catalog")
@@ -1595,6 +1789,7 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
     async def start(request: Request):
         await body(request)
         workspace.start_job("start")
+        workspace.held = False
         return {"ok": True}
 
     @app.post("/api/stop")
@@ -1602,6 +1797,7 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None) ->
         await body(request)
         if workspace._future is not None and not workspace._future.done():
             raise ValueError("busy")
+        workspace.held = True
         await asyncio.to_thread(workspace.services.close)
         return {"ok": True}
 
@@ -1730,7 +1926,7 @@ def save_app_settings(desktop: Path, **changes) -> dict:
     return values
 
 
-def _serve_in_window(app: FastAPI, server, sock: socket.socket, url: str, desktop: Path,
+def _serve_in_window(app: FastAPI, server, sockets: list, url: str, desktop: Path,
                      hidden: bool = False) -> None:
     """The page in its own window on this thread, the server behind it on another."""
     services = app.state.workspace.services
@@ -1758,7 +1954,7 @@ def _serve_in_window(app: FastAPI, server, sock: socket.socket, url: str, deskto
 
     def serve() -> None:
         try:
-            server.run(sockets=[sock])
+            server.run(sockets=sockets)
         finally:
             window.close()
 
@@ -1839,31 +2035,39 @@ def _start(args: argparse.Namespace, home: Path, refuse: Callable[[str], int], l
             webbrowser.open(url)
         return 0
     token = secrets.token_urlsafe(32)
-    sock = socket.socket()
+    sockets: list[socket.socket] = []
     try:
+        settings = pageaccess.read(home)
+        problem = page_problem(settings)
+        if problem:
+            return refuse(problem)
         stopped = stop_leftovers(home)
         if stopped:
             print(langs.term(f"Stopped what an earlier personagent left running: {', '.join(stopped)}."))
+        port = settings.port_or(args.port)
         try:
-            sock.bind(("127.0.0.1", args.port))
-        except (OSError, OverflowError):
-            return refuse(langs.term(f"Port {args.port} is in use. Leave --port out to pick a free one."))
-        sock.listen(128)
-        port = sock.getsockname()[1]
-        url = f"http://127.0.0.1:{port}/#token={token}"
+            sockets = pageaccess.listen(settings, port)
+        except OSError:
+            if args.port:
+                return refuse(langs.term(f"Port {args.port} is in use. Leave --port out to pick a free one."))
+            return refuse(_port_taken(port))
+        port = sockets[0].getsockname()[1]
+        url = f"http://{pageaccess.local_link_host(settings)}:{port}/#token={token}"
         atomic_write_text(info, json.dumps({"url": url}))
         windowed = not (args.browser or args.no_browser) and appwindow.available()
         if windowed:
             print(langs.term(f"personagent {__version__}\n\n  {url}\n\nClose the personagent window to stop."), flush=True)
         else:
             print(langs.term(f"personagent {__version__}\n\n  {url}\n\nKeep this window open. Press Ctrl+C to stop."), flush=True)
+        for line in remote_lines(settings, port):
+            print(line, flush=True)
         notice = updates.line(updates.notice(home))
         if notice:
             print(langs.term(notice), flush=True)
-        app = create_app(home, token)
-        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+        app = create_app(home, token, gate=pageaccess.gate_for(home, settings))
+        server = uvicorn.Server(uvicorn.Config(app, host=settings.host, port=port, log_level="warning"))
         if windowed:
-            _serve_in_window(app, server, sock, url, desktop, hidden=args.background)
+            _serve_in_window(app, server, sockets, url, desktop, hidden=args.background)
             return 0
         if not args.no_browser:
             # The socket already listens, so an early request waits its turn.
@@ -1871,9 +2075,132 @@ def _start(args: argparse.Namespace, home: Path, refuse: Callable[[str], int], l
             timer.daemon = True
             timer.start()
         app.state.shutdown = lambda: setattr(server, "should_exit", True)
-        server.run(sockets=[sock])
+        server.run(sockets=sockets)
         return 0
     finally:
-        sock.close()
+        for sock in sockets:
+            sock.close()
+        info.unlink(missing_ok=True)
+        lock.release()
+
+
+def page_problem(settings: pageaccess.Settings) -> str:
+    """Why the page may not listen as configured, one line per setting; '' when it may."""
+    return "\n".join(f"{key}: {langs.term(sentence)}" for level, key, sentence in pageaccess.problems(settings)
+                     if level == "ERROR")
+
+
+def _port_taken(port: int) -> str:
+    return langs.term(f"Port {port} is in use, or PAGE_HOST is not an address of this computer. "
+                      f"Set PAGE_PORT to another port, or correct PAGE_HOST.")
+
+
+def remote_lines(settings: pageaccess.Settings, port: int) -> list[str]:
+    """Where another device finds the page, and what plain HTTP exposes; none on loopback."""
+    if not settings.remote:
+        return []
+    if pageaccess.in_container():
+        where = langs.term(f"From another device, open the port this container publishes (it listens on "
+                           f"{port} inside) on the computer running it, and sign in with the page password.")
+    else:
+        address = settings.host if not pageaccess.is_wildcard(settings.host) else pageaccess.guess_address()
+        if address:
+            shown = f"[{address}]" if ":" in address else address
+            where = langs.term(f"From another device, open http://{shown}:{port}/ and sign in with the page password.")
+        else:
+            where = langs.term(f"From another device, open this computer's address at port {port} "
+                               f"and sign in with the page password.")
+    return [where, langs.term(
+        "The page is served over plain HTTP, so on a network the password and the session can be read "
+        "in transit. Reach it through an SSH tunnel, a VPN such as Tailscale, or a reverse proxy with "
+        "HTTPS; docs/deploy.md shows how.")]
+
+
+def _first_password(home: Path) -> str:
+    """In a container with no page password: a random one, saved as a hash; '' otherwise."""
+    settings = pageaccess.read(home)
+    if not (settings.remote and not settings.password and not settings.invalid and pageaccess.in_container()):
+        return ""
+    password = secrets.token_urlsafe(18)
+    sw.copy_env_template(home)
+    sw.write_env(home / ".env", {"PAGE_PASSWORD": pageaccess.hash_password(password)})
+    return password
+
+
+def serve_headless(home: Path) -> int:
+    """`personagent up` with the page: the character, its platforms and the
+    page together, with no window and no browser. Setup may happen on the
+    page, so no model key is needed to start."""
+    import uvicorn
+    from .storage import ALREADY_RUNNING, RuntimeInstanceLock
+    from .services import _memory_problem
+
+    generated = _first_password(home)
+    settings = pageaccess.read(home)
+    problem = page_problem(settings)
+    if problem:
+        print(problem, file=sys.stderr)
+        return 2
+    if sw.env_get(home / ".env", "LLM_API_KEY"):
+        damaged = _memory_problem(home)
+        if damaged:
+            print(damaged, file=sys.stderr)
+            return 1
+        if not sw.env_get(home / ".env", "CONNECTOR_TOKEN"):
+            # As `up` without the page: the connectors sign with it.
+            sw.write_env(home / ".env", {"CONNECTOR_TOKEN": secrets.token_urlsafe(32)})
+    desktop = home / "runtime" / "desktop"
+    info = desktop / "welcome.json"
+    lock = FileLock(info.with_suffix(".lock"), timeout=0)
+    try:
+        lock.acquire()
+    except LockUnavailable:
+        print(langs.term(ALREADY_RUNNING.format(home=home)), file=sys.stderr)
+        return 2
+    sockets: list[socket.socket] = []
+    try:
+        probe = RuntimeInstanceLock(home)
+        try:
+            probe.acquire()
+        except LockUnavailable:
+            print(langs.term(ALREADY_RUNNING.format(home=home)), file=sys.stderr)
+            return 2
+        probe.release()
+        updates.refresh_soon(home)
+        stopped = stop_leftovers(home)
+        if stopped:
+            print(langs.term(f"Stopped what an earlier personagent left running: {', '.join(stopped)}."))
+        port = settings.port_or()
+        try:
+            sockets = pageaccess.listen(settings, port)
+        except OSError:
+            print(_port_taken(port), file=sys.stderr)
+            return 1
+        port = sockets[0].getsockname()[1]
+        token = secrets.token_urlsafe(32)
+        url = f"http://{pageaccess.local_link_host(settings)}:{port}/#token={token}"
+        atomic_write_text(info, json.dumps({"url": url}))
+        print(langs.term(f"personagent {__version__}\n\n  {url}\n\nKeep this window open. Press Ctrl+C to stop."))
+        for line in remote_lines(settings, port):
+            print(line)
+        if generated:
+            # Printed once: only its hash is kept.
+            print(langs.term(f"The page password, made for this first start and shown only this once: {generated}",
+                             keep=(generated,)))
+            print(langs.term("Change it with `personagent page password`."))
+        if not sw.env_get(home / ".env", "LLM_API_KEY"):
+            print(langs.term("No model key yet: open the page to finish the setup. The character starts once it is saved."))
+        print(langs.term(f"Logs are in {desktop}."))
+        notice = updates.line(updates.notice(home), sub="up")
+        if notice:
+            print(langs.term(notice))
+        app = create_app(home, token, gate=pageaccess.gate_for(home, settings), headless=True)
+        server = uvicorn.Server(uvicorn.Config(app, host=settings.host, port=port, log_level="warning"))
+        app.state.shutdown = lambda: setattr(server, "should_exit", True)
+        server.run(sockets=sockets)
+        return 0
+    finally:
+        for sock in sockets:
+            sock.close()
         info.unlink(missing_ok=True)
         lock.release()

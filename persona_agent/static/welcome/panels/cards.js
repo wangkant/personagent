@@ -437,12 +437,16 @@ PA.strings({
       option.value = item.id;
     }
     if ([...target.options].some((o) => o.value === chosen)) target.value = chosen;
-    const none = overview && !overview.targets.length;
+    // From another device there is no folder of this computer to save into.
+    const remote = Boolean(PA.state && PA.state.remote);
+    const none = remote || (overview && !overview.targets.length);
     target.hidden = targetLabel.hidden = !!none;
+    exportTools.hidden = remote;
     pngButton.textContent = busy === "png" ? t("cards_saving") : t("cards_save_png");
     jsonButton.textContent = busy === "json" ? t("cards_saving") : t("cards_save_json");
     for (const node of [pngButton, jsonButton, target]) node.disabled = !!busy || !!none || !overview;
-    if (none && !exportLine.dataset.path) exportLine.textContent = t("cards_no_targets");
+    if (remote) exportLine.textContent = t("local_only");
+    else if (none && !exportLine.dataset.path) exportLine.textContent = t("cards_no_targets");
     else if (exportLine.dataset.path) exportLine.textContent = t("cards_saved", { path: exportLine.dataset.path });
     else exportLine.textContent = "";
     ideaLabel.textContent = t("cards_draft_label");

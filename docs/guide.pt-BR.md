@@ -9,18 +9,19 @@ Este guia explica como configurar o personagent, conectá-lo às suas conversas,
 3. [Veja primeiro: a demonstração](#veja-primeiro-a-demonstração)
 4. [Comandos de terminal](#comandos-de-terminal): [configuração](#configurar-no-terminal) · [conectar uma plataforma](#conectar-uma-plataforma-no-terminal) · [chat](#conversar-no-terminal) · [executar o serviço](#executar-o-serviço)
 5. [Faça dele o seu personagem](#faça-dele-o-seu-personagem)
-6. [Coloque em um chat](#coloque-em-um-chat): [Plataformas que o personagent conecta por conta própria](#plataformas-que-o-personagent-conecta-por-conta-própria) · [Outras plataformas](#outras-plataformas-pelo-astrbot-gerenciado) · [Pontes que você mesmo executa](#pontes-que-você-mesmo-executa) · [Falar primeiro](#falar-primeiro)
-7. [Assistentes de programação](#assistentes-de-programação)
-8. [Outros programas](#outros-programas)
-9. [Ensine a ele](#ensine-a-ele)
-10. [Memória](#memória)
-11. [Atividade](#atividade)
-12. [Meça](#meça)
-13. [Como funciona](#como-funciona)
-14. [Privacidade e consentimento](#privacidade-e-consentimento)
-15. [Solução de problemas](#solução-de-problemas)
-16. [Atualização a partir da 0.x](#atualização-a-partir-da-0x)
-17. [Status e outros documentos](#status-e-outros-documentos)
+6. [Coloque em um chat](#coloque-em-um-chat): [Aprovação de conversas novas](#a-quem-ele-responde-aprovação-de-conversas-novas) · [Plataformas que o personagent conecta por conta própria](#plataformas-que-o-personagent-conecta-por-conta-própria) · [Outras plataformas](#outras-plataformas-pelo-astrbot-gerenciado) · [Pontes que você mesmo executa](#pontes-que-você-mesmo-executa) · [Falar primeiro](#falar-primeiro)
+7. [Ferramentas](#ferramentas)
+8. [Assistentes de programação](#assistentes-de-programação)
+9. [Outros programas](#outros-programas)
+10. [Ensine a ele](#ensine-a-ele)
+11. [Memória](#memória)
+12. [Atividade](#atividade)
+13. [Meça](#meça)
+14. [Como funciona](#como-funciona)
+15. [Privacidade e consentimento](#privacidade-e-consentimento)
+16. [Solução de problemas](#solução-de-problemas)
+17. [Atualização a partir da 0.x](#atualização-a-partir-da-0x)
+18. [Status e outros documentos](#status-e-outros-documentos)
 
 ## Instalação e a pasta do personagent
 
@@ -58,7 +59,7 @@ Este guia escreve os comandos como `personagent ...`. Se você não o instalou, 
 - **Conversa** é uma conversa individual com o personagem na página. O mesmo agente que atende às suas plataformas de chat responde aqui. Nesta conversa, você é o administrador. As figurinhas e as imagens que o personagem envia aparecem na conversa, e uma imagem que não está mais armazenada é substituída por uma breve observação. As mensagens que o personagem envia depois da resposta, como a resposta a um comando de memória enviado enquanto ele respondia ou uma mensagem iniciada por ele mesmo, aparecem em poucos segundos enquanto a tela Conversa estiver aberta. Ambas permanecem na conversa exibida. Quando o modelo não responde, a página informa isso no lugar de uma resposta e oferece **Enviar novamente**. **Comandos de memória**, abaixo da caixa de mensagem, lista os [comandos de memória](#comandos-de-memória), e selecionar um deles o insere na caixa de mensagem. **Esquecer as conversas desta página** esquece tudo o que o personagem lembra desta conversa e das conversas anteriores da página, e inicia uma nova; o que ele lembra das conversas nos aplicativos conectados é mantido, e esse esquecimento não pode ser desfeito. Esse recurso depende dos dados por trás da [Atividade](#atividade). **Nova conversa** inicia uma nova conversa e mantém o que o personagem lembra.
 - **Atividade** mostra os chats em que o personagem está, o que ele disse recentemente, o que ele lembra e o que aprendeu. Veja [Atividade](#atividade).
 - **Conectar plataformas** coloca o personagem no QQ, WeChat, Telegram, Discord e outras plataformas. Veja [Coloque em um chat](#coloque-em-um-chat). Na parte inferior, **Assistentes de programação** conecta o personagem aos [assistentes de programação](#assistentes-de-programação) deste computador.
-- **Personagem e configurações** é onde você escolhe um serviço de modelos (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama ou qualquer outro serviço compatível com OpenAI), cola a chave de API e escolhe um nome e uma personalidade pronta. **Verificar e iniciar a conversa** testa a chave com uma pequena solicitação e só a salva se a solicitação funcionar. Depois da configuração, a caixa **Persona** mostra `persona.txt`. **Salvar a persona** reinicia o agente com o novo texto e mantém o que ele aprendeu. **Mais recursos** ativa a pesquisa na web pelo Tavily (DuckDuckGo é o padrão gratuito), a compreensão de imagens e o início de conversas por iniciativa própria nas plataformas que você escolher. Em seguida vêm as [Configurações avançadas](#configurações-avançadas).
+- **Personagem e configurações** é onde você escolhe um serviço de modelos (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama ou qualquer outro serviço compatível com OpenAI), cola a chave de API e escolhe um nome e uma personalidade pronta. **Verificar e iniciar a conversa** testa a chave com uma pequena solicitação e só a salva se a solicitação funcionar. Com o OpenRouter escolhido, **Entrar com o OpenRouter** obtém a chave em vez disso: o navegador mostra a aprovação do OpenRouter, o OpenRouter devolve o navegador ao endereço próprio da página neste computador (`http://localhost:<port>/signin/openrouter`), e o personagent troca o código de uso único por uma chave, testa-a do mesmo modo e a salva com o resto do formulário. A chave nunca passa pela própria página. Quando uma chave funciona, o nome do modelo oferece os modelos que o serviço lista (lidos com a chave salva em `<endereço da API>/models` e guardados por cinco minutos); um serviço que não lista nenhum deixa o campo como está. Depois da configuração, a caixa **Persona** mostra `persona.txt`. **Salvar a persona** reinicia o agente com o novo texto e mantém o que ele aprendeu. **Mais recursos** ativa a pesquisa na web pelo Tavily (DuckDuckGo é o padrão gratuito), a compreensão de imagens e o início de conversas por iniciativa própria nas plataformas que você escolher. **Ferramentas**, logo abaixo, adiciona [ferramentas de servidores MCP](#ferramentas). Em seguida vêm as [Configurações avançadas](#configurações-avançadas).
 - **Prática** reproduz a demonstração roteirizada e oferece um grupo de prática. Veja [Veja primeiro: a demonstração](#veja-primeiro-a-demonstração).
 - **Aplicativo** verifica os serviços de que o personagem depende e reúne os registros, a execução em segundo plano, as atualizações e os seus dados. Veja [A tela Aplicativo](#a-tela-aplicativo).
 
@@ -76,7 +77,7 @@ Depois que um modelo é configurado, **Personagem e configurações** termina co
 
 | Seção | Configurações |
 |---|---|
-| **Respostas, administrador e acesso** | **Responder às mensagens** (`AGENT_ENABLED`); **Ficar em silêncio nestes grupos** (`ACCESS_PAUSED_GROUPS`); Como o personagem chama você e qual é a sua relação com ele (`ADMIN_NAME`, `ADMIN_RELATIONSHIP`); **Suas contas** (`ADMIN_IDS`); **Responder apenas nestes grupos** (`ACCESS_GROUPS`); **Outras pessoas autorizadas a enviar mensagens privadas** (`ACCESS_DM_USERS`). **Escolher entre as conversas recentes** lista as pessoas e os grupos da Atividade, para que você adicione os identificadores deles sem digitá-los. |
+| **Respostas, administrador e acesso** | **Responder às mensagens** (`AGENT_ENABLED`); **Ficar em silêncio nestes grupos** (`ACCESS_PAUSED_GROUPS`); Como o personagem chama você e qual é a sua relação com ele (`ADMIN_NAME`, `ADMIN_RELATIONSHIP`); **Suas contas** (`ADMIN_IDS`); **Responder apenas nestes grupos** (`ACCESS_GROUPS`); **Outras pessoas autorizadas a enviar mensagens privadas** (`ACCESS_DM_USERS`); **Plataformas em que conversas novas precisam de aprovação** (`ACCESS_APPROVAL_PLATFORMS`). **Escolher entre as conversas recentes** lista as pessoas e os grupos da Atividade, para que você adicione os identificadores deles sem digitá-los. |
 | **Participação e estilo de resposta** | **Fuso horário** (`PERSONA_TZ_OFFSET_HOURS`); **Nos grupos, responder apenas quando chamado** (`CHAT_ONLY_WHEN_CALLED`); **Mensagens antes de participar** (`CHAT_TRIGGER_COUNT`); **Frequência com que inicia conversas**, que define de uma só vez os sete intervalos `PROACTIVE_*`; **Estilo de resposta**: emojis, três conjuntos de símbolos e o tamanho máximo da resposta, gravados em `persona.card.json`. |
 | **Modelos** | Um modelo reserva com endereço de serviço e chave próprios (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_API_KEY`), o modelo para decisões rápidas (`LLM_JUDGE_MODEL`) e o modelo para conversas privadas (`LLM_DM_MODEL`). O modelo reserva é testado antes de ser salvo. |
 | **Aprendizado** | `REACT_LEARN_ENABLED`, `REACT_LEARN_ADMIN_ONLY`, `REACT_ELICIT_ENABLED`, `PROMOTE_AUTO_ENABLED`, `PROMOTE_MIN_SPEAKERS` (1 ou 2), `PROMOTE_JUDGE_ENABLED` (o personagem decide o que as reações não conseguem resolver) e `PROMOTE_OBSERVE_MAX_DAYS` (dias sem nenhuma reação nova antes que um item em observação seja deixado de lado). **Reiniciar o aprendizado** grava um novo `PERSONA_VERSION`, de modo que o que o personagem aprendeu até então deixa de ser usado. Nada é apagado. |
@@ -166,14 +167,18 @@ Tudo o que a página faz também está disponível em um terminal, o que é adeq
 | `personagent chat` | um chat em grupo simulado no terminal |
 | `personagent demo` | a demonstração roteirizada acima |
 | `personagent run` | só o serviço, para conectores que você mesmo executa |
-| `personagent up` | o serviço, as plataformas que o personagent conecta por conta própria e o AstrBot gerenciado, juntos |
+| `personagent up` | o serviço, as plataformas que o personagent conecta por conta própria e o AstrBot gerenciado, juntos (`--page` também serve a página) |
+| `personagent page password` | define a senha com que outros dispositivos entram na página (`--random` mostra uma nova uma única vez) |
+| `personagent service install` | mantém `personagent up` em execução após uma reinicialização (`restart`, `remove`, `status`; `--dry-run` mostra o que faria) |
 | `personagent connect <plataforma>` | conecta uma das [plataformas que o personagent conecta por conta própria](#conectar-uma-plataforma-no-terminal) (`--remove` para desconectá-la); sem plataforma, lista essas plataformas |
 | `personagent connect astrbot` | conecta um AstrBot (`--install` para baixar um gerenciado, `--start` para iniciá-lo) |
 | `personagent connect claude-code`, `personagent connect codex`, `personagent connect dsh` | coloca o personagem em um [assistente de programação](#assistentes-de-programação) (`--react` para comentários no fim de um turno nos dois primeiros, `--remove` para desfazer) |
+| `personagent tools` | [ferramentas de servidores MCP](#ferramentas): `list`, `add`, `remove`, `check`, `call`, `set` |
 | `personagent mcp` | o servidor MCP que um assistente de programação inicia; você não o executa diretamente |
 | `personagent doctor` | verifica a configuração e cada serviço de que ele depende |
 | `personagent learned` | mostra o que ele aprendeu e o que ainda observa, e permite intervir se você quiser |
 | `personagent memory` | lista o que ele lembra, esquece um item ou traz um item de volta |
+| `personagent access` | lista as [conversas novas aguardando aprovação](#a-quem-ele-responde-aprovação-de-conversas-novas) e as aprova ou recusa pelo código (`approve`, `admin`, `decline`, `undo`, `policy <platform> approve\|open`) |
 | `personagent eval` | mede a fala, a persona, o aprendizado e a memória |
 | `personagent character` | [importa um cartão de personagem](#cartões-de-personagem-e-rascunhos) (`import FILE`), salva o personagem como cartão (`export FILE.png` ou `.json`) ou mostra uma persona rascunhada a partir de uma descrição (`draft "..."`) |
 
@@ -183,7 +188,7 @@ Todos os comandos aceitam `--help`.
 
 `personagent init --terminal` faz as mesmas perguntas da página, no idioma que você escolhe primeiro, e explica cada termo em uma linha:
 
-- **O serviço de IA.** As predefinições são as da página. O padrão é `openrouter/free` do OpenRouter, que encaminha cada solicitação a um dos seus modelos gratuitos. A chave é gratuita. O limite é de 20 solicitações por minuto e 50 por dia, ou 1000 por dia depois que você compra pelo menos 10 créditos. Toda chamada ao modelo conta, não só as respostas, e o dia recomeça à meia-noite UTC. Depois do limite, o personagem diz que não pode responder agora, e `runtime/desktop/agent.log` traz o motivo do OpenRouter. O modelo muda de uma solicitação para outra, então a voz do personagem oscila mais do que com um modelo escolhido, e alguns provedores gratuitos guardam o que recebem. Para um personagem mais estável, use um modelo pago com a mesma chave. Se o OpenRouter for difícil de acessar onde você está, `glm-4.7-flash` da Zhipu também é gratuito. Para o Ollama, informe um modelo que você já baixou. O Ollama não precisa de chave.
+- **O serviço de IA.** As predefinições são as da página. O padrão é `openrouter/free` do OpenRouter, que encaminha cada solicitação a um dos seus modelos gratuitos. A chave é gratuita. Uma chave obtida com **Entrar com o OpenRouter** (ou com o login por código do terminal) é uma chave comum do OpenRouter com o rótulo `personagent`: ela é salva no `.env` como uma chave colada e, até você removê-la em [openrouter.ai/keys](https://openrouter.ai/keys), pode gastar o crédito dessa conta, embora os modelos gratuitos não precisem de nenhum. O limite é de 20 solicitações por minuto e 50 por dia, ou 1000 por dia depois que você compra pelo menos 10 créditos. Toda chamada ao modelo conta, não só as respostas, e o dia recomeça à meia-noite UTC. Depois do limite, o personagem diz que não pode responder agora, e `runtime/desktop/agent.log` traz o motivo do OpenRouter. O modelo muda de uma solicitação para outra, então a voz do personagem oscila mais do que com um modelo escolhido, e alguns provedores gratuitos guardam o que recebem. Para um personagem mais estável, use um modelo pago com a mesma chave. Se o OpenRouter for difícil de acessar onde você está, `glm-4.7-flash` da Zhipu também é gratuito. Para o Ollama, informe um modelo que você já baixou. O Ollama não precisa de chave.
 - **A chave.** A digitação fica oculta por padrão. Você pode optar por mostrá-la, o que também revela a chave salva ao reconfigurar. O assistente testa a chave com uma pequena solicitação. Se ela falhar, ele mostra o endereço chamado, o status HTTP e uma provável correção.
 - **O personagem.** Um nome e um dos sete personagens prontos (Amigo de humor seco, Ouvinte acolhedor, Gamer, Leitor dedicado e três que a comunidade já desenha: A garota-baleia do DeepSeek, A garota-dragão do GPT e A senhorita Claude) ou um personagem básico que você mesmo escreve (Escrever o meu depois). Se você escolher um dos três últimos sem definir um nome, o personagem recebe o nome da personificação: GPT-chan, DeepSeek-chan ou Claude-chan. A página local mostra o retrato animado dele. Depois que você escreve a sua própria persona, clicar em um retrato em **Personagem e configurações** troca só a imagem. Ali mesmo, **Usar minha própria imagem** aceita um arquivo PNG, JPEG ou WebP de até 2 MB, guardado na pasta do personagent como `avatar.png` (ou `.jpg`, `.webp`) e mostrado apenas na página local.
 - **Plataformas de chat.** Opcional; esta etapa pode ser ignorada na primeira vez. A configuração lista as dez plataformas que o personagent conecta por conta própria, que você conecta depois com [`personagent connect <plataforma>`](#conectar-uma-plataforma-no-terminal). Para as demais plataformas, ela pode conectar o AstrBot e, antes disso, baixá-lo e instalá-lo. Veja [Pontes que você mesmo executa](#pontes-que-você-mesmo-executa).
@@ -198,6 +203,7 @@ Para configurar sem perguntas, como em um script, execute `personagent init --no
 - A Twitch exibe um link e um código. Abra o link em um navegador conectado à conta da Twitch do personagem, confira se a página mostra o mesmo código e aprove o login. O comando aguarda até que o login seja aprovado.
 - Cada valor também pode ser informado como opção, como `--telegram-token` ou `--irc-server`, e `personagent connect --help` lista todas elas. Um valor informado como opção pode permanecer no histórico do shell. Com `--no-input`, o comando não faz nenhuma pergunta; quando falta um valor obrigatório, ele indica a opção correspondente e sai com o código 2.
 - `--remove` desconecta a plataforma e apaga os valores salvos dela.
+- Uma plataforma conectada pela primeira vez pede [aprovação de conversas novas](#a-quem-ele-responde-aprovação-de-conversas-novas); o comando avisa isso e mostra `personagent access policy <platform> open`, que a desativa.
 
 A conexão fica ativa enquanto o personagent estiver em execução. `personagent up` inicia o personagent com as plataformas conectadas; se o personagent já estiver em execução, reinicie-o. No menu de `personagent start --terminal`, a opção 3 conecta essas plataformas e a opção 5 inicia o personagent com elas.
 
@@ -246,6 +252,8 @@ Alex> Nova, você está aí?
 `personagent run` inicia só o serviço com o qual os conectores falam, em `http://127.0.0.1:8080`. Ao iniciar, imprime a versão, o endereço, a pasta do personagent e se o agente está ativo. `--host` e `--port` substituem `SERVER_HOST` e `SERVER_PORT`. Use isto quando você mesmo executa o conector.
 
 `personagent up` inicia o serviço com todas as plataformas conectadas pela página, com `personagent connect <plataforma>` ou com `connect astrbot --install`. Ele não abre um navegador. Ctrl+C para tudo, e cada processo escreve o seu registro em `runtime/desktop/` na pasta do personagent.
+
+Em um servidor ou em um NAS, `personagent up` também pode servir a página, para que você configure e acompanhe o personagent em um celular ou em outro computador depois de entrar com uma senha da página; `personagent service install` o mantém em execução após uma reinicialização, e uma imagem oficial do Docker faz as duas coisas. [Em um servidor, um NAS ou no Docker](deploy.pt-BR.md#em-um-servidor-um-nas-ou-no-docker) trata dos três casos e das formas seguras de acessar a página.
 
 ## Faça dele o seu personagem
 
@@ -336,7 +344,15 @@ Abra **Conectar plataformas** na página local e escolha uma plataforma. A pági
 Chat platform  ⇄  connector  ⇄  personagent  ⇄  Model API
 ```
 
-Um conector entra na plataforma, encaminha cada mensagem ao personagent e traz a resposta de volta. Há três tipos.
+Um conector entra na plataforma, encaminha cada mensagem ao personagent e traz a resposta de volta. Há três tipos, descritos depois da próxima seção.
+
+### A quem ele responde: aprovação de conversas novas
+
+Uma plataforma conectada na página ou com `personagent connect <platform>` começa pedindo aprovação de conversas novas. Nela, o personagem responde a você e às pessoas e grupos que você aprovou; ninguém mais recebe resposta do modelo. Quem escreve para o bot no privado recebe uma mensagem fixa no idioma do personagem dizendo que o administrador dele precisa aprovar a conversa, com um código de seis caracteres; a pessoa a recebe de novo no máximo uma vez por dia, por mais que escreva. Em um grupo não aprovado, o personagem não diz nada, e quando alguém se dirige a ele ali, diz no máximo uma vez por dia que o administrador dele não aprovou o grupo.
+
+Cada solicitação aparece em **Conectar plataformas**, abaixo das plataformas conectadas, com o nome, a hora, o código e as primeiras palavras, e o ponto ao lado de **Conectar plataformas** fica âmbar. **Aprovar** faz o personagem responder a essa conversa a partir da próxima mensagem, sem reiniciar. **Recusar** impede que a conversa seja respondida ou peça de novo; a lista de conversas recusadas tem **Desfazer**. Para uma conversa privada, **Sou eu** a aprova e torna essa conta a sua conta de administrador na plataforma, que é a forma de virar administrador sem procurar o próprio ID; essa opção é oferecida primeiro enquanto a plataforma não tem administrador. Uma solicitação expira após três dias, e cada plataforma mantém no máximo vinte em espera, de modo que uma enxurrada de desconhecidos não consegue fazer o bot enviar uma enxurrada de mensagens. Nada do que um desconhecido escreve chega ao modelo.
+
+A frase abaixo de cada plataforma conectada diz qual regra vale ali e oferece a outra: **Responder a conversas novas sem aprovação** responde a toda conversa que a plataforma entrega ao bot, como nas versões anteriores (as configurações de resposta continuam valendo), e **Pedir aprovação para conversas novas** ativa a aprovação. As pastas do personagent configuradas antes desta versão continuam respondendo como antes até você ativá-la. Os canais informados ao conectar a Twitch ou o IRC contam como aprovados. A conversa da própria página, os assistentes de programação e a API compatível com OpenAI nunca pedem aprovação. Em um computador sem tela, `personagent access` lista as solicitações e as decide pelo código (`approve`, `decline`, `admin`, `undo` e `policy <platform> approve|open`).
 
 ### Plataformas que o personagent conecta por conta própria
 
@@ -426,6 +442,31 @@ O personagent escuta em `127.0.0.1:8080`, e um `SERVER_HOST` vazio significa o m
 ### Falar primeiro
 
 Algumas mensagens não respondem a ninguém. São as falas por iniciativa própria (`PROACTIVE_ENABLED`, desativado por padrão), a pergunta de acompanhamento depois de uma rejeição e a desculpa quando o modelo falha em um grupo. Em uma conversa privada, a desculpa volta na resposta à mensagem que espera. O personagent coloca essas mensagens em uma caixa de saída, e os conectores as buscam e enviam nas plataformas que deixam um bot falar primeiro. A página local as busca da mesma forma para a sua própria tela Conversa. Contas oficiais do WeChat e bots inteligentes do WeCom não permitem isso. O QQ limita a taxa das mensagens espontâneas de um bot oficial, e os usuários podem desativá-las. `PROACTIVE_PLATFORMS=qq_official` limita essas falas ao bot oficial do QQ, e `qq` ao QQ pelo NapCat. Na página, **Iniciar conversas ocasionalmente**, em **Mais recursos**, grava as duas configurações. Veja o [guia de implantação](deploy.pt-BR.md#mais-de-uma-plataforma).
+
+## Ferramentas
+
+Além da pesquisa na web, o personagem pode usar ferramentas de servidores MCP que você adicionar: a hora atual, o texto de uma página da web, as suas notas, uma agenda e tudo o mais que um servidor MCP oferecer. O personagem continua escrevendo cada resposta com a própria voz. Uma ferramenta é algo que ele consulta no caminho, como faz com a pesquisa na web: quando uma mensagem pede algo que uma ferramenta fornece, ele chama essa única ferramenta, lê a resposta e responde como ele mesmo.
+
+**Adicionar um servidor.** Em **Personagem e configurações**, a seção **Ferramentas**, abaixo de **Mais recursos**, aceita a configuração das instruções do servidor tal como está: o bloco `{"mcpServers": {...}}` completo, escrito para o Claude Desktop ou o Cursor, a entrada de um único servidor ou o objeto de um único servidor. **Informar um programa ou um endereço** aceita um comando com os argumentos e as variáveis de ambiente dele, ou o endereço de um servidor remoto (Streamable HTTP) com os cabeçalhos de solicitação. Quando o `uvx` é encontrado (os instaladores trazem o uv), dois servidores do conjunto oficial de referência são oferecidos prontos para adicionar: **Hora** (`uvx mcp-server-time`) e **Leitura de páginas** (`uvx mcp-server-fetch`). Em um terminal:
+
+```
+personagent tools add '{"mcpServers": {"time": {"command": "uvx", "args": ["mcp-server-time"]}}}'
+personagent tools add --name fetch --command uvx --arg mcp-server-fetch
+personagent tools add --name notes --url https://example.com/mcp --header "Authorization=Bearer ..."
+personagent tools check
+personagent tools call time get_current_time '{"timezone": "Asia/Tokyo"}'
+personagent tools set time get_current_time --who anyone
+personagent tools list
+personagent tools remove fetch
+```
+
+**Cada ferramenta** tem um interruptor e a escolha de quem pode fazer com que seja usada: **Apenas o administrador**, o padrão para toda ferramenta nova, ou **Qualquer pessoa a quem o personagem responde**. Uma ferramenta que o remetente de uma mensagem não pode usar nunca é oferecida para essa mensagem. **Verificar** conecta ao servidor imediatamente, lê as ferramentas dele e informa o motivo quando isso falha: o programa não foi encontrado, foi encerrado (com as últimas linhas da saída), o endereço recusou a conexão, não respondeu a tempo ou exige um login por OAuth, que o personagent ainda não suporta. **Testar** chama uma ferramenta manualmente com os argumentos que você informar e mostra o texto que o personagem receberia. **Remover** encerra o servidor e o remove. As alterações entram em vigor em poucos segundos, sem reinicialização.
+
+**Execução.** O serviço do personagem inicia os servidores quando é iniciado, sem esperar por eles, reinicia um servidor que para (após 2 segundos, e depois com o intervalo dobrando até 5 minutos) e encerra os servidores, e os programas que eles iniciaram, quando é encerrado. Um servidor que não inicia é informado na página e por `personagent doctor`; o personagem funciona sem ele. Uma chamada tem 20 segundos; só o texto de uma resposta é usado, com no máximo 3.000 caracteres, e outros conteúdos, como imagens, são nomeados e omitidos. Os argumentos que o modelo escolhe são verificados em relação à descrição da ferramenta antes da chamada.
+
+**Custo.** Sem ferramentas, uma verificação por expressão regular decide se uma mensagem pode precisar de uma pesquisa na web, e só então o modelo é consultado. Enquanto uma ferramenta estiver ativada, cada mensagem que o personagem for responder, enviada por alguém com permissão para usar uma ferramenta, gera uma pequena solicitação adicional ao modelo juiz (`LLM_JUDGE_MODEL`), que decide se deve usar uma ferramenta, pesquisar na web ou nenhuma das duas. A tela Aplicativo conta essas solicitações como **Decisão de usar uma ferramenta**.
+
+**Segurança.** Adicionar um servidor executa um programa neste computador com os seus próprios direitos de usuário ou conecta ao endereço que você informar; adicione apenas servidores em que você confia. Os nomes, as descrições e as respostas das ferramentas vêm de terceiros: o tamanho deles é limitado, e eles são marcados para o modelo como material externo, do qual o modelo é instruído a nunca aceitar instruções. O que uma ferramenta retorna é enviado ao serviço de modelo junto com a conversa. Os servidores ficam em `mcp.json`, na pasta do personagent; as variáveis de ambiente e os cabeçalhos de solicitação dele são segredos, e a página mostra apenas quais deles estão definidos. Na Atividade, em `/why` no `personagent chat` e na explicação do grupo de prática, uma resposta que recorreu a uma ferramenta informa o nome da ferramenta, nunca os argumentos nem a resposta dela.
 
 ## Assistentes de programação
 
@@ -840,6 +881,7 @@ O provedor de modelos vê as conversas:
 - Quando o próprio personagem decide um item aprendido, a resposta, as reações a ela e as redações candidatas vão para `PROMOTE_JUDGE_MODEL` (vazio: `REACT_MODEL`). `PROMOTE_JUDGE_ENABLED=false` desativa isso.
 - As imagens vão para o endpoint de visão.
 - Quando o modelo decide procurar algo, a consulta vai para o Tavily (se `TAVILY_API_KEY` estiver definido) ou para o DuckDuckGo.
+- Quando ele decide usar uma das suas [ferramentas](#ferramentas), os argumentos que escolheu vão para o servidor dessa ferramenta, e a resposta da ferramenta vai para o serviço de modelo.
 - Com `EMBEDDING_MODEL` definido, a mensagem que ele responde, as lembranças e os exemplos de busca vão para o endpoint de embeddings (`EMBEDDING_BASE_URL`, ou `LLM_BASE_URL` se vazio).
 
 Antes de conectá-lo a pessoas reais, diga a elas que é um bot e obtenha o consentimento delas para o processamento das mensagens. Leia o [aviso legal](DISCLAIMER.pt-BR.md).
@@ -852,6 +894,8 @@ Os principais arquivos e pastas da pasta do personagent, e o que cada um contém
 |---|---|---|
 | `.env` | As configurações, com a chave do modelo e as demais chaves em texto simples | Segredos |
 | `persona.txt`, `persona.card.json` | A persona e o cartão opcional | Não |
+| `mcp.json` | Os [servidores de ferramentas](#ferramentas), as variáveis de ambiente e os cabeçalhos de solicitação deles, e as configurações de cada ferramenta | Segredos |
+| `runtime/tools/` | As ferramentas que cada servidor listou por último e quais servidores o serviço em execução conseguiu iniciar | Não |
 | `persona.txt.bak` e suas cópias com data, `avatar.png` | As personas que você escreveu e que uma personalidade pronta substituiu, e a sua própria imagem | Não |
 | `platforms/` | `direct.json`, com as credenciais das plataformas que o personagent conecta por conta própria, e o AstrBot gerenciado com as configurações dele | Segredos |
 | `runtime/memory.json`, `core_memory.json`, `episodes.json` | Fatos, nota principal, eventos e resumos de cada conversa | Conteúdo de conversas |

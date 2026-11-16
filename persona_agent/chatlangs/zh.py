@@ -43,6 +43,9 @@ SPEC = Spec(
         "said": ("你说过：",),
         "about": ("关于{name}：",),
         "from": ("来自{name}：",),
+        # Fixed lines, no model: a chat waiting for the admin's approval.
+        "approval_dm": ("需经我的管理员批准后，我才能在此回复\n本次申请的代码为 {code}，请将其转告我的管理员",),
+        "approval_group": ("我的管理员尚未批准此群聊，因此我暂时无法在此回复",),
     },
     failure_excuses=("等我一下，网有点卡",
                      "信号不太好，稍等",

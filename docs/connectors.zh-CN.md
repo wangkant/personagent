@@ -45,7 +45,7 @@ curl http://127.0.0.1:8080/health
 | 要转发其私聊的人 | `SATORI_DM_USERS` | `MATRIX_DM_USERS` | `dm_users` |
 | 平台的服务器 | `SATORI_URL` | `MATRIX_URL` | AstrBot 自身的设置 |
 
-群或私聊列表为空时，该类消息均不转发。`*` 转发该类的全部内容，并将事件标记为 `"prefiltered": false`，交由 agent 的 `ACCESS_GROUPS` 和 `ACCESS_DM_USERS` 决定。其余设置见各连接器的 README。
+群或私聊列表为空时，该类消息均不转发。`*` 转发该类的全部内容，并将事件标记为 `"prefiltered": false`，交由 agent 的 `ACCESS_GROUPS` 和 `ACCESS_DM_USERS` 决定（在 `ACCESS_APPROVAL_PLATFORMS` 列出的平台上，还需经管理员批准新对话）。其余设置见各连接器的 README。
 
 ## 地址
 
@@ -91,7 +91,7 @@ QQ 是唯一的例外，为兼容而保留。其 id 存储时不带前缀（`123
 }
 ```
 
-必填字段是 `platform`、`conversation_type`（`group` 或 `dm`）、`sender_id`、`message_id` 和 `sent_at`，群聊还须包含 `conversation_id`。`sent_at` 是平台为消息标记的时间，单位为 unix 秒（也接受纯数字字符串，小数部分会被舍去）。角色看到的每条消息都附有这一时间。agent 启动后，在某个平台的第一条消息到达起两分钟内，如果群聊消息到达时已超过 10 分钟，即视为重启后补发的积压消息：只作为上下文保留，不予回复。两分钟之后，较早的 `sent_at` 不再使消息被搁下，因此时钟偏慢的连接器发来的消息仍会得到回复。请发送平台原始 id，前缀由 agent 添加。
+必填字段是 `platform`、`conversation_type`（`group` 或 `dm`）、`sender_id`、`message_id` 和 `sent_at`，群聊还须包含 `conversation_id`。`sent_at` 是平台为消息标记的时间，单位为 unix 秒（也接受纯数字字符串，小数部分会被舍去）。角色看到的每条消息都附有这一时间。agent 启动后，在某个平台的第一条消息到达起两分钟内，如果群聊消息到达时已超过 10 分钟，即视为重启后补发的积压消息：只作为上下文保留，不予回复。两分钟之后，较早的 `sent_at` 不再使消息被搁下，因此时钟偏慢的连接器发来的消息仍会得到回复。请发送平台原始 id，前缀由 agent 添加。群聊事件可以带有 `conversation_name`，即平台提供的群名称；该群等待批准时，管理员会看到这一名称。
 
 `addressed` 由连接器设置。消息提及机器人、回复机器人的某条消息，或按平台自身规则是对机器人说的，该字段即为 true。agent 本身也会留意文本中出现的名称。它将对自身消息的引用或对机器人的 @ 视为可供学习的反应，因此回复机器人消息时须设置 `addressed`。对其他成员消息的引用从不视为对机器人的反应。转发消息中对机器人的提及不算对机器人说话，因此不要为此设置 `addressed`。
 

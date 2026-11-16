@@ -45,7 +45,7 @@ A página local configura o conector direto. Os outros três usam os mesmos nome
 | Pessoas cujas mensagens privadas são encaminhadas | `SATORI_DM_USERS` | `MATRIX_DM_USERS` | `dm_users` |
 | O servidor da plataforma | `SATORI_URL` | `MATRIX_URL` | O do próprio AstrBot |
 
-Uma lista de grupos ou de conversas privadas vazia não encaminha nada desse tipo. `*` encaminha tudo e marca os eventos com `"prefiltered": false`, o que deixa a decisão para `ACCESS_GROUPS` e `ACCESS_DM_USERS` do agente. O README de cada conector lista as demais configurações.
+Uma lista de grupos ou de conversas privadas vazia não encaminha nada desse tipo. `*` encaminha tudo e marca os eventos com `"prefiltered": false`, o que deixa a decisão para `ACCESS_GROUPS` e `ACCESS_DM_USERS` do agente (e, em uma plataforma listada em `ACCESS_APPROVAL_PLATFORMS`, para a aprovação de conversas novas pelo administrador). O README de cada conector lista as demais configurações.
 
 ## Endereçamento
 
@@ -91,7 +91,7 @@ Cada solicitação traz uma mensagem e devolve as respostas a ela.
 }
 ```
 
-Os campos obrigatórios são `platform`, `conversation_type` (`group` ou `dm`), `sender_id`, `message_id` e `sent_at`, mais `conversation_id` para grupos. `sent_at` é quando a plataforma carimbou a mensagem, em segundos unix (uma string de dígitos também é aceita, e a fração é descartada). O personagem vê cada mensagem com esse horário. Uma mensagem de grupo que tem mais de 10 minutos quando chega, nos dois minutos seguintes à primeira mensagem da plataforma desde que o agente foi iniciado, é um acúmulo entregue depois de um reinício: é mantida como contexto e não é respondida. Passados esses dois minutos, um `sent_at` antigo deixa de reter uma mensagem, de modo que um conector cujo relógio está atrasado continua recebendo respostas. Envie os ids brutos da plataforma. O agente acrescenta o prefixo.
+Os campos obrigatórios são `platform`, `conversation_type` (`group` ou `dm`), `sender_id`, `message_id` e `sent_at`, mais `conversation_id` para grupos. `sent_at` é quando a plataforma carimbou a mensagem, em segundos unix (uma string de dígitos também é aceita, e a fração é descartada). O personagem vê cada mensagem com esse horário. Uma mensagem de grupo que tem mais de 10 minutos quando chega, nos dois minutos seguintes à primeira mensagem da plataforma desde que o agente foi iniciado, é um acúmulo entregue depois de um reinício: é mantida como contexto e não é respondida. Passados esses dois minutos, um `sent_at` antigo deixa de reter uma mensagem, de modo que um conector cujo relógio está atrasado continua recebendo respostas. Envie os ids brutos da plataforma. O agente acrescenta o prefixo. Um evento de grupo pode trazer `conversation_name`, o nome do grupo quando a plataforma o informa; o administrador o vê quando o grupo aguarda aprovação.
 
 O conector define `addressed`. É verdadeiro quando a mensagem menciona o bot, responde a uma das mensagens do bot ou é dirigida ao bot pelas regras da própria plataforma. O agente também percebe sozinho o próprio nome no texto. Ele lê uma citação da própria mensagem, ou uma @ ao bot, como uma reação com a qual pode aprender, então defina `addressed` nas respostas ao bot. Uma citação da mensagem de outro membro nunca é uma reação ao bot. Uma menção ao bot dentro de uma mensagem encaminhada não se dirige ao bot, então não defina `addressed` para ela.
 

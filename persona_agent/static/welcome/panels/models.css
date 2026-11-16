@@ -1,0 +1,8 @@
+/* The models panel: under the model field. */
+.models-note {
+  margin: 6px 0 8px;
+}
+#advanced label.check.models-free {
+  margin: 0 0 12px;
+  font-size: 13px;
+}

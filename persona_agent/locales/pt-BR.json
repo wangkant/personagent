@@ -469,5 +469,18 @@
 "Any other software that accepts an OpenAI-compatible address: `{cmd} api`.": "Qualquer outro programa que aceite um endereço compatível com OpenAI: `{cmd} api`.",
 "personagent demo: short scenes played with scripted answers": "personagent demo: cenas curtas com respostas predefinidas",
 "personagent demo: the same scenes, played by your model ({model})": "personagent demo: as mesmas cenas, com o seu modelo ({model})",
-"unknown command {cmd}; /help lists the commands": "comando desconhecido {cmd}; /help mostra os comandos"
+"unknown command {cmd}; /help lists the commands": "comando desconhecido {cmd}; /help mostra os comandos",
+"Sign in with an OpenRouter account instead of pasting a key?": "Entrar com uma conta do OpenRouter em vez de colar uma chave?",
+"Open this address in a browser on any device, sign in and approve:": "Abra este endereço em um navegador de qualquer dispositivo, entre e aprove:",
+"OpenRouter creates a key for personagent, which is kept on this computer. Until you remove it at openrouter.ai/keys, the key can spend the credit of your OpenRouter account. The free models need no credit.": "O OpenRouter cria uma chave para o personagent, que fica salva neste computador. Até você removê-la em openrouter.ai/keys, a chave pode gastar o crédito da sua conta do OpenRouter. Os modelos gratuitos não precisam de crédito.",
+"Code shown on the page (press Enter to paste a key instead)": "Código mostrado na página (pressione Enter para colar uma chave em vez disso)",
+"Signed in. OpenRouter created a key for personagent.": "Login feito. O OpenRouter criou uma chave para o personagent.",
+"That is not a code from the OpenRouter page.": "Este não é um código da página do OpenRouter.",
+"OpenRouter did not accept the code; it may have expired after ten minutes.": "O OpenRouter não aceitou o código; ele pode ter expirado depois de dez minutos.",
+"OpenRouter did not return a key.": "O OpenRouter não retornou uma chave.",
+"personagent could not reach OpenRouter to collect the key.": "O personagent não conseguiu acessar o OpenRouter para obter a chave.",
+"Paste a key instead.": "Cole uma chave em vez disso.",
+"New chats on {name} wait for your approval: whoever writes to the bot receives a short code, and `{list}` shows the requests. To answer everyone without approval instead, run `{open}`.": "As conversas novas no {name} aguardam a sua aprovação: quem escrever para o bot recebe um código curto, e `{list}` mostra as solicitações. Para responder a todos sem aprovação, execute `{open}`.",
+"  it searched the web first": "  antes, ele pesquisou na web",
+"  it used the tool {name} first": "  antes, ele usou a ferramenta {name}"
 }

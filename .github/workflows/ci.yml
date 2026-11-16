@@ -62,6 +62,8 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -e ".[dev]"
       - name: Run the test suite
+        # bash: PowerShell reports only the last command of a step, which hid failing tests here.
+        shell: bash
         run: |
           python -m pytest -q
           python -m compileall -q .
@@ -147,6 +149,24 @@ jobs:
           print('sdist install ok')
           "
 
+  docker:
+    # The image as a server runs it: healthy, the sign-in page for another device,
+    # a wrong password refused, the right one let in, a first-start password printed once.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the compose file and the Dockerfile
+        run: |
+          docker compose -f compose.yaml config --quiet
+          docker build --check .
+      - name: Build the image
+        run: docker build -t personagent:ci .
+      - name: Smoke-test the container
+        run: python3 tools/docker_smoke.py --image personagent:ci
+
   installer:
     # install.sh and install.ps1 as a newcomer runs them: uv and a Python of its own are fetched.
     runs-on: ${{ matrix.os }}
@@ -184,6 +204,8 @@ jobs:
           sh install.sh
       - name: Install on Linux through the mirrors (manual runs only)
         if: runner.os == 'Linux' && github.event_name == 'workflow_dispatch'
+        # The mirrors are in mainland China and the runner is not: a slow link there is no defect here.
+        continue-on-error: true
         run: |
           export PERSONAGENT_MIRROR=cn PERSONAGENT_UV_DIR="$RUNNER_TEMP/uvbin-cn" UV_TOOL_BIN_DIR="$RUNNER_TEMP/bin-cn"
           export UV_TOOL_DIR="$RUNNER_TEMP/tools-cn" UV_PYTHON_INSTALL_DIR="$RUNNER_TEMP/python-cn"

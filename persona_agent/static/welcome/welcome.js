@@ -68,6 +68,8 @@ const translations = {
     activityUndone: "已撤销，角色不会再使用这一说法。",
     activityQuiet: "未发言",
     activityCount: "×{n}",
+    activitySearched: "已联网搜索",
+    activityUsedTool: "已使用工具 {name}",
     activityFacts: "事实",
     activityThread: "此前的对话",
     activityEvents: "事件",
@@ -145,6 +147,7 @@ const translations = {
     m_followup: "跟进",
     m_proactive: "主动发起话题",
     local: "运行在你的电脑上",
+    localRemote: "运行在另一台电脑上",
     welcome: "欢迎使用 personagent",
     localReady: "本地应用已就绪",
     running: "正在运行",
@@ -155,6 +158,11 @@ const translations = {
     repliesOffOpen: "前往设置",
     serviceStopped: "已停止",
     exit: "退出",
+    signOut: "退出登录",
+    signingOut: "正在退出登录…",
+    signOutFailed: "无法退出登录。请检查网络连接后重试。",
+    signin_required: "登录已失效，请重新登录。",
+    local_only: "此操作只能在运行 personagent 的电脑上进行。",
     exitAsk: "退出后，角色将在所有已连接的平台（{platforms}）上停止回复，直至再次运行 personagent。确定退出吗？",
     winMin: "最小化",
     winMax: "最大化",
@@ -221,6 +229,7 @@ const translations = {
     updateRun: "请退出 personagent，运行以下命令，然后重新打开。",
     updateOpens: "请退出 personagent，然后使用以下命令打开新版本。",
     updateDownload: "请在更新说明页下载新版本源码，解压后覆盖 personagent 文件夹。",
+    updateContainer: "此副本运行在容器中。请在启动该容器的位置运行以下命令，拉取新镜像并重新启动容器。",
     copy: "复制",
     copied: "已复制",
     close: "关闭",
@@ -247,6 +256,7 @@ const translations = {
     qqLater: "也可以将角色接入 QQ、微信、Telegram…",
     qqLaterHint: "如需接入其他平台，请在「连接平台」中选择，扫码或填写几项即可完成。",
     chatHint: "本机对话，你在此处的身份是管理员。",
+    chatHintRemote: "本页面与角色的对话，你在此处的身份是管理员。",
     newChat: "新对话",
     newChatDone: "已开始新的对话，角色记住的内容仍然保留。",
     chatWait: "上一条消息的回复尚未完成，请稍候再发送。",
@@ -435,6 +445,17 @@ const translations = {
     reach_public_bot: "如需防止他人将机器人添加到他们的服务器，请在 Discord 开发者门户的 Bot 页面关闭 Public Bot。",
     reachLimit: "限制回复对象",
     reachChange: "更改回复对象",
+    reach_approval: "在此平台上，角色只回复你批准过的群聊和人；其他人向机器人发送消息时会收到一个简短代码，并等待你批准。",
+    reach_dm_approval: "在此平台上，角色只回复你批准过的人；其他人向机器人发送消息时会收到一个简短代码，并等待你批准。",
+    reach_channels_approval: "在此平台上，角色在连接时填写的频道中回复，私聊则只回复你批准过的人；其他人私聊机器人时会收到一个简短代码，并等待你批准。",
+    approvalOn: "新对话需经批准",
+    approvalOff: "新对话无需批准即回复",
+    approvalOffAsk: "此后，角色将不经你批准即回复 {platform} 上的所有新对话，任何找到该机器人的人都可以使用你的模型服务。回复设置仍然有效。是否继续？",
+    approvalOffYes: "无需批准即回复",
+    approvalSaving: "正在保存…",
+    approvalOnDone: "{platform} 上的新对话现在需经你批准。",
+    approvalOffDone: "{platform} 上的新对话现在无需批准即会得到回复。",
+    approvalsNav: "等待批准的新对话：{n}",
     field_required: "请填写所有必填项。",
     invalid_field: "有一项格式不正确，请检查地址或端口。",
     invalid_platform: "暂不支持该平台。",
@@ -516,6 +537,8 @@ const translations = {
     activityUndone: "Undone. The character will no longer phrase it this way.",
     activityQuiet: "Stayed quiet",
     activityCount: "×{n}",
+    activitySearched: "Searched the web",
+    activityUsedTool: "Used the tool {name}",
     activityFacts: "Facts",
     activityThread: "Earlier in this chat",
     activityEvents: "Events",
@@ -593,6 +616,7 @@ const translations = {
     m_followup: "follow-up",
     m_proactive: "proactive",
     local: "Running on your computer",
+    localRemote: "Running on another computer",
     welcome: "Welcome to personagent",
     localReady: "Local app ready",
     running: "Running",
@@ -603,6 +627,11 @@ const translations = {
     repliesOffOpen: "Open settings",
     serviceStopped: "Stopped",
     exit: "Quit",
+    signOut: "Sign out",
+    signingOut: "Signing out…",
+    signOutFailed: "Signing out failed. Check the connection, then try again.",
+    signin_required: "The sign-in has ended. Sign in again.",
+    local_only: "This can be done only on the computer personagent runs on.",
     exitAsk: "After quitting, the character stops replying on every connected app ({platforms}) until personagent runs again. Quit now?",
     winMin: "Minimize",
     winMax: "Maximize",
@@ -676,6 +705,7 @@ const translations = {
     updateRun: "Quit personagent, run this command, then open it again.",
     updateOpens: "Quit personagent, then open the new version with this command.",
     updateDownload: "Download the new source from the release page and unpack it over this folder.",
+    updateContainer: "This copy runs in a container. Where the container was started, run this command to pull the new image and start the container again.",
     copy: "Copy",
     copied: "Copied",
     close: "Close",
@@ -705,6 +735,7 @@ const translations = {
     qqLaterHint:
       "To connect another app, choose it under Connect apps. Most need only a QR code scan or one or two values.",
     chatHint: "A chat on this computer. Here you are the admin.",
+    chatHintRemote: "This page's own chat with the character. Here you are the admin.",
     newChat: "New chat",
     newChatDone: "A new chat has started. What the character remembers is kept.",
     chatWait: "The reply to your last message is still coming. Send this one when it is done.",
@@ -909,6 +940,17 @@ const translations = {
     reach_public_bot: "To keep others from adding the bot to their servers, turn off Public Bot on the Bot page of the Discord Developer Portal.",
     reachLimit: "Limit who it answers",
     reachChange: "Change who it answers",
+    reach_approval: "Here the character answers only the groups and people you approved; anyone else who writes to the bot receives a short code and waits for your approval.",
+    reach_dm_approval: "Here the character answers only the people you approved; anyone else who writes to the bot receives a short code and waits for your approval.",
+    reach_channels_approval: "Here the character answers in the channels entered when connecting, and in direct messages only the people you approved; anyone else who writes to the bot directly receives a short code and waits for your approval.",
+    approvalOn: "Ask for approval of new chats",
+    approvalOff: "Answer new chats without approval",
+    approvalOffAsk: "From now on, the character answers every new chat on {platform} without asking you first, so anyone who finds the bot can use your model service. The reply settings still apply. Continue?",
+    approvalOffYes: "Answer without approval",
+    approvalSaving: "Saving…",
+    approvalOnDone: "New chats on {platform} now wait for your approval.",
+    approvalOffDone: "New chats on {platform} are now answered without approval.",
+    approvalsNav: "New chats waiting for approval: {n}",
     field_required: "Fill in every required field.",
     invalid_field: "One value is not valid. Check the address or port.",
     invalid_platform: "This app is not supported.",
@@ -1009,6 +1051,17 @@ if (fragment.has("token")) {
   sessionStorage.setItem("personagent-setup-token", token);
   history.replaceState(null, "", location.pathname);
 }
+// Without the token the page asks as a signed-in device; a cross-site request cannot add this header.
+const authHeaders = () =>
+  token ? { "X-Personagent-Setup-Token": token } : { "X-Personagent-Session": "1" };
+// A device whose session ended goes back to the sign-in page, which "/" then serves.
+function signedOut(response) {
+  if (!token && response.status === 401) {
+    location.reload();
+    return true;
+  }
+  return false;
+}
 const t = (key, fields = {}) =>
   Object.entries(fields).reduce(
     (value, [name, text]) => value.replaceAll(`{${name}}`, () => text),
@@ -1058,12 +1111,13 @@ async function api(path, payload) {
     method: payload === undefined ? "GET" : "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Personagent-Setup-Token": token,
+      ...authHeaders(),
       ...(frameKey && path === "window" ? { "X-Personagent-Window": frameKey } : {}),
     },
     body: payload === undefined ? undefined : JSON.stringify(payload),
-    credentials: "omit",
+    credentials: "same-origin",
   });
+  if (signedOut(response)) throw new Error("signin_required");
   const value = await response.json();
   if (!response.ok) throw new Error(value.error || value.detail || "generic");
   return value;
@@ -1135,8 +1189,8 @@ async function syncOwnAvatar() {
     let url = "";
     if (version) {
       const response = await fetch("/api/avatar", {
-        headers: { "X-Personagent-Setup-Token": token },
-        credentials: "omit",
+        headers: authHeaders(),
+        credentials: "same-origin",
       });
       if (response.ok) url = URL.createObjectURL(await response.blob());
     }
@@ -1644,8 +1698,20 @@ function closePanel() {
   // Back where it was opened: that platform's tile.
   document.querySelector(`.tile[data-platform="${CSS.escape(kind || "")}"]`)?.focus();
 }
+// What the connected list last showed: a poll that changes nothing leaves its buttons and the focus alone.
+let connectedShown = "",
+  // The platform whose approval switch is being saved.
+  policySaving = "";
+function connectedKey(connected, working) {
+  return JSON.stringify([lang, Boolean(catalog), connected, working, policySaving, state.platformStatus, state.platformDetail,
+    state.platformReach, state.platformApproval]);
+}
 function renderConnected(connected, working) {
+  const key = connectedKey(connected, working);
+  if (key === connectedShown) return;
+  connectedShown = key;
   const list = $("connected-list");
+  const focused = list.contains(document.activeElement) ? document.activeElement.dataset.focusKey : "";
   list.replaceChildren();
   for (const kind of connected) {
     const row = document.createElement("li");
@@ -1675,9 +1741,12 @@ function renderConnected(connected, working) {
     remove.setAttribute("aria-label", labelled(t("disconnect"), platformName(kind)));
     remove.disabled = working;
     remove.addEventListener("click", () => disconnect(kind));
+    again.dataset.focusKey = `again-${kind}`;
+    remove.dataset.focusKey = `remove-${kind}`;
     row.append(badge(kind, "small"), name, status, again, remove);
     list.append(row, connectedNote(kind, working));
   }
+  if (focused) list.querySelector(`[data-focus-key="${CSS.escape(focused)}"]`)?.focus();
 }
 // Under a platform's row: why it is not connected, when it has a named cause,
 // and who the character answers there, with the way to the setting that limits it.
@@ -1695,21 +1764,55 @@ function connectedNote(kind, working) {
   note.append(reachLine(kind, working));
   return note;
 }
-function reachLine(kind, working) {
+function reachLine(kind, working, where = "list") {
   const line = document.createElement("p");
   line.className = "connected-reach";
   const reach = (state.platformReach || {})[kind] || "all";
   const open = reach === "all" || reach === "dm_all";
   line.textContent = t(`reach_${reach}`) + (kind === "discord" ? " " + t("reach_public_bot") : "");
+  const approval = (state.platformApproval || {})[kind];
+  if (approval !== undefined) {
+    // The other choice, offered where the sentence says which one holds.
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "quiet";
+    toggle.dataset.focusKey = `${where}-approval-${kind}`;
+    const saving = policySaving === kind;
+    toggle.textContent = t(saving ? "approvalSaving" : approval ? "approvalOff" : "approvalOn");
+    toggle.setAttribute("aria-label", labelled(toggle.textContent, platformName(kind)));
+    toggle.setAttribute("aria-busy", String(saving));
+    toggle.disabled = working || Boolean(policySaving);
+    toggle.addEventListener("click", () => switchApproval(kind, !approval, toggle.dataset.focusKey));
+    line.append(" ", toggle);
+  }
   const limit = document.createElement("button");
   limit.type = "button";
   limit.className = "quiet";
+  limit.dataset.focusKey = `${where}-limit-${kind}`;
   limit.textContent = t(open ? "reachLimit" : "reachChange");
   limit.setAttribute("aria-label", labelled(limit.textContent, platformName(kind)));
   limit.disabled = working;
   limit.addEventListener("click", openReplySettings);
   line.append(" ", limit);
   return line;
+}
+async function switchApproval(kind, approve, focusKey) {
+  const where = { platform: platformName(kind) };
+  if (!approve && !(await ask(t("approvalOffAsk", where), t("approvalOffYes")))) return;
+  policySaving = kind;
+  renderStatus();
+  try {
+    await api("approvals/policy", { platform: kind, approve });
+    state = await api("state");
+    toast(t(approve ? "approvalOnDone" : "approvalOffDone", where));
+  } catch (error) {
+    toast(t(error.message));
+  } finally {
+    policySaving = "";
+    renderStatus();
+    // The switch was disabled while it saved, which dropped the focus: it goes back to it.
+    document.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`)?.focus();
+  }
 }
 // The advanced settings' first group, which holds who the character answers.
 function openReplySettings() {
@@ -1808,7 +1911,8 @@ function renderUpdate() {
   set("update-link", t("updateLink", { version: update.version }));
   set("update-title", t("updateTitle", { version: update.version }));
   $("update-notes").href = update.url;
-  set("update-how", t(!update.command ? "updateDownload" : update.opens ? "updateOpens" : "updateRun"));
+  set("update-how", t(update.container ? "updateContainer" : !update.command ? "updateDownload"
+    : update.opens ? "updateOpens" : "updateRun"));
   $("update-command-row").hidden = !update.command;
   set("update-command", update.command);
   $("update-close").setAttribute("aria-label", t("close"));
@@ -1867,6 +1971,19 @@ function renderStatus() {
         !(working && job.action !== "disconnect" && job.platform === kind),
     );
   $("platforms-dot").hidden = !connected.length;
+  // A chat waiting for approval turns the dot amber, as a finding does on the app's.
+  const waiting = Object.values(state.approvalsWaiting || {}).reduce((sum, n) => sum + n, 0);
+  const dot = $("platforms-dot");
+  dot.classList.toggle("attention", waiting > 0);
+  if (waiting > 0) {
+    dot.setAttribute("role", "img");
+    dot.setAttribute("aria-label", t("approvalsNav", { n: String(waiting) }));
+    dot.title = dot.getAttribute("aria-label");
+  } else {
+    dot.removeAttribute("role");
+    dot.removeAttribute("aria-label");
+    dot.removeAttribute("title");
+  }
   for (const tile of document.querySelectorAll(".tile")) {
     const on = connected.includes(tile.dataset.platform);
     tile.classList.toggle("on", on);
@@ -1901,9 +2018,14 @@ function renderStatus() {
     platform: platformName(selected),
   });
   // Who the character now answers there, said as soon as the platform connects.
-  $("done-reach").replaceChildren(
-    ...(done && state.platforms.includes(selected) ? [reachLine(selected, working)] : []),
-  );
+  const doneKey = done && state.platforms.includes(selected) ? connectedKey([selected], working) : "";
+  if ($("done-reach").dataset.shown !== doneKey) {
+    const hadFocus = $("done-reach").contains(document.activeElement)
+      ? document.activeElement.dataset.focusKey : "";
+    $("done-reach").dataset.shown = doneKey;
+    $("done-reach").replaceChildren(...(doneKey ? [reachLine(selected, working, "done")] : []));
+    if (hadFocus) $("done-reach").querySelector(`[data-focus-key="${CSS.escape(hadFocus)}"]`)?.focus();
+  }
   if (!active) return;
   const scan = job.stage === "scan";
   // A sign-in by link (Twitch) shows the link itself; its QR is for a phone.
@@ -2271,6 +2393,9 @@ function recentLine(row) {
       ? [reasonText(row)]
       : [t("activityQuiet"), reasonText(row)];
   if (row.count > 1) why.push(t("activityCount", { n: String(row.count) }));
+  // What the reply drew on, by name only.
+  if (row.spoke && row.lookup?.kind === "search") why.push(t("activitySearched"));
+  if (row.spoke && row.lookup?.kind === "tool") why.push(t("activityUsedTool", { name: row.lookup.name }));
   why.push(ago(row.when));
   item.append(el("small", "why", why.filter(Boolean).join(" · ")));
   return item;
@@ -2741,8 +2866,8 @@ function pictureGone(node) {
 async function showPicture(node, name) {
   try {
     const response = await fetch(`/api/chat/picture/${encodeURIComponent(name)}`, {
-      headers: { "X-Personagent-Setup-Token": token },
-      credentials: "omit",
+      headers: authHeaders(),
+      credentials: "same-origin",
     });
     if (!response.ok) throw new Error("gone");
     const blob = await response.blob();
@@ -3048,10 +3173,11 @@ $("own-avatar-file").addEventListener("change", async () => {
   try {
     const response = await fetch("/api/avatar", {
       method: "POST",
-      headers: { "X-Personagent-Setup-Token": token, "Content-Type": "application/octet-stream" },
+      headers: { ...authHeaders(), "Content-Type": "application/octet-stream" },
       body: file,
-      credentials: "omit",
+      credentials: "same-origin",
     });
+    if (signedOut(response)) return;
     const value = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(value.error || value.detail || "generic");
     state = value;
@@ -3242,6 +3368,17 @@ $("persona-save").addEventListener("click", async () => {
     $("persona-save").textContent = t("personaSave");
   }
 });
+// What the form saves besides the service and its key.
+function formValues() {
+  return {
+    baseUrl: $("base-url").value,
+    model: $("model").value,
+    name: $("character-name").value,
+    character: $("character").value,
+    avatar: avatarChoice,
+    lang: $("character-lang").value || lang,
+  };
+}
 $("settings-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (saving) return;
@@ -3262,12 +3399,7 @@ $("settings-form").addEventListener("submit", async (event) => {
       apiKey: $("api-key").value,
       // Set by the detect panel: a key in the environment, read on the server.
       apiKeyFrom: $("api-key").dataset.from || "",
-      baseUrl: $("base-url").value,
-      model: $("model").value,
-      name: $("character-name").value,
-      character: $("character").value,
-      avatar: avatarChoice,
-      lang: $("character-lang").value || lang,
+      ...formValues(),
     });
     // A chosen personality rewrote persona.txt: drop the box's old text.
     if ($("character").value !== "custom") {
@@ -3482,6 +3614,37 @@ $("stop-services").addEventListener("click", async () => {
     toast(t(error.message));
   }
 });
+// Another device signs out instead of quitting, which only the computer itself may do.
+function renderRemote() {
+  const remote = Boolean(state?.remote);
+  document.body.classList.toggle("remote", remote);
+  $("exit").hidden = remote;
+  $("sign-out").hidden = !remote;
+  // "This computer" is the other one: the words say so.
+  for (const [plain, there] of [["local", "localRemote"], ["chatHint", "chatHintRemote"]]) {
+    const node = document.querySelector(`[data-t="${remote ? plain : there}"]`);
+    if (node) node.dataset.t = remote ? there : plain;
+  }
+}
+$("sign-out").addEventListener("click", async () => {
+  const button = $("sign-out");
+  button.disabled = true;
+  button.textContent = t("signingOut");
+  try {
+    const response = await fetch("/auth/signout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Personagent-Session": "1" },
+      body: "{}",
+      credentials: "same-origin",
+    });
+    if (!response.ok && response.status !== 401) throw new Error("generic");
+    location.reload();
+  } catch {
+    toast(t("signOutFailed"));
+    button.disabled = false;
+    button.textContent = t("signOut");
+  }
+});
 $("exit").addEventListener("click", async () => {
   // Quitting stops the character everywhere it is connected, not only here.
   const connected = state?.platforms || [];
@@ -3553,6 +3716,10 @@ window.PA = {
   $,
   api,
   t,
+  // A platform's name in the page's language, its small logo, and "5 minutes ago".
+  platformName,
+  badge,
+  ago,
   toast,
   ask,
   // The Activity view's sentences for where an item stands and how it came into use.
@@ -3598,16 +3765,23 @@ window.PA = {
   async upload(path, blob) {
     const response = await fetch(`/api/${path}`, {
       method: "POST",
-      headers: { "X-Personagent-Setup-Token": token, "Content-Type": "application/octet-stream" },
+      headers: { ...authHeaders(), "Content-Type": "application/octet-stream" },
       body: blob,
-      credentials: "omit",
+      credentials: "same-origin",
     });
+    if (signedOut(response)) throw new Error("signin_required");
     const value = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(value.error || value.detail || "generic");
     return value;
   },
   get catalog() {
     return catalog;
+  },
+  // The setup form's values without the key, as its own save sends them.
+  formValues,
+  // A form save, or another save in its place, is under way.
+  get saving() {
+    return saving;
   },
   // The Persona box: its text now, a draft put in without saving, or the saved text read again.
   get personaText() {
@@ -3635,15 +3809,9 @@ window.PA = {
   // First, and not waited for: a frameless window needs its buttons whatever else loads.
   loadFrame();
   await loadLang(lang);
-  if (!token) {
-    renderText();
-    toast(t("auth"));
-    // No view can open, so the message stays up.
-    clearTimeout(toastTimer);
-    return;
-  }
   try {
     [state, catalog] = await Promise.all([api("state"), api("catalog")]);
+    renderRemote();
     // Loaded once up front, so switching characters never shows an empty circle.
     for (const item of catalog.characters)
       if (item.avatar) new Image().src = item.avatar;
@@ -3661,7 +3829,12 @@ window.PA = {
     poll();
     activityLoop();
   } catch (error) {
-    toast(t(error.message));
+    if (!token && !state) {
+      // Opened here without its link: the token is in the launch window.
+      if (error.message === "signin_required") return;
+      renderText();
+    }
+    toast(t(!token && error.message === "forbidden" ? "auth" : error.message));
     // Nothing loaded and no view is open: keep the message up.
     if (!state) clearTimeout(toastTimer);
   }

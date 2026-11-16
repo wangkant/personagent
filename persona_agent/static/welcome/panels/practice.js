@@ -52,6 +52,8 @@ PA.strings({
     practice_why_failed: "The model did not respond to this message, so the character did not reply.",
     practice_why_off: "Replies are turned off under Character & settings, so the character did not read the message from {who}.",
     practice_why_retry: "This is a second attempt. The first reply, “{text}”, was rejected.",
+    practice_why_searched: "Before replying, it searched the web.",
+    practice_why_tool: "Before replying, it used the tool {name}.",
     practice_why_learning: "Learned from this message: {text}",
     practice_why_offered_none: "No earlier learning was used for this reply.",
     practice_why_offered: "Earlier learning used for this reply:",
@@ -133,6 +135,8 @@ PA.strings({
     practice_why_failed: "模型未响应此消息，因此角色没有回复。",
     practice_why_off: "「角色与设置」中已关闭回复，因此角色未处理{who}的消息。",
     practice_why_retry: "此回复是第二次尝试，第一次的回复「{text}」已被否定。",
+    practice_why_searched: "回复前进行了联网搜索。",
+    practice_why_tool: "回复前使用了工具 {name}。",
     practice_why_learning: "从此消息中学到：{text}",
     practice_why_offered_none: "此回复未使用之前学到的内容。",
     practice_why_offered: "此回复使用了以下已学内容：",
@@ -710,6 +714,8 @@ PA.strings({
     }[data.what];
     if (head) add(PA.t(head, { who, reason: data.reason }));
     if (data.retryOf) add(PA.t("practice_why_retry", { text: data.retryOf }));
+    if (data.lookup?.kind === "search") add(PA.t("practice_why_searched"));
+    if (data.lookup?.kind === "tool") add(PA.t("practice_why_tool", { name: data.lookup.name }));
     if (data.learning) add(PA.t("practice_why_learning", { text: data.learning }));
     if (["named", "admin", "joined"].includes(data.what)) {
       add(PA.t(data.offered.length ? "practice_why_offered" : "practice_why_offered_none"));

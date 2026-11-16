@@ -9,18 +9,19 @@ This guide covers setting personagent up, putting it in your chats, teaching it 
 3. [See it first: the demo](#see-it-first-the-demo)
 4. [Terminal commands](#terminal-commands): [setup](#set-up-in-the-terminal) · [connect a platform](#connect-a-platform-in-the-terminal) · [chat](#chat-in-the-terminal) · [run the service](#run-the-service)
 5. [Make it your character](#make-it-your-character)
-6. [Put it in a chat](#put-it-in-a-chat): [Platforms personagent connects itself](#platforms-personagent-connects-itself) · [Other platforms](#other-platforms-through-the-managed-astrbot) · [Bridges you run yourself](#bridges-you-run-yourself) · [Speaking first](#speaking-first)
-7. [Coding agents](#coding-agents)
-8. [Other software](#other-software)
-9. [Teach it](#teach-it)
-10. [Memory](#memory)
-11. [Activity](#activity)
-12. [Measure it](#measure-it)
-13. [How it works](#how-it-works)
-14. [Privacy and consent](#privacy-and-consent)
-15. [Troubleshooting](#troubleshooting)
-16. [Upgrading from 0.x](#upgrading-from-0x)
-17. [Status and other docs](#status-and-other-docs)
+6. [Put it in a chat](#put-it-in-a-chat): [Approval of new chats](#who-it-answers-approval-of-new-chats) · [Platforms personagent connects itself](#platforms-personagent-connects-itself) · [Other platforms](#other-platforms-through-the-managed-astrbot) · [Bridges you run yourself](#bridges-you-run-yourself) · [Speaking first](#speaking-first)
+7. [Tools](#tools)
+8. [Coding agents](#coding-agents)
+9. [Other software](#other-software)
+10. [Teach it](#teach-it)
+11. [Memory](#memory)
+12. [Activity](#activity)
+13. [Measure it](#measure-it)
+14. [How it works](#how-it-works)
+15. [Privacy and consent](#privacy-and-consent)
+16. [Troubleshooting](#troubleshooting)
+17. [Upgrading from 0.x](#upgrading-from-0x)
+18. [Status and other docs](#status-and-other-docs)
 
 ## Install and the home folder
 
@@ -58,7 +59,7 @@ This guide writes commands as `personagent ...`. If you did not install it, put 
 - **Chat** is a one-to-one chat with the character on the page. The same agent that serves your chat platforms answers it. In this chat you are the admin. Stickers and pictures the character sends appear in the chat, and a picture that is no longer stored shows a short note in its place. Messages the character sends after its reply, such as the answer to a memory command sent while it was replying or a message it starts itself, appear within a few seconds while the Chat view is open. Both stay in the chat's history. When the model does not answer, the page says so in place of a reply and offers **Send again**. **Memory commands** below the message box lists the [memory commands](#memory-commands), and selecting one inserts it into the message box. **Forget this page's chats** forgets everything the character remembers from this chat together with what the page's earlier chats remembered, and starts a new chat; what it remembers from chats on connected apps is kept, and the forget cannot be undone. It needs the data behind [Activity](#activity). **New chat** starts a new chat and keeps what the character remembers.
 - **Activity** shows the chats the character is in, what it said lately, what it remembers and what it learned. See [Activity](#activity).
 - **Connect apps** puts the character in QQ, WeChat, Telegram, Discord and other platforms. See [Put it in a chat](#put-it-in-a-chat). At the bottom, **Coding assistants** connects the character to the [coding agents](#coding-agents) on this computer.
-- **Character & settings** is where you pick a model service (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama, or any other OpenAI-compatible service), paste the API key, and choose a name and a ready personality. **Verify & start chatting** tests the key with one small request and saves it only if the request succeeds. After setup, the **Persona** box shows `persona.txt`. **Save persona** restarts the agent with the new text and keeps what it has learned. **More features** turns on web search through Tavily (DuckDuckGo is the free default), image understanding, and speaking first on the apps you choose. [Advanced settings](#advanced-settings) follows.
+- **Character & settings** is where you pick a model service (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama, or any other OpenAI-compatible service), paste the API key, and choose a name and a ready personality. **Verify & start chatting** tests the key with one small request and saves it only if the request succeeds. With OpenRouter chosen, **Sign in with OpenRouter** gets the key instead: the browser shows OpenRouter's approval, OpenRouter sends the browser back to the page's own address on this computer (`http://localhost:<port>/signin/openrouter`), and personagent exchanges the one-time code for a key, tests it the same way and saves it with the rest of the form. The key never passes through the page itself. Once a key works, the model name offers the models the service lists (read with the saved key at `<API address>/models`, kept for five minutes); a service that lists none leaves the field as it is. After setup, the **Persona** box shows `persona.txt`. **Save persona** restarts the agent with the new text and keeps what it has learned. **More features** turns on web search through Tavily (DuckDuckGo is the free default), image understanding, and speaking first on the apps you choose. **Tools** below it adds [tools from MCP servers](#tools). [Advanced settings](#advanced-settings) follows.
 - **Practice** plays the scripted demo and runs a practice group chat. See [See it first: the demo](#see-it-first-the-demo).
 - **App** checks the services the character relies on and holds the logs, running in the background, updates, and your data. See [The App view](#the-app-view).
 
@@ -76,7 +77,7 @@ Once a model is set up, **Character & settings** ends with **Advanced settings**
 
 | Section | Settings |
 |---|---|
-| **Replies, admin and access** | **Reply to messages** (`AGENT_ENABLED`); **Stay silent in these groups** (`ACCESS_PAUSED_GROUPS`); What the character calls you and your relationship to it (`ADMIN_NAME`, `ADMIN_RELATIONSHIP`); **Your accounts** (`ADMIN_IDS`); **Reply only in these groups** (`ACCESS_GROUPS`); **Others allowed to send private messages** (`ACCESS_DM_USERS`). **Choose from recent chats** lists the people and groups from Activity, so that you can add their ids without typing them. |
+| **Replies, admin and access** | **Reply to messages** (`AGENT_ENABLED`); **Stay silent in these groups** (`ACCESS_PAUSED_GROUPS`); What the character calls you and your relationship to it (`ADMIN_NAME`, `ADMIN_RELATIONSHIP`); **Your accounts** (`ADMIN_IDS`); **Reply only in these groups** (`ACCESS_GROUPS`); **Others allowed to send private messages** (`ACCESS_DM_USERS`); **Platforms where new chats need approval** (`ACCESS_APPROVAL_PLATFORMS`). **Choose from recent chats** lists the people and groups from Activity, so that you can add their ids without typing them. |
 | **Speaking and reply style** | **Time zone** (`PERSONA_TZ_OFFSET_HOURS`); **In groups, reply only when addressed** (`CHAT_ONLY_WHEN_CALLED`); **Messages before joining in** (`CHAT_TRIGGER_COUNT`); **How often it starts conversations**, which sets the seven `PROACTIVE_*` timings at once; **Reply style**: emoji, three sets of symbols and the maximum reply length, written to `persona.card.json`. |
 | **Models** | A backup model with its own service address and key (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_API_KEY`), the model for quick decisions (`LLM_JUDGE_MODEL`) and the model for private chats (`LLM_DM_MODEL`). The backup model is tested before it is saved. |
 | **Learning** | `REACT_LEARN_ENABLED`, `REACT_LEARN_ADMIN_ONLY`, `REACT_ELICIT_ENABLED`, `PROMOTE_AUTO_ENABLED`, `PROMOTE_MIN_SPEAKERS` (1 or 2), `PROMOTE_JUDGE_ENABLED` (the character decides what reactions cannot settle) and `PROMOTE_OBSERVE_MAX_DAYS` (days without a new reaction before an item under observation is set aside). **Restart learning** writes a new `PERSONA_VERSION`, so that what the character learned so far is no longer used. Nothing is deleted. |
@@ -166,14 +167,18 @@ Everything the page does is also available from a terminal, which suits servers 
 | `personagent chat` | a simulated group chat in the terminal |
 | `personagent demo` | the scripted demo above |
 | `personagent run` | the service alone, for connectors you run yourself |
-| `personagent up` | the service, the platforms personagent connects itself and the managed AstrBot, together |
+| `personagent up` | the service, the platforms personagent connects itself and the managed AstrBot, together (`--page` serves the page as well) |
+| `personagent page password` | set the password other devices sign in to the page with (`--random` prints a new one once) |
+| `personagent service install` | keep `personagent up` running after a reboot (`restart`, `remove`, `status`; `--dry-run` prints what it would do) |
 | `personagent connect <platform>` | connect one of the [platforms personagent connects itself](#connect-a-platform-in-the-terminal) (`--remove` to disconnect it); without a platform, list them |
 | `personagent connect astrbot` | connect an AstrBot (`--install` to download a managed one, `--start` to start it) |
 | `personagent connect claude-code`, `personagent connect codex`, `personagent connect dsh` | put the character into a [coding agent](#coding-agents) (`--react` for remarks when a turn ends on the first two, `--remove` to undo) |
+| `personagent tools` | [tools from MCP servers](#tools): `list`, `add`, `remove`, `check`, `call`, `set` |
 | `personagent mcp` | the MCP server a coding agent starts; you do not run it yourself |
 | `personagent doctor` | check the setup and every service it depends on |
 | `personagent learned` | show what it learned and what it is still observing, and step in if you choose |
 | `personagent memory` | list what it remembers, forget an item or bring one back |
+| `personagent access` | list the [new chats waiting for approval](#who-it-answers-approval-of-new-chats) and approve or decline them by code (`approve`, `admin`, `decline`, `undo`, `policy <platform> approve\|open`) |
 | `personagent eval` | measure speaking, persona, learning and memory |
 | `personagent character` | [import a character card](#character-cards-and-drafts) (`import FILE`), save the character as one (`export FILE.png` or `.json`), or print a persona drafted from a description (`draft "..."`) |
 
@@ -183,7 +188,7 @@ Every command takes `--help`.
 
 `personagent init --terminal` asks the same questions as the page, in the language you pick first, and explains each term in one line:
 
-- **The AI service.** The presets match the page. The default is OpenRouter's `openrouter/free`, which hands each request to one of its free models. The key costs nothing. The limit is 20 requests a minute and 50 a day, or 1000 a day once you have bought at least 10 credits. Every model call counts, not only replies, and the day resets at midnight UTC. Once it runs out the character says it cannot answer right now, and `runtime/desktop/agent.log` has OpenRouter's reason. The model changes between requests, so the character's voice varies more than on one chosen model, and some free providers keep what they receive. For a steadier character, use a paid model with the same key. If OpenRouter is hard to reach where you are, Zhipu's `glm-4.7-flash` is free too. For Ollama, name a model you have already pulled. Ollama needs no key.
+- **The AI service.** The presets match the page. The default is OpenRouter's `openrouter/free`, which hands each request to one of its free models. The key costs nothing. A key from **Sign in with OpenRouter** (or the terminal's code sign-in) is an ordinary OpenRouter key labelled `personagent`: it is saved in `.env` like a pasted one, and until you remove it at [openrouter.ai/keys](https://openrouter.ai/keys) it can spend the credit of that account, though the free models need none. The limit is 20 requests a minute and 50 a day, or 1000 a day once you have bought at least 10 credits. Every model call counts, not only replies, and the day resets at midnight UTC. Once it runs out the character says it cannot answer right now, and `runtime/desktop/agent.log` has OpenRouter's reason. The model changes between requests, so the character's voice varies more than on one chosen model, and some free providers keep what they receive. For a steadier character, use a paid model with the same key. If OpenRouter is hard to reach where you are, Zhipu's `glm-4.7-flash` is free too. For Ollama, name a model you have already pulled. Ollama needs no key.
 - **The key.** Input is hidden by default. You can choose to show it, which also reveals the saved key when you reconfigure. The wizard tests the key with one small request. If the request fails, it shows the address it called, the HTTP status and a likely fix.
 - **The character.** A name, and one of seven ready characters (dry-witted friend, warm listener, gamer, bookworm, and three the community already draws: the DeepSeek whale girl, the GPT dragon girl and the Claude lady) or a plain one to write yourself. Pick one of the last three without choosing a name and the character takes its personification's name: GPT-chan, DeepSeek-chan or Claude-chan (GPT娘 and so on in Chinese, GPTちゃん in Japanese, GPT쨩 in Korean). The local page shows its animated portrait. Once you have written your own persona, clicking a portrait under **Character & settings** changes only the picture. **Use my own picture** there takes a PNG, JPEG or WebP file of up to 2 MB, keeps it in the home as `avatar.png` (or `.jpg`, `.webp`) and shows it only on the local page.
 - **Chat platforms.** Optional, and you can skip this step the first time. The setup names the ten platforms personagent connects itself, which you connect afterwards with [`personagent connect <platform>`](#connect-a-platform-in-the-terminal). For the other platforms it can connect AstrBot, and download and install it first. See [Bridges you run yourself](#bridges-you-run-yourself).
@@ -198,6 +203,7 @@ To set up without questions, for example in a script, run `personagent init --no
 - Twitch prints a link and a code. Open the link in a browser that is signed in to the character's Twitch account, check that the page shows the same code, and approve the sign-in. The command waits until then.
 - Each value is also an option, such as `--telegram-token` or `--irc-server`, and `personagent connect --help` lists them all. A value given as an option can remain in the shell's history. With `--no-input` the command asks nothing; when a required value is missing, it names the option and exits with code 2.
 - `--remove` disconnects the platform and deletes its saved values.
+- A platform connected for the first time asks for [approval of new chats](#who-it-answers-approval-of-new-chats); the command says so and prints `personagent access policy <platform> open`, which turns that off.
 
 The connection is active while personagent runs. `personagent up` starts personagent with its connected platforms; if personagent is already running, restart it. In the menu of `personagent start --terminal`, option 3 connects these platforms and option 5 starts personagent with them.
 
@@ -246,6 +252,8 @@ Alex> Nova, you there?
 `personagent run` starts only the service the connectors talk to, at `http://127.0.0.1:8080`. On startup it prints the version, the address, the home folder and whether the agent is on. `--host` and `--port` override `SERVER_HOST` and `SERVER_PORT`. Use this command when you run the connector yourself.
 
 `personagent up` starts the service together with every platform you connected from the page, with `personagent connect <platform>` or with `connect astrbot --install`. It opens no browser. Ctrl+C stops everything, and each process writes its log to `runtime/desktop/` in the home folder.
+
+On a server or a NAS, `personagent up` can serve the page too, so that you set personagent up and look after it from a phone or another computer after signing in with a page password; `personagent service install` keeps it running after a reboot, and an official Docker image does both. [On a server, a NAS or in Docker](deploy.md#on-a-server-a-nas-or-in-docker) covers all three and the safe ways to reach the page.
 
 ## Make it your character
 
@@ -336,7 +344,15 @@ Open **Connect apps** on the local page and pick a platform. The page asks only 
 Chat platform  ⇄  connector  ⇄  personagent  ⇄  Model API
 ```
 
-A connector logs in to the platform, passes each message to personagent and carries the reply back. There are three kinds.
+A connector logs in to the platform, passes each message to personagent and carries the reply back. There are three kinds, described after the next section.
+
+### Who it answers: approval of new chats
+
+A platform connected on the page or with `personagent connect <platform>` starts out asking for approval of new chats. There the character answers you and the people and groups you approved; anyone else gets no reply from the model. A person who writes to the bot privately receives one fixed message in the character's language saying that its admin has to approve the chat, with a six-character code; they receive it again at most once a day, however often they write. In a group that is not approved the character says nothing, and when someone addresses it there it says at most once a day that its admin has not approved the group.
+
+Each request appears on **Connect apps** below the connected platforms, with the name, the time, the code and the first words, and the dot beside **Connect apps** turns amber. **Approve** lets the character answer that chat from the next message on, without a restart. **Decline** keeps the chat from being answered or asking again; the list of declined chats has **Undo**. For a private message, **This is me** approves it and makes that account your admin account on the platform, which is the way to become admin without looking up your own id; it is offered first while the platform has no admin. A request expires after three days, and each platform keeps at most twenty waiting, so a flood of strangers cannot make the bot send a flood of messages. Nothing a stranger writes reaches the model.
+
+The sentence under each connected platform says which rule holds there and offers the other: **Answer new chats without approval** answers every chat the platform delivers to the bot, as earlier versions did (the reply settings still apply), and **Ask for approval of new chats** turns approval on. Homes set up before this version keep answering as before until you turn it on. Channels entered when connecting Twitch or IRC count as approved. The page's own chat, coding assistants and the OpenAI-compatible API never ask. On a computer without a display, `personagent access` lists the requests and decides them by code (`approve`, `decline`, `admin`, `undo`, and `policy <platform> approve|open`).
 
 ### Platforms personagent connects itself
 
@@ -426,6 +442,31 @@ personagent listens on `127.0.0.1:8080`, and a blank `SERVER_HOST` means the sam
 ### Speaking first
 
 Some messages are not replies to anyone. These are openers (`PROACTIVE_ENABLED`, off by default), the follow-up question after a rejection, and the excuse sent when the model fails in a group. In a DM, the excuse goes back in the response to the waiting message instead. personagent queues these messages in an outbox, and the connectors pull and send them on platforms that let a bot speak first. The local page pulls them for its own Chat view in the same way. WeChat official accounts and WeCom smart bots do not. QQ rate-limits an official bot's unprompted messages, and users can switch them off. `PROACTIVE_PLATFORMS=qq_official` limits openers to the official QQ bot, and `qq` limits them to QQ through NapCat. On the page, **Sometimes speak first** under **More features** writes both settings. See the [deployment guide](deploy.md#more-than-one-platform).
+
+## Tools
+
+Besides web search, the character can use tools from MCP servers that you add: the current time, the text of a web page, your notes, a calendar, and anything else an MCP server offers. The character still writes every reply in its own voice. A tool is something it consults on the way, as it does with web search: when a message asks for something a tool provides, it calls that one tool, reads the answer, and replies as itself.
+
+**Adding a server.** In **Character & settings**, the **Tools** section below **More features** takes the configuration from the server's instructions as it is: the whole `{"mcpServers": {...}}` block written for Claude Desktop or Cursor, a single server's entry, or a single server's object. **Enter a program or an address instead** takes a command with its arguments and environment variables, or the address of a remote server (Streamable HTTP) with its request headers. When `uvx` is found (the installers bring uv), two servers from the official reference set are offered ready to add: **Time** (`uvx mcp-server-time`) and **Fetch** (`uvx mcp-server-fetch`). In a terminal:
+
+```
+personagent tools add '{"mcpServers": {"time": {"command": "uvx", "args": ["mcp-server-time"]}}}'
+personagent tools add --name fetch --command uvx --arg mcp-server-fetch
+personagent tools add --name notes --url https://example.com/mcp --header "Authorization=Bearer ..."
+personagent tools check
+personagent tools call time get_current_time '{"timezone": "Asia/Tokyo"}'
+personagent tools set time get_current_time --who anyone
+personagent tools list
+personagent tools remove fetch
+```
+
+**Each tool** has a switch and a choice of who may cause it to be used: **the administrator only**, the default for every new tool, or **anyone the character answers**. A tool that the sender of a message may not use is never offered for that message. **Check** connects to the server now and reads its tools, and names the reason when that fails: the program was not found, it stopped (with its last lines of output), the address refused the connection, it did not answer in time, or it requires an OAuth sign-in, which personagent does not support yet. **Try** calls a tool by hand with arguments you enter and shows the text the character would receive. **Remove** stops the server and removes it. Changes take effect within a few seconds without a restart.
+
+**Running.** The character service starts the servers when it starts, without waiting for them, restarts a server that stops (after 2 seconds, then doubling up to 5 minutes), and stops them, and the programs they started, when it stops. A server that does not start is reported on the page and by `personagent doctor`; the character works without it. A call has 20 seconds; only the text of an answer is used, at most 3,000 characters of it, and other content such as images is named and left out. The arguments the model chooses are checked against the tool's description before the call.
+
+**Cost.** Without tools, a regular-expression check decides whether a message might need a web search, and only then is the model asked. While a tool is on, every message the character is going to answer from someone permitted to use a tool costs one additional small request to the judge model (`LLM_JUDGE_MODEL`), which decides whether to use a tool, search the web, or neither. The App view counts these requests as **Deciding whether to use a tool**.
+
+**Safety.** Adding a server runs a program on this computer with your own user rights, or connects to the address you enter; add only servers you trust. Tool names, descriptions and answers come from a third party: they are bounded in length and marked for the model as external material, which it is told never to take instructions from. What a tool returns is sent to the model service with the conversation. The servers are kept in `mcp.json` in the home; its environment variables and request headers are secrets, and the page shows only which of them are set. In Activity, `/why` in `personagent chat` and the practice group's explanation, a reply that drew on a tool names the tool, never its arguments or its answer.
 
 ## Coding agents
 
@@ -840,6 +881,7 @@ The model provider sees conversations:
 - When the character decides a learned item itself, the reply, the reactions to it and the candidate wordings go to `PROMOTE_JUDGE_MODEL` (blank: `REACT_MODEL`). `PROMOTE_JUDGE_ENABLED=false` turns this off.
 - Images go to the vision endpoint.
 - When the model decides to look something up, the search query goes to Tavily (if `TAVILY_API_KEY` is set) or DuckDuckGo.
+- When it decides to use one of your [tools](#tools), the arguments it chose go to that tool's server, and the tool's answer goes to the model service.
 - With `EMBEDDING_MODEL` set, the message being answered, the memories and the retrieval examples go to the embedding endpoint (`EMBEDDING_BASE_URL`, or `LLM_BASE_URL` when that is blank).
 
 Before you connect it to real people, tell them it is a bot and get their consent to have their messages processed. Read the [disclaimer](DISCLAIMER.md).
@@ -852,6 +894,8 @@ The main files and folders in the home, and what each holds:
 |---|---|---|
 | `.env` | Settings, with the model key and any other keys in plain text | Secrets |
 | `persona.txt`, `persona.card.json` | The persona and its optional card | No |
+| `mcp.json` | The [tool servers](#tools), their environment variables and request headers, and each tool's settings | Secrets |
+| `runtime/tools/` | The tools each server last listed, and which servers the running service could start | No |
 | `persona.txt.bak` and its dated copies, `avatar.png` | Personas you wrote that a ready one replaced, and your own picture | No |
 | `platforms/` | `direct.json` with the credentials of the platforms personagent connects itself, and the managed AstrBot with its settings | Secrets |
 | `runtime/memory.json`, `core_memory.json`, `episodes.json` | Facts, the core note, events and summaries of each chat | Chat content |

@@ -74,14 +74,24 @@ def script(home: Path, *, remove: bool = False, folders: list[Path] | None = Non
     return "\n".join([
         "$ErrorActionPreference = 'Stop'",
         "$shell = New-Object -ComObject WScript.Shell",
-        f"foreach ($folder in {where}) {{",
-        f"  $link = $shell.CreateShortcut((Join-Path $folder {_quoted(LINK)}))",
+        "function Save-Link($path) {",
+        "  $link = $shell.CreateShortcut($path)",
         f"  $link.TargetPath = {_quoted(program)}",
         f"  $link.Arguments = {_quoted(arguments)}",
         f"  $link.WorkingDirectory = {_quoted(home)}",
         f"  $link.IconLocation = {_quoted(window.icon())}",
         "  $link.Description = 'personagent'",
         "  $link.Save()",
+        "}",
+        f"foreach ($folder in {where}) {{",
+        f"  $final = Join-Path $folder {_quoted(LINK)}",
+        "  try { Save-Link $final } catch {",
+        # WScript.Shell saves only to a path the system code page can spell.
+        "    $base = $env:PUBLIC; if (-not $base) { $base = Join-Path $env:SystemRoot 'Temp' }",
+        "    $staged = Join-Path $base ('personagent-' + [Guid]::NewGuid().ToString('N') + '.lnk')",
+        "    try { Save-Link $staged; Move-Item -LiteralPath $staged -Destination $final -Force }",
+        "    finally { if (Test-Path -LiteralPath $staged) { Remove-Item -LiteralPath $staged -Force } }",
+        "  }",
         "}"])
 
 
@@ -124,8 +134,17 @@ def status(home: Path) -> dict[str, str]:
         "  if (-not $pair[1]) { continue }",
         f"  $path = Join-Path $pair[1] {_quoted(LINK)}",
         "  if (Test-Path -LiteralPath $path) {",
-        "    $link = $shell.CreateShortcut($path)",
-        "    $found += [pscustomobject]@{kind = $pair[0]; target = $link.TargetPath; arguments = $link.Arguments}",
+        # WScript.Shell reads only a path the system code page can spell: read a copy elsewhere.
+        "    $read = $path",
+        "    if ($path -match '[^ -~]') {",
+        "      $base = $env:PUBLIC; if (-not $base) { $base = Join-Path $env:SystemRoot 'Temp' }",
+        "      $read = Join-Path $base ('personagent-' + [Guid]::NewGuid().ToString('N') + '.lnk')",
+        "      Copy-Item -LiteralPath $path -Destination $read -Force",
+        "    }",
+        "    try {",
+        "      $link = $shell.CreateShortcut($read)",
+        "      $found += [pscustomobject]@{kind = $pair[0]; target = $link.TargetPath; arguments = $link.Arguments}",
+        "    } finally { if ($read -ne $path) { Remove-Item -LiteralPath $read -Force } }",
         "  }",
         "}",
         "ConvertTo-Json -InputObject @($found) -Compress"])

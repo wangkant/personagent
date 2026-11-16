@@ -9,18 +9,19 @@ Dieses Handbuch erklärt, wie Sie personagent einrichten, in Ihre Chats einbinde
 3. [Erst ansehen: die Demo](#erst-ansehen-die-demo)
 4. [Terminal-Befehle](#terminal-befehle): [Einrichtung](#im-terminal-einrichten) · [Plattform verbinden](#eine-plattform-im-terminal-verbinden) · [Chat](#im-terminal-chatten) · [den Dienst ausführen](#den-dienst-ausführen)
 5. [Die eigene Figur gestalten](#die-eigene-figur-gestalten)
-6. [In einen Chat bringen](#in-einen-chat-bringen): [Plattformen, die personagent selbst verbindet](#plattformen-die-personagent-selbst-verbindet) · [Andere Plattformen](#andere-plattformen-über-das-verwaltete-astrbot) · [Brücken, die Sie selbst betreiben](#brücken-die-sie-selbst-betreiben) · [Zuerst sprechen](#zuerst-sprechen)
-7. [Programmierassistenten](#programmierassistenten)
-8. [Andere Software](#andere-software)
-9. [Der Figur etwas beibringen](#der-figur-etwas-beibringen)
-10. [Gedächtnis](#gedächtnis)
-11. [Aktivität](#aktivität)
-12. [Messen](#messen)
-13. [Wie es funktioniert](#wie-es-funktioniert)
-14. [Datenschutz und Einwilligung](#datenschutz-und-einwilligung)
-15. [Fehlerbehebung](#fehlerbehebung)
-16. [Upgrade von 0.x](#upgrade-von-0x)
-17. [Status und weitere Dokumente](#status-und-weitere-dokumente)
+6. [In einen Chat bringen](#in-einen-chat-bringen): [Freigabe neuer Chats](#wem-die-figur-antwortet-freigabe-neuer-chats) · [Plattformen, die personagent selbst verbindet](#plattformen-die-personagent-selbst-verbindet) · [Andere Plattformen](#andere-plattformen-über-das-verwaltete-astrbot) · [Brücken, die Sie selbst betreiben](#brücken-die-sie-selbst-betreiben) · [Zuerst sprechen](#zuerst-sprechen)
+7. [Werkzeuge](#werkzeuge)
+8. [Programmierassistenten](#programmierassistenten)
+9. [Andere Software](#andere-software)
+10. [Der Figur etwas beibringen](#der-figur-etwas-beibringen)
+11. [Gedächtnis](#gedächtnis)
+12. [Aktivität](#aktivität)
+13. [Messen](#messen)
+14. [Wie es funktioniert](#wie-es-funktioniert)
+15. [Datenschutz und Einwilligung](#datenschutz-und-einwilligung)
+16. [Fehlerbehebung](#fehlerbehebung)
+17. [Upgrade von 0.x](#upgrade-von-0x)
+18. [Status und weitere Dokumente](#status-und-weitere-dokumente)
 
 ## Installation und der personagent-Ordner
 
@@ -58,7 +59,7 @@ Dieses Handbuch gibt Befehle als `personagent ...` an. Wenn Sie personagent nich
 - **Chat** ist ein Einzelgespräch mit der Figur auf der Seite. Derselbe Agent, der Ihre Chat-Plattformen bedient, antwortet hier. In diesem Chat sind Sie der Administrator. Sticker und Bilder, die die Figur sendet, erscheinen im Chat; an der Stelle eines Bildes, das nicht mehr gespeichert ist, steht ein kurzer Hinweis. Nachrichten, die die Figur nach ihrer Antwort sendet, etwa die Antwort auf einen Gedächtnis-Befehl, der während ihrer Antwort gesendet wurde, oder eine Nachricht, die sie von sich aus beginnt, erscheinen innerhalb weniger Sekunden, solange die Ansicht **Chat** geöffnet ist. Beides bleibt im Verlauf des Chats erhalten. Antwortet das Modell nicht, weist die Seite an der Stelle der Antwort darauf hin und bietet **Erneut senden** an. **Gedächtnisbefehle** unterhalb des Eingabefelds listet die [Gedächtnis-Befehle](#gedächtnis-befehle) auf; wenn Sie einen davon auswählen, wird er in das Eingabefeld eingefügt. **Chats dieser Seite vergessen** vergisst alles, was sich die Figur aus diesem Chat und den früheren Chats der Seite merkt, und beginnt einen neuen Chat; was sie sich aus Chats in verbundenen Apps merkt, bleibt erhalten, und das Vergessen lässt sich nicht rückgängig machen. Dafür sind die Daten hinter [Aktivität](#aktivität) erforderlich. **Neuer Chat** beginnt einen neuen Chat und behält, was sich die Figur merkt.
 - **Aktivität** zeigt die Chats, in denen die Figur aktiv ist, was sie zuletzt gesagt hat, was sie sich merkt und was sie gelernt hat. Siehe [Aktivität](#aktivität).
 - **Plattformen verbinden** bringt die Figur in QQ, WeChat, Telegram, Discord und weitere Plattformen. Siehe [In einen Chat bringen](#in-einen-chat-bringen). Ganz unten verbindet **Programmierassistenten** die Figur mit den [Programmierassistenten](#programmierassistenten) auf diesem Computer.
-- **Figur & Einstellungen** ist der Ort, an dem Sie einen Modelldienst auswählen (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama oder jeden anderen OpenAI-kompatiblen Dienst), den API-Schlüssel einfügen und einen Namen und eine fertige Persönlichkeit wählen. **Prüfen & Chat starten** testet den Schlüssel mit einer kleinen Anfrage und speichert ihn nur, wenn sie gelingt. Nach der Einrichtung zeigt das Feld **Persona** `persona.txt`. **Persona speichern** startet den Agenten mit dem neuen Text neu und behält, was er gelernt hat. **Weitere Funktionen** schaltet die Websuche über Tavily (DuckDuckGo ist die kostenlose Voreinstellung), die Bilderkennung und eigene Gesprächsanstöße auf den von Ihnen gewählten Plattformen ein. Darauf folgen die [Erweiterten Einstellungen](#erweiterte-einstellungen).
+- **Figur & Einstellungen** ist der Ort, an dem Sie einen Modelldienst auswählen (OpenRouter, DeepSeek, SiliconFlow, Alibaba Bailian, Zhipu GLM, Moonshot, Volcengine Ark, OpenAI, Google Gemini, Ollama oder jeden anderen OpenAI-kompatiblen Dienst), den API-Schlüssel einfügen und einen Namen und eine fertige Persönlichkeit wählen. **Prüfen & Chat starten** testet den Schlüssel mit einer kleinen Anfrage und speichert ihn nur, wenn sie gelingt. Ist OpenRouter gewählt, holt **Mit OpenRouter anmelden** den Schlüssel stattdessen ab: Der Browser zeigt die Freigabe von OpenRouter, OpenRouter leitet den Browser zurück an die eigene Adresse der Seite auf diesem Computer (`http://localhost:<port>/signin/openrouter`), und personagent tauscht den einmaligen Code gegen einen Schlüssel ein, prüft ihn auf dieselbe Weise und speichert ihn mit den übrigen Angaben des Formulars. Der Schlüssel durchläuft nie die Seite selbst. Sobald ein Schlüssel funktioniert, bietet der Modellname die Modelle an, die der Dienst auflistet (mit dem gespeicherten Schlüssel unter `<API-Adresse>/models` gelesen und fünf Minuten lang vorgehalten); bei einem Dienst, der keine auflistet, bleibt das Feld unverändert. Nach der Einrichtung zeigt das Feld **Persona** `persona.txt`. **Persona speichern** startet den Agenten mit dem neuen Text neu und behält, was er gelernt hat. **Weitere Funktionen** schaltet die Websuche über Tavily (DuckDuckGo ist die kostenlose Voreinstellung), die Bilderkennung und eigene Gesprächsanstöße auf den von Ihnen gewählten Plattformen ein. **Werkzeuge** darunter fügt [Werkzeuge von MCP-Servern](#werkzeuge) hinzu. Darauf folgen die [Erweiterten Einstellungen](#erweiterte-einstellungen).
 - **Übung** spielt die vorgefertigte Demo ab und stellt einen Übungsgruppenchat bereit. Siehe [Erst ansehen: die Demo](#erst-ansehen-die-demo).
 - **App** prüft die Dienste, auf die die Figur angewiesen ist, und bündelt die Protokolle, die Ausführung im Hintergrund, die Updates und Ihre Daten. Siehe [Die Ansicht App](#die-ansicht-app).
 
@@ -76,7 +77,7 @@ Sobald ein Modell eingerichtet ist, endet **Figur & Einstellungen** mit **Erweit
 
 | Abschnitt | Einstellungen |
 |---|---|
-| **Antworten, Administrator und Zugriff** | **Auf Nachrichten antworten** (`AGENT_ENABLED`); **In diesen Gruppen schweigen** (`ACCESS_PAUSED_GROUPS`); Wie die Figur Sie nennt und in welcher Beziehung Sie zu ihr stehen (`ADMIN_NAME`, `ADMIN_RELATIONSHIP`); **Ihre Konten** (`ADMIN_IDS`); **Nur in diesen Gruppen antworten** (`ACCESS_GROUPS`); **Weitere Personen mit Erlaubnis für Direktnachrichten** (`ACCESS_DM_USERS`). **Aus letzten Chats auswählen** listet die Personen und Gruppen aus Aktivität auf, sodass Sie deren Kennungen hinzufügen können, ohne sie einzutippen. |
+| **Antworten, Administrator und Zugriff** | **Auf Nachrichten antworten** (`AGENT_ENABLED`); **In diesen Gruppen schweigen** (`ACCESS_PAUSED_GROUPS`); Wie die Figur Sie nennt und in welcher Beziehung Sie zu ihr stehen (`ADMIN_NAME`, `ADMIN_RELATIONSHIP`); **Ihre Konten** (`ADMIN_IDS`); **Nur in diesen Gruppen antworten** (`ACCESS_GROUPS`); **Weitere Personen mit Erlaubnis für Direktnachrichten** (`ACCESS_DM_USERS`); **Plattformen, auf denen neue Chats eine Freigabe benötigen** (`ACCESS_APPROVAL_PLATFORMS`). **Aus letzten Chats auswählen** listet die Personen und Gruppen aus Aktivität auf, sodass Sie deren Kennungen hinzufügen können, ohne sie einzutippen. |
 | **Sprechen und Antwortstil** | **Zeitzone** (`PERSONA_TZ_OFFSET_HOURS`); **In Gruppen nur antworten, wenn angesprochen** (`CHAT_ONLY_WHEN_CALLED`); **Nachrichten vor einer Beteiligung** (`CHAT_TRIGGER_COUNT`); **Häufigkeit eigener Gesprächsanstöße**, womit die sieben `PROACTIVE_*`-Zeitwerte auf einmal festgelegt werden; **Antwortstil**: Emojis, drei Sonderzeichen und die maximale Antwortlänge, gespeichert in `persona.card.json`. |
 | **Modelle** | Ein Ersatzmodell mit eigener Dienstadresse und eigenem Schlüssel (`LLM_FALLBACK_MODEL`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_API_KEY`), das Modell für schnelle Entscheidungen (`LLM_JUDGE_MODEL`) und das Modell für Direktnachrichten (`LLM_DM_MODEL`). Das Ersatzmodell wird vor dem Speichern getestet. |
 | **Lernen** | `REACT_LEARN_ENABLED`, `REACT_LEARN_ADMIN_ONLY`, `REACT_ELICIT_ENABLED`, `PROMOTE_AUTO_ENABLED`, `PROMOTE_MIN_SPEAKERS` (1 oder 2), `PROMOTE_JUDGE_ENABLED` (die Figur entscheidet, was Reaktionen nicht klären können) und `PROMOTE_OBSERVE_MAX_DAYS` (Tage ohne neue Reaktion, nach denen ein Eintrag in Beobachtung zurückgestellt wird). **Lernen neu beginnen** schreibt eine neue `PERSONA_VERSION`, sodass das bisher Gelernte nicht mehr verwendet wird. Gelöscht wird nichts. |
@@ -166,14 +167,18 @@ Alle Funktionen der Seite stehen auch im Terminal zur Verfügung, was sich für 
 | `personagent chat` | ein simulierter Gruppenchat im Terminal |
 | `personagent demo` | die geskriptete Demo oben |
 | `personagent run` | nur der Dienst, für Konnektoren, die Sie selbst betreiben |
-| `personagent up` | der Dienst, die Plattformen, die personagent selbst verbindet, und das verwaltete AstrBot zusammen |
+| `personagent up` | der Dienst, die Plattformen, die personagent selbst verbindet, und das verwaltete AstrBot zusammen (`--page` stellt zusätzlich die Seite bereit) |
+| `personagent page password` | legt das Passwort fest, mit dem sich andere Geräte bei der Seite anmelden (`--random` gibt einmalig ein neues aus) |
+| `personagent service install` | hält `personagent up` nach einem Neustart in Betrieb (`restart`, `remove`, `status`; `--dry-run` gibt aus, was geschehen würde) |
 | `personagent connect <platform>` | verbindet eine der [Plattformen, die personagent selbst verbindet](#eine-plattform-im-terminal-verbinden) (`--remove` trennt sie); ohne Plattform listet der Befehl sie auf |
 | `personagent connect astrbot` | verbindet ein AstrBot (`--install`, um ein verwaltetes herunterzuladen, `--start`, um es zu starten) |
 | `personagent connect claude-code`, `personagent connect codex`, `personagent connect dsh` | bindet die Figur in einen [Programmierassistenten](#programmierassistenten) ein (`--react` für Bemerkungen am Ende eines Durchgangs bei den ersten beiden, `--remove` zum Rückgängigmachen) |
+| `personagent tools` | [Werkzeuge von MCP-Servern](#werkzeuge): `list`, `add`, `remove`, `check`, `call`, `set` |
 | `personagent mcp` | der MCP-Server, den ein Programmierassistent startet; Sie führen ihn nicht selbst aus |
 | `personagent doctor` | prüft die Konfiguration und jeden Dienst, von dem er abhängt |
 | `personagent learned` | zeigt, was die Figur gelernt hat und was sie noch beobachtet, und ermöglicht bei Bedarf ein Eingreifen |
 | `personagent memory` | listet auf, was die Figur sich merkt, vergisst einen Eintrag oder stellt ihn wieder her |
+| `personagent access` | listet die [neuen Chats, die auf Freigabe warten](#wem-die-figur-antwortet-freigabe-neuer-chats), und gibt sie per Code frei oder lehnt sie ab (`approve`, `admin`, `decline`, `undo`, `policy <platform> approve\|open`) |
 | `personagent eval` | misst Sprechen, Persona, Lernen und Gedächtnis |
 | `personagent character` | [importiert eine Charakterkarte](#charakterkarten-und-entwürfe) (`import FILE`), speichert die Figur als Karte (`export FILE.png` oder `.json`) oder gibt eine aus einer Beschreibung entworfene Persona aus (`draft "..."`) |
 
@@ -183,7 +188,7 @@ Alle Befehle akzeptieren `--help`.
 
 `personagent init --terminal` stellt dieselben Fragen wie die Seite, in der Sprache, die Sie zu Beginn wählen, und erklärt jeden Begriff in einer Zeile:
 
-- **Der KI-Dienst.** Die Voreinstellungen entsprechen denen der Seite. Standard ist `openrouter/free` von OpenRouter, das jede Anfrage an eines seiner kostenlosen Modelle weiterleitet. Der Schlüssel ist kostenlos. Das Limit beträgt 20 Anfragen pro Minute und 50 pro Tag, oder 1000 pro Tag, sobald Sie mindestens 10 Credits erworben haben. Jeder Modellaufruf zählt, nicht nur die Antworten, und der Tag beginnt um Mitternacht UTC neu. Ist das Limit erreicht, teilt die Figur mit, dass sie gerade nicht antworten kann, und `runtime/desktop/agent.log` enthält den Grund von OpenRouter. Das Modell wechselt von Anfrage zu Anfrage, sodass die Ausdrucksweise der Figur stärker schwankt als mit einem fest gewählten Modell, und manche kostenlosen Anbieter speichern, was sie erhalten. Für eine beständigere Figur wählen Sie ein kostenpflichtiges Modell mit demselben Schlüssel. Wenn OpenRouter für Sie schwer erreichbar ist, ist `glm-4.7-flash` von Zhipu ebenfalls kostenlos. Für Ollama geben Sie ein Modell an, das Sie bereits heruntergeladen haben. Ollama benötigt keinen Schlüssel.
+- **Der KI-Dienst.** Die Voreinstellungen entsprechen denen der Seite. Standard ist `openrouter/free` von OpenRouter, das jede Anfrage an eines seiner kostenlosen Modelle weiterleitet. Der Schlüssel ist kostenlos. Ein Schlüssel aus **Mit OpenRouter anmelden** (oder der Code-Anmeldung im Terminal) ist ein gewöhnlicher OpenRouter-Schlüssel mit der Bezeichnung `personagent`: Er wird wie ein eingefügter in `.env` gespeichert und kann, bis Sie ihn unter [openrouter.ai/keys](https://openrouter.ai/keys) entfernen, das Guthaben dieses Kontos verbrauchen, auch wenn die kostenlosen Modelle keines benötigen. Das Limit beträgt 20 Anfragen pro Minute und 50 pro Tag, oder 1000 pro Tag, sobald Sie mindestens 10 Credits erworben haben. Jeder Modellaufruf zählt, nicht nur die Antworten, und der Tag beginnt um Mitternacht UTC neu. Ist das Limit erreicht, teilt die Figur mit, dass sie gerade nicht antworten kann, und `runtime/desktop/agent.log` enthält den Grund von OpenRouter. Das Modell wechselt von Anfrage zu Anfrage, sodass die Ausdrucksweise der Figur stärker schwankt als mit einem fest gewählten Modell, und manche kostenlosen Anbieter speichern, was sie erhalten. Für eine beständigere Figur wählen Sie ein kostenpflichtiges Modell mit demselben Schlüssel. Wenn OpenRouter für Sie schwer erreichbar ist, ist `glm-4.7-flash` von Zhipu ebenfalls kostenlos. Für Ollama geben Sie ein Modell an, das Sie bereits heruntergeladen haben. Ollama benötigt keinen Schlüssel.
 - **Der Schlüssel.** Die Eingabe ist standardmäßig verborgen. Sie können sie anzeigen lassen; bei einer Neukonfiguration wird dann auch der gespeicherte Schlüssel angezeigt. Der Assistent testet den Schlüssel mit einer kleinen Anfrage. Schlägt sie fehl, zeigt er die aufgerufene Adresse, den HTTP-Status und eine wahrscheinliche Abhilfe.
 - **Die Figur.** Ein Name und eine von sieben fertigen Figuren (trockener Freund, aufmerksamer Zuhörer, Gamer, Bücherwurm sowie drei, die die Community bereits zeichnet: DeepSeek-chan, GPT-chan und Claude-chan) oder eine schlichte Figur, die Sie selbst beschreiben. Wählen Sie eine der letzten drei, ohne einen Namen festzulegen, trägt die Figur deren Namen. Die lokale Seite zeigt ihr animiertes Porträt. Sobald Sie eine eigene Persona geschrieben haben, ändert ein Klick auf ein Porträt unter **Figur & Einstellungen** nur das Bild. Dort nimmt **Eigenes Bild verwenden** eine PNG-, JPEG- oder WebP-Datei bis 2 MB an, legt sie im personagent-Ordner als `avatar.png` (oder `.jpg`, `.webp`) ab und zeigt sie nur auf der lokalen Seite.
 - **Chatplattformen.** Optional; Sie können diesen Schritt beim ersten Mal überspringen. Die Einrichtung nennt die zehn Plattformen, die personagent selbst verbindet; diese verbinden Sie anschließend mit [`personagent connect <platform>`](#eine-plattform-im-terminal-verbinden). Für die übrigen Plattformen kann sie AstrBot verbinden und es zuvor herunterladen und installieren. Siehe [Brücken, die Sie selbst betreiben](#brücken-die-sie-selbst-betreiben).
@@ -198,6 +203,7 @@ Um ohne Rückfragen einzurichten, etwa in einem Skript, führen Sie `personagent
 - Twitch gibt einen Link und einen Code aus. Öffnen Sie den Link in einem Browser, der beim Twitch-Konto der Figur angemeldet ist, prüfen Sie, ob die Seite denselben Code anzeigt, und bestätigen Sie die Anmeldung. Bis dahin wartet der Befehl.
 - Jeder Wert kann auch als Option angegeben werden, etwa `--telegram-token` oder `--irc-server`; `personagent connect --help` listet alle Optionen auf. Ein als Option angegebener Wert kann im Verlauf der Shell verbleiben. Mit `--no-input` stellt der Befehl keine Fragen; fehlt ein erforderlicher Wert, nennt er die Option und beendet sich mit Code 2.
 - `--remove` trennt die Plattform und löscht ihre gespeicherten Werte.
+- Eine Plattform, die zum ersten Mal verbunden wird, verlangt eine [Freigabe neuer Chats](#wem-die-figur-antwortet-freigabe-neuer-chats); der Befehl weist darauf hin und gibt `personagent access policy <platform> open` aus, womit sich das abschalten lässt.
 
 Die Verbindung ist aktiv, solange personagent läuft. `personagent up` startet personagent mit seinen verbundenen Plattformen; läuft personagent bereits, starten Sie es neu. Im Menü von `personagent start --terminal` verbindet Option 3 diese Plattformen, und Option 5 startet personagent mit ihnen.
 
@@ -246,6 +252,8 @@ Alex> Nova, bist du da?
 `personagent run` startet nur den Dienst, mit dem die Konnektoren sprechen, unter `http://127.0.0.1:8080`. Beim Start gibt er die Version, die Adresse und den personagent-Ordner aus sowie, ob der Agent aktiv ist. `--host` und `--port` überschreiben `SERVER_HOST` und `SERVER_PORT`. Verwenden Sie diesen Befehl, wenn Sie den Konnektor selbst betreiben.
 
 `personagent up` startet den Dienst mit allen Plattformen, die über die Seite, mit `personagent connect <platform>` oder mit `connect astrbot --install` verbunden wurden. Es öffnet keinen Browser. Strg+C beendet alles, und jeder Prozess schreibt sein Log nach `runtime/desktop/` im personagent-Ordner.
+
+Auf einem Server oder NAS kann `personagent up` auch die Seite bereitstellen, sodass Sie personagent nach der Anmeldung mit einem Seitenpasswort von einem Smartphone oder einem anderen Computer aus einrichten und betreuen; `personagent service install` hält es nach einem Neustart in Betrieb, und ein offizielles Docker-Image erledigt beides. [Auf einem Server, einem NAS oder in Docker](deploy.de.md#auf-einem-server-einem-nas-oder-in-docker) behandelt alle drei Wege und die sicheren Zugänge zur Seite.
 
 ## Die eigene Figur gestalten
 
@@ -336,7 +344,15 @@ Die Begrüßung der Karte (`first_mes` und die alternativen Begrüßungen) wird 
 Chat platform  ⇄  connector  ⇄  personagent  ⇄  Model API
 ```
 
-Ein Konnektor meldet sich bei der Plattform an, leitet jede Nachricht an personagent weiter und stellt die Antwort zu. Es gibt drei Arten.
+Ein Konnektor meldet sich bei der Plattform an, leitet jede Nachricht an personagent weiter und stellt die Antwort zu. Es gibt drei Arten, die nach dem nächsten Abschnitt beschrieben werden.
+
+### Wem die Figur antwortet: Freigabe neuer Chats
+
+Eine Plattform, die auf der Seite oder mit `personagent connect <platform>` verbunden wird, verlangt zunächst eine Freigabe neuer Chats. Dort antwortet die Figur Ihnen sowie den Personen und Gruppen, die Sie freigegeben haben; alle anderen erhalten keine Antwort vom Modell. Wer dem Bot privat schreibt, erhält eine feste Nachricht in der Sprache der Figur, dass ihr Administrator den Chat freigeben muss, mit einem sechsstelligen Code; diese Nachricht kommt höchstens einmal am Tag erneut, wie oft die Person auch schreibt. In einer nicht freigegebenen Gruppe sagt die Figur nichts, und wenn sie dort jemand anspricht, sagt sie höchstens einmal am Tag, dass ihr Administrator die Gruppe nicht freigegeben hat.
+
+Jede Anfrage erscheint unter **Plattformen verbinden** unterhalb der verbundenen Plattformen, mit dem Namen, der Uhrzeit, dem Code und den ersten Worten, und der Punkt neben **Plattformen verbinden** wird gelb. **Freigeben** lässt die Figur ab der nächsten Nachricht in diesem Chat antworten, ohne Neustart. **Ablehnen** verhindert, dass der Chat beantwortet wird oder erneut anfragt; die Liste der abgelehnten Chats bietet **Rückgängig machen**. Bei einer Direktnachricht gibt **Das bin ich** den Chat frei und macht dieses Konto zu Ihrem Administratorkonto auf der Plattform; so werden Sie Administrator, ohne Ihre eigene ID herauszusuchen, und solange die Plattform keinen Administrator hat, wird diese Schaltfläche zuerst angeboten. Eine Anfrage läuft nach drei Tagen ab, und jede Plattform hält höchstens zwanzig wartende Anfragen, sodass eine Flut Fremder den Bot keine Flut von Nachrichten senden lassen kann. Nichts, was ein Fremder schreibt, erreicht das Modell.
+
+Der Satz unter jeder verbundenen Plattform nennt die dort geltende Regel und bietet die andere an: **Neue Chats ohne Freigabe beantworten** beantwortet jeden Chat, den die Plattform dem Bot zustellt, wie in früheren Versionen (die Antworteinstellungen gelten weiterhin), und **Freigabe für neue Chats verlangen** schaltet die Freigabe ein. Vor dieser Version eingerichtete personagent-Ordner antworten weiter wie bisher, bis Sie sie einschalten. Beim Verbinden von Twitch oder IRC eingetragene Kanäle gelten als freigegeben. Der Chat der Seite selbst, Programmierassistenten und die OpenAI-kompatible API verlangen nie eine Freigabe. Auf einem Computer ohne Bildschirm listet `personagent access` die Anfragen auf und entscheidet sie per Code (`approve`, `decline`, `admin`, `undo` und `policy <platform> approve|open`).
 
 ### Plattformen, die personagent selbst verbindet
 
@@ -426,6 +442,31 @@ personagent lauscht auf `127.0.0.1:8080`, und ein leeres `SERVER_HOST` bedeutet 
 ### Zuerst sprechen
 
 Manche Nachrichten antworten niemandem. Dazu gehören eigene Gesprächsanstöße (`PROACTIVE_ENABLED`, standardmäßig deaktiviert), die Nachfrage nach einer Ablehnung und die Ausrede, wenn das Modell in einer Gruppe ausfällt. In einer DM geht die Ausrede in der Antwort auf die wartende Nachricht zurück. personagent legt diese Nachrichten in eine Outbox, und die Konnektoren rufen sie ab und senden sie auf den Plattformen, die einen Bot zuerst sprechen lassen. Die lokale Seite ruft sie auf dieselbe Weise für ihre eigene Ansicht **Chat** ab. Offizielle WeChat-Konten und intelligente WeCom-Bots erlauben dies nicht. QQ begrenzt die Rate unaufgeforderter Nachrichten eines offiziellen Bots, und Nutzer können sie deaktivieren. `PROACTIVE_PLATFORMS=qq_official` beschränkt eigene Gesprächsanstöße auf den offiziellen QQ-Bot und `qq` auf QQ über NapCat. Auf der Seite setzt **Gelegentlich selbst beginnen** unter **Weitere Funktionen** beide Einstellungen. Siehe den [Bereitstellungsleitfaden](deploy.de.md#mehr-als-eine-plattform).
+
+## Werkzeuge
+
+Neben der Websuche kann die Figur Werkzeuge von MCP-Servern verwenden, die Sie hinzufügen: die aktuelle Uhrzeit, den Text einer Webseite, Ihre Notizen, einen Kalender und alles andere, was ein MCP-Server anbietet. Jede Antwort schreibt die Figur weiterhin mit ihrer eigenen Stimme. Ein Werkzeug zieht sie unterwegs zu Rate, wie bei der Websuche: Verlangt eine Nachricht etwas, das ein Werkzeug liefert, ruft sie genau dieses eine Werkzeug auf, liest die Antwort und antwortet als sie selbst.
+
+**Einen Server hinzufügen.** In **Figur & Einstellungen** nimmt der Bereich **Werkzeuge** unter **Weitere Funktionen** die Konfiguration aus der Anleitung des Servers unverändert entgegen: den gesamten Block `{"mcpServers": {...}}`, wie er für Claude Desktop oder Cursor angegeben ist, den Eintrag eines einzelnen Servers oder das Objekt eines einzelnen Servers. **Stattdessen ein Programm oder eine Adresse eingeben** nimmt einen Befehl mit seinen Argumenten und Umgebungsvariablen entgegen oder die Adresse eines entfernten Servers (Streamable HTTP) mit ihren Anfrage-Headern. Wird `uvx` gefunden (die Installationsprogramme bringen uv mit), werden zwei Server aus dem offiziellen Referenzsatz zum sofortigen Hinzufügen angeboten: **Uhrzeit** (`uvx mcp-server-time`) und **Abruf** (`uvx mcp-server-fetch`). Im Terminal:
+
+```
+personagent tools add '{"mcpServers": {"time": {"command": "uvx", "args": ["mcp-server-time"]}}}'
+personagent tools add --name fetch --command uvx --arg mcp-server-fetch
+personagent tools add --name notes --url https://example.com/mcp --header "Authorization=Bearer ..."
+personagent tools check
+personagent tools call time get_current_time '{"timezone": "Asia/Tokyo"}'
+personagent tools set time get_current_time --who anyone
+personagent tools list
+personagent tools remove fetch
+```
+
+**Jedes Werkzeug** hat einen Schalter und eine Auswahl, wer seine Verwendung auslösen darf: **Nur der Administrator**, die Voreinstellung für jedes neue Werkzeug, oder **Jeder, dem die Figur antwortet**. Ein Werkzeug, das der Absender einer Nachricht nicht verwenden darf, wird für diese Nachricht nie angeboten. **Prüfen** verbindet sich sofort mit dem Server, liest seine Werkzeuge und nennt den Grund, wenn das fehlschlägt: Das Programm wurde nicht gefunden, es wurde beendet (mit seinen letzten Ausgabezeilen), die Adresse hat die Verbindung abgelehnt, der Server hat nicht rechtzeitig geantwortet, oder er verlangt eine Anmeldung über OAuth, die personagent noch nicht unterstützt. **Ausprobieren** ruft ein Werkzeug manuell mit den von Ihnen eingegebenen Argumenten auf und zeigt den Text, den die Figur erhalten würde. **Entfernen** beendet den Server und entfernt ihn. Änderungen werden innerhalb weniger Sekunden ohne Neustart wirksam.
+
+**Betrieb.** Der Dienst der Figur startet die Server beim eigenen Start, ohne auf sie zu warten, startet einen beendeten Server neu (nach 2 Sekunden, dann mit jeweils verdoppelter Wartezeit bis zu 5 Minuten) und beendet sie samt den von ihnen gestarteten Programmen, wenn er selbst endet. Ein Server, der nicht startet, wird auf der Seite und von `personagent doctor` gemeldet; die Figur arbeitet ohne ihn weiter. Ein Aufruf hat 20 Sekunden Zeit; verwendet wird nur der Text einer Antwort, höchstens 3.000 Zeichen davon, und andere Inhalte wie Bilder werden benannt und ausgelassen. Die vom Modell gewählten Argumente werden vor dem Aufruf mit der Beschreibung des Werkzeugs abgeglichen.
+
+**Kosten.** Ohne Werkzeuge entscheidet eine Prüfung mit regulären Ausdrücken, ob eine Nachricht eine Websuche erfordern könnte, und nur dann wird das Modell gefragt. Solange ein Werkzeug eingeschaltet ist, kostet jede Nachricht einer zur Werkzeugnutzung berechtigten Person, auf die die Figur antworten wird, eine zusätzliche kleine Anfrage an das Entscheidungsmodell (`LLM_JUDGE_MODEL`). Diese entscheidet, ob ein Werkzeug verwendet, im Web gesucht oder keines von beiden getan wird. Die Ansicht App zählt diese Anfragen als **Entscheidung, ob ein Werkzeug verwendet wird**.
+
+**Sicherheit.** Beim Hinzufügen eines Servers wird ein Programm auf diesem Computer mit Ihren eigenen Benutzerrechten ausgeführt oder eine Verbindung zu der eingegebenen Adresse hergestellt; fügen Sie nur Server hinzu, denen Sie vertrauen. Namen, Beschreibungen und Antworten von Werkzeugen stammen von Dritten: Sie sind in der Länge begrenzt und für das Modell als externes Material gekennzeichnet, aus dem es nie Anweisungen übernehmen soll. Was ein Werkzeug zurückgibt, wird zusammen mit dem Chat an den Modelldienst gesendet. Die Server werden in `mcp.json` im personagent-Ordner gespeichert; ihre Umgebungsvariablen und Anfrage-Header sind Geheimnisse, und die Seite zeigt nur, welche davon gesetzt sind. In der Aktivität, bei `/why` in `personagent chat` und in der Erklärung der Übungsgruppe nennt eine Antwort, die sich auf ein Werkzeug gestützt hat, das Werkzeug, nie seine Argumente oder seine Antwort.
 
 ## Programmierassistenten
 
@@ -840,6 +881,7 @@ Der Modellanbieter sieht die Gespräche:
 - Wenn die Figur selbst über einen gelernten Eintrag entscheidet, gehen die Antwort, die Reaktionen darauf und die vorgeschlagenen Formulierungen an `PROMOTE_JUDGE_MODEL` (leer: `REACT_MODEL`). `PROMOTE_JUDGE_ENABLED=false` schaltet dies aus.
 - Bilder werden an den Endpunkt der Bilderkennung gesendet.
 - Wenn das Modell beschließt, etwas nachzuschlagen, wird die Anfrage an Tavily gesendet (wenn `TAVILY_API_KEY` gesetzt ist) oder an DuckDuckGo.
+- Wenn das Modell beschließt, eines Ihrer [Werkzeuge](#werkzeuge) zu verwenden, gehen die gewählten Argumente an den Server dieses Werkzeugs und die Antwort des Werkzeugs an den Modelldienst.
 - Mit gesetztem `EMBEDDING_MODEL` werden die Nachricht, auf die er antwortet, Erinnerungen und Suchbeispiele an den Embeddings-Endpunkt gesendet (`EMBEDDING_BASE_URL` oder `LLM_BASE_URL`, wenn leer).
 
 Bevor Sie ihn mit echten Menschen verbinden, teilen Sie ihnen mit, dass es sich um einen Bot handelt, und holen Sie ihre Einwilligung zur Verarbeitung ihrer Nachrichten ein. Lesen Sie den [Haftungsausschluss](DISCLAIMER.de.md).
@@ -852,6 +894,8 @@ Die wichtigsten Dateien und Ordner im personagent-Ordner und was sie enthalten:
 |---|---|---|
 | `.env` | Einstellungen, mit dem Modellschlüssel und weiteren Schlüsseln im Klartext | Geheimnisse |
 | `persona.txt`, `persona.card.json` | Die Persona und ihre optionale Karte | Nein |
+| `mcp.json` | Die [Werkzeugserver](#werkzeuge), ihre Umgebungsvariablen und Anfrage-Header sowie die Einstellungen jedes Werkzeugs | Geheimnisse |
+| `runtime/tools/` | Die Werkzeuge, die jeder Server zuletzt aufgelistet hat, und welche Server der laufende Dienst starten konnte | Nein |
 | `persona.txt.bak` und seine datierten Kopien, `avatar.png` | Selbst geschriebene Personas, die eine fertige ersetzt hat, und Ihr eigenes Bild | Nein |
 | `platforms/` | `direct.json` mit den Zugangsdaten der Plattformen, die personagent selbst verbindet, sowie das verwaltete AstrBot mit seinen Einstellungen | Geheimnisse |
 | `runtime/memory.json`, `core_memory.json`, `episodes.json` | Fakten, Hauptnotiz, Ereignisse und Zusammenfassungen jedes Chats | Chatinhalte |

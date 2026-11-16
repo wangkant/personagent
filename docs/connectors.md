@@ -75,7 +75,8 @@ names, so a setting means the same thing in each of them:
 
 An empty group or DM list forwards nothing of that kind. `*` forwards all of
 it and marks the events `"prefiltered": false`, which leaves the decision to
-the agent's `ACCESS_GROUPS` and `ACCESS_DM_USERS`. Each connector's README
+the agent's `ACCESS_GROUPS` and `ACCESS_DM_USERS` (and, on a platform listed in
+`ACCESS_APPROVAL_PLATFORMS`, the admin's approval of new chats). Each connector's README
 lists its remaining settings.
 
 ## Addressing
@@ -151,7 +152,8 @@ first message since the agent started, is a backlog delivered after a
 restart: it is kept as context and not answered. After those two minutes
 an old `sent_at` no longer holds a message back, so a connector whose clock
 runs behind is still answered. Send raw platform ids. The agent adds the
-prefix.
+prefix. A group event may carry `conversation_name`, the group's name where
+the platform gives one; the admin sees it when the group waits for approval.
 
 The connector sets `addressed`. It is true when the message mentions the
 bot, replies to one of the bot's messages, or is addressed to the bot under

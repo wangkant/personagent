@@ -464,5 +464,18 @@
 "Any other software that accepts an OpenAI-compatible address: `{cmd} api`.": "Любая другая программа, принимающая адрес, совместимый с OpenAI: `{cmd} api`.",
 "personagent demo: short scenes played with scripted answers": "personagent demo: короткие сцены с заранее заданными ответами",
 "personagent demo: the same scenes, played by your model ({model})": "personagent demo: те же сцены, которые разыгрывает ваша модель ({model})",
-"unknown command {cmd}; /help lists the commands": "неизвестная команда {cmd}; список команд — /help"
+"unknown command {cmd}; /help lists the commands": "неизвестная команда {cmd}; список команд — /help",
+"Sign in with an OpenRouter account instead of pasting a key?": "Войти с учётной записью OpenRouter вместо того, чтобы вставлять ключ?",
+"Open this address in a browser on any device, sign in and approve:": "Откройте этот адрес в браузере на любом устройстве, войдите и подтвердите доступ:",
+"OpenRouter creates a key for personagent, which is kept on this computer. Until you remove it at openrouter.ai/keys, the key can spend the credit of your OpenRouter account. The free models need no credit.": "OpenRouter создаёт для personagent ключ, который хранится на этом компьютере. Пока вы не удалите его на openrouter.ai/keys, ключ может расходовать средства вашей учётной записи OpenRouter. Бесплатным моделям средства не нужны.",
+"Code shown on the page (press Enter to paste a key instead)": "Код, показанный на странице (нажмите Enter, чтобы вместо этого вставить ключ)",
+"Signed in. OpenRouter created a key for personagent.": "Вход выполнен. OpenRouter создал ключ для personagent.",
+"That is not a code from the OpenRouter page.": "Это не код со страницы OpenRouter.",
+"OpenRouter did not accept the code; it may have expired after ten minutes.": "OpenRouter не принял код; возможно, он истёк через десять минут.",
+"OpenRouter did not return a key.": "OpenRouter не вернул ключ.",
+"personagent could not reach OpenRouter to collect the key.": "personagent не удалось связаться с OpenRouter, чтобы получить ключ.",
+"Paste a key instead.": "Вместо этого вставьте ключ.",
+"New chats on {name} wait for your approval: whoever writes to the bot receives a short code, and `{list}` shows the requests. To answer everyone without approval instead, run `{open}`.": "Новые чаты на {name} ждут вашего одобрения: каждый, кто пишет боту, получает короткий код, а `{list}` показывает запросы. Чтобы вместо этого отвечать всем без одобрения, выполните `{open}`.",
+"  it searched the web first": "  перед ответом выполнил веб-поиск",
+"  it used the tool {name} first": "  перед ответом использовал инструмент {name}"
 }

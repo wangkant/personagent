@@ -68,6 +68,7 @@ A burst of messages gets one reply.
 <td width="220" valign="top"><strong>It connects to all your platforms.</strong></td>
 <td valign="top">
 Twenty-two chat platforms connect from one page, by a phone scan or a few pasted values. Most take both group chats and private chats.<br>
+A platform you connect answers only the chats you approve: a stranger gets a short code, and you approve it on the page, where **This is me** also makes you the admin.<br>
 The same agent answers in a window on your computer and inside Claude Code, Codex and DeepSeek Harness.<br>
 Any software that takes an OpenAI-compatible address, such as Open WebUI or SillyTavern, can talk to the same character.<br>
 Any other platform can be added through an AstrBot, Koishi or Matrix bridge, or a connector you write.
@@ -77,7 +78,21 @@ Any other platform can be added through an AstrBot, Koishi or Matrix bridge, or 
 <td width="220" valign="top"><strong>It works with what you have.</strong></td>
 <td valign="top">
 Any OpenAI-compatible model: OpenRouter's free models, a paid service, or one running on your own computer with Ollama.<br>
-One line installs it, with a Python of its own, on a computer that has nothing installed. The page is in English, Chinese or eight more languages, and one pasted model key starts the chat; with Ollama or LM Studio already running, one click does.
+One line installs it, with a Python of its own, on a computer that has nothing installed. The page is in English, Chinese or eight more languages, and signing in with OpenRouter in the browser, or one pasted model key, starts the chat; with Ollama or LM Studio already running, one click does.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>It uses the tools you give it.</strong></td>
+<td valign="top">
+Paste the block from an MCP server's README, and the character can look things up or act through that server's tools, one for a reply, answering in its own voice.<br>
+Each tool has a switch and a choice of who may cause its use: you alone, or anyone the character answers.
+</td>
+</tr>
+<tr>
+<td width="220" valign="top"><strong>It runs where you need it.</strong></td>
+<td valign="top">
+On your own computer in a window, or on a server, a NAS or in Docker, kept running by `personagent service install`.<br>
+With a page password set, the same page opens from a phone or another computer, behind a sign-in.
 </td>
 </tr>
 </table>
@@ -104,7 +119,7 @@ The installer brings its own Python, installs personagent and opens it; on Windo
 
 With Python 3.10 or later already installed, `python -m pip install personagent` and then `personagent` do the same, and with [uv](https://docs.astral.sh/uv/), `uvx personagent` runs it without a separate install step. On Windows you can also download the source ZIP and double-click `start.bat`, which fetches Python as well when the computer has none.
 
-It opens in a window of its own on Windows, and in your browser on macOS and Linux. Paste a model API key and click **Verify & start chatting**. OpenRouter's free models are preselected; they still need a key, which costs nothing and which you get from OpenRouter through **Get an API key** on the page. `personagent demo` plays three scripted scenes with no key at all. The [getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md) walks through the page screen by screen.
+It opens in a window of its own on Windows, and in your browser on macOS and Linux. Press **Sign in with OpenRouter** and approve in the browser, or paste a model API key and click **Verify & start chatting**. OpenRouter's free models are preselected; they still need an account or a key, which costs nothing. `personagent demo` plays three scripted scenes with no key at all. The [getting-started guide](https://github.com/wangkant/personagent/blob/main/docs/start.md) walks through the page screen by screen.
 
 personagent is free. You pay the model service you choose, at its own rates. One message can lead to more than one model request: besides the reply, the character at times decides whether to speak in a group, judges how a reply was received, or tidies its memory. OpenRouter's free models allow 50 requests a day, and some free providers keep what they receive; Ollama runs a model on your own computer with no key.
 
@@ -123,6 +138,16 @@ Connected apps start again each time personagent starts. The scan-to-connect app
 For everything else there is **Other software** on the same page: switch it on, copy the address, the key and the model name into any app that takes an OpenAI-compatible address, and that app talks to your character, with the same memory as everywhere else. The [guide](https://github.com/wangkant/personagent/blob/main/docs/guide.md#other-software) has the details, and `personagent connect api` does the same from a terminal.
 
 Already running AstrBot, Koishi or Matrix? personagent can sit behind it as the agent: see [bridges you run yourself](https://github.com/wangkant/personagent/blob/main/docs/guide.md#bridges-you-run-yourself), the [Satori connector](https://github.com/wangkant/personagent/blob/main/integrations/satori/README.md) and the [Matrix connector](https://github.com/wangkant/personagent/blob/main/integrations/matrix/README.md).
+
+## On a server
+
+```sh
+personagent page password --random   # prints a password for the page
+PAGE_HOST=0.0.0.0 personagent up      # the service, the platforms and the page on port 8090
+personagent service install           # keep it running after a reboot (Linux, macOS)
+```
+
+Open `http://<the server's address>:8090/` from any device and sign in with the page password. Without a password the page refuses to listen beyond the computer itself. Plain HTTP shows the password to the network it crosses, so beyond a home network use an SSH tunnel, Tailscale or a reverse proxy with HTTPS. In Docker, `docker compose up -d` in a clone of the repository builds and starts it, and `docker compose logs` shows the password made on the first start; images are published at `ghcr.io/wangkant/personagent` with each release. The [deployment guide](https://github.com/wangkant/personagent/blob/main/docs/deploy.md#on-a-server-a-nas-or-in-docker) has each step.
 
 ## Coding agents
 

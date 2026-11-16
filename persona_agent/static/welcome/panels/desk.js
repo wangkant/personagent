@@ -21,7 +21,9 @@ PA.strings({
     desk_login_done_off: "已关闭：登录 Windows 后不再自动启动 personagent。",
     desk_saving: "正在保存…",
     desk_checking: "正在检查…",
-    desk_unsupported: "桌面图标和登录后自动启动仅支持 Windows。在其他系统中，请手动将 personagent 添加到启动器或登录项。",
+    desk_unsupported: "桌面图标和登录后自动启动仅支持 Windows。在 macOS 和 Linux 上，请在命令行中运行 personagent service install，使 personagent 在重启后自动运行。",
+    desk_remote: "桌面图标和登录后自动启动属于运行 personagent 的那台电脑，只能在该电脑上设置。",
+    desk_remote_open: "文件夹只能在运行 personagent 的电脑上打开。以上为该电脑上的路径。",
     desk_uvx: "当前通过 uvx 从临时文件夹运行，图标无法指向该位置。请先安装 personagent：uv tool install personagent",
     desk_shortcut_failed: "Windows 未允许此项修改。请重试；如仍失败，请在命令行中运行 personagent shortcut 查看原因。",
     desk_data_title: "你的数据",
@@ -108,7 +110,9 @@ PA.strings({
     desk_login_done_off: "Off: personagent will no longer start after you sign in to Windows.",
     desk_saving: "Saving…",
     desk_checking: "Checking…",
-    desk_unsupported: "Desktop icons and starting at sign-in are available on Windows only. On other systems, add personagent to your launcher or login items manually.",
+    desk_unsupported: "Desktop icons and starting at sign-in are available on Windows only. On macOS and Linux, run personagent service install in a terminal to keep personagent running after a reboot.",
+    desk_remote: "The desktop icon and starting at sign-in belong to the computer personagent runs on and can be set only there.",
+    desk_remote_open: "Folders open only on the computer personagent runs on. The path above is on that computer.",
     desk_uvx: "This copy runs through uvx from a temporary folder, which an icon cannot point to. Install personagent first: uv tool install personagent",
     desk_shortcut_failed: "Windows did not allow this change. Try again; if it still fails, run personagent shortcut in a terminal to see the reason.",
     desk_data_title: "Your data",
@@ -277,6 +281,9 @@ PA.strings({
   const dataHint = el("p", "field-note");
   const homePath = el("p", "desk-path");
   homePath.id = "desk-home";
+  const remoteNote = el("p", "field-note");
+  remoteNote.id = "desk-remote-open";
+  remoteNote.hidden = true;
   const placeList = el("div", "desk-places");
   const placeRows = {};
   for (const place of PLACES) {
@@ -297,7 +304,7 @@ PA.strings({
   const dataError = el("div", "error");
   dataError.id = "desk-data-error";
   dataError.setAttribute("role", "alert");
-  data.append(dataTitle, dataHint, homePath, placeList, dataError);
+  data.append(dataTitle, dataHint, homePath, remoteNote, placeList, dataError);
 
   const backup = el("div", "card side-card desk-card");
   backup.id = "desk-backup";
@@ -362,6 +369,7 @@ PA.strings({
   // ---- drawing
   function renderLinks() {
     const supported = !links || links.supported;
+    unsupported.textContent = t(links && links.remote ? "desk_remote" : "desk_unsupported");
     unsupported.hidden = supported;
     iconFeature.hidden = loginFeature.hidden = !supported;
     uvxNote.hidden = !(links && links.uvx);
@@ -458,9 +466,14 @@ PA.strings({
     loginTitle.textContent = t("desk_login_title");
     dataTitle.textContent = t("desk_data_title");
     dataHint.textContent = t("desk_data_hint");
+    // Another device has no file manager of that computer's to open.
+    const remote = Boolean(PA.state && PA.state.remote);
+    remoteNote.textContent = t("desk_remote_open");
+    remoteNote.hidden = !remote;
     for (const place of PLACES) {
       placeRows[place].name.textContent = t(`desk_place_${place}`);
       placeRows[place].hint.textContent = t(`desk_place_${place}_hint`);
+      placeRows[place].open.hidden = remote;
       if (!placeRows[place].open.disabled) placeRows[place].open.textContent = t("desk_open");
     }
     backupTitle.textContent = t("desk_backup_title");
@@ -496,7 +509,8 @@ PA.strings({
       showError(dataError, error.message);
     }
     try {
-      links = await PA.api("desk/shortcuts");
+      // Set only on the computer itself: another device is not asked.
+      links = PA.state && PA.state.remote ? { supported: false, remote: true } : await PA.api("desk/shortcuts");
       showError(computerError, "");
     } catch (error) {
       links = { supported: true, uvx: false, icon: "off", login: "off" };
@@ -504,7 +518,7 @@ PA.strings({
     } finally {
       loading = false;
     }
-    renderLinks();
+    renderText();
   }
 
   // ---- acting

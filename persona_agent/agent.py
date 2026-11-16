@@ -42,6 +42,7 @@ from .prompt import PromptBuilder
 from .prompts import (DEFAULT_PERSONA, parse_persona_style,
                       render_persona_template)
 from .retrieval import Retrieval
+from .mcp_tools import ToolHub
 from .search import WebSearch
 from .settings import AgentSettings
 from .stickers import StickerLibrary
@@ -224,6 +225,9 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self.access_groups: set = set(s.access_groups)
         self.access_dm_users: set = set(s.access_dm_users)
         self.connector_qq_platforms: set = set(s.connector_qq_platforms)
+        self.access_approval_platforms: set = set(s.access_approval_platforms)
+        # The home's .env as the service re-reads it (approvals.LiveEnv); set by the server.
+        self.settings_env = None
         self.connector_outbox_enabled = s.connector_outbox_enabled
 
         self.memory_file = resolve_runtime_state_file(s.memory_file)
@@ -239,6 +243,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self.vision_api_key = s.vision_api_key
         self.vision_base_url = s.vision_base_url
         self.tavily_key = s.tavily_key
+        # The admin's MCP servers: nothing runs until the service or a turn starts them.
+        self.tool_hub = ToolHub(ROOT)
         self.embedding_model = s.embedding_model
         self.embedding_base_url = s.embedding_base_url
         self.embedding_api_key = s.embedding_api_key
@@ -786,6 +792,9 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         await self.stickers.aclose()
+        hub = self.__dict__.get("tool_hub")
+        if hub is not None:
+            await hub.aclose()
 
         clients = list(self._http_pool.values())
         self._http_pool.clear()

@@ -168,6 +168,11 @@ class AgentSettings:
     #: messages are claimed for the connector, then neither kept nor learned from.
     access_paused_groups: tuple[str, ...] = _env(
         lambda env: access.identity_from_env(env).written["ACCESS_PAUSED_GROUPS"])
+    #: Platforms where a chat in neither list waits for the admin's approval
+    #: instead of being answered (``ACCESS_APPROVAL_PLATFORMS``).
+    access_approval_platforms: tuple[str, ...] = _env(
+        lambda env: tuple(sorted(access.approval_platforms(
+            env_str(access.APPROVAL_SETTING, "", env=env)))))
     #: Connector platforms whose ids are minted bare, on NapCat's keys. The
     #: operator's call, never the connector's: a bare id carries QQ authority.
     connector_qq_platforms: tuple[str, ...] = ()

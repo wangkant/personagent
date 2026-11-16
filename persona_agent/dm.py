@@ -19,6 +19,7 @@ from .messages import message_time
 # unchanged prompt, so the one retry carries a note.
 from .decision import EMPTY_DRAFT_RETRY_NOTE as _EMPTY_DRAFT_RETRY_NOTE
 from .decision import PASS, SEND
+from .search import tool_caller
 from .textproc import (
     TextProcessing,
     _clean_prompt_source,
@@ -444,7 +445,8 @@ class DirectMessages:
         # Searched once here, so the retry reuses it. Before the context joins
         # the last turn: the search decision reads that turn as the person's.
         if not proactive:
-            messages = await self._ground_with_search(messages)
+            with tool_caller(is_admin):
+                messages = await self._ground_with_search(messages)
         messages = prompt.messages_with_context(messages)
 
         async def draft(system_text: str) -> tuple[str, str]:
