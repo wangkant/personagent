@@ -418,10 +418,21 @@ class Tuning:
                 return {**self.view(), "changed": False, "restarted": False, "personaUpdated": False}
             if changes:
                 sw.write_env(self.ws.env, changes)
+            if access.APPROVAL_SETTING in changes:
+                self._record_policy(old.get(access.APPROVAL_SETTING, ""), changes[access.APPROVAL_SETTING])
             if card is not None:
                 atomic_write_text(*card)
             persona = self._persona_for_admin(old, changes)
             return self._applied(changes, card is not None, persona)
+
+    def _record_policy(self, before: str, after: str) -> None:
+        """A platform added or removed here is the owner's decision, which a later connect keeps."""
+        from .. import approvals
+
+        was, now = access.approval_platforms(before), access.approval_platforms(after)
+        store = approvals.Store(approvals.store_path(self.home))
+        for platform in sorted(was ^ now):
+            store.decide_policy(platform, "approve" if platform in now else "open")
 
     def _applied(self, changes: dict, card: bool, persona: bool) -> dict:
         restart = card or persona or any(not BY_KEY[k].live for k in changes)

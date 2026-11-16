@@ -64,9 +64,9 @@ def test_a_request_gets_a_short_code_and_one_answer_a_day(tmp: Path) -> None:
 def test_a_flood_of_strangers_gets_a_bounded_list_and_bounded_answers(tmp: Path) -> None:
     store = approvals.Store(tmp / "approvals.json", clock=Clock())
     told = sum(store.note(platform="discord", kind="dm", chat_id=f"discord:{n}")[1] for n in range(200))
-    check("at most MAX_WAITING answers for a whole flood", told == approvals.MAX_WAITING, str(told))
+    check("at most MAX_WAITING answers for a whole flood", told == approvals.MAX_WAITING["dm"], str(told))
     check("the list holds MAX_WAITING per platform",
-          len(store.snapshot()["waiting"]) == approvals.MAX_WAITING)
+          len(store.snapshot()["waiting"]) == approvals.MAX_WAITING["dm"])
     check("another platform has its own room",
           store.note(platform="telegram", kind="dm", chat_id="telegram:1")[1])
     codes = [w["code"] for w in store.snapshot()["waiting"]]
@@ -82,41 +82,44 @@ def test_what_a_stranger_writes_is_kept_short_and_harmless(tmp: Path) -> None:
           not any(ch in entry["name"] + entry["words"] for ch in "\x1b‮\x07\n"), repr(entry))
     check("the name and the words are cut",
           len(entry["name"]) <= approvals.NAME_CHARS + 1 and len(entry["words"]) <= approvals.WORDS_CHARS + 1)
-    for bad in ("telegram:a,b", "telegram:#x", "telegram:a b", "telegram:", ":1", "x" * 200):
-        check(f"an id the lists cannot hold makes no request: {bad!r}",
+    for bad in ("telegram:a b", "telegram:", ":1", "telegram:" + "x" * 200, "telegram:a\x00"):
+        check(f"an id the file cannot hold makes no request: {bad!r}",
               store.note(platform="telegram", kind="dm", chat_id=bad) == ("", False))
 
 
-def test_approving_adds_the_id_to_the_lists_and_the_code_works_once(tmp: Path) -> None:
+def test_approvals_are_kept_apart_and_the_code_works_once(tmp: Path) -> None:
     home = _home(tmp, "ACCESS_DM_USERS=telegram:5\n")
-    store = approvals.Store(approvals.home_path(home), clock=Clock())
+    store = approvals.Store(approvals.store_path(home), clock=Clock())
     dm, _ = store.note(platform="telegram", kind="dm", chat_id="telegram:42", words="hi")
     group, _ = store.note(platform="telegram", kind="group", chat_id="telegram:-100", name="Book club")
     me, _ = store.note(platform="discord", kind="dm", chat_id="discord:9")
     no, _ = store.note(platform="discord", kind="dm", chat_id="discord:66", words="buy now")
-    store.decide(dm.lower(), "approve", home)
-    with pytest.raises(ValueError):
-        store.decide(group, "admin", home)
-    store.decide(group, "approve", home)
-    store.decide(f" {me[:3]}-{me[3:]} ", "admin", home)
-    store.decide(no, "decline", home)
-    env = _env(home)
-    check("a DM goes to ACCESS_DM_USERS beside what was there",
-          env["ACCESS_DM_USERS"] == "telegram:5,telegram:42", repr(env))
-    check("a group to ACCESS_GROUPS", env["ACCESS_GROUPS"] == "telegram:-100")
-    check("This is me to ADMIN_IDS", env["ADMIN_IDS"] == "discord:9")
-    check("the declined id is in no list", "discord:66" not in json.dumps(env))
+    store.decide("approve", code=dm.lower())
+    with pytest.raises(approvals.Refused):
+        store.decide("admin", code=group)
+    store.decide("approve", code=group)
+    store.decide("admin", code=f" {me[:3]}-{me[3:]} ")
+    store.decide("decline", code=no)
+    view = store.view()
+    check("the settings are left as they were", _env(home).get("ACCESS_DM_USERS") == "telegram:5"
+          and "ADMIN_IDS" not in _env(home) and "ACCESS_GROUPS" not in _env(home), repr(_env(home)))
+    check("approved: a DM, a group, an admin",
+          view["dm"] == {"telegram:42", "discord:9"} and view["group"] == {"telegram:-100"}
+          and view["admins"] == {"discord:9"}, repr(view))
+    check("the declined id is not approved", view["declined"] == {"discord:66"})
     data = store.snapshot()
     check("decided requests leave the list", data["waiting"] == [])
     check("a decline keeps the id but not the words",
           data["declined"][0]["id"] == "discord:66" and "words" not in data["declined"][0]
-          and "buy now" not in approvals.home_path(home).read_text(encoding="utf-8"))
+          and "buy now" not in approvals.store_path(home).read_text(encoding="utf-8"))
     with pytest.raises(LookupError):
-        store.decide(dm, "approve", home)
+        store.decide("approve", code=dm)
     check("a declined chat is never answered or listed again",
           store.note(platform="discord", kind="dm", chat_id="discord:66") == ("", False))
-    check("undo lets it ask again", store.undo("discord:66")
+    check("undo lets it ask again", store.undo("discord:66") == "declined"
           and store.note(platform="discord", kind="dm", chat_id="discord:66")[1])
+    check("undo forgets an approval too", store.undo("telegram:42") == "approved"
+          and "telegram:42" not in store.view()["dm"])
     check("undoing an unknown id says so", not store.undo("discord:404"))
 
 
@@ -239,16 +242,16 @@ async def test_an_approval_reaches_the_running_service(tmp: Path) -> None:
     home = _home(tmp, "ACCESS_APPROVAL_PLATFORMS=telegram\n")
     agent, served = _agent(tmp / "rt", access_approval_platforms=("telegram",))
     agent.settings_env = approvals.LiveEnv(home / ".env")
-    agent._approval_store = approvals.Store(approvals.home_path(home))
+    agent._approval_store = approvals.Store(approvals.store_path(home))
     await agent.handle_event(_dm("telegram", "42", 1))
     code = agent._approvals().snapshot()["waiting"][0]["code"]
-    agent._approvals().decide(code, "approve", home)
+    agent._approvals().decide("approve", code=code)
     reply = await agent.handle_event(_dm("telegram", "42", 2))
     check("approved: answered on the next message, no restart",
           reply["owned"] and ("private:telegram:42", "friend") in served, repr((reply, served)))
     await agent.handle_event(_dm("telegram", "77", 3))
     me = agent._approvals().snapshot()["waiting"][0]["code"]
-    agent._approvals().decide(me, "admin", home)
+    agent._approvals().decide("admin", code=me)
     await agent.handle_event(_dm("telegram", "77", 4))
     check("This is me: answered as the admin", ("private:telegram:77", "owner") in served, repr(served))
     approvals.set_policy(home, "discord", True)
@@ -280,7 +283,7 @@ async def test_a_declined_stranger_hears_nothing(tmp: Path) -> None:
     agent, served = _agent(tmp, access_approval_platforms=("telegram",))
     await agent.handle_event(_dm("telegram", "66", 1))
     store = agent._approvals()
-    store.decide(store.snapshot()["waiting"][0]["code"], "decline", tmp)
+    store.decide("decline", code=store.snapshot()["waiting"][0]["code"])
     reply = await agent.handle_event(_dm("telegram", "66", 2))
     check("no answer, no request, no model turn",
           reply["replies"] == [] and reply["owned"] and served == [] and not store.snapshot()["waiting"])
@@ -365,7 +368,7 @@ def client(workspace):
 
 
 def test_the_page_lists_decides_and_switches(client, workspace) -> None:
-    store = approvals.Store(approvals.home_path(workspace.home))
+    store = approvals.Store(approvals.store_path(workspace.home))
     code, _ = store.note(platform="telegram", kind="dm", chat_id="telegram:42", name="<b>Ann</b>",
                          words="<img src=x onerror=alert(1)>")
     assert client.get("/api/approvals").status_code == 403
@@ -375,19 +378,21 @@ def test_the_page_lists_decides_and_switches(client, workspace) -> None:
     assert state["platformReach"]["telegram"] == "approval"
     body = client.get("/api/approvals", headers=HEADERS).json()
     item = body["waiting"][0]
-    assert item["code"] == code and item["hasAdmin"] is False and item["kind"] == "dm"
+    assert "code" not in item and item["hasAdmin"] is False and item["kind"] == "dm"
+    assert item["id"] == "telegram:42" and code not in json.dumps(body), "the page never shows the code"
     assert item["name"] == "<b>Ann</b>", "kept as text: the page shows it with textContent"
     post = lambda path, payload: client.post(f"/api/approvals/{path}", headers=HEADERS, json=payload)
-    assert post("decide", {"code": code, "action": "nope"}).json() == {"error": "approvals_bad_request"}
-    done = post("decide", {"code": code, "action": "admin"}).json()
-    assert done["waiting"] == [] and _env(workspace.home)["ADMIN_IDS"] == "telegram:42"
-    assert post("decide", {"code": code, "action": "approve"}).json() == {"error": "approvals_gone"}
-    other, _ = store.note(platform="telegram", kind="dm", chat_id="telegram:43")
+    assert post("decide", {"id": "telegram:42", "action": "nope"}).json() == {"error": "approvals_bad_request"}
+    done = post("decide", {"id": "telegram:42", "action": "admin", "code": code}).json()
+    assert done["waiting"] == [] and [a["id"] for a in done["approved"] if a["admin"]] == ["telegram:42"]
+    assert post("decide", {"id": "telegram:42", "action": "approve"}).json() == {"error": "approvals_gone"}
+    store.note(platform="telegram", kind="dm", chat_id="telegram:43")
     assert client.get("/api/approvals", headers=HEADERS).json()["waiting"][0]["hasAdmin"] is True
-    declined = post("decide", {"code": other, "action": "decline"}).json()
+    declined = post("decide", {"id": "telegram:43", "action": "decline"}).json()
     assert [d["id"] for d in declined["declined"]] == ["telegram:43"]
     assert post("undo", {"id": "telegram:43"}).json()["declined"] == []
     assert post("undo", {"id": "telegram:43"}).json() == {"error": "approvals_gone"}
+    assert post("undo", {"id": "telegram:42"}).json()["approved"] == []
     assert post("policy", {"platform": "telegram", "approve": False}).json()["policy"] == []
     state = client.get("/api/state", headers=HEADERS).json()
     assert state["platformApproval"] == {"telegram": False} and state["platformReach"]["telegram"] != "approval"
@@ -400,6 +405,7 @@ def test_a_platform_connected_for_the_first_time_asks(tmp_path, monkeypatch) -> 
     space = welcome.Workspace(home)
     try:
         monkeypatch.setattr(space, "_connected", lambda kind: kind == "discord")
+        monkeypatch.setattr(approvals, "used_before", lambda home, kind: False)
         for name in ("start_agent", "start_direct", "restart_direct", "start_astrbot", "stop"):
             monkeypatch.setattr(space.services, name, lambda *a, **k: None)
         monkeypatch.setattr(space, "_connect_direct", lambda spec, values: None)
@@ -419,14 +425,14 @@ def test_a_platform_connected_for_the_first_time_asks(tmp_path, monkeypatch) -> 
 def test_the_terminal_commands(tmp_path, monkeypatch, capsys) -> None:
     home = _home(tmp_path, "ACCESS_APPROVAL_PLATFORMS=telegram\n")
     monkeypatch.setenv("AGENT_HOME", str(home))
-    store = approvals.Store(approvals.home_path(home))
+    store = approvals.Store(approvals.store_path(home))
     code, _ = store.note(platform="telegram", kind="dm", chat_id="telegram:42", name="Ann", words="hello")
     assert approvals.main(["list"]) == 0
     out = capsys.readouterr().out
     assert code in out and "Ann" in out and "hello" in out and "Telegram" in out
     assert approvals.main(["approve", "ZZZZZZ"]) == 1
     assert approvals.main(["approve", code]) == 0
-    assert _env(home)["ACCESS_DM_USERS"] == "telegram:42"
+    assert store.view()["dm"] == {"telegram:42"} and "ACCESS_DM_USERS" not in _env(home)
     second, _ = store.note(platform="telegram", kind="dm", chat_id="telegram:43")
     assert approvals.main(["decline", second]) == 0
     assert approvals.main(["undo", "telegram:43"]) == 0
@@ -437,6 +443,7 @@ def test_the_terminal_commands(tmp_path, monkeypatch, capsys) -> None:
     assert approvals.main(["list", "--json"]) == 0
     listed = json.loads(capsys.readouterr().out)
     assert listed["policy"] == ["discord", "telegram"] and listed["waiting"] == []
+    assert [a["id"] for a in listed["approved"]] == ["telegram:42"]
 
 
 def test_the_settings_page_takes_the_platform_list() -> None:

@@ -13,6 +13,7 @@ import asyncio
 import base64
 import binascii
 import json
+import logging
 import secrets
 import time
 from pathlib import Path
@@ -342,6 +343,10 @@ async def chat_completions(request: Request) -> Response:
         return _respond(request, JSONResponse(completion(cid, created, "\n".join(messages))))
     except ApiError as error:
         return _error(request, error)
+    except Exception:
+        logging.getLogger("agent").exception("[api] the turn failed")
+        return _error(request, ApiError(500, "internal_error", "the turn failed; see the service log",
+                                        kind="api_error"))
     finally:
         if not handed_off:
             srv._connector_admission.release()

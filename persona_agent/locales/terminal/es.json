@@ -667,5 +667,18 @@
 "Lingering is off, so it stops when you log out. To keep it running, run: sudo loginctl enable-linger {0}": "Lingering está desactivado, por lo que se detiene al cerrar la sesión. Para mantenerlo en ejecución, ejecute: sudo loginctl enable-linger {0}",
 "Running now: yes.": "En ejecución ahora: sí.",
 "Running now: no.": "En ejecución ahora: no.",
-"Restarted.": "Reiniciado."
+"Restarted.": "Reiniciado.",
+"personagent runs as a service now, while you are logged in. Its output goes to {0}.": "personagent se ejecuta ahora como servicio mientras tenga la sesión iniciada. Su salida se escribe en {0}.",
+"The file mcp.json in the home folder cannot be read as JSON. Correct it or remove it.": "El archivo mcp.json de la carpeta de personagent no se puede leer como JSON. Corríjalo o elimínelo.",
+"Approved (answered, besides the reply settings):": "Aprobados (reciben respuesta además de los ajustes de respuesta):",
+"admin": "administrador",
+"`{0}` forgets an approval or a decline, so the chat asks again.": "`{0}` olvida una aprobación o un rechazo, de modo que el chat vuelve a solicitarla.",
+"This request cannot be decided so.": "Esta solicitud no puede resolverse de esta forma.",
+"This IRC sender is not identified with the network's services, so anyone may use the nick and it cannot be made an admin. Identify with NickServ, then write again.": "Este remitente de IRC no está identificado en los servicios de la red, por lo que cualquiera puede usar ese apodo y no puede convertirse en administrador. Identifíquese con NickServ y vuelva a escribir.",
+"This IRC sender is not identified with the network's services: whoever takes the nick next is answered too.": "Este remitente de IRC no está identificado en los servicios de la red: quien tome este apodo a continuación también recibirá respuesta.",
+"Done: the chat can ask for approval again.": "Hecho: el chat puede volver a solicitar la aprobación.",
+"Nothing approved or declined has that id. Run `{0}` to see the ids.": "Ningún chat aprobado o rechazado tiene ese ID. Ejecute `{0}` para ver los ID.",
+"ACCESS_APPROVAL_PLATFORMS is set in the environment, which overrides .env; change it there.": "ACCESS_APPROVAL_PLATFORMS está definida en el entorno, que prevalece sobre .env; cámbiela allí.",
+"forget an approval or a decline, so the chat asks again": "olvida una aprobación o un rechazo, de modo que el chat vuelve a solicitarla",
+"the chat's id, as the list shows it": "el ID del chat, tal como lo muestra la lista"
 }

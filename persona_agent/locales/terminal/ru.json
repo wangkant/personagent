@@ -667,5 +667,18 @@
 "Lingering is off, so it stops when you log out. To keep it running, run: sudo loginctl enable-linger {0}": "Режим lingering выключен, поэтому служба останавливается при выходе из системы. Чтобы она продолжала работать, выполните: sudo loginctl enable-linger {0}",
 "Running now: yes.": "Работает сейчас: да.",
 "Running now: no.": "Работает сейчас: нет.",
-"Restarted.": "Перезапущена."
+"Restarted.": "Перезапущена.",
+"personagent runs as a service now, while you are logged in. Its output goes to {0}.": "personagent теперь работает как служба, пока вы находитесь в системе. Его вывод записывается в {0}.",
+"The file mcp.json in the home folder cannot be read as JSON. Correct it or remove it.": "Файл mcp.json в папке personagent не читается как JSON. Исправьте или удалите его.",
+"Approved (answered, besides the reply settings):": "Одобренные (получают ответы в дополнение к настройкам ответов):",
+"admin": "администратор",
+"`{0}` forgets an approval or a decline, so the chat asks again.": "`{0}` отменяет одобрение или отклонение, и чат снова отправляет запрос.",
+"This request cannot be decided so.": "По этому запросу нельзя принять такое решение.",
+"This IRC sender is not identified with the network's services, so anyone may use the nick and it cannot be made an admin. Identify with NickServ, then write again.": "Этот отправитель IRC не идентифицирован в службах сети, поэтому этим никнеймом может воспользоваться кто угодно и сделать его администратором нельзя. Идентифицируйтесь через NickServ и напишите снова.",
+"This IRC sender is not identified with the network's services: whoever takes the nick next is answered too.": "Этот отправитель IRC не идентифицирован в службах сети: ответы получит и тот, кто займёт этот никнейм следующим.",
+"Done: the chat can ask for approval again.": "Готово: чат может снова запросить одобрение.",
+"Nothing approved or declined has that id. Run `{0}` to see the ids.": "Нет одобренного или отклонённого чата с этим идентификатором. Выполните `{0}`, чтобы увидеть идентификаторы.",
+"ACCESS_APPROVAL_PLATFORMS is set in the environment, which overrides .env; change it there.": "ACCESS_APPROVAL_PLATFORMS задана в окружении, которое имеет приоритет над .env; измените её там.",
+"forget an approval or a decline, so the chat asks again": "отменяет одобрение или отклонение, и чат снова отправляет запрос",
+"the chat's id, as the list shows it": "идентификатор чата, как он показан в списке"
 }

@@ -68,15 +68,17 @@ class Proactive:
         groups = list(self.buffers.keys()) or list(self._group_allowlist())
         random.shuffle(groups)
         paused = self._paused_groups()
-        waiting_on, allowed = self._approval_platforms(), self._group_allowlist()
+        waiting_on = self._approval_platforms()
+        allowed = self._group_allowlist() | self._approved("group")
+        declined = self._approved("declined")
         for gid in groups:
             # DMs are the DM pass's; an unreachable room costs no model call.
             if (channels.is_dm(gid) or gid in paused
                     or not self._proactive_platform_ok(gid)
                     or self._background_route(gid) is None):
                 continue
-            # A group that still needs the admin's approval hears nothing unprompted.
-            if access.awaits_group_approval(gid, self._route_platform(gid), allowed, waiting_on,
+            # A group that still needs the admin's approval, or was declined, hears nothing unprompted.
+            if gid in declined or access.awaits_group_approval(gid, self._route_platform(gid), allowed, waiting_on,
                                             via_connector=True):
                 continue
             last_act = self.last_activity_at.get(gid, 0.0)
@@ -184,11 +186,15 @@ class Proactive:
             route = self._background_route(pkey)
             if route is None:
                 continue
-            if route != "onebot" and access.dm_refusal(
+            approved = uid in self._approved("dm")
+            if not approved and route != "onebot" and access.dm_refusal(
                     uid, admins, allowed, via_connector=True,
                     prefiltered=route.get("prefiltered", True)):
                 continue
-            if access.awaits_dm_approval(uid, self._route_platform(pkey), admins, allowed,
+            if uid in self._approved("declined") and not access.is_admin(uid, admins):
+                continue
+            if access.awaits_dm_approval(uid, self._route_platform(pkey), admins,
+                                         allowed | ({uid} if approved else set()),
                                          self._approval_platforms(), via_connector=True):
                 continue
             last_act = self.last_dm_activity_at.get(uid, 0.0)

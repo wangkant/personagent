@@ -68,7 +68,6 @@ LABELS = {
     "ru": ("Характер", "Ситуация", "Указания из карточки"),
 }
 
-_COMMENT = re.compile(r"\{\{//.*?\}\}", re.S)
 _CHAR = re.compile(r"\{\{\s*char\s*\}\}|<bot>", re.I)
 _USER = re.compile(r"\{\{\s*user\s*\}\}|<user>", re.I)
 _EMPTY_MACRO = re.compile(r"\{\{\s*(?:original|trim|noop)\s*\}\}", re.I)
@@ -110,7 +109,12 @@ class Card:
 
 
 def _text(value) -> str:
-    return value.replace("\r\n", "\n").strip() if isinstance(value, str) else ""
+    """A card's text without control characters: an escape sequence could
+    redraw a terminal's screen, and none belongs in a persona."""
+    if not isinstance(value, str):
+        return ""
+    value = value.replace("\r\n", "\n").replace("\r", "\n")
+    return "".join(c for c in value if c in "\n\t" or not (ord(c) < 32 or 127 <= ord(c) < 160)).strip()
 
 
 def _decode_json(raw: bytes):
@@ -149,7 +153,10 @@ def _png_chunks(data: bytes) -> dict[str, bytes]:
                 _translated, _, text = rest.partition(b"\0")
                 if packed:
                     inflate = zlib.decompressobj()
-                    text = inflate.decompress(text, MAX_JSON * 2)
+                    try:
+                        text = inflate.decompress(text, MAX_JSON * 2)
+                    except zlib.error:
+                        raise CardError("card_broken") from None
                     if inflate.unconsumed_tail:
                         raise CardError("card_too_large")
                 found.setdefault(name, text)
@@ -215,7 +222,10 @@ def _read_charx(data: bytes) -> tuple[dict, bytes | None]:
             path = _icon_path(obj, members)
             if path:
                 icon = _read_member(archive, members[path], MAX_ICON)
-        except (zipfile.BadZipFile, OSError, EOFError, NotImplementedError, zlib.error):
+        except CardError:
+            raise
+        except Exception:
+            # Whatever a member's compression raises (zlib, bz2, lzma), the file is broken.
             raise CardError("card_broken") from None
     return obj, icon
 
@@ -318,10 +328,27 @@ def picture(raw: bytes) -> tuple[bytes | None, str]:
 # ---- what the card becomes
 
 
+def _without_comments(text: str) -> str:
+    """`{{// ...}}` removed, by searching forward once: a pattern would look
+    for the end again from every unclosed opening."""
+    out, pos = [], 0
+    while True:
+        start = text.find("{{//", pos)
+        if start < 0:
+            break
+        end = text.find("}}", start + 4)
+        if end < 0:
+            break
+        out.append(text[pos:start])
+        pos = end + 2
+    out.append(text[pos:])
+    return "".join(out)
+
+
 def resolve(text: str, name: str, user: str) -> str:
     """Macros filled in: {{char}} and <BOT> are the name, {{user}} and <USER>
     the person; comments and {{original}} go."""
-    text = _COMMENT.sub("", text)
+    text = _without_comments(text)
     text = _CHAR.sub(lambda _m: name, text)
     text = _USER.sub(lambda _m: user, text)
     return _EMPTY_MACRO.sub("", text)
@@ -567,6 +594,8 @@ def apply(home: Path, card: Card, parts, *, name: str, persona: str, values: dic
             atomic_write_text(path, json.dumps({"entries": entries}, ensure_ascii=False, indent=2) + "\n")
             done.append("lorebook")
     if "picture" in parts and card.picture:
+        # The person's own picture is kept as their persona is.
+        kept(_back_up(sw.own_avatar(home)) if sw.own_avatar(home) else None)
         sw.write_own_avatar(home, card.picture)
         sw.write_env(home / ".env", {"PERSONA_AVATAR": sw.OWN_AVATAR})
         done.append("picture")

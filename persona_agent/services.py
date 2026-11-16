@@ -54,6 +54,11 @@ _KILL_ON_JOB_CLOSE = 0x2000
 _STILL_ACTIVE = 259
 
 
+# Bytes of one child's log before it is set aside at the next start.
+LOG_LIMIT = 10 * 1024 * 1024
+# Set by the service files: which manager started this process.
+SERVICE_ENV = "PERSONAGENT_SERVICE"
+
 class _BasicLimits(ctypes.Structure):
     _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
                 ("LimitFlags", ctypes.c_uint32), ("MinimumWorkingSetSize", ctypes.c_size_t),
@@ -317,6 +322,7 @@ class Services:
         rest end when they are stopped, or at the next start."""
         logs = self.home / "runtime" / "desktop"
         logs.mkdir(parents=True, exist_ok=True)
+        _turn_over(logs / f"{name}.log")
         fd = os.open(logs / f"{name}.log", os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
         job = None
         with os.fdopen(fd, "ab") as log:
@@ -591,7 +597,34 @@ def _memory_problem(home: Path) -> str:
     return memory_admin.damaged_sentence(error) if error else ""
 
 
+def _stop_on_sigterm() -> None:
+    """A service manager stops with SIGTERM, which by default ends Python at once and
+    skips the orderly stop: read it as Ctrl+C. Windows has no such signal to catch."""
+    if os.name != "posix":
+        return
+    import signal
+
+    def stop(_signal, _frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, stop)
+
+
+def _turn_over(log: Path, limit: int = LOG_LIMIT) -> None:
+    """Keep a log that grew past `limit` as <name>.1, so the next start begins a new one."""
+    try:
+        if log.stat().st_size > limit:
+            os.replace(log, log.with_name(log.name + ".1"))
+    except OSError:
+        pass
+
+
 def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
+    code = _up(argv, prog)
+    # launchd starts a job again after any exit but a clean one; a refusal would loop.
+    return 0 if code == 2 and os.environ.get(SERVICE_ENV) == "launchd" else code
+
+
+def _up(argv: list[str] | None, prog: str) -> int:
     parser = argparse.ArgumentParser(
         prog=prog, description=langs.term("Start personagent and its connected platforms together"),
         epilog=langs.term("It listens on 127.0.0.1 at SERVER_PORT in .env (8080 by default; when that port "
@@ -620,7 +653,7 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
     damaged = _memory_problem(home)
     if damaged:
         print(damaged, file=sys.stderr)
-        return 1
+        return 2
     from . import updates
     from .setup_wizard import connect_astrbot
     updates.refresh_soon(home)
@@ -635,6 +668,7 @@ def main(argv: list[str] | None = None, prog: str = "personagent up") -> int:
         print(langs.term(ALREADY_RUNNING.format(home=home)), file=sys.stderr)
         return 2
     probe.release()
+    _stop_on_sigterm()
     services = Services(home)
     try:
         if not env_get(home / ".env", "CONNECTOR_TOKEN"):

@@ -1,8 +1,10 @@
 """The approvals panel: new chats waiting for the admin, on the platforms that
-ask for approval (approvals.py), and the switch that makes a platform ask."""
+ask for approval (approvals.py), the chats approved or declined, and the
+switch that makes a platform ask."""
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 
 from fastapi import Request
@@ -11,56 +13,74 @@ from .. import access, approvals, channels, connections as conn
 
 ERRORS: frozenset[str] = frozenset({
     "approvals_gone", "approvals_bad_request", "approvals_write_failed", "approvals_not_dm",
+    "approvals_unverified", "approvals_code_mismatch", "approvals_env_locked",
 })
 
-# One decision at a time: each one rewrites .env.
+# One decision at a time.
 _busy = threading.Lock()
+
+
+def _store(workspace) -> approvals.Store:
+    return approvals.Store(approvals.store_path(workspace.home))
 
 
 def overview(workspace) -> dict:
     values = workspace.config()
-    data = approvals.Store(approvals.home_path(workspace.home)).snapshot()
-    identity = access.identity_from_env(values)
+    data = _store(workspace).snapshot()
+    # The admins the service has: .env, the environment (which may override it) and This is me.
+    admins = (access.identity_from_env(values).admins | access.identity_from_env(os.environ).admins
+              | frozenset(a["id"] for a in data["approved"] if a.get("admin")))
 
     def admin_there(chat_id: str) -> bool:
-        return bool(access.entries_on(channels.platform_of(chat_id), identity.admins))
+        return bool(access.entries_on(channels.platform_of(chat_id), admins))
 
-    # The stored words are cleaned once more: the file is the page's input too.
-    waiting = [{"code": w["code"], "platform": str(w.get("platform") or ""), "kind": w.get("kind"),
-                "name": approvals.clean_text(w.get("name"), approvals.NAME_CHARS),
-                "words": approvals.clean_text(w.get("words"), approvals.WORDS_CHARS),
-                "at": float(w.get("at") or 0), "id": str(w["id"]),
+    def row(r: dict) -> dict:
+        # The stored text is cleaned once more: the file is the page's input too.
+        return {"platform": str(r.get("platform") or ""), "kind": r.get("kind"),
+                "name": approvals.clean_text(r.get("name"), approvals.NAME_CHARS),
+                "at": float(r.get("at") or 0), "id": str(r["id"]),
+                "unverified": approvals.unverified(str(r["id"]))}
+
+    # No code: This is me asks for the one the owner's own chat received.
+    waiting = [{**row(w), "words": approvals.clean_text(w.get("words"), approvals.WORDS_CHARS),
                 "hasAdmin": admin_there(str(w["id"]))}
                for w in sorted(data["waiting"], key=lambda w: float(w.get("at") or 0))]
-    declined = [{"id": str(d["id"]), "platform": str(d.get("platform") or ""), "kind": d.get("kind"),
-                 "name": approvals.clean_text(d.get("name"), approvals.NAME_CHARS),
-                 "at": float(d.get("at") or 0)}
-                for d in reversed(data["declined"])]
-    return {"waiting": waiting, "declined": declined,
-            "policy": sorted(approvals.policy(values))}
+    full = sorted({f"{w['platform']}:{w['kind']}" for w in waiting
+                   if sum(1 for o in waiting if (o["platform"], o["kind"]) == (w["platform"], w["kind"]))
+                   >= approvals.MAX_WAITING[w["kind"]]})
+    return {"waiting": waiting, "full": full,
+            "approved": [{**row(a), "admin": bool(a.get("admin"))} for a in reversed(data["approved"])],
+            "declined": [row(d) for d in reversed(data["declined"])],
+            "policy": sorted(approvals.current_policy(workspace.home)),
+            "policyLocked": approvals.policy_locked()}
+
+
+def _chat_id(payload: dict) -> str:
+    chat_id = payload.get("id")
+    if not isinstance(chat_id, str) or not 0 < len(chat_id) <= approvals.ID_CHARS:
+        raise ValueError("approvals_bad_request")
+    return chat_id
 
 
 def decide(workspace, payload: dict) -> dict:
-    code, action = payload.get("code"), payload.get("action")
-    if not isinstance(code, str) or not 0 < len(code) <= 32 or action not in approvals.ACTIONS:
+    chat_id, action, typed = _chat_id(payload), payload.get("action"), payload.get("code", "")
+    if action not in approvals.ACTIONS or not isinstance(typed, str) or len(typed) > 32:
         raise ValueError("approvals_bad_request")
     try:
-        entry = approvals.Store(approvals.home_path(workspace.home)).decide(code, action, workspace.home)
+        entry = _store(workspace).decide(action, chat_id=chat_id, typed=typed)
     except LookupError:
         raise ValueError("approvals_gone") from None
-    except ValueError:
-        raise ValueError("approvals_not_dm") from None
+    except approvals.Refused as refused:
+        raise ValueError(str(refused)) from None
     except OSError:
         raise ValueError("approvals_write_failed") from None
     return {**overview(workspace), "decided": {"action": action, "kind": entry.get("kind")}}
 
 
 def undo(workspace, payload: dict) -> dict:
-    chat_id = payload.get("id")
-    if not isinstance(chat_id, str) or not 0 < len(chat_id) <= 200:
-        raise ValueError("approvals_bad_request")
+    chat_id = _chat_id(payload)
     try:
-        if not approvals.Store(approvals.home_path(workspace.home)).undo(chat_id):
+        if not _store(workspace).undo(chat_id):
             raise ValueError("approvals_gone")
     except OSError:
         raise ValueError("approvals_write_failed") from None
@@ -75,6 +95,8 @@ def policy(workspace, payload: dict) -> dict:
         raise ValueError("approvals_bad_request")
     try:
         approvals.set_policy(workspace.home, kind, on)
+    except approvals.PolicyLocked:
+        raise ValueError("approvals_env_locked") from None
     except OSError:
         raise ValueError("approvals_write_failed") from None
     return overview(workspace)

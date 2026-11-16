@@ -71,6 +71,9 @@ _UV = """\
 import os, subprocess, sys
 from pathlib import Path
 args = sys.argv[1:]
+if args[:1] == ["--version"]:
+    print("uv 0.13.8 (stand-in)")
+    sys.exit(0)
 with open(Path(__file__).with_name("uv-calls.log"), "a", encoding="utf-8") as log:
     log.write(" ".join(args[:4]) + " mirror=" + os.environ.get("UV_PYTHON_INSTALL_MIRROR", "") + "\\n")
 if args[:1] != ["venv"]:

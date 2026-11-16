@@ -112,7 +112,7 @@ def page(tmp_path, monkeypatch, openrouter):
     workspace = welcome.Workspace(tmp_path)
     app = welcome.create_app(tmp_path, "token", workspace=workspace)
     texts: list[str] = []
-    with TestClient(app, base_url=f"http://127.0.0.1:{PORT}") as client:
+    with TestClient(app, base_url=f"http://127.0.0.1:{PORT}", client=("127.0.0.1", 50000)) as client:
         original = client.request
 
         def request(*args, **kwargs):
@@ -199,12 +199,18 @@ def test_only_openrouter_signs_in_and_only_with_the_token(page) -> None:
 
 # ---- each way it fails
 
-def test_a_refusal_ends_the_attempt_with_a_sentence(page) -> None:
+def test_a_refusal_tells_the_tab_and_cannot_be_used_to_end_someone_s_attempt(page) -> None:
     client = page["client"]
-    _start(client, pageLang="zh")
-    # OpenRouter returns no state when access is denied.
+    started = _start(client, pageLang="zh")
+    # OpenRouter returns no state when access is denied, and any page the person
+    # visits can send the same request: the tab is told, the attempt keeps waiting.
     denied = _back(client, {})
     assert denied.status_code == 400 and "未在 OpenRouter 上批准访问" in denied.text
+    assert "可以关闭此标签页" not in denied.text
+    assert client.get("/api/signin", headers=HEADERS).json()["state"] == "waiting"
+    # With the attempt's own state and no code, it is this attempt that was refused.
+    state = parse_qs(urlsplit(started["url"]).query)["state"][0]
+    assert _back(client, {"state": state}).status_code == 400
     assert client.get("/api/signin", headers=HEADERS).json()["error"] == "signin_denied"
 
 
@@ -288,6 +294,36 @@ def test_the_callback_refuses_a_forwarded_request(page, openrouter) -> None:
         refused = _back(client, {"code": back["code"], "state": back["state"]}, **{header: "1.2.3.4"})
         assert refused.status_code == 403, header
     assert client.get("/api/signin", headers=HEADERS).json()["state"] == "waiting"
+
+
+def test_another_device_cannot_end_the_attempt_with_a_borrowed_host(page, openrouter, tmp_path) -> None:
+    client = page["client"]
+    _start(client)
+    with TestClient(page["app"], base_url=f"http://127.0.0.1:{PORT}", client=("192.168.1.99", 50000)) as other:
+        for query in ({}, {"code": "x"}, {"error": "access_denied"}):
+            assert _back(other, query).status_code == 403, query
+    assert client.get("/api/signin", headers=HEADERS).json()["state"] == "waiting"
+
+
+def test_a_device_the_page_treats_as_remote_is_refused_even_from_loopback(tmp_path, openrouter,
+                                                                          monkeypatch) -> None:
+    from persona_agent import pageaccess
+    for name in pageaccess.SETTINGS:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(signin, "open_browser", lambda url: True)
+    sw.write_env(tmp_path / ".env", {"PAGE_PASSWORD": pageaccess.hash_password("plum-orchard-41-lantern")})
+    workspace = welcome.Workspace(tmp_path)
+    try:
+        app = welcome.create_app(tmp_path, "token", workspace=workspace, gate=pageaccess.Gate(tmp_path))
+        with TestClient(app, base_url=f"http://127.0.0.1:{PORT}", client=("127.0.0.1", 50000)) as here:
+            _start(here)
+            # Through a proxy on this computer: another device, whatever the Host says.
+            assert _back(here, {}, **{"x-real-ip": "203.0.113.5", "via": "1.1 proxy",
+                                      "x-forwarded-proto": "https", "x-forwarded-for": "203.0.113.5"}
+                         ).status_code == 403
+            assert here.get("/api/signin", headers=HEADERS).json()["state"] == "waiting"
+    finally:
+        workspace.close()
 
 
 def test_the_state_binds_the_callback_to_its_attempt_once(page, openrouter) -> None:

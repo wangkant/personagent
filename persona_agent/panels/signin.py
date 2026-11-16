@@ -122,9 +122,9 @@ class SignIn:
             if not state:
                 if code:
                     return None, "signin_link_invalid"
-                # A refusal comes back without the state the attempt sent.
-                a.status, a.error = "failed", "signin_denied"
-                return a, "signin_denied"
+                # A refusal comes back without the state the attempt sent, and so can a
+                # request from any page the person visits: the attempt keeps waiting.
+                return None, "signin_denied"
             if not secrets.compare_digest(state.encode(), a.state.encode()):
                 return None, "signin_link_invalid"
             if not code:
@@ -206,7 +206,7 @@ def page(lang: str, error: str) -> str:
 
     title = say("title_failed" if error else "title_ok")
     # A link that finished nothing changed nothing in personagent either.
-    tail = f"<p>{say('close')}</p>" if error != "signin_link_invalid" else ""
+    tail = f"<p>{say('close')}</p>" if error not in ("signin_link_invalid", "signin_denied") else ""
     body = f"<p>{say(error)}</p>{tail}" if error else f"<p>{say('ok')}</p>"
     mark = "signin-mark signin-mark-failed" if error else "signin-mark"
     return ("<!doctype html>\n"
@@ -220,7 +220,13 @@ def page(lang: str, error: str) -> str:
 
 
 def admitted(request: Request) -> bool:
-    """A browser navigation to the address the attempt named, and nothing else."""
+    """A browser navigation on this computer to the address the attempt named,
+    and nothing else: a Host header alone is the caller's to choose."""
+    from ..pageaccess import is_loopback
+
+    client = request.client.host if request.client else ""
+    if getattr(request.state, "remote", False) or not is_loopback(client):
+        return False
     server = request.scope.get("server") or ("", 0)
     if request.headers.get("host", "").lower() != f"localhost:{server[1]}":
         return False

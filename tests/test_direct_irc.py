@@ -201,7 +201,7 @@ def test_run_hands_channel_messages_and_dms_over_and_reconnects_after_a_drop(mon
     assert [t for _, t in seen] == ["#room", "#room", "#room", "alex"]
     plain, called, named, dm = (e for e, _ in seen)
     assert plain["conversation_type"] == "group" and plain["conversation_id"] == "#room"
-    assert plain["addressed"] is False and plain["sender_id"] == "alex" and plain["sender_name"] == "Alex"
+    assert plain["addressed"] is False and plain["sender_id"] == "~alex" and plain["sender_name"] == "Alex"
     assert plain["segments"] == [{"type": "text", "text": "just chatting"}]
     assert called["addressed"] is True and called["text"] == "how are you?"
     assert called["segments"][-1] == {"type": "mention", "user_id": "nova", "name": "Nova"}
@@ -318,5 +318,5 @@ def test_rfc1459_casemapping_folds_brackets_in_ids():
     bot = irc.IRC(values(irc_nick="Nova[m]"), connect=connector())
     bot.nick, bot.bot_id = "Nova[m]", bot.lower("Nova[m]")
     event = bot.event("Al[x]!~a@h", "#room", "nova{M}: hello")
-    assert event["sender_id"] == "al{x}" and event["addressed"] is True and event["text"] == "hello"
+    assert event["sender_id"] == "~al{x}" and event["addressed"] is True and event["text"] == "hello"
     assert irc.parse("@time=x :a!b@c PRIVMSG #r :hi there") == ("a!b@c", "PRIVMSG", ["#r", "hi there"])

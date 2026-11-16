@@ -97,8 +97,8 @@ async def draft(home: Path, values: dict, idea: str) -> str:
     except Exception as error:
         status = _status_of(error)
         kind = ModelCalls._classify_api_error(error)
-        raise ValueError("key_rejected" if status in (401, 403)
-                         else "model_limited" if kind in ("fatal_auth", "rate_limit")
+        raise ValueError("key_rejected" if status in (401, 403) or kind == "fatal_auth"
+                         else "model_limited" if kind == "rate_limit"
                          else "model_unreachable") from None
     finally:
         await client.close()

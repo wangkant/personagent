@@ -328,10 +328,11 @@ def approvals_state(found: Path) -> dict:
 
     try:
         waiting = approvals.waiting_counts(found)
+        approved = len(approvals.Store(approvals.store_path(found)).snapshot()["approved"])
     except OSError:
-        waiting = {}
+        waiting, approved = {}, 0
     return {"platforms": sorted(approvals.policy({"ACCESS_APPROVAL_PLATFORMS": env_str("ACCESS_APPROVAL_PLATFORMS")})),
-            "waiting": waiting}
+            "waiting": waiting, "approved": approved}
 
 
 def approvals_row(state: dict) -> tuple[str, str]:

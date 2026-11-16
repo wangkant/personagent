@@ -116,8 +116,9 @@ def _files_class():
                                  self.runtime / "embeddings.jsonl")
 
         def _admins(self) -> frozenset[str]:
+            from .approvals import approved_admins
             return access.parse_ids(self.admin_ids, native_platforms=self.connector_qq_platforms) \
-                | access.page_owner(self.runtime)
+                | access.page_owner(self.runtime) | approved_admins(self.runtime)
 
     return Files
 

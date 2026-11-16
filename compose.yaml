@@ -19,6 +19,9 @@ services:
     #   PAGE_PASSWORD: "change-this-to-a-long-password"
     #   Names the page answers to besides addresses typed as numbers:
     #   PAGE_ALLOWED_HOSTS: "nas.local"
+    #   Your hours ahead of UTC (behind: a minus sign). A container's clock is UTC, and
+    #   the character's sense of the hour and its quiet hours at night follow this:
+    #   PERSONA_TZ_OFFSET_HOURS: "1"
 
 volumes:
   personagent-data:

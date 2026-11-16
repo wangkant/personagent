@@ -41,8 +41,13 @@ def resolve_seed_lang_file(stem: str, ext: str, lang: str, root: Path | None = N
 
 def runtime_dir() -> Path:
     """Return the ignored directory used for learned runtime state."""
-    configured = os.getenv("AGENT_RUNTIME_DIR", "").strip()
-    root = ROOT.resolve()
+    return runtime_dir_for(ROOT, os.getenv("AGENT_RUNTIME_DIR", ""))
+
+
+def runtime_dir_for(home: Path, configured: str = "") -> Path:
+    """`runtime_dir` of a home whose AGENT_RUNTIME_DIR is `configured`."""
+    configured = str(configured or "").strip()
+    root = Path(home).resolve()
     path = Path(configured).expanduser() if configured else Path("runtime")
     resolved = path.resolve() if path.is_absolute() else (root / path).resolve()
     try:

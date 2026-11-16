@@ -31,6 +31,8 @@ FAIL_WINDOW_S = 15 * 60
 LOCK_S = 15 * 60
 FAIL_DELAY_S = 1.0
 MAX_ADDRESSES = 4096
+# Password checks running at once, from every address together; more are refused, not queued.
+CHECKS_AT_ONCE = 2
 HASH_PREFIX = "scrypt:"
 # n, r, p: about 16 MiB and a few dozen milliseconds per attempt.
 SCRYPT = (2 ** 14, 8, 1)
@@ -313,29 +315,52 @@ class Sessions:
 
 
 class Limiter:
-    """Failed sign-ins per address: each is slowed, and FAIL_LIMIT of them
-    within FAIL_WINDOW_S shut that address out for LOCK_S."""
+    """Sign-in attempts per address. An attempt counts from the moment it is
+    admitted, so a burst cannot outrun the count: recent failures plus attempts
+    being checked never reach FAIL_LIMIT within FAIL_WINDOW_S, and reaching it
+    shuts the address out for LOCK_S."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._failures: dict[str, list[float]] = {}
+        self._checking: dict[str, int] = {}
         self._locked: dict[str, float] = {}
 
-    def wait(self, address: str) -> int:
-        """Seconds until `address` may try again; 0 when it may now."""
-        with self._lock:
-            until = self._locked.get(address, 0.0)
-            left = until - time.monotonic()
-            if left <= 0:
-                self._locked.pop(address, None)
-                return 0
-            return int(left) + 1
-
-    def failed(self, address: str) -> int:
-        """Record a failure; the attempts left before the address is shut out."""
+    def begin(self, address: str) -> tuple[str, int]:
+        """("ok", 0) when `address` may be checked now, which the caller must
+        `finish`; ("locked", seconds) when it is shut out; ("busy", seconds)
+        while its earlier attempts still fill the limit."""
         now = time.monotonic()
         with self._lock:
-            if len(self._failures) >= MAX_ADDRESSES:
+            until = self._locked.get(address, 0.0)
+            if until > now:
+                return "locked", int(until - now) + 1
+            self._locked.pop(address, None)
+            recent = [t for t in self._failures.get(address, []) if now - t < FAIL_WINDOW_S]
+            if recent:
+                self._failures[address] = recent
+            else:
+                self._failures.pop(address, None)
+            if len(recent) + self._checking.get(address, 0) >= FAIL_LIMIT:
+                return "busy", 1
+            if len(self._checking) >= MAX_ADDRESSES and address not in self._checking:
+                return "busy", 1
+            self._checking[address] = self._checking.get(address, 0) + 1
+            return "ok", 0
+
+    def finish(self, address: str, ok: bool) -> int:
+        """End an attempt `begin` admitted; the attempts left, 0 when the address is now shut out."""
+        now = time.monotonic()
+        with self._lock:
+            left = self._checking.get(address, 0) - 1
+            if left > 0:
+                self._checking[address] = left
+            else:
+                self._checking.pop(address, None)
+            if ok:
+                self._failures.pop(address, None)
+                return FAIL_LIMIT
+            if len(self._failures) >= MAX_ADDRESSES and address not in self._failures:
                 self._failures = {a: [t for t in times if now - t < FAIL_WINDOW_S]
                                   for a, times in self._failures.items()}
                 self._failures = {a: times for a, times in self._failures.items() if times}
@@ -349,9 +374,35 @@ class Limiter:
                 return 0
             return FAIL_LIMIT - len(recent)
 
-    def succeeded(self, address: str) -> None:
+
+class Checks:
+    """At most CHECKS_AT_ONCE password checks at a time, on threads of their
+    own: a burst cannot occupy the threads every other request of the page uses."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._running = 0
+        self._pool = None
+
+    def take(self) -> bool:
         with self._lock:
-            self._failures.pop(address, None)
+            if self._running >= CHECKS_AT_ONCE:
+                return False
+            self._running += 1
+            return True
+
+    def give_back(self) -> None:
+        with self._lock:
+            self._running -= 1
+
+    def pool(self):
+        from concurrent.futures import ThreadPoolExecutor
+
+        with self._lock:
+            if self._pool is None:
+                self._pool = ThreadPoolExecutor(max_workers=CHECKS_AT_ONCE,
+                                                thread_name_prefix="personagent-signin")
+            return self._pool
 
 
 class Gate:
@@ -361,6 +412,7 @@ class Gate:
         self.home = home
         self.sessions = Sessions()
         self.limiter = Limiter()
+        self.checks = Checks()
         self._cache: tuple = ()
 
     def settings(self) -> Settings:

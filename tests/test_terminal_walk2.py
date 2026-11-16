@@ -40,7 +40,7 @@ def test_up_on_a_damaged_memory_file_gives_the_sentence(home, monkeypatch, capsy
     memory = home / "runtime" / "memory.json"
     memory.write_text('{"broken', encoding="utf-8")
     _no_start(monkeypatch)
-    check("refused, non-zero", services.main([]) == 1)
+    check("refused: 2, which a service does not restart into", services.main([]) == 2)
     err = capsys.readouterr().err.strip()
     want = {"en": f"The memory file {memory} is damaged and was left untouched, and no "
                   "earlier copy of it exists. Move the damaged file aside, for example by "
@@ -56,7 +56,7 @@ def test_up_names_the_daily_copy_and_a_damaged_core_file(home, monkeypatch, caps
     core.write_text("[1]", encoding="utf-8")
     (home / "runtime" / "core_memory.json.bak").write_text("{}", encoding="utf-8")
     _no_start(monkeypatch)
-    check("refused", services.main([]) == 1)
+    check("refused", services.main([]) == 2)
     err = capsys.readouterr().err
     check("the file, its copy, both ways forward",
           f"The memory file {core} is damaged" in err and f"{core}.bak" in err

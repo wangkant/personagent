@@ -12,7 +12,8 @@ from typing import Optional
 
 from .access import ADMIN_MODE
 from .llm import purpose
-from .search import SEARCH_CONTEXT_LINES, SearchHint, caller_for_mode, tool_caller
+from . import access
+from .search import SEARCH_CONTEXT_LINES, SearchHint, tool_caller
 from .textproc import (
     SLEEP_PASS_PROB,
     SUB_TRIGGER_PASS_PROB,
@@ -121,7 +122,11 @@ class ReplyDecision:
         self.model_calls.append(time.time())
         # A retry fixes the draft's form; a second search would be a second call.
         enable_search = mode in ("called", ADMIN_MODE, "followup") and not retry_note
-        with purpose("reply"), tool_caller(caller_for_mode(mode)):
+        hint = self._search_hint(group_id, latest_text)
+        # The admin's tools follow who wrote the message answered, not the mode:
+        # a sticky admin call can carry a stranger's later line.
+        admin_turn = mode == ADMIN_MODE and getattr(hint, "trigger_admin", False)
+        with purpose("reply"), tool_caller(admin_turn):
             raw = await self._call_llm(
                 system=system,
                 messages=[{"role": "user", "content": prompt.user}],
@@ -136,7 +141,7 @@ class ReplyDecision:
                 # Never on the gate: recovered prose would read as "decided to speak".
                 plain_text_fallback=True,
                 # Search gates on the trigger text, not the whole prompt.
-                search_hint=self._search_hint(group_id, latest_text),
+                search_hint=hint,
             )
         reply, reasoning, intent, mem = TextProcessing._parse_model_output(
             raw, model_to_use)
@@ -151,13 +156,22 @@ class ReplyDecision:
         if not latest_text:
             return latest_text
         buf = list(self.buffers.get(group_id) or ())
-        trigger = latest_text
+        trigger, trigger_uid = latest_text, ""
         # The trigger is normally the buffer's last line, merged or cut.
         if buf and latest_text[:50] in buf[-1].get("text", ""):
-            trigger = f"{_clean_prompt_source(buf.pop().get('name'))}: {latest_text}"
+            last = buf.pop()
+            trigger = f"{_clean_prompt_source(last.get('name'))}: {latest_text}"
+            trigger_uid = str(last.get("user_id") or "")
+        context = buf[-SEARCH_CONTEXT_LINES:]
         lines = [f"{_clean_prompt_source(m.get('name'))}: {m.get('text', '')}"
-                 for m in buf[-SEARCH_CONTEXT_LINES:]]
-        return SearchHint(latest_text, lines + [trigger])
+                 for m in context]
+        admins = self._admins() if hasattr(self, "_admins") else frozenset()
+
+        def admin(uid) -> bool:
+            # A line of unknown origin is nobody's: it never counts as the admin's.
+            return bool(uid) and access.is_admin(str(uid), admins)
+        return SearchHint(latest_text, lines + [trigger],
+                          admins=[admin(m.get("user_id")) for m in context] + [admin(trigger_uid)])
 
     def _finalize_reply(self, reply: str, *, log_ctx: str):
         """Core-memory tag, output filter, sanitize, [AT:] marker. Returns

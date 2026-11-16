@@ -293,7 +293,9 @@ class _Learning:
         if self.agent is not None:
             return Judge(self.agent._judging_on(),
                          float(self.agent.promote_observe_max_days or 0), self.agent._admins())
-        return Judge.from_env(None, self.policy, access.page_owner(runtime_dir()))
+        from .approvals import approved_admins
+        return Judge.from_env(None, self.policy,
+                              access.page_owner(runtime_dir()) | approved_admins(runtime_dir()))
 
     def rebuild(self) -> bool:
         if self.agent is not None:

@@ -658,6 +658,7 @@
 "It runs while you are logged in. To keep it running after you log out and start it at boot, run: sudo loginctl enable-linger {0}": "服务在你登录期间运行。如需在注销后继续运行并在开机时启动，请运行：sudo loginctl enable-linger {0}",
 "`{0}` failed: {1}": "`{0}` 执行失败：{1}",
 "personagent runs as a service now and starts again after a reboot. Its output goes to {0}.": "personagent 现已作为服务运行，重启后会自动启动。输出写入 {0}。",
+"personagent runs as a service now, while you are logged in. Its output goes to {0}.": "personagent 现已作为服务运行，但仅在你登录期间运行。输出写入 {0}。",
 "A LaunchAgent runs while you are logged in: on a Mac that serves others, turn on automatic login.": "LaunchAgent 只在你登录期间运行：为他人提供服务的 Mac 请开启自动登录。",
 "The service is removed ({0}).": "服务已删除（{0}）。",
 "Not installed. `personagent service install` installs it.": "未安装。`personagent service install` 可安装服务。",
@@ -667,5 +668,17 @@
 "Lingering is off, so it stops when you log out. To keep it running, run: sudo loginctl enable-linger {0}": "lingering 未开启，因此服务会在你注销后停止。如需保持运行，请运行：sudo loginctl enable-linger {0}",
 "Running now: yes.": "当前运行：是。",
 "Running now: no.": "当前运行：否。",
-"Restarted.": "已重启。"
+"Restarted.": "已重启。",
+"The file mcp.json in the home folder cannot be read as JSON. Correct it or remove it.": "无法将主目录中的 mcp.json 读取为 JSON。请修正或删除该文件。",
+"Approved (answered, besides the reply settings):": "已批准（除回复设置外，角色也会回复）：",
+"admin": "管理员",
+"`{0}` forgets an approval or a decline, so the chat asks again.": "使用 `{0}` 可撤销批准或拒绝，该对话此后需重新申请。",
+"This request cannot be decided so.": "无法以这种方式处理该申请。",
+"This IRC sender is not identified with the network's services, so anyone may use the nick and it cannot be made an admin. Identify with NickServ, then write again.": "该 IRC 发送者未在网络服务中登录身份，任何人都可以使用这个昵称，因此不能设为管理员。请先通过 NickServ 登录身份，再重新发送消息。",
+"This IRC sender is not identified with the network's services: whoever takes the nick next is answered too.": "该 IRC 发送者未在网络服务中登录身份：此后使用这个昵称的任何人也会得到回复。",
+"Done: the chat can ask for approval again.": "已完成：该对话可以再次申请批准。",
+"Nothing approved or declined has that id. Run `{0}` to see the ids.": "没有使用该编号的已批准或已拒绝对话。运行 `{0}` 可查看编号。",
+"ACCESS_APPROVAL_PLATFORMS is set in the environment, which overrides .env; change it there.": "ACCESS_APPROVAL_PLATFORMS 已在环境变量中设置，环境变量优先于 .env；请在环境变量中修改。",
+"forget an approval or a decline, so the chat asks again": "撤销批准或拒绝，该对话此后需重新申请",
+"the chat's id, as the list shows it": "对话的编号，与列表中显示的一致"
 }

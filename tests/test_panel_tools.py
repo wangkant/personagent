@@ -123,8 +123,38 @@ def test_a_session_from_another_device_adds_addresses_but_no_programs(client, wo
         with pytest.raises(ValueError, match="^tools_local_only$"):
             panel.add(workspace, {**payload, "_remote": True})
     assert mcp_tools.load_config(workspace.home)["mcpServers"] == {}
-    added = panel.add(workspace, {"url": "http://127.0.0.1:9/mcp", "name": "far", "_remote": True})
+    # Nor an address on this computer or its network.
+    for url in ("http://127.0.0.1:9/mcp", "http://localhost:9/mcp", "http://10.0.0.5/mcp",
+                "http://169.254.169.254/mcp", "http://[::1]:9/mcp", "http://192.168.1.2/mcp"):
+        with pytest.raises(ValueError, match="^tools_local_address$"):
+            panel.add(workspace, {"url": url, "name": "inner", "_remote": True})
+    added = panel.add(workspace, {"url": "https://8.8.8.8/mcp", "name": "far", "_remote": True})
     assert added["added"] == ["far"]
     # Where the request came from is the server's to say, never the page's.
     local = post(client, "add", {"snippet": block, "_remote": True})
     assert local.status_code == 200 and "prog" in local.json()["added"]
+
+
+def test_a_remote_session_cannot_check_or_call_an_inward_address(tmp_path, monkeypatch):
+    from persona_agent import pageaccess
+    from persona_agent import setup_wizard as sw
+
+    for name in (*pageaccess.SETTINGS, pageaccess.CONTAINER_ENV):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(pageaccess, "FAIL_DELAY_S", 0.0)
+    password = "plum-orchard-41-lantern"
+    sw.write_env(tmp_path / ".env", {"PAGE_HOST": "0.0.0.0", "PAGE_PASSWORD": pageaccess.hash_password(password)})
+    # Written by hand on the computer itself, then used from a phone.
+    mcp_tools.add_servers(tmp_path, {"inner": {"url": "http://127.0.0.1:9/mcp"}})
+    space = welcome.Workspace(tmp_path)
+    app = welcome.create_app(space.home, TOKEN, workspace=space, gate=pageaccess.Gate(space.home))
+    try:
+        with TestClient(app, base_url="http://192.168.1.5:8090", client=("192.168.1.20", 50000)) as phone:
+            phone.post("/auth/signin", json={"password": password})
+            session = {pageaccess.SESSION_HEADER: "1"}
+            for path, payload in (("check", {"server": "inner"}),
+                                  ("call", {"server": "inner", "tool": "echo", "arguments": {}})):
+                answer = phone.post(f"/api/tools/{path}", json=payload, headers=session)
+                assert answer.json() == {"error": "tools_local_address"}, answer.text
+    finally:
+        space.close()

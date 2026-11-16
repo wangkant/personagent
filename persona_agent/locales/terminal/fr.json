@@ -667,5 +667,18 @@
 "Lingering is off, so it stops when you log out. To keep it running, run: sudo loginctl enable-linger {0}": "Le mode « linger » est désactivé : il s'arrête donc à votre déconnexion. Pour qu'il continue, exécutez : sudo loginctl enable-linger {0}",
 "Running now: yes.": "En cours d'exécution : oui.",
 "Running now: no.": "En cours d'exécution : non.",
-"Restarted.": "Redémarré."
+"Restarted.": "Redémarré.",
+"personagent runs as a service now, while you are logged in. Its output goes to {0}.": "personagent s'exécute désormais comme service, tant que votre session est ouverte. Sa sortie est écrite dans {0}.",
+"The file mcp.json in the home folder cannot be read as JSON. Correct it or remove it.": "Le fichier mcp.json du dossier personagent ne peut pas être lu comme du JSON. Corrigez-le ou supprimez-le.",
+"Approved (answered, besides the reply settings):": "Approuvées (reçoivent une réponse, en plus des réglages de réponse) :",
+"admin": "administrateur",
+"`{0}` forgets an approval or a decline, so the chat asks again.": "`{0}` oublie une approbation ou un refus, et la discussion fait alors une nouvelle demande.",
+"This request cannot be decided so.": "Cette demande ne peut pas être tranchée de cette façon.",
+"This IRC sender is not identified with the network's services, so anyone may use the nick and it cannot be made an admin. Identify with NickServ, then write again.": "Cet expéditeur IRC n'est pas identifié auprès des services du réseau : n'importe qui peut utiliser ce pseudonyme, il ne peut donc pas devenir administrateur. Identifiez-vous auprès de NickServ, puis écrivez de nouveau.",
+"This IRC sender is not identified with the network's services: whoever takes the nick next is answered too.": "Cet expéditeur IRC n'est pas identifié auprès des services du réseau : quiconque prendra ce pseudonyme ensuite recevra aussi des réponses.",
+"Done: the chat can ask for approval again.": "C'est fait : la discussion peut de nouveau demander une approbation.",
+"Nothing approved or declined has that id. Run `{0}` to see the ids.": "Aucune discussion approuvée ou refusée n'a cet identifiant. Exécutez `{0}` pour voir les identifiants.",
+"ACCESS_APPROVAL_PLATFORMS is set in the environment, which overrides .env; change it there.": "ACCESS_APPROVAL_PLATFORMS est défini dans l'environnement, qui prime sur .env ; modifiez-le là.",
+"forget an approval or a decline, so the chat asks again": "oublie une approbation ou un refus, et la discussion fait alors une nouvelle demande",
+"the chat's id, as the list shows it": "l'identifiant de la discussion, tel que la liste l'affiche"
 }

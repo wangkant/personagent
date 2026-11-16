@@ -116,6 +116,38 @@ class InstallerSyntaxTests(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(done.stdout.strip(), "python=3.12")
 
+    @unittest.skipUnless(os.name == "nt", "the Windows installer's own checks")
+    def test_an_old_uv_is_not_used_and_a_copy_from_pip_is_seen(self) -> None:
+        powershell = _powershell()
+        if not powershell:
+            self.skipTest("PowerShell is not installed")
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            bin_dir = folder / "bin"
+            bin_dir.mkdir()
+            for name, version, listed in (("old", "0.7.3", ""), ("new", "0.13.8", ""),
+                                          ("ours", "0.13.8", "personagent v1.5.0")):
+                (folder / f"{name}.cmd").write_text(
+                    "@echo off\r\n"
+                    f"if \"%1\"==\"--version\" echo uv {version} (stand-in)\r\n"
+                    # Its own folder, so no path is written into a file cmd reads in its code page.
+                    "if \"%1 %2 %3\"==\"tool dir --bin\" echo %~dp0bin\r\n"
+                    + (f"if \"%1 %2\"==\"tool list\" echo {listed}\r\n" if listed else ""),
+                    encoding="ascii", newline="")
+            source = (f"$PersonagentInstallLib = $true; . '{PS1}'; "
+                      f"$old = Test-PaUvRecent '{folder / 'old.cmd'}'; $new = Test-PaUvRecent '{folder / 'new.cmd'}'; "
+                      f"$none = Test-PaForeignCopy '{folder / 'new.cmd'}'; "
+                      f"Set-Content -LiteralPath '{bin_dir / 'personagent.exe'}' -Value x; "
+                      f"$pip = Test-PaForeignCopy '{folder / 'new.cmd'}'; $uv = Test-PaForeignCopy '{folder / 'ours.cmd'}'; "
+                      "Write-Output \"$old $new $none $pip $uv\"")
+            done = subprocess.run([powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", source],
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                  stdin=subprocess.DEVNULL, timeout=120)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            # An old uv: no. A recent one: yes. No personagent there: nothing to replace.
+            # One that uv does not list: replace it. One uv installed: leave it to the upgrade.
+            self.assertEqual(done.stdout.strip(), "False True False True False")
+
     def test_a_shell_parses_the_unix_installer(self) -> None:
         shell = shutil.which("sh")
         if not shell:
@@ -161,6 +193,37 @@ class ShellInstallerPartsTests(unittest.TestCase):
             (cwd / "page.html").write_text(absolute, encoding="utf-8")
             done = self._run(pick, cwd)
             self.assertEqual(done.stdout.strip(), f"https://files.example/uv-1.0.0-py3-none-{tag}.whl")
+
+    def _stand_in_uv(self, cwd: Path, name: str, version: str, listed: str = "") -> Path:
+        made = cwd / name
+        made.write_text("#!/bin/sh\n"
+                        f'[ "$1" = --version ] && echo "uv {version} (stand-in)"\n'
+                        f'[ "$1 $2 $3" = "tool dir --bin" ] && echo "{cwd}/bin"\n'
+                        f'[ "$1 $2" = "tool list" ] && echo "{listed}"\n'
+                        "exit 0\n", encoding="utf-8")
+        made.chmod(0o755)
+        return made
+
+    def test_an_old_uv_is_not_used(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            cwd = Path(temp)
+            for name, version, recent in (("a", "0.7.30", False), ("b", "0.8.0", True),
+                                          ("c", "0.13.8", True), ("d", "1.0.2", True)):
+                uv = self._stand_in_uv(cwd, name, version)
+                done = self._run(f'uv_recent "{uv}"', cwd)
+                self.assertEqual(done.returncode == 0, recent, (version, done.stderr))
+            self.assertNotEqual(self._run(f'uv_recent "{cwd}/missing"', cwd).returncode, 0)
+
+    def test_a_copy_installed_another_way_is_seen(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            cwd = Path(temp)
+            (cwd / "bin").mkdir()
+            uv = self._stand_in_uv(cwd, "uv", "0.13.8")
+            self.assertNotEqual(self._run(f'foreign_copy "{uv}"', cwd).returncode, 0, "nothing there")
+            (cwd / "bin" / "personagent").write_text("#!/bin/sh\n", encoding="utf-8")
+            self.assertEqual(self._run(f'foreign_copy "{uv}"', cwd).returncode, 0, "from pip or pipx")
+            ours = self._stand_in_uv(cwd, "uv2", "0.13.8", "personagent v1.5.0")
+            self.assertNotEqual(self._run(f'foreign_copy "{ours}"', cwd).returncode, 0, "uv's own")
 
     def test_a_checksum_that_differs_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

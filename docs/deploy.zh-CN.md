@@ -64,7 +64,7 @@ personagent
 
 以下操作都在本地页面中完成。相关设置位于「角色与设置」→「高级设置」，点击「保存高级设置」后生效。括号中为各项在 `.env` 中的设置名；直接修改 `.env` 后，需重新启动 personagent 才会生效。
 
-- **批准新对话。** 在 `ACCESS_APPROVAL_PLATFORMS` 列出的平台上（从此版本起连接的平台都会加入），不在下列两个名单中的对话不会交给模型回复。私聊会收到一条附有六位代码的固定消息，每天最多一次；未经批准的群聊只在有人点名角色时收到说明，每天最多一次。申请显示在「连接平台」中，可选择「批准」「拒绝」，私聊还可选择「这是我」，后者同时将该账号加入 `ADMIN_IDS`。在服务器上，`personagent access` 列出申请，`personagent access approve CODE`（或 `decline`、`admin`）处理其中一条。批准会把编号加入 `ACCESS_DM_USERS` 或 `ACCESS_GROUPS`，正在运行的服务会立即从 `.env` 读取这一变更。申请三天后过期，每个平台最多保留二十条。`personagent access policy <平台> open`（或页面上的「新对话无需批准即回复」）可关闭某个平台的批准。
+- **批准新对话。** 在 `ACCESS_APPROVAL_PLATFORMS` 列出的平台上（从此版本起连接的平台都会加入），不在下列两个名单中的对话不会交给模型回复。私聊会收到一条附有六位代码的固定消息，每天最多一次；未经批准的群聊只在有人点名角色时收到说明，每天最多一次。申请显示在「连接平台」中，可选择「批准」「拒绝」，私聊还可选择「这是我」，输入你本人对话收到的代码后，该账号即成为管理员。在服务器上，`personagent access` 列出申请，`personagent access approve CODE`（或 `decline`、`admin`）处理其中一条。已批准和已拒绝的对话保存在运行目录的 `approvals.json` 中，正在运行的服务会立即读取；无论 `ADMIN_IDS`、`ACCESS_DM_USERS` 和 `ACCESS_GROUPS` 来自 `.env` 还是环境变量，批准的对话都会在其之外额外生效，且不会改动这些设置。无论采用哪种方式，已拒绝的对话都不会得到回复。申请三天后过期，每个平台最多保留二十条私聊申请和十条群聊申请。只有首次连接、尚无决定记录且尚无对话的平台才会要求批准。`personagent access policy <平台> open`（或页面上的「新对话无需批准即回复」）可关闭某个平台的批准。
 - **把自己设为管理员。** 先私聊角色一次，再在「回复、管理员与回复范围」中点击「从最近的聊天中选择」，在自己的账号旁点击「这是我」（`ADMIN_IDS`）。扫码接入的 QQ 官方机器人看到的是 openid，而不是 QQ 号，因此请用这种方式设置。
 - **只在部分群聊中回复。** 在同一列表中为要保留的群聊勾选「在此群聊中回复」，或在「仅在以下群聊中回复」（`ACCESS_GROUPS`）中填写群聊编号。某个平台一旦列出任一群聊，角色在该平台的其他群聊中便不再回复。经扫码接入的 QQ 官方机器人所在群聊，编号形如 `qq_official:<id>`，在 QQ 中无法直接看到：请先在该群中 @ 机器人一次，再通过「从最近的聊天中选择」勾选。
 - **暂停全部回复。** 关闭「回复、管理员与回复范围」中的第一项「回复消息」（`AGENT_ENABLED`），保存前会先确认。角色仍保持连接，但在重新开启之前不回复任何消息。
@@ -301,7 +301,7 @@ personagent 可以在没有显示器的机器上运行。为此提供了三项�
   ```
   location / {
       proxy_pass http://127.0.0.1:8090;
-      proxy_set_header Host $host;
+      proxy_set_header Host $http_host;
       proxy_set_header X-Forwarded-For $remote_addr;
       proxy_set_header X-Forwarded-Proto $scheme;
   }
@@ -342,11 +342,14 @@ docker run -d --name personagent --init --restart unless-stopped \
 
 首次运行：打开 `http://<服务器>:8090/`，用日志中的密码登录，填写模型密钥并连接平台；二维码显示在页面上。镜像以非特权用户运行 `personagent up`，并设置 `PAGE_HOST=0.0.0.0` 和 `PAGE_PORT=8090`。如需自行指定密码，请在环境变量中提供 `PAGE_PASSWORD`；未提供时，首次启动会生成一个密码，只将其哈希值保存在 `/data/.env` 中，并只打印一次。其他设置也均可通过环境变量提供。`docker exec -it personagent personagent page password` 可修改密码，`docker exec personagent personagent doctor` 可检查设置。将端口映射为 `127.0.0.1:8090:8090`，则页面只能经 SSH 隧道或同一主机上的代理访问。使用绑定挂载时，该目录须允许用户 1000 写入。
 
+Windows 和 macOS 上的 Docker Desktop 会将发往已发布端口的所有连接从同一个网关地址转入容器，因此页面会把所有设备视为同一个地址：任一设备输错 5 次密码，所有设备都将暂停登录 15 分钟。在 Linux 上，各设备保留各自的地址。使用 Docker Desktop 时，请勿让该端口暴露在不受信任的网络中：将其发布为 `127.0.0.1:8090:8090` 并通过 SSH 隧道访问，或通过 Tailscale 访问。
+
 容器中不具备的功能：
 
 - **应用窗口、通知区域图标和桌面图标。** 容器中没有显示器，这些功能均由页面提供。
 - **从页面更新。** 镜像通过拉取新镜像更新：`docker compose pull && docker compose up -d`。更新提示会说明这一点。
 - **托管的 AstrBot** 可以使用：它需要 glibc（镜像基于 Debian）、可写的主目录（`/data`），以及访问 PyPI 和 GitHub 或其镜像（`PERSONAGENT_MIRROR`）的出站网络。它会下载到卷中，约占几百 MB。
+- **你所在的时区。** 容器内的时钟为 UTC。请在 `compose.yaml` 中或通过 `-e` 设置 `PERSONA_TZ_OFFSET_HOURS`（你所在时区相对 UTC 的小时数，例如 `8` 或 `-5`），否则角色会按 UTC 判断时间和夜间的安静时段。
 
 镜像的健康检查访问页面的 `/health`。每次发布都会推送 amd64 和 arm64 镜像，标签为版本号和 `latest`。
 

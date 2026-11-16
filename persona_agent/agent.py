@@ -228,6 +228,8 @@ class Agent(Turns, DirectMessages, MessageParsing, ReplyDecision, PromptBuilder,
         self.access_approval_platforms: set = set(s.access_approval_platforms)
         # The home's .env as the service re-reads it (approvals.LiveEnv); set by the server.
         self.settings_env = None
+        # The home's approvals file (approvals.store_path); set by the server.
+        self.approvals_file = None
         self.connector_outbox_enabled = s.connector_outbox_enabled
 
         self.memory_file = resolve_runtime_state_file(s.memory_file)

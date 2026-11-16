@@ -16,6 +16,9 @@ const STRINGS = {
     signin_wrong_last: "The password is not correct. One more attempt is allowed from this device before sign-in is paused for 15 minutes.",
     signin_locked: "Too many attempts from this device. Sign-in is paused; try again in {minutes} minutes.",
     signin_failed: "The page could not be reached. Check the connection, then try again.",
+    signin_busy: "Other sign-ins are being checked. Try again in a moment.",
+    signin_origin:
+      "The address in the browser and the address the server was given differ, so the sign-in was refused. Check that the proxy passes the Host header with its port, and PAGE_ALLOWED_HOSTS.",
     signin_forgot: "To set a new password, run personagent page password on the computer personagent runs on.",
     signin_http:
       "This connection is not encrypted: on a shared network, the password and the session can be read in transit. Reach the page through an SSH tunnel, a VPN such as Tailscale, or a reverse proxy with HTTPS.",
@@ -35,6 +38,9 @@ const STRINGS = {
     signin_wrong_last: "密码不正确。此设备还可尝试 1 次，之后登录将暂停 15 分钟。",
     signin_locked: "此设备尝试次数过多，登录已暂停，请在 {minutes} 分钟后重试。",
     signin_failed: "无法连接到页面。请检查网络连接后重试。",
+    signin_busy: "正在核对其他登录请求，请稍后重试。",
+    signin_origin:
+      "浏览器中的地址与服务器收到的地址不一致，因此登录被拒绝。请检查代理是否连同端口一起转发 Host 请求头，以及 PAGE_ALLOWED_HOSTS 的设置。",
     signin_forgot: "如需设置新密码，请在运行 personagent 的电脑上运行 personagent page password。",
     signin_http:
       "此连接未加密：在共享网络中，密码与登录状态可能在传输途中被读取。请通过 SSH 隧道、Tailscale 等 VPN，或启用 HTTPS 的反向代理访问此页面。",
@@ -162,6 +168,8 @@ $("signin-form").addEventListener("submit", async (event) => {
     }
     if (value.error === "signin_locked") {
       say({ error: true, key: "signin_locked", fields: { minutes: Math.max(1, Math.ceil((value.seconds || 60) / 60)) } });
+    } else if (value.error === "signin_busy" || value.error === "signin_origin") {
+      say({ error: true, key: value.error });
     } else if (value.error === "signin_wrong") {
       say({ error: true, key: value.left === 1 ? "signin_wrong_last" : "signin_wrong", fields: { left: value.left } });
     } else {

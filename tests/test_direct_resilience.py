@@ -737,7 +737,7 @@ def test_irc_takes_the_services_account_for_the_sender_where_the_server_tags_it(
     bot = irc.IRC(irc_values())
     bot.bot_id, bot.nick = "nova", "Nova"
     plain = bot.event("kant!~k@host", "#room", "hi")
-    assert plain["sender_id"] == "kant"         # no account-tag: the nick, as before
+    assert plain["sender_id"] == "~kant"        # no account-tag: the network vouches for no one
     bot.accounts = True
     who = irc.parse("@account=Kant :someone!~s@host PRIVMSG #room :hi")
     assert irc.tags("@account=Kant;time=x :a PRIVMSG #r :hi") == {"account": "Kant", "time": "x"}

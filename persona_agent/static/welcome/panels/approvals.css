@@ -62,19 +62,61 @@
 #approvals-root .error {
   margin: 8px 0;
 }
-.approvals-declined {
+.approvals-decided {
   margin-top: 10px;
 }
 /* Only declined chats: the panel's own line already separates them. */
-#approvals-root > .approvals-declined:first-child {
+#approvals-root > .approvals-decided:first-child {
   border-top: none;
   margin-top: 0;
   padding-top: 0;
 }
-.approvals-declined .field-note {
+.approvals-decided .field-note {
   margin: 6px 0 2px;
 }
+.approval-id {
+  color: var(--muted);
+  font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+.approval-tag {
+  font-size: 12px;
+  color: var(--ok);
+}
+.approval-warn {
+  margin: 4px 0 0;
+  color: var(--warn-text);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.approval-item .approval-warn {
+  margin-left: 31px;
+}
+.approval-code {
+  margin: 8px 0 0 31px;
+}
+.approval-code label {
+  display: block;
+  color: var(--ink);
+  line-height: 1.55;
+  margin-bottom: 4px;
+}
+.approval-code-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.approval-code-line input {
+  width: 9em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
 @media (max-width: 560px) {
+  .approval-item .approval-warn,
+  .approval-code {
+    margin-left: 0;
+  }
   .approval-words,
   .approval-actions {
     margin-left: 0;

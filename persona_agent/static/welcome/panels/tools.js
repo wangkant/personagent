@@ -91,6 +91,9 @@ PA.strings({
     tools_sse_unsupported: "This server uses the older SSE transport, which personagent does not support. Use its Streamable HTTP address.",
     tools_write_failed: "The tool settings file could not be written. Close any program that is using it, then try again.",
     tools_bad_request: "This request is not valid.",
+    tools_local_address: "An address on this computer or its local network can be added and used only on the computer personagent runs on.",
+    tools_file_damaged: "The file mcp.json in the home folder cannot be read as JSON. Correct it or remove it, then try again.",
+    tools_state_disabled: "Switched off in mcp.json",
     tools_local_only: "A server that runs a program can be added only on the computer personagent runs on, from its own page or with `personagent tools add`. A server at an address can be added from here.",
   },
   zh: {
@@ -184,6 +187,9 @@ PA.strings({
     tools_sse_unsupported: "该服务器使用旧版 SSE 传输方式，personagent 不支持。请使用其 Streamable HTTP 地址。",
     tools_write_failed: "无法写入工具设置文件。请关闭正在使用该文件的程序后重试。",
     tools_bad_request: "该请求无效。",
+    tools_local_address: "本机或局域网中的地址只能在运行 personagent 的电脑上添加和使用。",
+    tools_file_damaged: "无法将主目录中的 mcp.json 读取为 JSON。请修正或删除该文件后重试。",
+    tools_state_disabled: "已在 mcp.json 中关闭",
     tools_local_only: "运行程序的服务器只能在运行 personagent 的电脑上添加：可使用该电脑上的页面，或运行 `personagent tools add`。通过地址连接的服务器可以在此处添加。",
   },
 });
@@ -564,6 +570,7 @@ PA.strings({
   }
 
   function stateLine(server) {
+    if (server.disabled) return make("span", "feature-state", PA.t("tools_state_disabled"));
     if (!data.running) return make("span", "feature-state", PA.t("tools_state_off"));
     const word = { running: "tools_state_running", starting: "tools_state_starting", failed: "tools_state_failed" }[server.state]
       || "tools_state_waiting";

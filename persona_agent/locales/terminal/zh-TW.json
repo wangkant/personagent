@@ -667,5 +667,18 @@
 "Lingering is off, so it stops when you log out. To keep it running, run: sudo loginctl enable-linger {0}": "lingering 未開啟，因此服務會在你登出後停止。如需持續執行，請執行：sudo loginctl enable-linger {0}",
 "Running now: yes.": "目前執行中：是。",
 "Running now: no.": "目前執行中：否。",
-"Restarted.": "已重新啟動。"
+"Restarted.": "已重新啟動。",
+"Approved (answered, besides the reply settings):": "已核准（除回覆設定外，角色也會回覆）：",
+"admin": "管理員",
+"`{0}` forgets an approval or a decline, so the chat asks again.": "使用 `{0}` 可撤銷核准或拒絕，該對話之後須重新申請。",
+"This request cannot be decided so.": "無法以這種方式處理此申請。",
+"This IRC sender is not identified with the network's services, so anyone may use the nick and it cannot be made an admin. Identify with NickServ, then write again.": "此 IRC 傳送者未向網路服務識別身分，任何人都能使用這個暱稱，因此無法設為管理員。請先透過 NickServ 識別身分，再重新傳送訊息。",
+"This IRC sender is not identified with the network's services: whoever takes the nick next is answered too.": "此 IRC 傳送者未向網路服務識別身分：之後使用這個暱稱的任何人也會獲得回覆。",
+"Done: the chat can ask for approval again.": "已完成：該對話可以再次申請核准。",
+"Nothing approved or declined has that id. Run `{0}` to see the ids.": "沒有使用該 ID 的已核准或已拒絕對話。執行 `{0}` 可查看 ID。",
+"ACCESS_APPROVAL_PLATFORMS is set in the environment, which overrides .env; change it there.": "ACCESS_APPROVAL_PLATFORMS 已在環境變數中設定，其優先順序高於 .env；請在環境變數中修改。",
+"forget an approval or a decline, so the chat asks again": "撤銷核准或拒絕，該對話之後須重新申請",
+"the chat's id, as the list shows it": "對話的 ID，與清單中顯示的相同",
+"The file mcp.json in the home folder cannot be read as JSON. Correct it or remove it.": "無法將 personagent 資料夾中的 mcp.json 讀取為 JSON。請修正或刪除該檔案。",
+"personagent runs as a service now, while you are logged in. Its output goes to {0}.": "personagent 現已作為服務執行，但僅在你登入期間執行。輸出會寫入 {0}。"
 }

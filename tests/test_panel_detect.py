@@ -177,3 +177,25 @@ def test_the_panel_s_sentences_exist_in_english_and_chinese() -> None:
     assert len(keys) >= 8
     for key in keys:
         assert f"    {key}:" in chinese, key
+
+
+def test_a_key_from_the_environment_goes_only_to_its_own_service(page, monkeypatch) -> None:
+    _workspace, client = page
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-from-the-shell")
+    sent = []
+    monkeypatch.setattr(sw, "probe_key", lambda base, key, model, timeout=30: sent.append((base, key)) or sw.Probe(base, 200))
+    refused = client.post("/api/config", headers=HEADERS, json={
+        "provider": "openrouter", "apiKey": "", "apiKeyFrom": "OPENROUTER_API_KEY",
+        "baseUrl": "https://elsewhere.example/v1", "model": "x", "lang": "en"})
+    assert refused.status_code == 400 and refused.json() == {"error": "key_required"}
+    assert sent == [], "the key went nowhere"
+    saved = client.post("/api/config", headers=HEADERS, json={
+        "provider": "openrouter", "apiKey": "", "apiKeyFrom": "OPENROUTER_API_KEY", "lang": "en"})
+    assert saved.status_code == 200 and sent == [("https://openrouter.ai/api/v1", "sk-or-from-the-shell")]
+
+
+def test_a_local_server_that_drips_or_nests_its_answer_is_no_find(local_server, monkeypatch) -> None:
+    deep = local_server({"models": []})
+    monkeypatch.setattr(detect, "LOCAL", (("ollama", "Ollama", "ollama", "http://localhost:11434/v1", deep + "/api/tags"),))
+    monkeypatch.setattr(detect.json, "loads", lambda raw: (_ for _ in ()).throw(RecursionError()))
+    assert asyncio.run(detect.found())["local"] == []

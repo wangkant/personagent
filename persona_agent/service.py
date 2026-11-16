@@ -141,7 +141,7 @@ def plist(home: Path) -> bytes:
         "Label": label(home),
         "ProgramArguments": argv,
         "WorkingDirectory": str(cwd),
-        "EnvironmentVariables": {"PYTHONUNBUFFERED": "1"},
+        "EnvironmentVariables": {"PYTHONUNBUFFERED": "1", "PERSONAGENT_SERVICE": "launchd"},
         "RunAtLoad": True,
         # Started again when it ends with an error, not after a clean stop.
         "KeepAlive": {"SuccessfulExit": False},
@@ -308,19 +308,23 @@ def _install(home: Path, kind: str, path: Path, plan: list[list[str]]) -> int:
         path.write_text(unit(home), encoding="utf-8")
     else:
         path.write_bytes(plist(home))
+    lingers = True
     for step in plan:
         code, said = _run(step)
         if step[:2] == ["launchctl", "bootout"]:
             continue  # nothing was loaded yet
         if step[:2] == ["loginctl", "enable-linger"]:
-            if code:
-                print(langs.term(f"It runs while you are logged in. To keep it running after you log out and "
-                                 f"start it at boot, run: sudo loginctl enable-linger {getpass.getuser()}"))
+            lingers = not code
             continue
         if code:
             print(langs.term(f"`{_shown(step)}` failed: {said}"), file=sys.stderr)
             return 1
-    print(langs.term(f"personagent runs as a service now and starts again after a reboot. Its output goes to {log}."))
+    if lingers:
+        print(langs.term(f"personagent runs as a service now and starts again after a reboot. Its output goes to {log}."))
+    else:
+        print(langs.term(f"personagent runs as a service now, while you are logged in. Its output goes to {log}."))
+        print(langs.term(f"It runs while you are logged in. To keep it running after you log out and "
+                         f"start it at boot, run: sudo loginctl enable-linger {getpass.getuser()}"))
     if kind == "macos":
         print(langs.term("A LaunchAgent runs while you are logged in: on a Mac that serves others, turn on "
                          "automatic login."))

@@ -519,3 +519,49 @@ def test_a_second_up_on_a_running_home_refuses_and_leaves_env_alone(tmp_path, mo
         held.release()
     assert "already running" in capsys.readouterr().err
     assert (tmp_path / ".env").read_bytes() == before
+
+
+@pytest.mark.skipif(os.name != "posix", reason="a service manager's SIGTERM is a POSIX signal")
+def test_a_service_manager_s_stop_reads_as_ctrl_c():
+    before = signal.getsignal(signal.SIGTERM)
+    try:
+        svc._stop_on_sigterm()
+        with pytest.raises(KeyboardInterrupt):
+            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(5)
+    finally:
+        signal.signal(signal.SIGTERM, before)
+
+
+def test_a_log_that_grew_large_is_set_aside_at_the_next_start(tmp_path):
+    log = tmp_path / "agent.log"
+    log.write_bytes(b"x" * 50)
+    svc._turn_over(log, limit=100)
+    check("a small log is kept", log.read_bytes() == b"x" * 50 and not (tmp_path / "agent.log.1").exists())
+    log.write_bytes(b"y" * 200)
+    (tmp_path / "agent.log.1").write_bytes(b"older")
+    svc._turn_over(log, limit=100)
+    check("a large one becomes .1, over the one before", not log.exists()
+          and (tmp_path / "agent.log.1").read_bytes() == b"y" * 200)
+    svc._turn_over(tmp_path / "missing.log", limit=100)
+
+
+def test_a_refusal_ends_cleanly_under_launchd_and_with_two_elsewhere(monkeypatch):
+    monkeypatch.setattr(svc, "_up", lambda argv, prog: 2)
+    monkeypatch.delenv(svc.SERVICE_ENV, raising=False)
+    check("a refusal is exit code 2", svc.main([]) == 2)
+    monkeypatch.setenv(svc.SERVICE_ENV, "launchd")
+    check("launchd would start a job again after it: 0 there", svc.main([]) == 0)
+    monkeypatch.setattr(svc, "_up", lambda argv, prog: 1)
+    check("a failure stays a failure", svc.main([]) == 1)
+
+
+def test_a_damaged_memory_file_refuses_the_start_with_two(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("AGENT_HOME", str(tmp_path))
+    monkeypatch.delenv(svc.SERVICE_ENV, raising=False)
+    for name in ("PAGE_HOST", "PAGE_PORT", "PAGE_PASSWORD", "PERSONAGENT_IN_CONTAINER"):
+        monkeypatch.delenv(name, raising=False)
+    sw.write_env(tmp_path / ".env", {"LLM_API_KEY": "sk-test-1234567890"})
+    monkeypatch.setattr(svc, "_memory_problem", lambda home: "memory.json is damaged")
+    check("exit code 2, which a service does not restart into", svc.main([]) == 2)
+    check("with the sentence", "memory.json is damaged" in capsys.readouterr().err)

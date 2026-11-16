@@ -710,6 +710,8 @@ async def lifespan(app: FastAPI):
             agent = Agent(AgentSettings.from_env())
             # An approval on the page or in the terminal reaches the running service through .env.
             agent.settings_env = approvals.LiveEnv(ROOT / ".env")
+            # The one approvals file the page and `personagent access` use too.
+            agent.approvals_file = approvals.store_path(ROOT)
             # The ledger is authoritative: repair stale views before serving.
             agent._rebuild_promoted_views(strict=True)
         except MemoryFileDamaged as error:
@@ -723,6 +725,7 @@ async def lifespan(app: FastAPI):
             runtime_lock = None
             raise
         # The admin's tool servers start beside it; one that fails is reported, not fatal.
+        agent.tool_hub.reports = True
         agent.tool_hub.start()
         _spawn(agent.probe_models())
         _spawn(agent.check_missed_mentions())

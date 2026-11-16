@@ -74,7 +74,7 @@ async def _fetch(base: str, key: str, openrouter: bool) -> list[dict] | None:
                     return None
     try:
         return parse(json.loads(raw), openrouter)
-    except ValueError:
+    except (ValueError, RecursionError):
         return None
 
 

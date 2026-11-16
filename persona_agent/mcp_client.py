@@ -14,6 +14,7 @@ import collections
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -21,7 +22,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
@@ -43,6 +44,22 @@ STDERR_LINE_CHARS = 300
 EXIT_GRACE_S = 2.0
 #: SSE reconnections for one request after the server closed the stream early.
 SSE_RECONNECTS = 5
+#: Redirects followed for one request, to the same host only.
+MAX_REDIRECTS = 3
+_REDIRECTS = (301, 302, 303, 307, 308)
+
+# What a server program may inherit: where things are, the language, proxies and
+# certificates, and uv's and npm's own settings (minus anything named like a secret).
+_ENV_KEEP = frozenset({
+    "PATH", "PATHEXT", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "USERNAME", "USER", "LOGNAME",
+    "SHELL", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMW6432",
+    "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)", "SYSTEMROOT", "WINDIR", "SYSTEMDRIVE", "COMSPEC",
+    "TEMP", "TMP", "TMPDIR", "LANG", "LANGUAGE", "TZ", "TERM", "OS", "PROCESSOR_ARCHITECTURE",
+    "NUMBER_OF_PROCESSORS", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "SSL_CERT_FILE",
+    "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS", "NODE_PATH", "NVM_DIR", "NVM_HOME",
+    "NVM_SYMLINK", "VOLTA_HOME", "PNPM_HOME", "CARGO_HOME", "LD_LIBRARY_PATH"})
+_ENV_KEEP_PREFIXES = ("LC_", "XDG_", "UV_", "NPM_CONFIG_")
+_SECRET_NAME = re.compile(r"(_KEY|_TOKEN|_SECRET)$|PASSWORD|PASSWD|SECRET|_AUTH|APIKEY")
 
 # The installers' own variable for where they put uv, not a setting of the home.
 UV_DIR_ENV = "PERSONAGENT_UV_DIR"
@@ -83,11 +100,31 @@ def uv_dirs() -> list[Path]:
     return dirs
 
 
-def find_program(command: str, env: Optional[dict] = None) -> str:
+def program_env(own: Optional[dict] = None) -> dict:
+    """What a server program starts with: what a program needs to run and find
+    its tools here, never this service's own settings or anything named like a
+    secret, plus the server's own `env`."""
+    from .home import FROM_ENV_FILE
+
+    out = {}
+    for name, value in os.environ.items():
+        upper = name.upper()
+        if name in FROM_ENV_FILE or upper in FROM_ENV_FILE or _SECRET_NAME.search(upper):
+            continue
+        if upper in _ENV_KEEP or upper.startswith(_ENV_KEEP_PREFIXES):
+            out[name] = value
+    out.update(own or {})
+    return out
+
+
+def find_program(command: str, env: Optional[dict] = None, cwd: Optional[str] = None) -> str:
     """The full path of `command`, or "" when it cannot be found. uv and uvx
-    are also looked for where the installers put them."""
+    are also looked for where the installers put them; a relative path is
+    taken from `cwd`."""
     if not command:
         return ""
+    if cwd and not Path(command).is_absolute() and ("/" in command or "\\" in command):
+        command = str(Path(cwd) / command)
     path = (env or os.environ).get("PATH") if env else None
     found = shutil.which(command, path=path)
     if found:
@@ -98,6 +135,28 @@ def find_program(command: str, env: Optional[dict] = None) -> str:
             if found:
                 return found
     return ""
+
+
+_CMD_META = re.compile(r'([()\][%!^"`<>&|;, *?])')
+
+
+def _batch_arg(arg: str) -> str:
+    """One argument as cmd.exe passes it on to a batch file's %*: quoted for
+    the program that reads it, then every cmd metacharacter escaped twice,
+    once for the line and once for the batch file's own expansion."""
+    if any(c in arg for c in "\r\n\0"):
+        raise McpError("exited", "a batch program cannot take an argument that spans lines")
+    quoted = re.sub(r'(\\*)"', r'\1\1\\"', arg)
+    quoted = '"' + re.sub(r"(\\*)$", r"\1\1", quoted) + '"'
+    return _CMD_META.sub(r"^\1", _CMD_META.sub(r"^\1", quoted))
+
+
+def batch_command_line(program: str, args: list, env: dict) -> str:
+    """The command line that runs a .cmd or .bat file through cmd.exe with its
+    arguments intact, `&`, `|`, `%` and quotes included."""
+    comspec = env.get("COMSPEC") or os.path.join(env.get("SYSTEMROOT") or "C:\\Windows", "System32", "cmd.exe")
+    line = " ".join([_CMD_META.sub(r"^\1", program), *(_batch_arg(str(a)) for a in args)])
+    return f'"{comspec}" /d /s /c "{line}"'
 
 
 def result_of(raw: dict) -> ToolResult:
@@ -202,7 +261,7 @@ class StdioSession(_Session):
                  cwd: Optional[str] = None) -> None:
         super().__init__()
         self.command, self.args = command, list(args or ())
-        self.env = {**os.environ, **(env or {})}
+        self.env = program_env(env)
         self.cwd = cwd or None
         self.process: Optional[subprocess.Popen] = None
         self._job = None
@@ -221,9 +280,13 @@ class StdioSession(_Session):
         return "\n".join(self._stderr)
 
     def start(self) -> None:
-        program = find_program(self.command, self.env)
+        program = find_program(self.command, self.env, self.cwd)
         if not program:
             raise McpError("not_found", self.command)
+        argv = [program, *self.args]
+        if os.name == "nt" and Path(program).suffix.lower() in (".cmd", ".bat"):
+            # npx and uvx shims: cmd.exe reads the line itself, so it gets one built for it.
+            argv = batch_command_line(program, self.args, self.env)
         self._loop = asyncio.get_running_loop()
         options: dict = {}
         if os.name == "nt":
@@ -233,7 +296,7 @@ class StdioSession(_Session):
             options["start_new_session"] = True
         try:
             self.process = subprocess.Popen(
-                [program, *self.args], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, env=self.env, cwd=self.cwd, **options)
         except FileNotFoundError:
             raise McpError("not_found", self.command) from None
@@ -451,8 +514,25 @@ class HttpSession(_Session):
             return McpError("sse_unsupported", str(status))
         return McpError("http", str(status))
 
-    async def _post(self, message: dict, timeout: float, *, retried: bool = False):
+    async def initialize(self, timeout: float) -> None:
+        # The whole handshake, the notification included: a 404 inside it never starts another.
+        self._initializing = True
+        try:
+            await super().initialize(timeout)
+        finally:
+            self._initializing = False
+
+    def _redirect(self, resp: httpx.Response) -> str:
+        """Where a redirect points, when it stays on the same host; "" otherwise."""
+        target = urljoin(self.url, resp.headers.get("location", ""))
+        old, new = urlsplit(self.url), urlsplit(target)
+        if new.scheme not in ("http", "https") or (new.hostname or "").lower() != (old.hostname or "").lower():
+            return ""
+        return target
+
+    async def _post(self, message: dict, timeout: float, *, retried: bool = False, hops: int = 0):
         deadline = time.monotonic() + timeout
+        follow = ""
         try:
             async with self._client.stream(
                     "POST", self.url, json=message, timeout=timeout,
@@ -462,37 +542,53 @@ class HttpSession(_Session):
                     if sid and _visible_ascii(sid) and len(sid) <= 512:
                         self.session_id = sid
                 status = resp.status_code
-                if status == 404 and self.session_id and not self._initializing and not retried:
-                    # The server ended the session: a new one, then the same message.
-                    self.session_id, self.protocol = "", ""
-                    await self.initialize(max(1.0, deadline - time.monotonic()))
-                    return await self._post(message, max(1.0, deadline - time.monotonic()), retried=True)
-                if status == 202:
+                if status in _REDIRECTS and hops < MAX_REDIRECTS:
+                    follow = self._redirect(resp)
+                    if not follow:
+                        raise self._refused(status, resp)
+                elif status == 404 and self.session_id and not self._initializing and not retried:
+                    pass    # a new session, below, once the stream is closed
+                elif status == 202:
                     return None
-                if status >= 300:
+                elif status >= 300:
                     raise self._refused(status, resp)
-                kind = resp.headers.get("content-type", "").split(";")[0].strip().lower()
-                if "id" not in message:
-                    return None
-                if kind == "text/event-stream":
-                    return await self._read_stream(resp, message["id"], deadline)
-                body = await self._read_body(resp)
-                try:
-                    answer = json.loads(body)
-                except ValueError:
-                    raise McpError("protocol", "the answer is not JSON") from None
-                if isinstance(answer, list):
-                    answer = next((a for a in answer if isinstance(a, dict)
-                                   and a.get("id") == message["id"]), None)
-                if not isinstance(answer, dict) or answer.get("id") != message["id"]:
-                    raise McpError("protocol", "the answer does not belong to the request")
-                return answer
+                else:
+                    kind = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+                    if "id" not in message:
+                        return None
+                    if kind == "text/event-stream":
+                        return await self._read_stream(resp, message["id"], deadline)
+                    body = await self._read_body(resp)
+                    try:
+                        answer = json.loads(body)
+                    except ValueError:
+                        raise McpError("protocol", "the answer is not JSON") from None
+                    if isinstance(answer, list):
+                        answer = next((a for a in answer if isinstance(a, dict)
+                                       and a.get("id") == message["id"]), None)
+                    if not isinstance(answer, dict) or answer.get("id") != message["id"]:
+                        raise McpError("protocol", "the answer does not belong to the request")
+                    return answer
         except httpx.ConnectError as e:
             raise McpError("refused", str(e)[:200]) from None
         except httpx.TimeoutException:
             raise McpError("timeout", f"{timeout:g} s") from None
         except httpx.HTTPError as e:
             raise McpError("http", str(e)[:200]) from None
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise McpError("timeout", f"{timeout:g} s")
+        if follow:
+            # The same method and body at the new address, which later requests use too.
+            self.url = follow
+            return await self._post(message, left, retried=retried, hops=hops + 1)
+        # The server ended the session: a new one, then the same message, once.
+        self.session_id, self.protocol = "", ""
+        await self.initialize(left)
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise McpError("timeout", f"{timeout:g} s")
+        return await self._post(message, left, retried=True, hops=hops)
 
     @staticmethod
     async def _read_body(resp: httpx.Response) -> bytes:
@@ -571,8 +667,6 @@ class HttpSession(_Session):
     async def request(self, method: str, params: dict, timeout: float):
         self._next += 1
         message = {"jsonrpc": "2.0", "id": self._next, "method": method, "params": params}
-        if method == "initialize":
-            self._initializing = True
         try:
             answer = await asyncio.wait_for(self._post(message, timeout), timeout + 1)
         except asyncio.TimeoutError:
@@ -581,9 +675,6 @@ class HttpSession(_Session):
             if e.code == "refused":
                 self.closed.set()
             raise
-        finally:
-            if method == "initialize":
-                self._initializing = False
         if answer is None:
             raise McpError("protocol", "no answer to the request")
         return _rpc_result(answer)

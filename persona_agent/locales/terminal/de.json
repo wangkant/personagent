@@ -667,5 +667,18 @@
 "Lingering is off, so it stops when you log out. To keep it running, run: sudo loginctl enable-linger {0}": "Lingering ist aus, daher endet er, wenn Sie sich abmelden. Damit er weiterläuft, führen Sie aus: sudo loginctl enable-linger {0}",
 "Running now: yes.": "Läuft jetzt: ja.",
 "Running now: no.": "Läuft jetzt: nein.",
-"Restarted.": "Neu gestartet."
+"Restarted.": "Neu gestartet.",
+"personagent runs as a service now, while you are logged in. Its output goes to {0}.": "personagent läuft jetzt als Dienst, solange Sie angemeldet sind. Seine Ausgabe geht nach {0}.",
+"The file mcp.json in the home folder cannot be read as JSON. Correct it or remove it.": "Die Datei mcp.json im personagent-Ordner kann nicht als JSON gelesen werden. Korrigieren oder entfernen Sie sie.",
+"Approved (answered, besides the reply settings):": "Freigegeben (zusätzlich zu den Antworteinstellungen beantwortet):",
+"admin": "Administrator",
+"`{0}` forgets an approval or a decline, so the chat asks again.": "`{0}` hebt eine Freigabe oder Ablehnung auf, sodass der Chat erneut anfragt.",
+"This request cannot be decided so.": "Diese Anfrage kann nicht auf diese Weise entschieden werden.",
+"This IRC sender is not identified with the network's services, so anyone may use the nick and it cannot be made an admin. Identify with NickServ, then write again.": "Dieser IRC-Absender ist bei den Diensten des Netzwerks nicht identifiziert; jeder kann den Nickname verwenden, daher kann er nicht zum Administrator gemacht werden. Identifizieren Sie sich bei NickServ und schreiben Sie dann erneut.",
+"This IRC sender is not identified with the network's services: whoever takes the nick next is answered too.": "Dieser IRC-Absender ist bei den Diensten des Netzwerks nicht identifiziert: Wer den Nickname als Nächstes übernimmt, erhält ebenfalls Antworten.",
+"Done: the chat can ask for approval again.": "Erledigt: Der Chat kann erneut um Freigabe bitten.",
+"Nothing approved or declined has that id. Run `{0}` to see the ids.": "Kein freigegebener oder abgelehnter Chat hat diese ID. Führen Sie `{0}` aus, um die IDs zu sehen.",
+"ACCESS_APPROVAL_PLATFORMS is set in the environment, which overrides .env; change it there.": "ACCESS_APPROVAL_PLATFORMS ist in der Umgebung gesetzt, die Vorrang vor .env hat; ändern Sie den Wert dort.",
+"forget an approval or a decline, so the chat asks again": "hebt eine Freigabe oder Ablehnung auf, sodass der Chat erneut anfragt",
+"the chat's id, as the list shows it": "die ID des Chats, wie die Liste sie anzeigt"
 }

@@ -142,6 +142,15 @@ def _shown(entries) -> str:
     return head + (f" and {len(entries) - 3} more" if len(entries) > 3 else "")
 
 
+def _approved_admins(base: Path) -> frozenset[str]:
+    """Accounts made admin with This is me, which ADMIN_IDS does not list."""
+    from .approvals import approved_admins, runtime_of
+    try:
+        return approved_admins(runtime_of(base))
+    except (OSError, ValueError):
+        return frozenset()
+
+
 def _identity_findings(identity: access.Identity) -> list["Finding"]:
     """What the admin and allowlist settings will not do as written.
 
@@ -367,7 +376,7 @@ def check_config(root: Path | None = None, env: dict | None = None) -> list[Find
               if i.isdigit()}
 
     admin_only = str(configured.get("REACT_LEARN_ADMIN_ONLY") or "").strip().lower()
-    if admin_only in ("1", "true", "yes", "on") and not identity.admins:
+    if admin_only in ("1", "true", "yes", "on") and not identity.admins and not _approved_admins(base):
         findings.append(Finding(
             "WARN", "REACT_LEARN_ADMIN_ONLY",
             "is on while ADMIN_IDS is empty, so no reaction on a chat platform"

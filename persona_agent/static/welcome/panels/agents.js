@@ -313,8 +313,11 @@ PA.strings({
     head.append(state);
     box.append(head);
     box.append(make("p", "field-note", PA.t(`agents_desc_${SHORT[item.id]}`)));
-    const usable = item.installed;
-    if (!usable && item.id !== "dsh")
+    // Connecting writes the assistant's own settings on that computer: only there.
+    const remote = Boolean(PA.state?.remote);
+    const usable = item.installed && !remote;
+    if (remote) box.append(make("p", "field-note agents-remote", PA.t("local_only")));
+    else if (!item.installed && item.id !== "dsh")
       box.append(make("p", "field-note", PA.t("agents_install_first")));
     const linked = item.state !== "off";
     if (usable && item.state === "on" && item.react !== null) {
@@ -435,6 +438,12 @@ PA.strings({
     const folder = draft.folder ?? info.folder;
     if (info.connected)
       details.append(make("p", "agents-done", PA.t("agents_astrbot_connected", { folder: info.folder })));
+    // Connecting and removing act on a folder of that computer; the reply lists stay open here.
+    if (PA.state?.remote) {
+      details.append(make("p", "field-note agents-remote", PA.t("local_only")));
+      if (info.connected) details.append(allowList(info));
+      return details;
+    }
     const [folderLabel, folderInput] = field("agents-folder", PA.t("agents_astrbot_folder"), folder,
       (value) => (draft.folder = value));
     details.append(folderLabel, folderInput);

@@ -262,7 +262,7 @@ and the session can be read in transit, so use one of these:
   ```
   location / {
       proxy_pass http://127.0.0.1:8090;
-      proxy_set_header Host $host;
+      proxy_set_header Host $http_host;
       proxy_set_header X-Forwarded-For $remote_addr;
       proxy_set_header X-Forwarded-Proto $scheme;
   }
@@ -333,6 +333,13 @@ personagent personagent doctor` checks the setup. Map the port as
 `127.0.0.1:8090:8090` to keep the page to an SSH tunnel or a proxy on the
 same host. A bind mount must be writable by user 1000.
 
+Docker Desktop on Windows and macOS passes every connection to a published
+port into the container from one gateway address, so the page sees all
+devices as one: five wrong passwords from any device pause sign-in for every
+device for 15 minutes. On Linux each device keeps its own address. With
+Docker Desktop, keep the port off networks you do not trust: publish it as
+`127.0.0.1:8090:8090` and use an SSH tunnel, or reach it through Tailscale.
+
 What a container does not have:
 
 - **The app window, the notification-area icon and the desktop icon.** There
@@ -343,6 +350,10 @@ What a container does not have:
   writable home (`/data`) and outbound access to PyPI and GitHub, or their
   mirrors (`PERSONAGENT_MIRROR`). It is downloaded into the volume, several
   hundred megabytes.
+- **Your time zone.** A container's clock is UTC. Set
+  `PERSONA_TZ_OFFSET_HOURS` (your hours ahead of UTC, such as `8` or `-5`) in
+  `compose.yaml` or with `-e`, or the character tells the hour and keeps its
+  quiet hours at night by UTC.
 
 The image's health check asks the page's `/health`. Images are published for
 amd64 and arm64 with each release, tagged with the version and `latest`.
@@ -434,12 +445,17 @@ made in `.env` itself takes effect after personagent restarts.
   day; an unapproved group hears at most one line a day, and only when
   someone addresses the character. The request waits on **Connect apps**
   with **Approve**, **Decline** and, for a private message, **This is me**,
-  which also adds the account to `ADMIN_IDS`. On a server,
-  `personagent access` lists the requests and `personagent access approve
-  CODE` (or `decline`, `admin`) decides one. Approving adds the id to
-  `ACCESS_DM_USERS` or `ACCESS_GROUPS`, and the running service reads the
-  change from `.env` at once. Requests expire after three days; at most
-  twenty wait per platform. `personagent access policy <platform> open` (or
+  which makes the account an admin once you type the code your own chat
+  received. On a server, `personagent access` lists the requests and
+  `personagent access approve CODE` (or `decline`, `admin`) decides one.
+  Approved and declined chats are kept in `approvals.json` in the runtime
+  folder, which the running service reads at once; they are added to
+  `ADMIN_IDS`, `ACCESS_DM_USERS` and `ACCESS_GROUPS` whether those come from
+  `.env` or the environment, and never change them. A declined chat stays
+  unanswered whatever the policy. Requests expire after three days; at most
+  twenty direct messages and ten groups wait per platform. A platform asks
+  only when it is connected for the first time with no decision recorded and
+  no chats yet. `personagent access policy <platform> open` (or
   **Answer new chats without approval** on the page) turns approval off for
   a platform.
 - **Make yourself the admin.** Send the character one private message, then

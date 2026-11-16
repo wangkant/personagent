@@ -253,6 +253,8 @@ def test_applying_writes_each_part_and_keeps_copies(home):
     (home / "data").mkdir()
     (home / "data" / "examples.en.jsonl").write_text('{"context": [], "reply": "mine"}\n', encoding="utf-8")
     (home / "persona.card.json").write_text(json.dumps({"reply_style": {"emoji": True}}), encoding="utf-8")
+    mine = bytes([0xFF, 0xD8, 0xFF]) + b"my own picture"
+    (home / "avatar.jpg").write_bytes(mine)
     raw = v2(nickname="Lu", character_book={"entries": [{"keys": ["oven"], "content": "Old.", "enabled": True}]})
     card = charcard.read(png({"chara": raw}))
     text = charcard.compose(card, name="Luna", lang="en")
@@ -267,6 +269,9 @@ def test_applying_writes_each_part_and_keeps_copies(home):
     assert json.loads((home / "persona.card.json").read_text(encoding="utf-8")) == {
         "reply_style": {"emoji": True}, "aliases": ["Lu"]}
     assert sw.own_avatar(home) is not None
+    # The picture the person had is kept, as their persona is.
+    assert (home / "avatar.jpg.bak").read_bytes() == mine and len(list(home.glob("avatar.jpg.*.bak"))) == 1
+    assert any("avatar.jpg" in kept for kept in done["backups"])
 
 
 def test_only_the_chosen_parts_change(home):
@@ -470,3 +475,23 @@ def test_the_terminal_imports_and_exports_a_card(home, tmp_path_factory, capsys,
     assert charcard.read(target.read_bytes()).name == "Luna"
     assert cli.main(["--home", str(home), "character", "export", str(target)]) == 2
     assert cli.main(["--home", str(home), "character", "import", str(folder / "missing.png"), "--yes"]) == 2
+
+
+def test_a_card_of_unclosed_comments_is_read_at_once_and_control_characters_go():
+    import time as _time
+
+    started = _time.monotonic()
+    text = charcard.resolve("{{//" * 80_000 + " kept {{// gone }} too", "Luna", "you")
+    assert _time.monotonic() - started < 2.0, "comments are stripped in one pass"
+    # A comment runs to the first close after it, however many openings come between.
+    assert text == " too"
+    assert charcard.resolve("a{{// one }}b{{//two}}c", "Luna", "you") == "abc"
+    assert charcard._text("Lu\x1b[8mna\x07\r\nsecond\tline\x9b") == "Lu[8mna\nsecond\tline"
+
+
+def test_broken_compressed_card_data_is_a_broken_card():
+    chunk = b"chara\x00\x01\x00\x00\x00" + b"this is not zlib data"
+    body = b"iTXt" + chunk
+    png = charcard.PNG_MAGIC + struct.pack(">I", len(chunk)) + body + struct.pack(">I", zlib.crc32(body))
+    with pytest.raises(charcard.CardError, match="card_broken"):
+        charcard.read(png + struct.pack(">I", 0) + b"IEND" + struct.pack(">I", zlib.crc32(b"IEND")))

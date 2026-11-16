@@ -374,6 +374,11 @@ def _ids(value) -> list[str]:
 
 def _allow_astrbot(workspace, payload: dict) -> None:
     data = _folder(workspace, payload.get("dataDir"))
+    # Another device changes the reply lists of the AstrBot connected here, and no other folder.
+    if payload.get("_remote"):
+        saved = _remembered(workspace)
+        if saved is None or not _same(data, sw.resolve_astrbot_data(saved) or saved):
+            raise ValueError("local_only")
     groups, dm_users = _ids(payload.get("groups", [])), _ids(payload.get("dmUsers", []))
     if not _ours(data, workspace.config().get("CONNECTOR_TOKEN", "")):
         raise ValueError("agents_not_connected")
@@ -434,7 +439,9 @@ def mount(app, workspace, body) -> None:
 
     def route(path: str, work) -> None:
         async def handler(request: Request):
-            return await asyncio.to_thread(one_at_a_time(work), await body(request))
+            payload = await body(request)
+            payload["_remote"] = bool(getattr(request.state, "remote", False))
+            return await asyncio.to_thread(one_at_a_time(work), payload)
         app.post(f"/api/agents/{path}")(handler)
 
     for path, work in routes.items():

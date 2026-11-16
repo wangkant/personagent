@@ -140,6 +140,7 @@ def test_install_status_restart_and_remove_on_linux(home, standins, monkeypatch,
           and ["systemctl", "--user", "enable", "--now"] in names, str(names))
     check("lingering asked for", any(call[:2] == ["loginctl", "enable-linger"] for call in standins()))
     check("its refusal is explained", "sudo loginctl enable-linger" in said)
+    check("and no reboot is promised without it", "after a reboot" not in said and "while you are logged in" in said)
     log = home / "runtime" / "desktop" / "service.log"
     check("the log exists before the service writes it", log.is_file())
     assert service.main(["status"]) == 0
@@ -198,3 +199,10 @@ def test_windows_uses_the_apps_own_start_at_sign_in(home, monkeypatch, capsys):
     assert service.main(["remove"]) == 0
     check("removed through the same", "Remove-Item" in ran[1])
     assert service.main(["restart"]) == 1
+
+
+def test_the_launch_agent_says_which_manager_started_it(home):
+    import plistlib
+
+    made = plistlib.loads(service.plist(home))
+    check("so that a refusal can end cleanly there", made["EnvironmentVariables"]["PERSONAGENT_SERVICE"] == "launchd")

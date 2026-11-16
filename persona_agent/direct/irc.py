@@ -439,12 +439,11 @@ class IRC(Platform):
     # ------------------------------------------------------------ events
 
     def sender_id(self, nick: str, account: str | None) -> str:
-        """Who sent a message. Where the server reports services accounts, the
-        account, so that a nick alone, which anyone may take, never passes for
-        the admin's id; a sender not logged in is marked with "~"."""
-        if not self.accounts:
-            return self.lower(nick)
-        if account and account != "*":
+        """Who sent a message: the services account where the server reports
+        one, so that a nick alone, which anyone may take, never passes for the
+        admin's id. Any other sender, on a network without account tags too,
+        is marked with "~" as one the network did not vouch for."""
+        if self.accounts and account and account != "*":
             return self.lower(account)
         return "~" + self.lower(nick)
 

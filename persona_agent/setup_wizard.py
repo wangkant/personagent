@@ -894,20 +894,32 @@ def _replace(source, target) -> None:
 
 def write_env(env_path: Path, values: dict) -> None:
     """Merge `values` into .env through a 0600 temp file and an atomic replace,
-    so an interrupted run never leaves a truncated or world-readable .env."""
-    text = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
-    updated = set_env_values(text, values)
+    so an interrupted run never leaves a truncated or world-readable .env.
+    One writer at a time, across processes (the page, the terminal, the
+    service), each with a temporary file of its own, so no write is lost."""
+    import tempfile
+
+    from persona_agent.storage import FileLock
+
     env_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = env_path.with_name(env_path.name + ".tmp")
-    # The mode applies only when the file is created, so start fresh.
-    tmp.unlink(missing_ok=True)
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, SECRET_FILE_MODE)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(updated)
-    # Keep a stricter mode the operator chose, never a wider one.
-    if env_path.exists():
-        os.chmod(tmp, env_path.stat().st_mode & SECRET_FILE_MODE)
-    _replace(tmp, env_path)
+    with FileLock(env_path.with_name("." + env_path.name + ".lock"), timeout=10):
+        text = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+        updated = set_env_values(text, values)
+        # An earlier release's fixed temporary name, left by an interrupted run.
+        env_path.with_name(env_path.name + ".tmp").unlink(missing_ok=True)
+        fd, name = tempfile.mkstemp(dir=env_path.parent, prefix="." + env_path.name + ".", suffix=".tmp")
+        tmp = Path(name)
+        try:
+            os.chmod(tmp, SECRET_FILE_MODE)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(updated)
+            # Keep a stricter mode the operator chose, never a wider one.
+            if env_path.exists():
+                os.chmod(tmp, env_path.stat().st_mode & SECRET_FILE_MODE)
+            _replace(tmp, env_path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
 
 
 def secure_env_file(env_path: Path) -> None:
@@ -2488,7 +2500,7 @@ def connect_platform(home: Path, kind: str, given: dict, *, remove: bool = False
                      no_input: bool = False, launcher: Launcher | None = None) -> int:
     """`personagent connect <platform>`: what the page's Connect and
     Disconnect do, with the same checks and the same saved form."""
-    from persona_agent import access, approvals, direct_setup
+    from persona_agent import approvals, direct_setup
     from persona_agent.direct import base as direct_base
 
     spec = connections.platform(kind)
@@ -2541,11 +2553,11 @@ def connect_platform(home: Path, kind: str, given: dict, *, remove: bool = False
             print(t("direct_failed", name=name), file=sys.stderr)
             print(t("direct_unexpected", error=type(exc).__name__), file=sys.stderr)
             return 1
-        # Connected for the first time: new chats there wait for the admin.
-        fresh = kind not in direct_setup.stored(home) and kind not in _via_astrbot(home)
+        # Connected before: the owner's choice there stands, and approval is not switched on.
+        connected = kind in direct_setup.stored(home) or kind in _via_astrbot(home)
         released = direct_setup.store(home, spec, values)
         direct_setup.clear_state(home, kind)
-        asks = fresh and kind not in access.NOTHING_TO_APPROVE and approvals.set_policy(home, kind, True)
+        asks = approvals.adopt(home, kind, connected=connected)
     except (KeyboardInterrupt, EOFError):
         print()
         _say(t("direct_stopped"))

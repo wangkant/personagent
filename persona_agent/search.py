@@ -9,7 +9,6 @@ from contextlib import contextmanager
 
 from . import decision_log
 from . import mcp_tools
-from .access import ADMIN_MODE
 from .llm import purpose
 from .mcp_client import describe
 from .textproc import (
@@ -50,20 +49,22 @@ def tool_caller(admin: bool):
         TOOL_CALLER.reset(token)
 
 
-def caller_for_mode(mode: str) -> bool:
-    """A group turn is the admin's only when the admin called the character."""
-    return mode == ADMIN_MODE
-
-
 class SearchHint(str):
     """The trigger, which alone decides whether to ask; `lines` is what the
-    decision then reads: the lines before it as `name: text`, trigger last."""
+    decision then reads: the lines before it as `name: text`, trigger last.
+    `admins` says, line by line, whether an admin wrote it."""
     lines: tuple[str, ...] = ()
+    admins: tuple[bool, ...] = ()
 
-    def __new__(cls, trigger: str, lines=()):
+    def __new__(cls, trigger: str, lines=(), admins=()):
         hint = super().__new__(cls, trigger)
         hint.lines = tuple(lines)
+        hint.admins = tuple(bool(a) for a in admins)
         return hint
+
+    @property
+    def trigger_admin(self) -> bool:
+        return len(self.admins) == len(self.lines) and bool(self.admins) and self.admins[-1]
 
 
 class WebSearch:
@@ -179,6 +180,13 @@ class WebSearch:
                 chosen_from[function["function"]["name"]] = offer
         if not chosen_from and not self._might_need_search(latest):
             return ""
+        if context and any(o.who != ANYONE for o in chosen_from.values()):
+            # With the admin's own tools on offer, the decision reads only what an
+            # admin wrote: another member's line could steer the call.
+            admins = getattr(hint, "admins", ())
+            kept = ([line for line, mine in zip(context[:-1], admins[:-1]) if mine]
+                    if len(admins) == len(context) else [])
+            context = kept + [context[-1]]
         decided_on = "\n".join(
             [_truncate_framed(line, 200) for line in context[:-1]]
             + [_truncate_framed(context[-1] if context else latest, 800)])
@@ -235,6 +243,17 @@ class WebSearch:
             self._thinking_off(payload, url)
             with purpose("tools" if chosen_from else "search"):
                 resp = await self._post_chat(url, key, payload, timeout=20)
+            if (chosen_from and 400 <= resp.status_code < 500 and resp.status_code not in (401, 403, 429)
+                    and self._might_need_search(latest)):
+                # A vendor that refuses a third party's schema still gets the search.
+                logger.warning("[Agent] the tool decision was refused (HTTP %d); asking about web search alone",
+                               resp.status_code)
+                payload["tools"] = [tool]
+                system = payload["messages"][0]["content"].replace(TOOL_RULES, "")
+                payload["messages"] = [{**payload["messages"][0], "content": system}, *payload["messages"][1:]]
+                chosen_from = {}
+                with purpose("search"):
+                    resp = await self._post_chat(url, key, payload, timeout=20)
             if resp.status_code != 200:
                 logger.warning("[Agent] search-decide HTTP %d: %s", resp.status_code, resp.text[:200])
                 return ""

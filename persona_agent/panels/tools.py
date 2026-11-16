@@ -12,7 +12,7 @@ from .. import mcp_tools
 ERRORS: frozenset[str] = frozenset({
     "tools_bad_snippet", "tools_bad_name", "tools_bad_url", "tools_name_taken", "tools_too_many",
     "tools_unknown_server", "tools_unknown_tool", "tools_sse_unsupported", "tools_write_failed",
-    "tools_bad_request", "tools_local_only",
+    "tools_bad_request", "tools_local_only", "tools_local_address", "tools_file_damaged",
 })
 MAX_FIELD_CHARS = 8192
 
@@ -62,6 +62,10 @@ def add(workspace, payload: dict) -> dict:
     # A program runs on this computer with its owner's rights: not for a session from another device.
     if payload.get("_remote") and any("command" in spec for spec in servers.values()):
         raise ValueError("tools_local_only")
+    # Nor an address that reaches this computer or its network from here.
+    if payload.get("_remote") and not all(mcp_tools.public_address(spec["url"])
+                                          for spec in servers.values() if "url" in spec):
+        raise ValueError("tools_local_address")
     added = mcp_tools.add_servers(workspace.home, servers)
     return {**overview(workspace), "added": added}
 
@@ -104,14 +108,25 @@ def mount(app, workspace, body) -> None:
     for path, work in {"add": lambda p: add(workspace, p), "remove": remove, "set": setting}.items():
         route(path, work)
 
+    async def reachable_from(request: Request, server: str) -> None:
+        # Checked on every use, so no later change to mcp.json can point a remote session inward.
+        if getattr(request.state, "remote", False):
+            spec = mcp_tools.load_config(workspace.home)["mcpServers"].get(server) or {}
+            if spec.get("url") and not await asyncio.to_thread(mcp_tools.public_address, spec["url"]):
+                raise ValueError("tools_local_address")
+
     @app.post("/api/tools/check")
     async def tools_check(request: Request):
         payload = await body(request)
-        return {**await mcp_tools.check(workspace.home, str(payload.get("server") or "")),
+        server = str(payload.get("server") or "")
+        await reachable_from(request, server)
+        return {**await mcp_tools.check(workspace.home, server),
                 "view": await asyncio.to_thread(overview, workspace)}
 
     @app.post("/api/tools/call")
     async def tools_call(request: Request):
         payload = await body(request)
-        return await mcp_tools.call_by_hand(workspace.home, str(payload.get("server") or ""),
+        server = str(payload.get("server") or "")
+        await reachable_from(request, server)
+        return await mcp_tools.call_by_hand(workspace.home, server,
                                             str(payload.get("tool") or ""), payload.get("arguments"))

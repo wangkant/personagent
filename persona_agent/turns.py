@@ -402,7 +402,7 @@ class Turns:
                     self._connector_inflight.pop(route_key, None)
                 self._trim_connector_convs()
         # Only an admitted turn may leave a handle behind.
-        if (route_key and sink.owned
+        if (route_key and sink.owned and not getattr(sink, "held", False)
                 and (connector["reply_handle"] or connector["connector_id"])):
             dm = payload.get("message_type") == "private"
             self.connector_handles.record(
@@ -417,6 +417,12 @@ class Turns:
         return {"handled": bool(handled), "owned": sink.owned,
                 "replies": sink.items}
 
+    def _mark_held(self) -> None:
+        """A held or declined chat: claimed, yet no route is kept for it."""
+        sink = current_sink.get()
+        if sink is not None:
+            sink.held = True
+
     def _claim_connector_turn(self) -> None:
         """Mark the connector turn as ours once admission passes, whatever it says."""
         sink = current_sink.get()
@@ -424,7 +430,7 @@ class Turns:
             sink.owned = True
 
     def _live(self, key: str, startup):
-        """A setting as .env says it now, when an approval or the policy has
+        """A setting as .env says it now, when the page or the terminal has
         changed it since the start; else `startup`."""
         env = getattr(self, "settings_env", None)
         value = env.get(key) if env is not None else None
@@ -433,21 +439,28 @@ class Turns:
     def _admins(self) -> frozenset[str]:
         """Every admin account (ADMIN_IDS), canonical; re-read since it is edited live."""
         return access.parse_ids(
-            self._live("ADMIN_IDS", self.admin_ids),
-            native_platforms=self.connector_qq_platforms,
-        ) | access.page_owner(paths.runtime_dir())
+            self.admin_ids, native_platforms=self.connector_qq_platforms,
+        ) | access.page_owner(paths.runtime_dir()) | self._approved("admins")
 
     def _dm_allowlist(self) -> frozenset[str]:
         """ACCESS_DM_USERS, canonical."""
         return access.parse_ids(
-            self._live("ACCESS_DM_USERS", self.access_dm_users),
+            self.access_dm_users,
             native_platforms=self.connector_qq_platforms)
 
     def _group_allowlist(self) -> frozenset[str]:
         """ACCESS_GROUPS, canonical."""
         return access.parse_ids(
-            self._live("ACCESS_GROUPS", self.access_groups),
-            native_platforms=self.connector_qq_platforms)
+            self.access_groups, native_platforms=self.connector_qq_platforms)
+
+    def _approved(self, which: str) -> frozenset[str]:
+        """Chats the admin approved ("dm", "group"), made admin ("admins") or
+        declined ("declined"), read again whenever the file changes."""
+        try:
+            return self._approvals().view()[which]
+        except OSError as exc:
+            logger.warning("[Agent] the approvals could not be read: %s", type(exc).__name__)
+            return frozenset()
 
     def _approval_platforms(self) -> frozenset[str]:
         """ACCESS_APPROVAL_PLATFORMS: where new chats wait for the admin."""
@@ -457,8 +470,9 @@ class Turns:
     def _approvals(self) -> approvals.Store:
         store = self.__dict__.get("_approval_store")
         if store is None:
-            store = self._approval_store = approvals.Store(
-                approvals.path_in(self.memory_file.parent))
+            # The server names the home's file (approvals.store_path); a bare agent keeps it beside its memory.
+            path = getattr(self, "approvals_file", None) or approvals.path_in(self.memory_file.parent)
+            store = self._approval_store = approvals.Store(path)
         return store
 
     async def _hold_for_approval(self, kind: str, chat_id: str, user_id: str,
@@ -468,6 +482,7 @@ class Turns:
         in a group, only when the message is addressed to the character."""
         # Claimed, so a connector's own model does not answer the stranger either.
         self._claim_connector_turn()
+        self._mark_held()
         key = channels.dm_routing_key(user_id) if kind == "dm" else chat_id
         self._log_refusal(key, access.UNAPPROVED)
         # Only the words as written: no picture is read, no link fetched.
@@ -482,9 +497,10 @@ class Turns:
         name = (str(payload.get("_conversation_name") or "") if kind == "group"
                 else str(sender.get("card") or sender.get("nickname") or ""))
         try:
+            has_admin = bool(access.entries_on(channels.platform_of(user_id), self._admins()))
             code, tell = await asyncio.to_thread(
                 self._approvals().note, platform=platform, kind=kind, chat_id=chat_id,
-                name=name, words=words)
+                name=name, words=words, has_admin=has_admin)
         except Exception as exc:
             logger.warning("[Agent] the approval request was not kept: %s", type(exc).__name__)
             return False
@@ -496,6 +512,14 @@ class Turns:
         else:
             sent = await self._send_group(chat_id, lines["approval_group"][0])
         return bool(sent.success)
+
+    def _silent_for_decline(self, key: str) -> bool:
+        """A chat the admin declined: nothing is said, whatever the policy,
+        and a connector's own model stays quiet too."""
+        self._claim_connector_turn()
+        self._mark_held()
+        self._log_refusal(key, "declined by the admin (personagent access)")
+        return False
 
     def _paused_groups(self) -> frozenset[str]:
         """ACCESS_PAUSED_GROUPS, canonical."""
@@ -639,16 +663,23 @@ class Turns:
         platform = (str(getattr(sink, "platform", "") or "") if via_connector
                     else channels.NATIVE_PLATFORM)
         waiting_on = self._approval_platforms()
+        # Approvals count only where the id cannot be forged: a namespaced id on the QQ webhook is refused below.
+        trusted = via_connector or (":" not in user_id and ":" not in str(payload.get("group_id", "")))
         if message_type == "private":
             admins = self._admins()
             allowed = self._dm_allowlist()
-            if access.awaits_dm_approval(user_id, platform, admins, allowed, waiting_on,
+            if (trusted and user_id in self._approved("declined")
+                    and not access.is_admin(user_id, admins) and user_id not in allowed):
+                return self._silent_for_decline(channels.dm_routing_key(user_id))
+            approved = trusted and user_id in self._approved("dm")
+            if access.awaits_dm_approval(user_id, platform, admins,
+                                         allowed | ({user_id} if approved else set()), waiting_on,
                                          via_connector=via_connector):
                 if proactive:
                     self._claim_connector_turn()
                     return False
                 return await self._hold_for_approval("dm", user_id, user_id, platform, payload)
-            refusal = access.dm_refusal(
+            refusal = "" if approved else access.dm_refusal(
                 user_id, admins, allowed,
                 via_connector=via_connector, prefiltered=prefiltered)
             if refusal:
@@ -670,10 +701,13 @@ class Turns:
         if not group_id:
             return False
         groups = self._group_allowlist()
-        if access.awaits_group_approval(group_id, platform, groups, waiting_on,
-                                        via_connector=via_connector, user_id=user_id):
+        if trusted and group_id in self._approved("declined") and group_id not in groups:
+            return self._silent_for_decline(group_id)
+        approved = trusted and group_id in self._approved("group")
+        if access.awaits_group_approval(group_id, platform, groups | ({group_id} if approved else set()),
+                                        waiting_on, via_connector=via_connector, user_id=user_id):
             return await self._hold_for_approval("group", group_id, user_id, platform, payload)
-        refusal = access.group_refusal(
+        refusal = "" if approved else access.group_refusal(
             group_id, groups,
             via_connector=via_connector, prefiltered=prefiltered,
             user_id=user_id)

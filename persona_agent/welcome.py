@@ -105,7 +105,9 @@ LOCAL_ONLY = frozenset({
     ("POST", "/api/health/open"), ("POST", "/api/runtime/background"), ("POST", "/api/runtime/hide"),
     ("POST", "/api/runtime/update"),
     # A card is saved into a folder of this computer.
-    ("POST", "/api/cards/export")})
+    ("POST", "/api/cards/export"),
+    # A coding assistant's own settings, or an AstrBot folder the caller names, on this computer.
+    ("POST", "/api/agents/coding"), ("POST", "/api/agents/astrbot"), ("POST", "/api/agents/astrbot/remove")})
 SIGNIN_ASSETS = ("signin.js", "signin.css")
 # Seconds between the headless page's checks that the character still runs.
 KEEP_RUNNING_S = 5.0
@@ -169,7 +171,7 @@ def _card_aliases(home: Path, values: dict) -> tuple:
     return tuple(dict.fromkeys(n for n in names if n))
 
 
-def reach(kind: str, values: dict) -> str:
+def reach(kind: str, values: dict, asking=None) -> str:
     """Who the character answers on one platform under the reply settings:
     "all", "groups_listed", "people_listed" or "listed"; "dm_all" and
     "dm_listed" on a platform without groups. Where new chats wait for the
@@ -177,7 +179,8 @@ def reach(kind: str, values: dict) -> str:
     groups are the channels typed in at connecting."""
     from . import access
 
-    if approval_applies(kind) and kind in access.approval_platforms(values.get(access.APPROVAL_SETTING)):
+    asking = access.approval_platforms(values.get(access.APPROVAL_SETTING)) if asking is None else asking
+    if approval_applies(kind) and kind in asking:
         if kind in access.CHANNELS_LISTED_AT_CONNECT:
             return "channels_approval"
         return "approval" if conn.platform(kind).groups else "dm_approval"
@@ -255,6 +258,7 @@ class Workspace:
         self._stale_state = ""
         # A platform the running job connects for the first time.
         self._new_platform = ""
+        self._was_connected = False
         self._history_path = self.home / "runtime" / "desktop" / "browser-chat.json"
         self._pictures = self._history_path.with_name("chat-pictures")
         saved = sw._read_json(self._history_path)
@@ -293,6 +297,7 @@ class Workspace:
             stored = direct_base.load_credentials(self.home)
             states = direct_base.read_status(self.home)
             direct_on = self.services.running("direct")
+            asking = approvals.current_policy(self.home)
             platforms = [p.kind for p in conn.PLATFORMS
                          if p.kind in stored or (p.kind in via_astrbot and p.kind not in stored)]
             status, details = {}, {}
@@ -331,10 +336,9 @@ class Workspace:
                     # Changes with the file, so the page fetches a replaced picture again.
                     "ownAvatar": self._own_avatar_version(own_picture),
                     "platforms": platforms, "platformStatus": status, "platformDetail": details,
-                    "platformReach": {kind: reach(kind, values) for kind in platforms},
+                    "platformReach": {kind: reach(kind, values, asking) for kind in platforms},
                     # Where new chats wait for the admin, and how many wait now.
-                    "platformApproval": {kind: kind in access.approval_platforms(
-                        values.get(access.APPROVAL_SETTING)) for kind in platforms if approval_applies(kind)},
+                    "platformApproval": {kind: kind in asking for kind in platforms if approval_applies(kind)},
                     "approvalsWaiting": self._waiting_counts(platforms),
                     "agentRunning": self.services.running("agent"),
                     # "Reply to messages" is off: running, yet it answers nobody.
@@ -391,7 +395,10 @@ class Workspace:
             if not key and taken:
                 # A key the page found in the environment and never saw.
                 from .panels import detect
-                if detect.ENV_KEYS.get(taken) == provider.key:
+                # Only to that service's own address: a key must not follow a typed one.
+                home_of_key = sw.provider_for_base(base)
+                if (detect.ENV_KEYS.get(taken) == provider.key
+                        and home_of_key is not None and home_of_key.key == provider.key):
                     key = detect.env_key(taken)
             if not key and same:
                 key = old.get("LLM_API_KEY", "")
@@ -839,7 +846,9 @@ class Workspace:
                 raise ValueError("invalid_action")
             own = bool(args) and conn.is_direct(kind)
             # A platform connected for the first time starts out asking for approval of new chats.
-            self._new_platform = kind if action in ("scan", "connect") and not self._connected(kind) else ""
+            self._new_platform = kind if action in ("scan", "connect") else ""
+            # Already connected (from before approval existed, or set up again): the owner's choice stands.
+            self._was_connected = bool(self._new_platform) and self._connected(kind)
             stage = ("start" if action in ("start", "disconnect") else
                      "prepare" if own and action == "scan" else "check" if own else "install")
             self.job = {"state": "working", "stage": stage, "error": "", "action": action,
@@ -862,8 +871,8 @@ class Workspace:
             if self._closed or self._cancelled:
                 raise RuntimeError("cancelled")
             # Written before anything starts, so no message gets past it; the running service reads it at once.
-            if self._new_platform and approval_applies(self._new_platform):
-                approvals.set_policy(self.home, self._new_platform, True)
+            if self._new_platform:
+                approvals.adopt(self.home, self._new_platform, connected=self._was_connected)
             self._stage("start")
             self.services.start_agent()
             if self._closed:
@@ -1567,7 +1576,8 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None,
             if fetched and fetched not in ("same-origin", "none"):
                 return refuse()
             if not pageaccess.same_origin(request.headers.get("origin", ""), request.headers.get("host", "")):
-                return refuse()
+                # The sign-in page names the likely cause (a proxy's Host); both headers are the caller's own.
+                return refuse("signin_origin" if path.startswith("/auth/") else "forbidden")
         request.state.signed_in = gate.session(request.cookies.get(pageaccess.COOKIE))
         if path.startswith("/api/"):
             if not request.state.signed_in or request.headers.get(pageaccess.SESSION_HEADER) != "1":
@@ -1612,7 +1622,7 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None,
                    "field_required", "invalid_field", "invalid_persona", "invalid_feature",
                    "invalid_chat", "activity_unavailable", "activity_changed", "forget_needs_activity",
                    "activity_restore_gone", "activity_restore_exists",
-                   "avatar_type", "avatar_too_large"}
+                   "avatar_type", "avatar_too_large", "local_only"}
         error = str(exc)
         known = error in allowed or any(
             error in importlib.import_module(f"{__package__}.panels.{name}").ERRORS for name in PANELS)
@@ -1633,21 +1643,31 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None,
     @app.post("/auth/signin")
     async def sign_in(request: Request):
         address = request.client.host if request.client else ""
-        wait = gate.limiter.wait(address)
-        if wait:
-            return JSONResponse({"error": "signin_locked", "seconds": wait}, status_code=429)
         payload = await body(request, 4096)
-        attempt = payload.get("password")
-        stored = gate.settings().password
-        ok = isinstance(attempt, str) and bool(stored) and await asyncio.to_thread(
-            pageaccess.verify, stored, attempt)
+        # Full: refused at once, and not held against this caller.
+        if not gate.checks.take():
+            return JSONResponse({"error": "signin_busy", "seconds": 1}, status_code=429)
+        try:
+            state, wait = gate.limiter.begin(address)
+            if state != "ok":
+                return JSONResponse({"error": "signin_locked" if state == "locked" else "signin_busy",
+                                     "seconds": wait}, status_code=429)
+            attempt = payload.get("password")
+            stored = gate.settings().password
+            ok = False
+            try:
+                if isinstance(attempt, str) and stored:
+                    ok = await asyncio.get_running_loop().run_in_executor(
+                        gate.checks.pool(), pageaccess.verify, stored, attempt)
+            finally:
+                left = gate.limiter.finish(address, ok)
+        finally:
+            gate.checks.give_back()
         if not ok:
-            left = gate.limiter.failed(address)
             await _fail_wait()
             if not left:
                 return JSONResponse({"error": "signin_locked", "seconds": pageaccess.LOCK_S}, status_code=429)
             return JSONResponse({"error": "signin_wrong", "left": left}, status_code=401)
-        gate.limiter.succeeded(address)
         response = JSONResponse({"ok": True})
         response.set_cookie(pageaccess.COOKIE, gate.sessions.create(pageaccess.fingerprint(stored)),
                             max_age=pageaccess.SESSION_S, path="/", httponly=True, samesite="strict",
@@ -2145,7 +2165,7 @@ def serve_headless(home: Path) -> int:
         damaged = _memory_problem(home)
         if damaged:
             print(damaged, file=sys.stderr)
-            return 1
+            return 2
         if not sw.env_get(home / ".env", "CONNECTOR_TOKEN"):
             # As `up` without the page: the connectors sign with it.
             sw.write_env(home / ".env", {"CONNECTOR_TOKEN": secrets.token_urlsafe(32)})

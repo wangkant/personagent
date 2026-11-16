@@ -667,5 +667,18 @@
 "Lingering is off, so it stops when you log out. To keep it running, run: sudo loginctl enable-linger {0}": "lingering がオフのため、ログアウトすると停止します。動かし続けるには、次を実行してください：sudo loginctl enable-linger {0}",
 "Running now: yes.": "現在実行中：はい。",
 "Running now: no.": "現在実行中：いいえ。",
-"Restarted.": "再起動しました。"
+"Restarted.": "再起動しました。",
+"Approved (answered, besides the reply settings):": "承認済み（返信設定に加えて返信します）：",
+"admin": "管理者",
+"`{0}` forgets an approval or a decline, so the chat asks again.": "`{0}` で承認または拒否を取り消すと、そのチャットは再び申請します。",
+"This request cannot be decided so.": "この申請はその方法では処理できません。",
+"This IRC sender is not identified with the network's services, so anyone may use the nick and it cannot be made an admin. Identify with NickServ, then write again.": "この IRC の送信者はネットワークのサービスで識別（identify）されていないため、誰でもこのニックネームを使えます。そのため管理者にはできません。NickServ で識別してから、もう一度メッセージを送ってください。",
+"This IRC sender is not identified with the network's services: whoever takes the nick next is answered too.": "この IRC の送信者はネットワークのサービスで識別（identify）されていません。次にこのニックネームを使う人にも返信することになります。",
+"Done: the chat can ask for approval again.": "完了しました。このチャットは再び承認を申請できます。",
+"Nothing approved or declined has that id. Run `{0}` to see the ids.": "その ID の承認済みまたは拒否済みのチャットはありません。`{0}` を実行すると ID を確認できます。",
+"ACCESS_APPROVAL_PLATFORMS is set in the environment, which overrides .env; change it there.": "ACCESS_APPROVAL_PLATFORMS は環境変数で設定されており、.env より優先されます。そちらで変更してください。",
+"forget an approval or a decline, so the chat asks again": "承認または拒否を取り消し、そのチャットが再び申請するようにします",
+"the chat's id, as the list shows it": "チャットの ID（一覧に表示されるもの）",
+"The file mcp.json in the home folder cannot be read as JSON. Correct it or remove it.": "personagent フォルダーの mcp.json を JSON として読み取れません。修正するか削除してください。",
+"personagent runs as a service now, while you are logged in. Its output goes to {0}.": "personagent はサービスとして動作するようになりました（ログインしている間のみ）。出力は {0} に書き込まれます。"
 }

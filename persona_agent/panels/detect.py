@@ -3,6 +3,7 @@ is running, or a model key in the environment."""
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 
 import httpx
@@ -12,6 +13,9 @@ from .. import home as homes
 ERRORS: frozenset[str] = frozenset()
 # Seconds; a closed local port refuses at once, so this only bounds a hung one.
 PROBE_S = 0.8
+# The whole answer of one local server, in seconds and in bytes.
+ANSWER_S = 3.0
+MAX_ANSWER = 1_000_000
 MAX_MODELS = 20
 #: (id, name, the provider the page selects, the address to save, where it lists its models)
 LOCAL = (
@@ -48,10 +52,21 @@ def _names(answer) -> list[str]:
 
 async def _local(client: httpx.AsyncClient, row: tuple) -> dict | None:
     key, name, provider, base, listing = row
+    async def read() -> list[str]:
+        async with client.stream("GET", listing, timeout=PROBE_S) as answer:
+            if answer.status_code != 200:
+                return []
+            raw = bytearray()
+            async for chunk in answer.aiter_bytes():
+                raw.extend(chunk)
+                if len(raw) > MAX_ANSWER:
+                    return []
+        return _names(json.loads(raw))
+
     try:
-        answer = await client.get(listing, timeout=PROBE_S)
-        models = _names(answer.json()) if answer.status_code == 200 else []
-    except (httpx.HTTPError, ValueError):
+        # Each wait for a byte is bounded above; this bounds a program that drips them.
+        models = await asyncio.wait_for(read(), ANSWER_S)
+    except (httpx.HTTPError, ValueError, RecursionError, asyncio.TimeoutError):
         return None
     # Running with nothing to chat with is no shortcut.
     return {"id": key, "name": name, "provider": provider, "baseUrl": base, "models": models} if models else None

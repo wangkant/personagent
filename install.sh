@@ -168,6 +168,22 @@ install_uv() {
     return 1
 }
 
+uv_recent() {
+    # uv_recent EXE: true for uv 0.8 or later.
+    version=$("$1" --version 2>/dev/null | sed -n 's/^uv \([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p')
+    [ -n "$version" ] || return 1
+    major=${version% *}
+    minor=${version#* }
+    [ "$major" -gt 0 ] || [ "$minor" -ge 8 ]
+}
+
+foreign_copy() {
+    # foreign_copy UV: a personagent in uv's executable folder that uv did not put there.
+    bin=$("$1" tool dir --bin 2>/dev/null) || return 1
+    [ -e "$bin/personagent" ] || return 1
+    ! "$1" tool list 2>/dev/null | grep -q '^personagent '
+}
+
 make_launcher() {
     # A way to open it without a terminal: a desktop file on macOS, a menu entry on Linux.
     exe=$1
@@ -212,7 +228,8 @@ main() {
             fi ;;
     esac
 
-    if have uv; then
+    # An older uv lacks `uv tool` or `--default-index`; it would fail and read as a network fault.
+    if have uv && uv_recent "$(command -v uv)"; then
         uv=$(command -v uv)
     else
         uv_dir="${PERSONAGENT_UV_DIR:-$HOME/.local/bin}"
@@ -234,9 +251,15 @@ main() {
 
     say "Installing personagent. The first time this downloads Python and takes a few minutes..." \
         "正在安装 personagent。首次安装需下载 Python，约需几分钟..."
+    force=""
+    if foreign_copy "$uv"; then
+        force="--force"
+        say "Replacing the personagent that was installed another way (pip or pipx)." \
+            "正在替换以其他方式（pip 或 pipx）安装的 personagent。"
+    fi
     run_install() {
         # run_install USE_INDEX_MIRROR USE_PYTHON_MIRROR
-        set -- "$1" "$2" tool install --python "$PYTHON_VERSION" --upgrade
+        set -- "$1" "$2" tool install --python "$PYTHON_VERSION" --upgrade $force
         use_index=$1
         use_python=$2
         shift 2

@@ -94,7 +94,8 @@ def _read(path: Path) -> dict:
 
 
 def load_config(home: Path) -> dict:
-    """{"mcpServers": {name: spec}}; servers that do not read as one are left out."""
+    """{"mcpServers": {name: spec}}; servers that do not read as one are left
+    out, and one marked `"disabled": true` carries `disabled`."""
     raw = _read(config_path(home)).get("mcpServers")
     servers = {}
     for name, spec in (raw.items() if isinstance(raw, dict) else ()):
@@ -103,7 +104,24 @@ def load_config(home: Path) -> dict:
         except ToolsError:
             logger.warning("[Tools] the server %r in %s is not one that can be run; it is skipped",
                            str(name)[:40], CONFIG_FILE)
+            continue
+        if spec.get("disabled") is True:
+            servers[_server_name(name)]["disabled"] = True
     return {"mcpServers": servers}
+
+
+def _raw_config(home: Path) -> dict:
+    """The file as written, for a change that must keep everything else in it."""
+    path = config_path(home)
+    if not path.exists():
+        return {"mcpServers": {}}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        raise ToolsError("tools_file_damaged") from None
+    if not isinstance(data, dict) or not isinstance(data.setdefault("mcpServers", {}), dict):
+        raise ToolsError("tools_file_damaged")
+    return data
 
 
 def save_config(home: Path, config: dict) -> None:
@@ -302,8 +320,8 @@ def parse_snippet(text: str, name: str = "") -> dict:
 
 
 def add_servers(home: Path, servers: dict) -> list[str]:
-    config = load_config(home)
-    have = config["mcpServers"]
+    raw = _raw_config(home)
+    have = raw["mcpServers"]
     for name in servers:
         if name in have:
             raise ToolsError("tools_name_taken")
@@ -311,15 +329,15 @@ def add_servers(home: Path, servers: dict) -> list[str]:
         raise ToolsError("tools_too_many")
     for name, spec in servers.items():
         have[name] = {**spec, "personagent": {"tools": {}}}
-    save_config(home, config)
+    save_config(home, raw)
     return list(servers)
 
 
 def remove_server(home: Path, name: str) -> None:
-    config = load_config(home)
-    if config["mcpServers"].pop(name, None) is None:
+    raw = _raw_config(home)
+    if raw["mcpServers"].pop(name, None) is None:
         raise ToolsError("tools_unknown_server")
-    save_config(home, config)
+    save_config(home, raw)
 
     def drop(data: dict) -> None:
         data.pop(name, None)
@@ -328,8 +346,7 @@ def remove_server(home: Path, name: str) -> None:
 
 def set_tool(home: Path, server: str, tool: str, *, enabled: Optional[bool] = None,
              who: Optional[str] = None) -> dict:
-    config = load_config(home)
-    spec = config["mcpServers"].get(server)
+    spec = load_config(home)["mcpServers"].get(server)
     if spec is None:
         raise ToolsError("tools_unknown_server")
     if not isinstance(tool, str) or not tool or len(tool) > TOOL_NAME_CHARS:
@@ -341,8 +358,13 @@ def set_tool(home: Path, server: str, tool: str, *, enabled: Optional[bool] = No
         row["enabled"] = bool(enabled)
     if who is not None:
         row["who"] = who
-    spec["personagent"]["tools"][tool] = row
-    save_config(home, config)
+    # Only this server's own block changes; every other key in the file stays as written.
+    raw = _raw_config(home)
+    entry = raw["mcpServers"][server]
+    block = entry.get("personagent") if isinstance(entry.get("personagent"), dict) else {}
+    tools = block.get("tools") if isinstance(block.get("tools"), dict) else {}
+    entry["personagent"] = {**block, "tools": {**tools, tool: row}}
+    save_config(home, raw)
     return row
 
 
@@ -437,51 +459,57 @@ def _fence(label: str, text: str) -> str:
 _PROPERTY_RE = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 
 
-def offer_schema(schema, depth: int = 0) -> Optional[dict]:
-    """The parts of an input schema the decision model needs, bounded and with
-    descriptions fenced; None when a required property cannot be offered."""
-    if not isinstance(schema, dict) or depth > 3:
-        return {}
-    out: dict = {}
+def _one_type(schema: dict) -> str:
+    """A single JSON type every vendor's validator takes: the first of a list
+    that is not null, else what the schema's shape says, else string."""
     kinds = schema.get("type")
-    if isinstance(kinds, str) and kinds in _TYPES:
-        out["type"] = kinds
-    elif isinstance(kinds, list):
-        kept = [k for k in kinds if k in _TYPES]
-        if kept:
-            out["type"] = kept
-    if isinstance(schema.get("enum"), list):
-        values = [e for e in schema["enum"][:50]
-                  if isinstance(e, (bool, int, float)) or (isinstance(e, str) and len(e) <= 100)]
-        out["enum"] = [scrub_third_party_text(e) if isinstance(e, str) else e for e in values]
-    for bound in ("minimum", "maximum"):
-        if isinstance(schema.get(bound), (int, float)) and not isinstance(schema.get(bound), bool):
-            out[bound] = schema[bound]
+    kinds = [kinds] if isinstance(kinds, str) else kinds if isinstance(kinds, list) else []
+    for kind in kinds:
+        if kind in _TYPES and kind != "null":
+            return kind
+    if isinstance(schema.get("properties"), dict):
+        return "object"
+    if "items" in schema:
+        return "array"
+    return "string"
+
+
+def offer_schema(schema, depth: int = 0) -> Optional[dict]:
+    """The parts of an input schema the decision model needs, in the plain
+    form every vendor accepts (one type, arrays with items, string enums),
+    bounded and with descriptions fenced; None when a required property
+    cannot be offered."""
+    schema = schema if isinstance(schema, dict) else {}
+    kind = "object" if depth == 0 else _one_type(schema)
+    out: dict = {"type": kind}
     if isinstance(schema.get("description"), str) and schema["description"].strip():
         out["description"] = _fence("parameter_description",
                                     schema["description"][:PROPERTY_DESCRIPTION_CHARS])
-    if isinstance(schema.get("items"), dict):
-        items = offer_schema(schema["items"], depth + 1)
-        if items is None:
-            return None
-        out["items"] = items
-    properties = schema.get("properties")
-    if isinstance(properties, dict):
+    enum = schema.get("enum")
+    if kind == "string" and isinstance(enum, list) and enum and all(isinstance(e, str) for e in enum):
+        out["enum"] = [scrub_third_party_text(e)[:100] for e in enum[:50]]
+    if kind in ("number", "integer"):
+        for bound in ("minimum", "maximum"):
+            if isinstance(schema.get(bound), (int, float)) and not isinstance(schema.get(bound), bool):
+                out[bound] = schema[bound]
+    if kind == "array":
+        items = offer_schema(schema.get("items"), depth + 1) if depth < 3 else None
+        out["items"] = items if items else {"type": "string"}
+    if kind == "object":
+        properties = schema.get("properties") if depth < 3 else None
         kept = {}
-        for key, item in list(properties.items())[:30]:
+        for key, item in list((properties or {}).items())[:30]:
             if isinstance(key, str) and _PROPERTY_RE.fullmatch(key):
                 offered = offer_schema(item, depth + 1)
                 if offered is not None:
                     kept[key] = offered
-        required = [k for k in schema.get("required") or () if isinstance(k, str)]
+        required = [k for k in (schema.get("required") if isinstance(properties, dict) else None) or ()
+                    if isinstance(k, str)]
         if any(k not in kept for k in required):
             return None
         out["properties"] = kept
         if required:
             out["required"] = required
-    if depth == 0:
-        out["type"] = "object"
-        out.setdefault("properties", {})
     return out
 
 
@@ -491,6 +519,8 @@ class Offered:
     tool: str
     description: str
     schema: dict
+    # Who may cause it to be used; a tool of unknown standing is the admin's.
+    who: str = ADMIN
 
 
 def function_for(index: int, offered: Offered) -> Optional[dict]:
@@ -603,8 +633,10 @@ class ToolHub:
     """The servers of one home, for the character service: started with it,
     following changes to mcp.json, stopped with it."""
 
-    def __init__(self, home: Path) -> None:
+    def __init__(self, home: Path, *, reports: bool = False) -> None:
         self.home = Path(home)
+        # Only the service's own hub writes status.json; a practice or terminal one would overwrite it.
+        self.reports = reports
         self._runners: dict[str, _Runner] = {}
         self._config: dict = {"mcpServers": {}}
         self._stamp: Optional[tuple] = None
@@ -643,7 +675,8 @@ class ToolHub:
             return
         self._stamp = stamp
         self._config = load_config(self.home) if stamp else {"mcpServers": {}}
-        servers = self._config["mcpServers"]
+        # A server switched off in the file ("disabled": true) is not started.
+        servers = {name: spec for name, spec in self._config["mcpServers"].items() if not spec.get("disabled")}
         for name in list(self._runners):
             runner = self._runners[name]
             if name not in servers or run_key(servers[name]) != runner.key:
@@ -658,6 +691,8 @@ class ToolHub:
         self.write_status()
 
     def write_status(self) -> None:
+        if not self.reports:
+            return
         servers = {name: {"state": r.state, "error": r.error, "detail": r.detail[:2000],
                           "tools": len(r.tools)} for name, r in self._runners.items()}
         try:
@@ -692,7 +727,8 @@ class ToolHub:
             for tool in runner.tools:
                 row = tool_setting(spec, tool["name"])
                 if row["enabled"] and (admin or row["who"] == ANYONE):
-                    out.append(Offered(name, tool["name"], tool["description"], tool["inputSchema"]))
+                    out.append(Offered(name, tool["name"], tool["description"], tool["inputSchema"],
+                                       row["who"]))
         return out[:MAX_OFFERED]
 
     async def call(self, offered: Offered, arguments: dict, timeout: float = TURN_CALL_TIMEOUT_S) -> ToolResult:
@@ -722,6 +758,29 @@ class ToolHub:
 
 # ------------------------------------------- the page and the terminal --
 
+def public_address(url: str) -> bool:
+    """Whether every address `url`'s host names is public: not this computer,
+    its network, link-local or reserved space. A name that does not resolve
+    counts as not public."""
+    import ipaddress
+    import socket
+
+    from .ingestion import _ip_obj_is_internal
+
+    host = (urlsplit(url).hostname or "").strip("[]")
+    if not host:
+        return False
+    try:
+        found = {ipaddress.ip_address(host)}
+    except ValueError:
+        try:
+            found = {ipaddress.ip_address(info[4][0].split("%", 1)[0])
+                     for info in socket.getaddrinfo(host, None)}
+        except (OSError, ValueError, UnicodeError):
+            return False
+    return bool(found) and not any(_ip_obj_is_internal(ip) for ip in found)
+
+
 def uvx_found() -> bool:
     return bool(find_program("uvx"))
 
@@ -745,6 +804,7 @@ def public_view(home: Path, *, running: bool) -> dict:
             "state": str(state.get("state") or "") if running else "",
             "error": str(state.get("error") or ""), "detail": str(state.get("detail") or "")[:2000],
             "listed": tools is not None,
+            "disabled": bool(spec.get("disabled")),
             "tools": [{**t, **tool_setting(spec, t["name"])} for t in (tools or [])],
         })
     added = {json.dumps({"c": s.get("command"), "a": s.get("args")}) for s in config["mcpServers"].values()}
@@ -809,6 +869,8 @@ def enabled_counts(home: Path) -> dict:
     config = load_config(home)
     on = 0
     for name, spec in config["mcpServers"].items():
+        if spec.get("disabled"):
+            continue
         for tool in known_tools(home, name, spec) or ():
             on += tool_setting(spec, tool["name"])["enabled"]
     return {"servers": len(config["mcpServers"]), "tools_on": on}
@@ -843,6 +905,7 @@ REFUSALS = {
                              "Use its Streamable HTTP address.",
     "tools_write_failed": "The tools file could not be written.",
     "tools_bad_request": "That request is not valid.",
+    "tools_file_damaged": "The file mcp.json in the home folder cannot be read as JSON. Correct it or remove it.",
 }
 
 
@@ -906,6 +969,19 @@ def main(argv: Optional[list] = None, prog: str = "personagent tools") -> int:
         return 2
 
 
+def keep_folder(spec: dict, folder: Path) -> None:
+    """A program named by a path relative to the folder it was added from
+    (`node build/index.js`) runs from that folder, wherever the service runs."""
+    if not spec.get("command") or spec.get("cwd"):
+        return
+    for word in [spec["command"], *spec.get("args", [])]:
+        path = Path(word)
+        if (not path.is_absolute() and ("/" in word or "\\" in word or path.suffix)
+                and (folder / path).exists()):
+            spec["cwd"] = str(folder.resolve())
+            return
+
+
 def _pairs_from(words: list, sep: str = "=") -> dict:
     out = {}
     for word in words:
@@ -945,6 +1021,8 @@ def _run(args, home: Path, parser) -> int:
             servers = {_server_name(args.name or _guess_name(spec)): spec}
         else:
             parser.error(langs.term("give a JSON file or snippet, --command or --url"))
+        for spec in servers.values():
+            keep_folder(spec, Path.cwd())
         for name in add_servers(home, servers):
             print(langs.term(f"Added {name}. A running character starts it within a few seconds.", keep=(name,)))
         print(langs.term("Its tools are on for the admin only; `personagent tools set` changes that."))

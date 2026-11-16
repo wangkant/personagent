@@ -21,8 +21,11 @@ def admits(home: Path):
     from persona_agent import access
     from persona_agent.config_env import env_bool
 
+    from persona_agent import approvals
+
     path = home / ".env"
     kept: dict = {}
+    store = approvals.Store(approvals.store_path(home))
 
     def settings() -> dict:
         try:
@@ -41,6 +44,11 @@ def admits(home: Path):
         group = access.canonical_id(f"{event.get('platform')}:{event.get('conversation_id')}",
                                     identity.native_platforms)
         if group in identity.paused_groups:
+            return False
+        decided = store.view()
+        if group in decided["group"]:
+            return True
+        if group in decided["declined"] and group not in identity.groups:
             return False
         # A group still waiting for approval hears at most one fixed line, never a written reply.
         if access.awaits_group_approval(group, str(event.get("platform") or ""), identity.groups,

@@ -98,7 +98,14 @@ def _decide(ledger, log, cand, policy) -> promotion.Decision:
         cand, linked_events=log.many(cand.get("evidence") or []),
         related_events=promotion.related_events(cand, log.all()),
         peers=ledger.all(), now=time.time(), policy=policy,
-        admin_ids=access.identity_from_env().admins)
+        admin_ids=access.identity_from_env().admins | _approved_admins())
+
+
+def _approved_admins() -> frozenset[str]:
+    """Accounts made admin with This is me, kept apart from ADMIN_IDS."""
+    from persona_agent.approvals import approved_admins
+    from persona_agent.paths import runtime_dir
+    return approved_admins(runtime_dir())
 
 
 #: How a reaction was tied to the reply, each a whole phrase so that every

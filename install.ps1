@@ -22,6 +22,7 @@ $PersonagentIndexMirrors = @(
 )
 $PersonagentPythonMirror = 'https://registry.npmmirror.com/-/binary/python-build-standalone'
 $PersonagentPython = '3.12'
+$PersonagentMinUv = New-Object Version 0, 8, 0
 
 function Write-PaLine {
     # One sentence in the system's language: English, or Chinese given as \u escapes.
@@ -116,11 +117,38 @@ function Install-PaUv {
     throw $last
 }
 
+function Test-PaUvRecent {
+    param([string]$Exe)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { $said = "$(& $Exe --version 2>$null)" } catch { $said = '' }
+    $ErrorActionPreference = $previous
+    if ($said -match 'uv (\d+)\.(\d+)\.(\d+)') {
+        return ((New-Object Version ([int]$Matches[1]), ([int]$Matches[2]), ([int]$Matches[3])) -ge $PersonagentMinUv)
+    }
+    return $false
+}
+
+function Test-PaForeignCopy {
+    # A personagent in uv's executable folder that uv did not put there (pip --user, pipx).
+    param([string]$Uv)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $bin = "$(& $Uv tool dir --bin 2>$null)".Trim()
+        $listed = "$(& $Uv tool list 2>$null)"
+    } catch { $bin = ''; $listed = '' }
+    $ErrorActionPreference = $previous
+    if (-not $bin) { return $false }
+    return ((Test-Path -LiteralPath (Join-Path $bin 'personagent.exe')) -and ($listed -notmatch '(?m)^personagent '))
+}
+
 function Get-PaUv {
     # uv already on this computer, else a fresh copy; the path of the executable.
     param([string[]]$Indexes)
     $found = Get-Command uv -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($found) { return $found.Source }
+    # An older uv lacks `uv tool` or `--default-index`; it would fail and read as a network fault.
+    if ($found -and (Test-PaUvRecent $found.Source)) { return $found.Source }
     $dir = $env:PERSONAGENT_UV_DIR
     if (-not $dir) { $dir = Join-Path $env:USERPROFILE '.local\bin' }
     $kept = Join-Path $dir 'uv.exe'
@@ -188,6 +216,10 @@ function Install-Personagent {
     if ($env:PERSONAGENT_PACKAGE) { $spec = $env:PERSONAGENT_PACKAGE }
 
     Write-PaLine 'Installing personagent. The first time this downloads Python and takes a few minutes...' '\u6b63\u5728\u5b89\u88c5 personagent\u3002\u9996\u6b21\u5b89\u88c5\u9700\u4e0b\u8f7d Python\uff0c\u7ea6\u9700\u51e0\u5206\u949f...'
+    $force = Test-PaForeignCopy $uv
+    if ($force) {
+        Write-PaLine 'Replacing the personagent that was installed another way (pip or pipx).' '\u6b63\u5728\u66ff\u6362\u4ee5\u5176\u4ed6\u65b9\u5f0f\uff08pip \u6216 pipx\uff09\u5b89\u88c5\u7684 personagent\u3002'
+    }
     $attempts = @(@{ Index = $indexMirror; Python = $pythonMirror })
     if ($mode -eq 'auto' -and -not ($indexMirror -and $pythonMirror)) {
         $attempts += @{ Index = $true; Python = $true }
@@ -197,6 +229,7 @@ function Install-Personagent {
     try {
         foreach ($attempt in $attempts) {
             $arguments = @('tool', 'install', '--python', $PersonagentPython, '--upgrade')
+            if ($force) { $arguments += '--force' }
             # On the command line, so that later upgrades of the tool use it too.
             if ($attempt.Index -and -not $env:UV_DEFAULT_INDEX) { $arguments += @('--default-index', $PersonagentIndexMirrors[0]) }
             if ($attempt.Python -and -not $savedPythonMirror) { $env:UV_PYTHON_INSTALL_MIRROR = $PersonagentPythonMirror }
