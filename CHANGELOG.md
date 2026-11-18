@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The licence is now Apache 2.0.** personagent is free to use, change and share, for commercial purposes too. The connectors under `integrations/` stay under the MIT License, and the three character portraits stay under CC BY-NC-SA 4.0, which does not allow commercial use. Versions 1.4.1 to 1.5.0 were released under the PolyForm Noncommercial License 1.0.0 and copies of them stay under it. A `NOTICE` file names the parts and their licences.
+
 ## [1.5.0] — 2026-11-16
 
 Beside the mature assistants: a connected platform answers only the chats its admin approves, OpenRouter signs in without a pasted key, the character uses tools from MCP servers, and personagent runs on a server or in Docker with its page behind a password.

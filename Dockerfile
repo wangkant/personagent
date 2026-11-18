@@ -14,7 +14,7 @@ FROM python:3.12-slim-bookworm
 LABEL org.opencontainers.image.title="personagent" \
       org.opencontainers.image.description="An agent that behaves like a person, on every platform you use." \
       org.opencontainers.image.source="https://github.com/wangkant/personagent" \
-      org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0 AND MIT AND CC-BY-NC-SA-4.0"
+      org.opencontainers.image.licenses="Apache-2.0 AND MIT AND CC-BY-NC-SA-4.0"
 # PERSONAGENT_IN_CONTAINER: a first start with no page password makes one and prints it once,
 # and update notices say to pull the new image.
 ENV PATH=/opt/personagent/bin:$PATH \

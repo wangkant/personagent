@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md) · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · [한국어](DISCLAIMER.ko.md) · [Español](DISCLAIMER.es.md) · [Français](DISCLAIMER.fr.md) · Deutsch · [Português (Brasil)](DISCLAIMER.pt-BR.md) · [Русский](DISCLAIMER.ru.md)
 
-personagent wird unter der [PolyForm Noncommercial License 1.0.0](../LICENSE) veröffentlicht: Nutzung, Änderung und Weitergabe sind für nichtkommerzielle Zwecke kostenlos, für kommerzielle Zwecke nicht gestattet. Das Programm bringt eine KI-Figur in Ihre Chats, und Sie sind derjenige, der es betreibt. Sie sind dafür verantwortlich, was es sagt, wo es dies sagt und welche Konten es verwendet. Diese Seite stellt keine Rechtsberatung dar.
+personagent wird unter der [Apache License 2.0](../LICENSE) veröffentlicht: Nutzung, Änderung und Weitergabe sind kostenlos, auch für kommerzielle Zwecke. Das Programm bringt eine KI-Figur in Ihre Chats, und Sie sind derjenige, der es betreibt. Sie sind dafür verantwortlich, was es sagt, wo es dies sagt und welche Konten es verwendet. Diese Seite stellt keine Rechtsberatung dar.
 
 ## Chat-Plattformen und Ihre Konten
 

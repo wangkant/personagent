@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md) · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · 한국어 · [Español](DISCLAIMER.es.md) · [Français](DISCLAIMER.fr.md) · [Deutsch](DISCLAIMER.de.md) · [Português (Brasil)](DISCLAIMER.pt-BR.md) · [Русский](DISCLAIMER.ru.md)
 
-personagent는 [PolyForm Noncommercial License 1.0.0](../LICENSE)으로 배포됩니다. 비상업적 목적이라면 무료로 사용, 수정, 공유할 수 있으며 상업적 목적으로는 사용할 수 없습니다. AI 캐릭터를 사용자의 채팅에 넣는 프로그램이고, 실행하는 사람은 사용자 자신입니다. 무엇을 말하는지, 어디서 말하는지, 어떤 계정을 쓰는지에 대한 책임은 사용자에게 있습니다. 이 페이지는 법률 자문이 아닙니다.
+personagent는 [Apache License 2.0](../LICENSE)으로 배포됩니다. 상업적 목적을 포함하여 무료로 사용, 수정, 공유할 수 있습니다. AI 캐릭터를 사용자의 채팅에 넣는 프로그램이고, 실행하는 사람은 사용자 자신입니다. 무엇을 말하는지, 어디서 말하는지, 어떤 계정을 쓰는지에 대한 책임은 사용자에게 있습니다. 이 페이지는 법률 자문이 아닙니다.
 
 ## 채팅 플랫폼과 사용자 계정
 

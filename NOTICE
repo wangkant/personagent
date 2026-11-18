@@ -1,0 +1,17 @@
+personagent
+Copyright 2026 Qiankang (Kant) Wang
+https://github.com/wangkant/personagent
+
+Licensed under the Apache License, Version 2.0: see LICENSE.
+
+Two parts of this repository carry licences of their own:
+
+- `integrations/` (the AstrBot plugin, the connector SDK and the Matrix and
+  Satori connectors) is under the MIT License: see `integrations/LICENSE`.
+- The character portraits in `persona_agent/static/characters/` are under
+  CC BY-NC-SA 4.0, which does not allow commercial use: see
+  `persona_agent/static/characters/LICENSE.md`.
+
+Versions 1.4.0 and earlier were released under the MIT License, and versions
+1.4.1 to 1.5.0 under the PolyForm Noncommercial License 1.0.0. Copies of those
+versions stay under the licence they were released with.

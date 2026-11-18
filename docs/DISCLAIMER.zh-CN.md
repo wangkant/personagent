@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · 简体中文 · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · [한국어](DISCLAIMER.ko.md) · [Español](DISCLAIMER.es.md) · [Français](DISCLAIMER.fr.md) · [Deutsch](DISCLAIMER.de.md) · [Português (Brasil)](DISCLAIMER.pt-BR.md) · [Русский](DISCLAIMER.ru.md)
 
-personagent 以 [PolyForm Noncommercial License 1.0.0](../LICENSE) 发布：可免费用于非商业目的的使用、修改和分享，不得用于商业目的。本软件使一个 AI 角色出现在你的聊天中，而运行该角色的是你本人。角色发表什么内容、在何处发言、使用哪些账号，均由你负责。本页不构成法律意见。
+personagent 以 [Apache License 2.0](../LICENSE) 发布：可免费使用、修改和分享，包括用于商业目的。本软件使一个 AI 角色出现在你的聊天中，而运行该角色的是你本人。角色发表什么内容、在何处发言、使用哪些账号，均由你负责。本页不构成法律意见。
 
 ## 聊天平台和你的账号
 

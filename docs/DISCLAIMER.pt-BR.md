@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md) · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · [한국어](DISCLAIMER.ko.md) · [Español](DISCLAIMER.es.md) · [Français](DISCLAIMER.fr.md) · [Deutsch](DISCLAIMER.de.md) · Português (Brasil) · [Русский](DISCLAIMER.ru.md)
 
-O personagent é distribuído sob a [PolyForm Noncommercial License 1.0.0](../LICENSE): o uso, a modificação e o compartilhamento são gratuitos para fins não comerciais e não são permitidos para fins comerciais. Ele coloca um personagem de IA nas suas conversas, e quem o executa é você. Você é responsável pelo que ele diz, por onde diz e por quais contas ele usa. Esta página não é aconselhamento jurídico.
+O personagent é distribuído sob a [Apache License 2.0](../LICENSE): o uso, a modificação e o compartilhamento são gratuitos, inclusive para fins comerciais. Ele coloca um personagem de IA nas suas conversas, e quem o executa é você. Você é responsável pelo que ele diz, por onde diz e por quais contas ele usa. Esta página não é aconselhamento jurídico.
 
 ## Plataformas de chat e suas contas
 

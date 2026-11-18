@@ -2,7 +2,7 @@
 
 [English](DISCLAIMER.md) · [简体中文](DISCLAIMER.zh-CN.md) · [繁體中文](DISCLAIMER.zh-TW.md) · [日本語](DISCLAIMER.ja.md) · [한국어](DISCLAIMER.ko.md) · [Español](DISCLAIMER.es.md) · Français · [Deutsch](DISCLAIMER.de.md) · [Português (Brasil)](DISCLAIMER.pt-BR.md) · [Русский](DISCLAIMER.ru.md)
 
-personagent est publié sous la [PolyForm Noncommercial License 1.0.0](../LICENSE) : son utilisation, sa modification et son partage sont gratuits à des fins non commerciales, et interdits à des fins commerciales. Il place un personnage d'IA dans vos discussions, et c'est vous qui l'exécutez. Vous êtes responsable de ce qu'il dit, de l'endroit où il le dit et des comptes qu'il utilise. Cette page n'est pas un conseil juridique.
+personagent est publié sous la [Apache License 2.0](../LICENSE) : son utilisation, sa modification et son partage sont gratuits, y compris à des fins commerciales. Il place un personnage d'IA dans vos discussions, et c'est vous qui l'exécutez. Vous êtes responsable de ce qu'il dit, de l'endroit où il le dit et des comptes qu'il utilise. Cette page n'est pas un conseil juridique.
 
 ## Les plateformes de discussion et vos comptes
 
