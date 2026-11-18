@@ -40,10 +40,12 @@ from . import direct  # noqa: F401  tests reach the platforms through welcome.di
 from .direct import base as direct_base
 from . import direct_setup
 from . import setup_wizard as sw
+from . import life
 from . import updates
 from . import window as appwindow
 from .astrbot_install import STALL_S, AstrBotInstallation, DownloadStalled, install_astrbot, progress_marker
 from .config_env import env_bool
+from .library import Library
 from .services import Services, stop_leftovers
 from .storage import FileLock, LockUnavailable, atomic_write_text
 
@@ -87,6 +89,9 @@ PAGE_CONNECTOR = "local-welcome"
 CHAT_KEPT = 50
 # A picture the character sent, stored by its content hash; nothing else is served.
 PICTURE_NAME = re.compile(r"[0-9a-f]{40}\.(png|jpg|gif|webp)")
+# A thing the character saw, as the library names it.
+ITEM_ID = re.compile(r"[0-9a-f]{16}")
+LIBRARY_PICTURE_TYPES = {".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 PICTURE_TYPES = {"png": "image/png", "jpg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
 MAX_PICTURE = 8 * 1024 * 1024
 # Seconds between outbox pulls while the character service is not running.
@@ -624,7 +629,8 @@ class Workspace:
         to show; None for what the page cannot show."""
         kind = item.get("type")
         if kind == "text" and str(item.get("text") or "").strip():
-            return {"role": "assistant", "text": str(item["text"])}
+            card = life.clean_card(item.get("card"))
+            return {"role": "assistant", "text": str(item["text"]), **({"card": card} if card else {})}
         if kind == "image":
             name = self._keep_picture(item.get("b64"))
             if name:
@@ -1346,6 +1352,94 @@ class Workspace:
             raise ValueError("activity_unavailable")
         return {"ok": True, "forgotten": int(result.get("forgotten") or 0)}
 
+    # -- the character's home and days
+
+    def _library(self) -> Library:
+        return Library(self._runtime())
+
+    async def _life_call(self, method: str, path: str, **kwargs) -> dict | None:
+        """The service's answer; None when it is stopped or cannot answer, so the files answer instead."""
+        try:
+            raw = await self._activity_call(method, path, **kwargs)
+        except ValueError:
+            return None
+        return None if raw is None or raw.get("off") else raw
+
+    async def home_view(self) -> dict:
+        raw = await self._life_call("GET", "/api/dashboard/home")
+        if raw is not None and isinstance(raw.get("now"), dict):
+            return raw
+        shown = life.home(life.Sources.from_files(self._runtime(), self.config()))
+        if self.services.running("agent"):
+            # Running but not answering: nothing is known of what it does now, only that it is not off.
+            shown["now"] = life.now_state(self._library(), life.clock(), running=True)
+        return shown
+
+    async def go_out(self) -> dict:
+        raw = await self._life_call("POST", "/api/dashboard/home/out", json={})
+        if raw is None:
+            return {"error": "off"}
+        code = str(raw.get("error") or "")
+        return {"error": code[:40]} if code or not raw.get("ok") else {"ok": True}
+
+    async def days(self, before: str = "", limit: int = life.DAYS_LIMIT, kept: bool = False) -> dict:
+        before = str(before or "")
+        if len(before) > 128:
+            raise ValueError("item_gone")
+        limit = max(1, min(life.DAYS_MAX, int(limit)))
+        raw = await self._life_call("GET", "/api/dashboard/days",
+                                    params={"before": before, "limit": limit, "kept": int(bool(kept))})
+        if raw is not None and isinstance(raw.get("items"), list):
+            return raw
+        return life.days(life.Sources.from_files(self._runtime(), self.config()), before, limit,
+                         kept_only=bool(kept))
+
+    def _item(self, payload) -> life.Item:
+        ident = str((payload or {}).get("id") or "")
+        item = self._library().get(ident) if ITEM_ID.fullmatch(ident) else None
+        if item is None:
+            raise ValueError("item_gone")
+        return item
+
+    async def mark_item(self, ident: str, action: str, kept: bool = True) -> dict:
+        """Keep, dismiss or mark told, through the service while it runs, else in the files."""
+        sent = {"id": ident, **({"kept": kept} if action == "keep" else {})}
+        raw = await self._life_call("POST", f"/api/dashboard/days/{action}", json=sent)
+        if raw is not None and raw.get("ok"):
+            return {"ok": True, "kept": bool(raw.get("kept"))}
+        item = life.mark(self._library(), ident, action, kept)
+        if item is None:
+            raise ValueError("item_gone")
+        return {"ok": True, "kept": item.state == life.KEPT}
+
+    async def _say(self, items: list) -> dict:
+        """Bring things it saw into this chat as its own messages, each with its card."""
+        since = self._seq
+        if items:
+            self._append([life.said(item) for item in items])
+            self._save_chat()
+            for item in items:
+                await self.mark_item(item.id, "told")
+        return {"count": len(items), **self.history(since)}
+
+    async def tell(self) -> dict:
+        async with self._chat_lock:
+            return await self._say(life.tell_queue(self._library()))
+
+    async def talk(self, payload: dict) -> dict:
+        item = self._item(payload)
+        async with self._chat_lock:
+            return await self._say([item])
+
+    def library_text(self, ident: str) -> dict:
+        item = self._item({"id": ident})
+        if not item.text.strip():
+            raise ValueError("item_gone")
+        return {"title": item.title, "text": item.text}
+
+    def library_picture(self, ident: str) -> Path | None:
+        return self._library().picture_path(ident) if ITEM_ID.fullmatch(str(ident or "")) else None
+
     def close(self) -> None:
         with self._lock:
             self._closed = True
@@ -1636,7 +1730,8 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None,
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; "
-            "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+            "connect-src 'self'; frame-src " + " ".join(f"https://{host}" for host in life.PLAYER_HOSTS) + "; "
+            "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         return response
 
     async def body(request: Request, limit: int = MAX_BODY) -> dict:
@@ -1663,7 +1758,7 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None,
                    "field_required", "invalid_field", "invalid_persona", "invalid_feature",
                    "invalid_chat", "activity_unavailable", "activity_changed", "forget_needs_activity",
                    "activity_restore_gone", "activity_restore_exists",
-                   "avatar_type", "avatar_too_large", "local_only"}
+                   "avatar_type", "avatar_too_large", "local_only", "item_gone"}
         error = str(exc)
         known = error in allowed or any(
             error in importlib.import_module(f"{__package__}.panels.{name}").ERRORS for name in PANELS)
@@ -1953,6 +2048,51 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None,
     @app.post("/api/activity/forget_chat")
     async def activity_forget_chat(request: Request):
         return await workspace.activity_forget_chat(await body(request))
+
+    @app.get("/api/home")
+    async def home_now():
+        return await workspace.home_view()
+
+    @app.post("/api/home/out")
+    async def home_out(request: Request):
+        await body(request)
+        answer = await workspace.go_out()
+        return answer if answer.get("ok") else JSONResponse(answer, status_code=409)
+
+    @app.post("/api/home/tell")
+    async def home_tell(request: Request):
+        await body(request)
+        return await workspace.tell()
+
+    @app.get("/api/days")
+    async def days(before: str = "", limit: int = life.DAYS_LIMIT, kept: int = 0):
+        return await workspace.days(before, limit, bool(kept))
+
+    @app.post("/api/days/keep")
+    async def days_keep(request: Request):
+        payload = await body(request)
+        item = workspace._item(payload)
+        return await workspace.mark_item(item.id, "keep", payload.get("kept") is not False)
+
+    @app.post("/api/days/dismiss")
+    async def days_dismiss(request: Request):
+        item = workspace._item(await body(request))
+        return await workspace.mark_item(item.id, "dismiss")
+
+    @app.post("/api/days/talk")
+    async def days_talk(request: Request):
+        return await workspace.talk(await body(request))
+
+    @app.get("/api/library/text")
+    async def library_text(id: str = ""):
+        return workspace.library_text(id)
+
+    @app.get("/api/library/picture/{ident}")
+    async def library_picture(ident: str):
+        path = workspace.library_picture(ident)
+        if path is None or path.suffix not in LIBRARY_PICTURE_TYPES:
+            raise HTTPException(404)
+        return FileResponse(path, media_type=LIBRARY_PICTURE_TYPES[path.suffix])
 
     @app.post("/api/show")
     async def show(request: Request):

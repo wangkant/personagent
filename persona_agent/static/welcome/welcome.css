@@ -2567,3 +2567,726 @@ button:active:not(:disabled) {
     scroll-padding-top: 96px;
   }
 }
+/* ---- Home: the character's stage beside the conversation */
+#chat-view.chat-page {
+  max-width: 1160px;
+  flex-direction: row;
+  gap: 36px;
+}
+.chat-column {
+  flex: 1;
+  min-width: 0;
+  max-width: 780px;
+  display: flex;
+  flex-direction: column;
+}
+/* The stage already shows who it is. */
+#chat-view #chat-avatar,
+#chat-view #chat-name,
+#chat-view #empty-avatar {
+  display: none;
+}
+.stage {
+  --state: var(--ok);
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-top: 8px;
+}
+.stage[data-state="out"] {
+  --state: var(--accent);
+}
+.stage[data-state="asleep"],
+.stage[data-state="off"] {
+  --state: var(--line-strong);
+}
+.stage-figure {
+  position: relative;
+  padding-top: 64px;
+}
+.stage-bubble {
+  position: absolute;
+  bottom: calc(100% - 54px);
+  left: 50%;
+  z-index: 1;
+  width: max-content;
+  max-width: 260px;
+  margin: 0;
+  padding: 7px 13px;
+  border-radius: 14px;
+  background: var(--field);
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.5;
+  text-align: center;
+  overflow-wrap: anywhere;
+  transform: translateX(-50%);
+  transition: opacity 0.3s;
+}
+.stage-bubble::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: calc(50% - 7px);
+  border: 7px solid transparent;
+  border-top-color: var(--field);
+  border-bottom: 0;
+}
+.stage-bubble.fading {
+  opacity: 0;
+}
+.stage-pat {
+  position: relative;
+  display: block;
+  padding: 0;
+  border-radius: 32px;
+  cursor: pointer;
+}
+.stage-pat:focus-visible {
+  outline-offset: 5px;
+}
+.avatar.stage-avatar {
+  width: 200px;
+  height: 200px;
+  font-size: 76px;
+  font-weight: 400;
+  color: var(--muted);
+  transition:
+    opacity 0.3s,
+    box-shadow 0.12s;
+}
+/* A portrait sheet is a whole bust: shown in a rounded square, not cut to a circle. */
+.avatar.stage-avatar.portrait:not(.still) {
+  border-radius: 28px;
+}
+.stage-avatar .face {
+  border-radius: inherit;
+}
+.stage-pat:hover .stage-avatar {
+  box-shadow: 0 0 0 5px var(--hover);
+}
+.stage-pat:active .stage-avatar {
+  box-shadow: 0 0 0 5px var(--deep);
+}
+.stage-avatar.pat {
+  animation: hop 0.55s ease-out;
+}
+.stage-avatar.pat:not(.still) .sprite {
+  animation: talk 0.33s step-end infinite;
+}
+@keyframes hop {
+  30% {
+    transform: translateY(-12px);
+  }
+  60% {
+    transform: none;
+  }
+  80% {
+    transform: translateY(-3px);
+  }
+}
+/* Its state shows in the pose: eyes closed asleep, the thinking look while answering, faint while away. */
+.stage[data-state="asleep"] .stage-avatar:not(.still):not(.talking):not(.thinking):not(.pat) .sprite {
+  background-position-x: 33.333%;
+  animation: breathe 6.5s ease-in-out infinite;
+}
+.stage[data-state="answering"] .stage-avatar:not(.still):not(.talking):not(.pat) .sprite {
+  background-position-x: 100%;
+  animation: breathe 4.8s ease-in-out infinite;
+}
+.stage[data-state="out"] .stage-avatar:not(.pat),
+.stage[data-state="off"] .stage-avatar:not(.pat) {
+  opacity: 0.4;
+}
+.stage-mark {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: none;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 30px;
+  letter-spacing: 1px;
+}
+.stage[data-state="asleep"] .stage-mark,
+.stage[data-state="out"] .stage-mark,
+.stage[data-state="back"] .stage-mark {
+  display: block;
+}
+.stage[data-state="asleep"] .stage-mark::before {
+  content: "z z";
+}
+.stage[data-state="out"] .stage-mark::before {
+  content: "\2197";
+  color: var(--accent);
+}
+.stage[data-state="back"] .stage-mark::before {
+  content: "\2726";
+  color: var(--accent);
+}
+.stage-text {
+  width: 100%;
+}
+.stage-text h2 {
+  margin: 16px 0 2px;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+/* Two lines' room, so a longer state never moves what is below it. */
+.stage-now {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 7px;
+  min-height: 3em;
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.stage-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--state);
+  transform: translateY(-1px);
+}
+.stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 4px;
+}
+.stage-actions .secondary {
+  height: auto;
+  min-height: 30px;
+}
+.stage-tell {
+  color: var(--accent);
+}
+.stage-why {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.stage-growth {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+/* A control waiting for its answer: plainly busy, not merely faded. */
+button.busy:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+.stage-actions .secondary:disabled:not(.busy) {
+  cursor: not-allowed;
+}
+/* ---- Days */
+.days-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 12px 0 24px;
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+.days-tab {
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 6px 6px 0 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  box-shadow: inset 0 -2px 0 transparent;
+}
+.days-tab:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.days-tab:active {
+  background: var(--deep);
+}
+.days-tab:focus-visible {
+  outline-offset: -2px;
+}
+.days-tab[aria-selected="true"] {
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--ink);
+}
+.days-panel {
+  max-width: 680px;
+}
+.days-status {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.day-group + .day-group {
+  margin-top: 28px;
+}
+.day-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.day-entry {
+  --kind: var(--line-strong);
+  padding: 14px 0 16px;
+  border-top: 1px solid var(--line);
+}
+.day-saw {
+  --kind: var(--accent);
+}
+.day-diary {
+  --kind: var(--warn);
+}
+.day-learned {
+  --kind: var(--ok);
+}
+.day-remembered {
+  --kind: #4f6f9a;
+}
+.day-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--faint);
+}
+.day-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.day-kind::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--kind);
+}
+.day-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.day-diary .day-text {
+  padding-left: 13px;
+  box-shadow: inset 2px 0 0 var(--warn-bg);
+  color: var(--ink-soft);
+  font-size: 14.5px;
+  line-height: 1.8;
+}
+.day-learned .day-text,
+.day-remembered .day-text,
+.day-did .day-text,
+.day-arrived .day-text {
+  font-size: 13.5px;
+}
+.day-entry.dismissed .content-card {
+  display: none;
+}
+.day-entry.dismissed .day-text {
+  color: var(--faint);
+}
+.day-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 8px 0 0 -10px;
+}
+.day-actions:empty,
+.day-status:empty {
+  display: none;
+}
+.day-actions .secondary {
+  height: auto;
+  min-height: 30px;
+}
+/* Kept shows as a pressed state of the same button. */
+.day-keep {
+  min-width: 5.5em;
+}
+.day-keep[aria-pressed="true"] {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+.day-status {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.day-status:focus {
+  outline: none;
+}
+.days-more {
+  margin: 20px 0 0 -10px;
+}
+/* ---- Content cards: in Days and in the conversation */
+.content-card {
+  max-width: 520px;
+  margin-top: 10px;
+  white-space: normal;
+  line-height: 1.5;
+}
+.bubble.has-card {
+  width: min(460px, 76%);
+}
+.bubble .content-card {
+  margin-top: 8px;
+}
+.content-card:first-child {
+  margin-top: 0;
+}
+.card-media {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--deep);
+}
+.card-cover,
+.card-player {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.card-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.card-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+}
+.card-play:focus-visible {
+  outline-offset: -4px;
+}
+.card-play-mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #1c1c1ab8;
+  transition:
+    background 0.12s,
+    transform 0.12s;
+}
+.card-play-mark::before {
+  content: "";
+  margin-left: 4px;
+  border-left: 16px solid #fff;
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+}
+.card-play:hover .card-play-mark {
+  background: var(--ink);
+  transform: scale(1.06);
+}
+.card-play:active .card-play-mark {
+  background: var(--ink-soft);
+  transform: scale(0.98);
+}
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+}
+.card-article .card-body,
+.card-post .card-body,
+.card-page .card-body {
+  padding-top: 0;
+}
+.card-title {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.card-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+.card-excerpt {
+  display: -webkit-box;
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+.content-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+  margin: 6px 0 0 -10px;
+}
+.content-actions .secondary {
+  height: auto;
+  min-height: 30px;
+}
+.card-open {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.card-open:hover {
+  background: var(--hover);
+}
+.card-open:active {
+  background: var(--deep);
+}
+/* ---- The reading panel */
+.reader {
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(86vh, 900px);
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  color: var(--text);
+  background: var(--lift);
+  box-shadow: var(--shadow);
+}
+.reader[open] {
+  display: flex;
+  flex-direction: column;
+}
+.reader::backdrop {
+  background: var(--veil);
+}
+.reader-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 16px 12px 24px;
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+.reader-heading {
+  flex: 1;
+  min-width: 0;
+}
+.reader-heading h2 {
+  font-size: 17px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.reader-source {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.reader-text {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+  padding: 18px 24px 8px;
+  font-size: 15px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.reader-text:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+.reader-text p {
+  margin: 0 0 1em;
+}
+.reader-note {
+  color: var(--muted);
+}
+.reader-foot {
+  margin: 0;
+  padding: 10px 24px 16px;
+  box-shadow: inset 0 1px 0 var(--line);
+  font-size: 13px;
+}
+/* Narrow: the stage sits above the conversation, and becomes a strip once they talk. */
+@media (max-width: 900px) {
+  #chat-view.chat-page {
+    flex-direction: column;
+    gap: 0;
+  }
+  .stage {
+    width: auto;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 18px;
+    padding: 0 0 14px;
+    text-align: left;
+  }
+  .stage-figure {
+    padding-top: 0;
+  }
+  .stage-bubble {
+    bottom: auto;
+    top: -4px;
+    left: calc(100% + 10px);
+    max-width: min(240px, 52vw);
+    transform: none;
+    text-align: left;
+    box-shadow: var(--shadow);
+  }
+  .stage-bubble::after {
+    top: 12px;
+    left: -7px;
+    border: 7px solid transparent;
+    border-right-color: var(--field);
+    border-left: 0;
+  }
+  .avatar.stage-avatar {
+    width: 112px;
+    height: 112px;
+    font-size: 44px;
+  }
+  .avatar.stage-avatar.portrait:not(.still) {
+    border-radius: 20px;
+  }
+  .stage-text {
+    flex: 1;
+    min-width: 0;
+  }
+  .stage-text h2 {
+    margin-top: 0;
+  }
+  .stage-now {
+    justify-content: flex-start;
+    min-height: 0;
+  }
+  .stage-actions {
+    justify-content: flex-start;
+    margin-left: -10px;
+  }
+  .stage-growth {
+    margin-top: 6px;
+  }
+  #chat-view:has(#chat-empty[hidden]) .stage {
+    gap: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  #chat-view:has(#chat-empty[hidden]) .avatar.stage-avatar {
+    width: 52px;
+    height: 52px;
+    font-size: 22px;
+  }
+  #chat-view:has(#chat-empty[hidden]) .avatar.stage-avatar.portrait:not(.still) {
+    border-radius: 12px;
+  }
+  #chat-view:has(#chat-empty[hidden]) .stage-text h2 {
+    font-size: 14px;
+  }
+  #chat-view:has(#chat-empty[hidden]) .stage-now {
+    margin: 0;
+    font-size: 12.5px;
+  }
+  #chat-view:has(#chat-empty[hidden]) .stage-why,
+  #chat-view:has(#chat-empty[hidden]) .stage-growth,
+  #chat-view:has(#chat-empty[hidden]) .stage-mark {
+    display: none;
+  }
+  #chat-view:has(#chat-empty[hidden]) .chat-heading {
+    padding-top: 8px;
+  }
+}
+@media (max-width: 480px) {
+  .avatar.stage-avatar {
+    width: 88px;
+    height: 88px;
+    font-size: 36px;
+  }
+  .stage {
+    gap: 14px;
+  }
+  .stage-actions .secondary,
+  .day-actions .secondary,
+  .content-actions .secondary,
+  .card-open,
+  .days-tab {
+    min-height: 40px;
+  }
+  .bubble.has-card {
+    width: 88%;
+  }
+  .reader-head {
+    padding-left: 18px;
+  }
+  .reader-text,
+  .reader-foot {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+@media (forced-colors: active) {
+  .stage-bubble,
+  .reader {
+    border: 1px solid;
+  }
+  .stage-bubble::after {
+    display: none;
+  }
+  .card-play-mark {
+    border: 2px solid ButtonText;
+  }
+  .card-play-mark::before {
+    border-left-color: ButtonText;
+  }
+  .days-tab[aria-selected="true"] {
+    border-bottom: 2px solid;
+  }
+  .stage-dot,
+  .day-kind::before {
+    border: 1px solid;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stage-avatar.pat {
+    animation: none;
+  }
+  .stage-avatar.pat:not(.still) .sprite {
+    animation: none;
+    background-position-x: 66.667%;
+  }
+  .stage[data-state="asleep"] .stage-avatar:not(.still):not(.talking):not(.thinking):not(.pat) .sprite,
+  .stage[data-state="answering"] .stage-avatar:not(.still):not(.talking):not(.pat) .sprite {
+    animation: none;
+  }
+  .card-play:hover .card-play-mark,
+  .card-play:active .card-play-mark {
+    transform: none;
+  }
+}

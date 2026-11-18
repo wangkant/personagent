@@ -245,6 +245,21 @@ class AgentSettings:
         lambda env: access.split_ids(
             env_str("PROACTIVE_PLATFORMS", "", strip=True, env=env)))
 
+    # ---- walks (roam.py) ----------------------------------------------------
+    #: Going out on its own as a signed-out visitor; it also needs a browser
+    #: and a model, and stays home without them.
+    roam_enabled: bool = _env(
+        lambda env: env_bool("ROAM_ENABLED", True, env=env))
+    roam_walks_a_day: int = _env(
+        lambda env: env_int("ROAM_WALKS_A_DAY", 3, minimum=0, maximum=6, env=env))
+    roam_gap_h: float = _env(
+        lambda env: env_float("ROAM_GAP_HOURS", 3.0, minimum=1.0, maximum=24.0, env=env))
+    #: Pages read in one walk at most; it reads at least 3.
+    roam_pages: int = _env(
+        lambda env: env_int("ROAM_PAGES_PER_WALK", 8, minimum=3, maximum=12, env=env))
+    roam_site_pages_a_day: int = _env(
+        lambda env: env_int("ROAM_SITE_PAGES_A_DAY", 30, minimum=1, maximum=60, env=env))
+
     # ---- the self-evolution loop ------------------------------------------
     #: Opt-in loop turning low-score eval entries into BAD/OK candidates, which
     #: still need corroborating evidence or a human promotion.

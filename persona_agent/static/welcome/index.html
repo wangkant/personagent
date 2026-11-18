@@ -47,7 +47,7 @@
         >
         <nav aria-label="Navigation" data-t-aria="ariaNav">
           <button type="button" class="nav active" data-view="chat" data-t-title="chat">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v11H9.5L5 20v-3.5H4z"/></svg><span data-t="chat">开始聊天</span>
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 11 12 4.5l7.5 6.5"/><path d="M6.5 9.5V19.5h11V9.5"/><path d="M10.5 19.5v-5h3v5"/></svg><span data-t="chat">家</span>
           </button>
           <button type="button" class="nav" data-view="activity" data-t-title="activity">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12h4l2.5-6.5 4 13 2.5-6.5h4"/></svg><span data-t="activity">动态</span
@@ -374,6 +374,27 @@
           <div id="tuning-root" class="panel-root side-card" hidden></div>
         </section>
         <section id="chat-view" class="page chat-page" hidden>
+          <aside id="stage" class="stage" aria-labelledby="stage-name" data-state="home">
+            <div class="stage-figure">
+              <p id="stage-bubble" class="stage-bubble" role="status" aria-live="polite" hidden></p>
+              <button type="button" id="stage-pat" class="stage-pat"
+                ><span class="avatar stage-avatar" id="stage-avatar" aria-hidden="true"></span
+                ><span class="stage-mark" aria-hidden="true"></span
+              ></button>
+            </div>
+            <div class="stage-text">
+              <h2 id="stage-name"></h2>
+              <p class="stage-now"><span class="stage-dot" aria-hidden="true"></span><span id="stage-now"></span></p>
+              <div class="stage-actions">
+                <button type="button" class="secondary" id="stage-days" data-t="homeDays">它的日常</button
+                ><button type="button" class="secondary" id="stage-out" aria-describedby="stage-why" hidden>出门看看</button
+                ><button type="button" class="secondary stage-tell" id="stage-tell" hidden></button>
+              </div>
+              <p id="stage-why" class="stage-why" hidden></p>
+              <p id="stage-growth" class="stage-growth" hidden></p>
+            </div>
+          </aside>
+          <div class="chat-column">
           <div class="chat-heading">
             <div class="avatar" id="chat-avatar" aria-hidden="true"
               ><span class="dots"><i></i><i></i><i></i></span
@@ -447,9 +468,25 @@
               记忆命令
             </button>
           </div>
+          </div>
         </section>
         <section id="activity-view" class="page activity-page" hidden>
           <h1 data-t="activity">动态</h1>
+          <div class="days-tabs" role="tablist" aria-labelledby="days-tabs-label">
+            <span id="days-tabs-label" class="sr-only" data-t="activity">动态</span
+            ><button type="button" role="tab" id="days-tab-days" class="days-tab" aria-selected="true" aria-controls="days-panel" data-t="daysTabDays">它的日常</button
+            ><button type="button" role="tab" id="days-tab-memory" class="days-tab" aria-selected="false" aria-controls="memory-panel" tabindex="-1" data-t="daysTabMemory">记忆与学习</button>
+          </div>
+          <div id="days-panel" class="days-panel" role="tabpanel" aria-labelledby="days-tab-days">
+            <p class="lead" data-t="daysLead">按日期记录它看到、写下和学到的内容。</p>
+            <p id="days-status" class="days-status" role="status"></p>
+            <div id="days-list" class="days-list"></div>
+            <div class="days-more">
+              <button type="button" class="secondary" id="days-earlier" data-t="daysEarlier" hidden>更早</button
+              ><button type="button" class="secondary" id="days-retry" data-t="daysRetry" hidden>重试</button>
+            </div>
+          </div>
+          <div id="memory-panel" class="memory-panel" role="tabpanel" aria-labelledby="days-tab-memory" hidden>
           <p class="lead" data-t="activityLead">
             角色所在的群聊和私聊、近期的发言，以及学到的内容。
           </p>
@@ -470,6 +507,7 @@
             <div id="activity-chat" class="activity-chat"></div>
           </div>
           <div id="learned-root" class="panel-root"></div>
+          </div>
         </section>
         <section id="platforms-view" class="page platforms-page" hidden>
           <h1 id="platforms-title"></h1>
@@ -636,6 +674,17 @@
             <button type="button" class="quiet" id="ask-no" data-t="cancel">取消</button>
             <button type="button" class="primary" id="ask-yes"></button>
           </div>
+        </dialog>
+        <dialog id="reader" class="reader" aria-labelledby="reader-title">
+          <div class="reader-head">
+            <div class="reader-heading">
+              <h2 id="reader-title"></h2>
+              <p id="reader-source" class="reader-source"></p>
+            </div>
+            <button type="button" class="quiet" id="reader-close" data-t="readerClose">关闭</button>
+          </div>
+          <div id="reader-text" class="reader-text" tabindex="0"></div>
+          <p class="reader-foot"><a id="reader-link" target="_blank" rel="noopener noreferrer" hidden></a></p>
         </dialog>
         <div id="closed" class="closed-overlay" hidden>
           <div class="card">

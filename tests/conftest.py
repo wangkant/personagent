@@ -60,6 +60,12 @@ def _no_update_check(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _no_walks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No service a test starts goes out to real sites; tests/test_roam.py turns walks on."""
+    monkeypatch.setenv("ROAM_ENABLED", "false")
+
+
+@pytest.fixture(autouse=True)
 def _same_on_every_machine(monkeypatch: pytest.MonkeyPatch) -> None:
     """English output whatever the system language, and no waiting on the
     disk: no test checks that a write was flushed."""

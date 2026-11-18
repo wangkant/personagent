@@ -9,7 +9,7 @@ function learnedChanged(from) {
 }
 const translations = {
   zh: {
-    chat: "开始聊天",
+    chat: "家",
     platforms: "连接平台",
     settings: "角色与设置",
     activity: "动态",
@@ -501,9 +501,76 @@ const translations = {
     chatPictureGone: "该图片已不存在。",
     chatViaCoding: "经由编程助手",
     closing: "正在关闭…",
+    homeNow_home: "在家。",
+    homeNow_answering: "正在 {where} 上回复消息。",
+    homeNow_answeringAny: "正在回复消息。",
+    homeNow_out: "外出中，正在 {where} 四处看看。",
+    homeNow_outAny: "外出散步中。",
+    homeNow_asleep: "正在休息，{time} 醒来。",
+    homeNow_asleepAny: "正在休息。",
+    homeNow_back: "散步归来，带回 {n} 样东西。",
+    homeNow_backOne: "散步归来，带回 1 样东西。",
+    homeNow_backNone: "散步归来。",
+    homeNow_off: "当前未在运行。",
+    homeDays: "它的日常",
+    homeOut: "出门看看",
+    homeOutBusy: "正在出门…",
+    homeTell: "有 {n} 件事想告诉你",
+    homeTellOne: "有 1 件事想告诉你",
+    homeTellBusy: "正在讲述…",
+    homeWhy_out: "{name}正在外出。",
+    homeWhy_asleep: "{name}正在休息。",
+    homeWhy_recent: "{name}在 30 分钟内刚外出过。",
+    homeWhy_off: "启动角色后才能外出。",
+    homeWhy_no_model: "设置模型后才能外出。",
+    homeGrowthDay: "第 {n} 天",
+    homeGrowthRemembers: "记得关于你的 {n} 件事",
+    homeGrowthSites: "去过 {n} 个网站",
+    homeSayLeft: "我出门了，很快回来。",
+    homeSayBack: "我回来了，带回了 {n} 样东西。",
+    homeSayBackOne: "我回来了，带回了 1 样东西。",
+    homeSayBackNone: "我回来了。",
+    homePat: "轻拍{name}",
+    homePat1: "你好。",
+    homePat2: "很高兴你来了。",
+    homePat3: "有点痒。",
+    homePat4: "嗯？我在听。",
+    homePat5: "谢谢你。",
+    daysTabDays: "它的日常",
+    daysTabMemory: "记忆与学习",
+    daysLead: "按日期记录它看到、写下和学到的内容。",
+    daysEmpty: "暂无内容。它外出时看到的和学到的内容会显示在这里。",
+    daysFailed: "无法加载它的日常。",
+    daysRetry: "重试",
+    daysEarlier: "更早",
+    daysLoading: "正在加载…",
+    daysToday: "今天",
+    daysYesterday: "昨天",
+    daysKind_saw: "看到",
+    daysKind_diary: "日记",
+    daysKind_learned: "学到",
+    daysKind_remembered: "记住",
+    daysKind_did: "做了",
+    daysKind_arrived: "纪事",
+    daysKeep: "收藏",
+    daysKept: "已收藏",
+    daysSaving: "正在保存…",
+    daysDismiss: "不感兴趣",
+    daysDismissed: "已标记为不感兴趣。",
+    daysTalk: "聊聊这个",
+    daysTalked: "已加入对话。",
+    cardPlay: "播放：{title}",
+    cardCover: "{title} 的封面",
+    cardPlayer: "播放器：{title}",
+    cardOpenOn: "在 {site} 打开",
+    cardOpen: "打开原网页",
+    cardRead: "阅读",
+    readerClose: "关闭",
+    readerFailed: "无法加载正文。",
+    readerEmpty: "此页面未保存可阅读的正文。",
   },
   en: {
-    chat: "Chat",
+    chat: "Home",
     platforms: "Connect apps",
     settings: "Character & settings",
     activity: "Activity",
@@ -1026,6 +1093,73 @@ const translations = {
     chatPictureGone: "This picture is no longer available.",
     chatViaCoding: "via a coding assistant",
     closing: "Closing…",
+    homeNow_home: "At home.",
+    homeNow_answering: "Answering messages on {where}.",
+    homeNow_answeringAny: "Answering messages.",
+    homeNow_out: "Out, looking around {where}.",
+    homeNow_outAny: "Out for a walk.",
+    homeNow_asleep: "Asleep until {time}.",
+    homeNow_asleepAny: "Asleep.",
+    homeNow_back: "Back from a walk with {n} things.",
+    homeNow_backOne: "Back from a walk with one thing.",
+    homeNow_backNone: "Back from a walk.",
+    homeNow_off: "Not running at the moment.",
+    homeDays: "Days",
+    homeOut: "Go out",
+    homeOutBusy: "Heading out…",
+    homeTell: "{n} things to tell you",
+    homeTellOne: "One thing to tell you",
+    homeTellBusy: "Telling…",
+    homeWhy_out: "{name} is out now.",
+    homeWhy_asleep: "{name} is asleep.",
+    homeWhy_recent: "{name} went out less than 30 minutes ago.",
+    homeWhy_off: "Start the character to let it go out.",
+    homeWhy_no_model: "Set up a model to let it go out.",
+    homeGrowthDay: "Day {n}",
+    homeGrowthRemembers: "remembers {n} things about you",
+    homeGrowthSites: "has been to {n} sites",
+    homeSayLeft: "I am heading out. I will be back soon.",
+    homeSayBack: "I am back, with {n} things to show you.",
+    homeSayBackOne: "I am back, with one thing to show you.",
+    homeSayBackNone: "I am back.",
+    homePat: "Pat {name}",
+    homePat1: "Hello.",
+    homePat2: "I am glad you are here.",
+    homePat3: "That tickles.",
+    homePat4: "Yes? I am listening.",
+    homePat5: "Thank you.",
+    daysTabDays: "Its days",
+    daysTabMemory: "Memory and learning",
+    daysLead: "What it saw, wrote and learned, day by day.",
+    daysEmpty: "Nothing here yet. What it sees on its walks and what it learns will appear here.",
+    daysFailed: "Its days could not be loaded.",
+    daysRetry: "Try again",
+    daysEarlier: "Earlier",
+    daysLoading: "Loading…",
+    daysToday: "Today",
+    daysYesterday: "Yesterday",
+    daysKind_saw: "Saw",
+    daysKind_diary: "Diary",
+    daysKind_learned: "Learned",
+    daysKind_remembered: "Remembered",
+    daysKind_did: "Did",
+    daysKind_arrived: "Milestone",
+    daysKeep: "Keep",
+    daysKept: "Kept",
+    daysSaving: "Saving…",
+    daysDismiss: "Not for me",
+    daysDismissed: "Marked as not for you.",
+    daysTalk: "Talk about it",
+    daysTalked: "Added to the conversation.",
+    cardPlay: "Play: {title}",
+    cardCover: "Cover of {title}",
+    cardPlayer: "Player: {title}",
+    cardOpenOn: "Open on {site}",
+    cardOpen: "Open the original page",
+    cardRead: "Read",
+    readerClose: "Close",
+    readerFailed: "The text could not be loaded.",
+    readerEmpty: "No readable text was kept for this page.",
   },
 };
 // The page's languages and their BCP 47 tags. English and Chinese live above;
@@ -1225,6 +1359,7 @@ function renderLanguage() {
   updateNames();
   renderStatus();
   renderActivity();
+  renderDays();
   if (!saving)
     $("save").textContent = t(state.configured ? "saveAgain" : "saveStart");
   $("api-key").placeholder = state.configured ? t("keySaved") : "sk-…";
@@ -1310,8 +1445,9 @@ function updateNames() {
   $("template-note").hidden = id !== "template";
   $("chat-name").textContent = state.name || name;
   paintAvatarOf($("preview-avatar"), avatarChoice, name);
-  for (const node of [$("chat-avatar"), $("empty-avatar")])
+  for (const node of [$("chat-avatar"), $("empty-avatar"), $("stage-avatar")])
     paintAvatarOf(node, state.avatar, state.name || name);
+  renderStage();
   $("chat-greeting").textContent = t("greeting", { name: state.name || name });
   $("platforms-title").textContent = t("platformsTitle", {
     name: state.name || name,
@@ -1497,7 +1633,9 @@ function showView(next) {
   if (next === "activity") {
     renderActivity();
     activityLoop();
+    if (daysTab === "days") loadDays();
   }
+  if (next === "chat" && !setup) loadHome();
   chatLoop();
   for (const shown of panelHooks.show[setup ? "settings" : next] || []) shown();
 }
@@ -2183,6 +2321,7 @@ async function poll() {
   try {
     state = await api("state");
     renderStatus();
+    homeTick();
   } catch (error) {
     if (error.message === "forbidden") {
       toast(t("forbidden"));
@@ -3025,6 +3164,10 @@ function showMessage(item, arrived = false) {
     Object.assign(via.style, { display: "block", marginTop: "2px", fontSize: "11.5px", opacity: "0.7" });
     node.append(via);
   }
+  if (item.card && item.role !== "user") {
+    node.classList.add("has-card");
+    node.append(contentCard(item.card));
+  }
   if (arrived) node.classList.add("arrived");
   chatSeen = Math.max(chatSeen, item.seq || 0);
   if (item.role === "user" && item.failed) {
@@ -3153,13 +3296,15 @@ let talkTimer = null;
 // The chat avatar thinks while a reply is on its way, then talks for a
 // while that grows with the reply.
 function avatarMood(mood, length = 0) {
-  const node = $("chat-avatar");
+  const nodes = [$("chat-avatar"), $("stage-avatar")];
   clearTimeout(talkTimer);
-  node.classList.toggle("thinking", mood === "thinking");
-  node.classList.toggle("talking", mood === "talking");
+  for (const node of nodes) {
+    node.classList.toggle("thinking", mood === "thinking");
+    node.classList.toggle("talking", mood === "talking");
+  }
   if (mood === "talking")
     talkTimer = setTimeout(
-      () => node.classList.remove("talking"),
+      () => nodes.forEach((node) => node.classList.remove("talking")),
       Math.min(3200, Math.max(900, 45 * length)),
     );
 }
@@ -3858,6 +4003,571 @@ window.addEventListener("resize", () => {
   if (!frame.frameless) return;
   clearTimeout(frameTimer);
   frameTimer = setTimeout(loadFrame, 150);
+});
+// ---- Home: the character on its stage, beside the conversation
+// The last answer of /api/home, or null while the service has none to give.
+let home = null,
+  homePolled = 0,
+  homeLoading = false,
+  homeOutBusy = false,
+  homeTellBusy = false,
+  homeLastState = null,
+  bubbleTimer = null,
+  patTimer = null,
+  patLast = 0;
+// No faster than the activity view already asks the service.
+const HOME_MS = 8000;
+const BUBBLE_MS = 8000;
+const PAT_MS = 1500;
+const PAT_LINES = 5;
+const HOME_STATES = ["home", "answering", "out", "asleep", "back", "off"];
+// A route the running service may not have answers 404: that is "nothing yet", not a failure.
+async function apiOptional(path) {
+  const response = await fetch(`/api/${path}`, { headers: authHeaders(), credentials: "same-origin" });
+  if (signedOut(response)) throw new Error("signin_required");
+  if (response.status === 404) return null;
+  const value = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(value.error || "generic");
+  return value;
+}
+function homeTick() {
+  if (view === "chat" && !document.hidden && Date.now() - homePolled >= HOME_MS) loadHome();
+}
+async function loadHome() {
+  if (homeLoading || !state?.configured) return renderStage();
+  homeLoading = true;
+  homePolled = Date.now();
+  try {
+    const value = await apiOptional("home");
+    home = value && typeof value.now === "object" && value.now ? value : null;
+  } catch {
+    home = null;
+  } finally {
+    homeLoading = false;
+  }
+  const now = home?.now.state || "";
+  if (now === "back" && homeLastState !== "back") say(backLine(home.now.count));
+  homeLastState = now;
+  renderStage();
+}
+const count = (value) => Math.max(0, Math.floor(Number(value) || 0));
+function backLine(n) {
+  n = count(n);
+  return t(n > 1 ? "homeSayBack" : n === 1 ? "homeSayBackOne" : "homeSayBackNone", { n: String(n) });
+}
+function nowText(now) {
+  const where = now.where ? platformName(String(now.where)) : "";
+  const n = count(now.count);
+  switch (now.state) {
+    case "answering":
+      return where ? t("homeNow_answering", { where }) : t("homeNow_answeringAny");
+    case "out":
+      return where ? t("homeNow_out", { where }) : t("homeNow_outAny");
+    case "asleep":
+      return now.until ? t("homeNow_asleep", { time: clockTime(now.until) }) : t("homeNow_asleepAny");
+    case "back":
+      return t(n > 1 ? "homeNow_back" : n === 1 ? "homeNow_backOne" : "homeNow_backNone", { n: String(n) });
+    case "off":
+      return t("homeNow_off");
+    default:
+      return t("homeNow_home");
+  }
+}
+function renderStage() {
+  if (!state) return;
+  const name = state.name || defaultName();
+  // Without the service's word, only what the page itself knows is said.
+  const now = home?.now || { state: state.agentRunning ? "home" : "off" };
+  $("stage").dataset.state = HOME_STATES.includes(now.state) ? now.state : "home";
+  $("stage-name").textContent = name;
+  $("stage-now").textContent = nowText(now);
+  $("stage-pat").setAttribute("aria-label", t("homePat", { name }));
+  // Going out is a part that can be absent: a reason this page cannot name hides it.
+  const why = home && !home.canGoOut ? String(home.whyNot || "") : "";
+  const reason = why && translations.en[`homeWhy_${why}`] ? t(`homeWhy_${why}`, { name }) : "";
+  const out = $("stage-out");
+  out.hidden = !home || (!home.canGoOut && !reason);
+  out.disabled = homeOutBusy || !home?.canGoOut;
+  out.classList.toggle("busy", homeOutBusy);
+  out.setAttribute("aria-busy", String(homeOutBusy));
+  out.textContent = t(homeOutBusy ? "homeOutBusy" : "homeOut");
+  $("stage-why").hidden = out.hidden || homeOutBusy || !reason;
+  $("stage-why").textContent = reason;
+  const tell = count(home?.tell);
+  const button = $("stage-tell");
+  button.hidden = !tell && !homeTellBusy;
+  button.disabled = homeTellBusy;
+  button.classList.toggle("busy", homeTellBusy);
+  button.setAttribute("aria-busy", String(homeTellBusy));
+  button.textContent = homeTellBusy
+    ? t("homeTellBusy")
+    : t(tell === 1 ? "homeTellOne" : "homeTell", { n: String(tell) });
+  const growth = home?.growth || {};
+  const parts = [
+    count(growth.day) && t("homeGrowthDay", { n: String(count(growth.day)) }),
+    count(growth.remembers) && t("homeGrowthRemembers", { n: String(count(growth.remembers)) }),
+    count(growth.sites) && t("homeGrowthSites", { n: String(count(growth.sites)) }),
+  ].filter(Boolean);
+  $("stage-growth").hidden = !parts.length;
+  $("stage-growth").textContent = parts.join(" · ");
+}
+// One thing said at a time, gone after a while; it never takes the focus.
+function say(text) {
+  const node = $("stage-bubble");
+  clearTimeout(bubbleTimer);
+  node.textContent = text;
+  node.classList.remove("fading");
+  node.hidden = false;
+  bubbleTimer = setTimeout(() => {
+    node.classList.add("fading");
+    bubbleTimer = setTimeout(() => {
+      node.hidden = true;
+      node.classList.remove("fading");
+    }, 300);
+  }, BUBBLE_MS);
+}
+// A pat is free: it is recorded nowhere and changes nothing but the moment.
+function pat() {
+  const avatar = $("stage-avatar");
+  clearTimeout(patTimer);
+  avatar.classList.remove("pat");
+  void avatar.offsetWidth;
+  avatar.classList.add("pat");
+  patTimer = setTimeout(() => avatar.classList.remove("pat"), PAT_MS);
+  let line = patLast;
+  while (line === patLast) line = 1 + Math.floor(Math.random() * PAT_LINES);
+  patLast = line;
+  say(t(`homePat${line}`));
+}
+async function goOut() {
+  if (homeOutBusy || !home?.canGoOut) return;
+  homeOutBusy = true;
+  renderStage();
+  try {
+    const value = await api("home/out", {});
+    if (value.error) throw new Error(value.error);
+    say(t("homeSayLeft"));
+  } catch (error) {
+    const key = `homeWhy_${error.message}`;
+    toast(translations.en[key] ? t(key, { name: state.name || defaultName() }) : t(error.message));
+  } finally {
+    homeOutBusy = false;
+    homePolled = 0;
+    await loadHome();
+  }
+}
+async function tellThings() {
+  if (homeTellBusy) return;
+  homeTellBusy = true;
+  renderStage();
+  let told = false;
+  try {
+    await api("home/tell", {});
+    if (home) home.tell = 0;
+    told = true;
+  } catch (error) {
+    toast(t(error.message));
+  } finally {
+    homeTellBusy = false;
+    renderStage();
+  }
+  if (!told) return;
+  $("message").focus();
+  // What it tells arrives through the chat, at its usual pace.
+  chatPolled = 0;
+  chatLoop();
+}
+$("stage-pat").addEventListener("click", pat);
+$("stage-pat").addEventListener("dblclick", () => openDays());
+$("stage-days").addEventListener("click", () => openDays());
+$("stage-out").addEventListener("click", goOut);
+$("stage-tell").addEventListener("click", tellThings);
+// ---- Days: what it saw, wrote and learned, newest first
+let days = null,
+  daysTab = "days",
+  daysStatus = "",
+  daysMoreBusy = false,
+  daysSeq = 0;
+// The entries drawn, by id, so a poll or an action never reloads a playing video.
+const dayNodes = new Map();
+const DAY_KINDS = ["saw", "diary", "learned", "remembered", "did", "arrived"];
+const DAYS_PAGE = 30;
+function openDays() {
+  selectDaysTab("days");
+  showView("activity");
+}
+function selectDaysTab(next, focus = false) {
+  daysTab = next;
+  for (const [tab, name] of [[$("days-tab-days"), "days"], [$("days-tab-memory"), "memory"]]) {
+    tab.setAttribute("aria-selected", String(name === next));
+    tab.tabIndex = name === next ? 0 : -1;
+    if (focus && name === next) tab.focus();
+  }
+  $("days-panel").hidden = next !== "days";
+  $("memory-panel").hidden = next !== "memory";
+  if (next === "days" && view === "activity") loadDays();
+}
+function dayKey(epoch) {
+  const date = new Date(Number(epoch || 0) * 1000);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+function dayTitle(epoch) {
+  const key = dayKey(epoch);
+  if (key === dayKey(Date.now() / 1000)) return t("daysToday");
+  if (key === dayKey(Date.now() / 1000 - 86400)) return t("daysYesterday");
+  return new Date(epoch * 1000).toLocaleDateString(LANGS[lang] || "en", {
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  });
+}
+const validEntry = (item) => item && typeof item === "object" && item.id && DAY_KINDS.includes(item.kind);
+async function loadDays(more = false) {
+  if (!state?.configured || (more && daysMoreBusy)) return;
+  const seq = ++daysSeq;
+  if (more) daysMoreBusy = true;
+  else if (!days) daysStatus = "loading";
+  renderDays();
+  try {
+    const last = more ? days?.items.at(-1)?.id : "";
+    const value = await apiOptional(
+      `days?limit=${DAYS_PAGE}${last ? `&before=${encodeURIComponent(last)}` : ""}`,
+    );
+    if (seq !== daysSeq) return;
+    const items = (Array.isArray(value?.items) ? value.items : []).filter(validEntry);
+    if (more) {
+      const known = new Set(days.items.map((item) => item.id));
+      const added = items.filter((item) => !known.has(item.id));
+      days = { items: [...days.items, ...added], more: Boolean(value?.more) && added.length > 0 };
+      daysStatus = "";
+      appendDays(added);
+    } else {
+      days = { items, more: Boolean(value?.more) };
+      daysStatus = "";
+      drawDays();
+    }
+  } catch {
+    if (seq !== daysSeq) return;
+    if (!more || !days) daysStatus = "failed";
+    else toast(t("daysFailed"));
+  } finally {
+    if (seq === daysSeq) daysMoreBusy = false;
+    renderDays();
+  }
+}
+function renderDays() {
+  if (!state) return;
+  const items = days?.items || [];
+  const status =
+    daysStatus === "loading" && !items.length
+      ? "daysLoading"
+      : daysStatus === "failed" && !items.length
+        ? "daysFailed"
+        : days && !items.length
+          ? "daysEmpty"
+          : "";
+  $("days-status").textContent = status ? t(status) : "";
+  $("days-status").hidden = !status;
+  $("days-retry").hidden = daysStatus !== "failed" || items.length > 0;
+  const earlier = $("days-earlier");
+  earlier.hidden = !days?.more;
+  earlier.disabled = daysMoreBusy;
+  earlier.classList.toggle("busy", daysMoreBusy);
+  earlier.setAttribute("aria-busy", String(daysMoreBusy));
+}
+// Drawn whole again only when the first page arrives or the language changes.
+function drawDays() {
+  dayNodes.clear();
+  $("days-list").replaceChildren();
+  appendDays(days?.items || []);
+}
+function appendDays(items) {
+  const list = $("days-list");
+  for (const item of items) {
+    let group = list.lastElementChild;
+    if (group?.dataset.day !== dayKey(item.at)) {
+      group = el("section", "day-group");
+      group.dataset.day = dayKey(item.at);
+      group.append(el("h2", "day-title", dayTitle(item.at)));
+      list.append(group);
+    }
+    const node = dayEntry(item);
+    dayNodes.set(item.id, node);
+    group.append(node);
+  }
+}
+function dayEntry(item) {
+  const node = el("article", `day-entry day-${item.kind}`);
+  const head = el("p", "day-head");
+  head.append(el("span", "day-kind", t(`daysKind_${item.kind}`)));
+  if (item.at) {
+    const time = el("time", "", clockTime(item.at));
+    time.dateTime = new Date(item.at * 1000).toISOString();
+    head.append(time);
+  }
+  node.append(head);
+  if (item.text) node.append(el("p", "day-text", String(item.text)));
+  if (item.card) node.append(contentCard(item.card));
+  if (item.kind === "saw") {
+    const actions = el("div", "day-actions");
+    const status = el("p", "day-status");
+    status.tabIndex = -1;
+    status.setAttribute("role", "status");
+    node.append(actions, status);
+    drawDayActions(node, item);
+  }
+  return node;
+}
+function dayButton(key, busyKey, run) {
+  const button = el("button", "secondary", t(key));
+  button.type = "button";
+  button.dataset.key = key;
+  button.dataset.busyKey = busyKey;
+  button.addEventListener("click", run);
+  return button;
+}
+function drawDayActions(node, item) {
+  const actions = node.querySelector(".day-actions");
+  const status = node.querySelector(".day-status");
+  node.classList.toggle("dismissed", Boolean(item.dismissed));
+  if (item.dismissed) {
+    actions.replaceChildren();
+    status.textContent = t("daysDismissed");
+    return;
+  }
+  const keep = dayButton(item.kept ? "daysKept" : "daysKeep", "daysSaving", () =>
+    dayAction(item, "keep", { id: item.id, kept: !item.kept }),
+  );
+  keep.setAttribute("aria-pressed", String(Boolean(item.kept)));
+  keep.classList.add("day-keep");
+  const dismiss = dayButton("daysDismiss", "daysSaving", () => dayAction(item, "dismiss", { id: item.id }));
+  const talk = dayButton("daysTalk", "daysSaving", () => dayAction(item, "talk", { id: item.id }));
+  if (item.talked) talk.classList.add("done");
+  for (const [button, verb] of [[keep, "keep"], [dismiss, "dismiss"], [talk, "talk"]]) {
+    const busy = item.busy === verb;
+    button.disabled = Boolean(item.busy);
+    button.classList.toggle("busy", busy);
+    button.setAttribute("aria-busy", String(busy));
+  }
+  actions.replaceChildren(keep, dismiss, talk);
+  status.textContent = item.talked ? t("daysTalked") : "";
+}
+async function dayAction(item, verb, payload) {
+  if (item.busy) return;
+  const node = dayNodes.get(item.id);
+  item.busy = verb;
+  drawDayActions(node, item);
+  let failed = "";
+  try {
+    const value = await api(`days/${verb}`, payload);
+    if (verb === "keep") item.kept = typeof value.kept === "boolean" ? value.kept : payload.kept;
+    if (verb === "dismiss") item.dismissed = true;
+    if (verb === "talk") item.talked = true;
+  } catch (error) {
+    failed = error.message;
+  }
+  item.busy = "";
+  if (!node.isConnected) return;
+  drawDayActions(node, item);
+  if (failed) {
+    toast(t(failed));
+    node.querySelector(`.day-actions [data-key]`)?.focus();
+    return;
+  }
+  if (verb === "keep") node.querySelector(".day-keep")?.focus();
+  else node.querySelector(".day-status").focus();
+  // Said in the conversation: that is where it goes on.
+  if (verb === "talk") {
+    chatPolled = 0;
+    showView("chat");
+  }
+}
+$("days-tab-days").addEventListener("click", () => selectDaysTab("days"));
+$("days-tab-memory").addEventListener("click", () => selectDaysTab("memory"));
+for (const tab of [$("days-tab-days"), $("days-tab-memory")])
+  tab.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next = ["ArrowLeft", "Home"].includes(event.key) ? "days" : "memory";
+    selectDaysTab(next, true);
+  });
+$("days-earlier").addEventListener("click", () => loadDays(true));
+$("days-retry").addEventListener("click", () => loadDays());
+// ---- Content cards: what it brought back, shown here rather than linked
+const PLAYER_HOSTS = new Set(["www.youtube-nocookie.com", "www.youtube.com", "player.bilibili.com"]);
+const CARD_KINDS = ["video", "article", "post", "page"];
+function playerUrl(address) {
+  try {
+    const url = new URL(String(address || ""));
+    if (url.protocol !== "https:" || !PLAYER_HOSTS.has(url.hostname)) return "";
+    // Pressing play is the request to play: the player should not ask twice.
+    url.searchParams.set("autoplay", "1");
+    return url.href;
+  } catch {
+    return "";
+  }
+}
+function pageUrl(address) {
+  try {
+    const url = new URL(String(address || ""));
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+function clipLength(seconds) {
+  const total = count(seconds);
+  if (!total) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  const [h, m, s] = [Math.floor(total / 3600), Math.floor((total % 3600) / 60), total % 60];
+  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+// The cover route needs the page's token, which an <img> cannot send.
+const libraryPictures = new Map();
+function libraryPicture(path) {
+  if (!/^\/api\/library\/picture\/[A-Za-z0-9_-]+$/.test(path || "")) return Promise.resolve("");
+  if (!libraryPictures.has(path))
+    libraryPictures.set(
+      path,
+      fetch(path, { headers: authHeaders(), credentials: "same-origin" })
+        .then((response) => (response.ok ? response.blob() : null))
+        .then((blob) => (blob ? URL.createObjectURL(blob) : ""))
+        .catch(() => "")
+        .then((url) => {
+          if (!url) libraryPictures.delete(path);
+          return url;
+        }),
+    );
+  return libraryPictures.get(path);
+}
+// The library's id for an address, as persona_agent.library.item_id makes it.
+async function libraryId(address) {
+  if (!crypto?.subtle) return "";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(address));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
+}
+function cardTitle(card) {
+  if (card.title) return String(card.title);
+  try {
+    return new URL(card.url).hostname;
+  } catch {
+    return "";
+  }
+}
+function contentCard(card) {
+  const kind = CARD_KINDS.includes(card.kind) ? card.kind : "page";
+  const root = el("div", `content-card card-${kind}`);
+  const title = cardTitle(card);
+  const site = String(card.site || "");
+  const player = kind === "video" ? playerUrl(card.embed) : "";
+  const link = pageUrl(card.url);
+  // An empty frame is drawn only where a player can go into it.
+  if (kind === "video" && (player || card.picture)) {
+    const media = el("div", "card-media");
+    const cover = el("div", "card-cover");
+    media.append(cover);
+    libraryPicture(card.picture).then((url) => {
+      if (!url || !cover.isConnected) return;
+      const image = el("img");
+      image.alt = t("cardCover", { title });
+      image.src = url;
+      cover.append(image);
+    });
+    if (player) {
+      const play = el("button", "card-play");
+      play.type = "button";
+      play.setAttribute("aria-label", t("cardPlay", { title }));
+      play.append(el("span", "card-play-mark"));
+      play.addEventListener("click", () => {
+        const frame = el("iframe", "card-player");
+        frame.src = player;
+        frame.title = t("cardPlayer", { title });
+        frame.loading = "lazy";
+        frame.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+        frame.allowFullscreen = true;
+        // The page sends no referrer, but these players refuse to play without the origin.
+        frame.referrerPolicy = "strict-origin-when-cross-origin";
+        media.replaceChildren(frame);
+        media.classList.add("playing");
+        frame.focus();
+      });
+      media.append(play);
+    }
+    root.append(media);
+  }
+  const body = el("div", "card-body");
+  body.append(el("strong", "card-title", title));
+  const facts = [site, String(card.author || ""), kind === "video" ? clipLength(card.length) : ""].filter(Boolean);
+  if (facts.length) body.append(el("span", "card-meta", facts.join(" · ")));
+  if (card.excerpt && !player) body.append(el("p", "card-excerpt", String(card.excerpt)));
+  const actions = el("div", "content-actions");
+  if ((kind === "article" || kind === "post") && card.readable !== false) {
+    const read = el("button", "secondary", t("cardRead"));
+    read.type = "button";
+    read.addEventListener("click", () => openReader(card, read));
+    actions.append(read);
+  }
+  if (link && !player) {
+    const open = el("a", "card-open", site ? t("cardOpenOn", { site }) : t("cardOpen"));
+    open.href = link;
+    open.target = "_blank";
+    open.rel = "noopener noreferrer";
+    actions.append(open);
+  }
+  if (actions.childElementCount) body.append(actions);
+  root.append(body);
+  return root;
+}
+// ---- The reading panel: the text it kept, read here
+let readerSeq = 0,
+  readerOpener = null;
+async function openReader(card, opener) {
+  const dialog = $("reader");
+  const seq = ++readerSeq;
+  readerOpener = opener;
+  $("reader-title").textContent = cardTitle(card);
+  $("reader-source").textContent = [card.site, card.author].filter(Boolean).join(" · ");
+  const link = pageUrl(card.url);
+  $("reader-link").hidden = !link;
+  $("reader-link").href = link || "#";
+  $("reader-link").textContent = card.site ? t("cardOpenOn", { site: card.site }) : t("cardOpen");
+  const text = $("reader-text");
+  text.setAttribute("aria-busy", "true");
+  text.replaceChildren(el("p", "reader-note", t("daysLoading")));
+  if (!dialog.open) dialog.showModal();
+  let note = "";
+  try {
+    const id = card.id || (await libraryId(String(card.url || "")));
+    const value = id ? await apiOptional(`library/text?id=${encodeURIComponent(id)}`) : null;
+    if (seq !== readerSeq) return;
+    const body = String(value?.text || "").trim();
+    if (value?.title) $("reader-title").textContent = String(value.title);
+    if (body)
+      text.replaceChildren(
+        ...body
+          .split(/\n\s*\n|\n/)
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .map((part) => el("p", "", part)),
+      );
+    else note = "readerEmpty";
+  } catch {
+    note = "readerFailed";
+  }
+  if (seq !== readerSeq) return;
+  if (note) text.replaceChildren(el("p", "reader-note", t(note)));
+  text.setAttribute("aria-busy", "false");
+  text.scrollTop = 0;
+}
+$("reader-close").addEventListener("click", () => $("reader").close());
+// A press on the veil outside the panel closes it, as Escape does.
+$("reader").addEventListener("click", (event) => {
+  if (event.target === $("reader")) $("reader").close();
+});
+$("reader").addEventListener("close", () => {
+  readerSeq += 1;
+  if (readerOpener?.isConnected) readerOpener.focus();
+  readerOpener = null;
 });
 // What a panel under /assets/panels builds its part of the page with. Panel
 // scripts run after this file and before the first state arrives.

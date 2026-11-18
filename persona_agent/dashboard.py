@@ -34,7 +34,8 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 from . import (access, candidates, channels, chatlog, decision_log, embeddings, evidence,
-               langs, learning as learning_rules, lineage, memstate, promotion)
+               langs, learning as learning_rules, life, lineage, memstate, promotion)
+from .library import KEPT, Library
 from .config_env import env_bool, env_float, env_int
 from .paths import ROOT, resolve_runtime_lang_file, runtime_dir
 from .settings import content_lang
@@ -1069,3 +1070,73 @@ async def dashboard_memory_evidence(request: Request, conv: str = "", kind: str 
     if found is None:
         return _refused(409, "already_forgotten", "that item is already gone")
     return _json(found, agent)
+
+
+# ------------------------------------------------------------------ life ----
+
+_ITEM_ID = re.compile(r"[0-9a-f]{16}")
+DAYS_MARKS = ("keep", "dismiss", "told")
+
+
+def _life_sources(agent) -> life.Sources:
+    runtime = runtime_dir()
+    return life.Sources.of_agent(agent, runtime) if agent is not None else life.Sources(runtime)
+
+
+@router.get("/api/dashboard/home", include_in_schema=False)
+async def dashboard_home(request: Request):
+    """What the character is doing now, its growth facts and whether it may go out."""
+    refused = _check(request)
+    if refused is not None:
+        return refused
+    agent = _server().agent
+    if agent is None:
+        return _json(life.home(_life_sources(None)), agent)
+    return _json(life.of_agent(agent, runtime_dir()), agent)
+
+
+@router.post("/api/dashboard/home/out", include_in_schema=False)
+async def dashboard_home_out(request: Request):
+    """Ask it to go out now; the walk is the roam part's and starts by itself."""
+    parsed, refused = await _memory_write(request)
+    if refused is not None:
+        return refused
+    agent = _server().agent
+    allowed, code = life.can_go_out(agent)
+    if not allowed:
+        return _json({"error": code}, agent)
+    try:
+        agent.roam.request()
+    except Exception as exc:
+        logger.warning("[dashboard] a walk could not be asked for: %s", exc)
+        return _json({"error": "off"}, agent)
+    return _json({"ok": True}, agent)
+
+
+@router.get("/api/dashboard/days", include_in_schema=False)
+async def dashboard_days(request: Request, before: str = "", limit: int = life.DAYS_LIMIT,
+                         kept: int = 0):
+    """Its days, newest first, a page at a time; with `kept`, only what the owner kept."""
+    refused = _check(request)
+    if refused is not None:
+        return refused
+    agent = _server().agent
+    return _json(life.days(_life_sources(agent), before[:128], limit, kept_only=bool(kept)), agent)
+
+
+@router.post("/api/dashboard/days/{action}", include_in_schema=False)
+async def dashboard_days_mark(action: str, request: Request):
+    """The owner's choice about one thing it saw, or that it was told."""
+    parsed, refused = await _memory_write(request)
+    if refused is not None:
+        return refused
+    if action not in DAYS_MARKS:
+        return _refused(404, "unknown_action", "unknown action")
+    ident = str(parsed.get("id") or "")
+    if not _ITEM_ID.fullmatch(ident):
+        return _refused(400, "invalid_id", "give an item id")
+    agent = _server().agent
+    item = life.mark(Library(runtime_dir()), ident, action, parsed.get("kept") is not False)
+    if item is None:
+        return _refused(404, "not_found", "no such item")
+    return _json({"ok": True, "kept": item.state == KEPT}, agent)

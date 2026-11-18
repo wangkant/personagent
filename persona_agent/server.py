@@ -35,6 +35,7 @@ from persona_agent.health import run_checks, all_critical_ok
 from persona_agent.memstore import MemoryFileDamaged
 from persona_agent.outbox import parse_pull, pull_problem
 from persona_agent.paths import ROOT, runtime_dir
+from persona_agent.roam import Roam
 from persona_agent.settings import AgentSettings
 from persona_agent.storage import (
     ALREADY_RUNNING, LockUnavailable, RuntimeInstanceLock, atomic_write_text)
@@ -731,6 +732,8 @@ async def lifespan(app: FastAPI):
         _spawn(agent.check_missed_mentions())
         _spawn(agent.loop_check_missed())
         _spawn(agent.loop_proactive())  # self-guards on PROACTIVE_ENABLED
+        agent.roam = Roam(agent, home=ROOT, runtime=runtime_dir())
+        _spawn(agent.roam.loop())       # stays home without ROAM_ENABLED, a browser or a model
         _spawn(agent.loop_evolve())     # self-guards on EVOLVE_AUTO_ENABLED
         _spawn(agent.loop_adoption())   # self-guards on PROMOTE_JUDGE_ENABLED
         _spawn(agent.loop_memory())     # folds self-guard on MEMORY_CALLS_PER_DAY
