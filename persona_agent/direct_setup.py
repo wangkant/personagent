@@ -6,13 +6,19 @@ display_failed, platform_rejected or cancelled), never a credential."""
 from __future__ import annotations
 
 import asyncio
+import importlib.util
+import os
+import shutil
+import subprocess
+import time
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 from . import connections as conn
 from . import direct
 from .astrbot_install import AstrBotInstallation
 from .direct import base as direct_base
+from .direct import browser as web
 
 # Refusals a direct platform names, which the page and the terminal explain one by one.
 NAMED_REFUSALS = {"token_rejected", "app_rejected", "bot_in_use", "message_content_intent_off",
@@ -25,6 +31,9 @@ NAMED_REFUSALS = {"token_rejected", "app_rejected", "bot_in_use", "message_conte
                   "login_denied", "invalid_intents", "invalid_shard", "sharding_required",
                   "invalid_api_version", "sign_in_expired", "login_rejected", "login_unsupported",
                   "token_short_lived", "sign_in_missing", "invite_declined",
+                  # A platform worked through its website (direct.browser).
+                  web.VERIFICATION, web.PAGE_CHANGED, web.NO_BROWSER, web.NO_DRIVER, web.DAILY_LIMIT,
+                  web.NO_START, "channel_missing",
                   # Still retried, with a cause the page names (direct.base.Status "retrying").
                   "unreachable", "access_denied", "session_paused"}
 
@@ -83,8 +92,9 @@ def check(home: Path, spec: conn.Platform, values: dict, *, session: bool = Fals
         kept = asyncio.run(ask())
     except direct_base.Refused as exc:
         raise RuntimeError(str(exc) if str(exc) in NAMED_REFUSALS else "platform_rejected") from None
-    except ConnectionError:
-        raise RuntimeError("network_failed") from None
+    except ConnectionError as exc:
+        # A browser that would not start is not the network.
+        raise RuntimeError(web.NO_START if str(exc) == web.NO_START else "network_failed") from None
     result = verdict(state)
     if result not in ("", "connected"):
         raise RuntimeError(result)
@@ -208,3 +218,140 @@ def remove(home: Path, spec: conn.Platform) -> bool:
 def clear_state(home: Path, kind: str) -> None:
     """What the ended login kept between runs."""
     direct.state_path(home, kind).unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------- a personal account in a browser
+
+#: `open_window(profile, url) -> the window's process or None`: an ordinary
+#: browser window for the owner to sign in. Tests sign in on a stand-in site.
+open_window: Callable[[Path, str], Optional[subprocess.Popen]] = web.open_sign_in
+# How long a window that handed over to another process may take to show it holds the profile.
+WINDOW_START_S = 15.0
+
+
+def is_browser(spec: conn.Platform) -> bool:
+    return spec.sign_in == "browser"
+
+
+def browser_support() -> str:
+    """NO_DRIVER or NO_BROWSER when this computer cannot work a website; "" when it can."""
+    if importlib.util.find_spec("playwright") is None:
+        return web.NO_DRIVER
+    if web.find_browser() is None:
+        return web.NO_BROWSER
+    return ""
+
+
+def support_command() -> str:
+    """The command that adds browser support to this copy of personagent."""
+    from .updates import how_to_add_browser_support
+
+    return how_to_add_browser_support()
+
+
+def profile_open(profile: Path) -> bool:
+    """Whether a browser holds `profile`: its lock is taken while one runs."""
+    if os.name == "nt":
+        lock = profile / "lockfile"
+        try:
+            lock.unlink()
+        except FileNotFoundError:
+            return False
+        except PermissionError:
+            return True
+        except OSError:
+            return False
+        return False
+    try:
+        target = os.readlink(profile / "SingletonLock")
+    except OSError:
+        return False
+    pid = target.rpartition("-")[2]
+    if not pid.isdigit():
+        return True
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def close_window(profile: Path, window: Optional[subprocess.Popen]) -> None:
+    """Close the sign-in window as its close button does, so the sign-in
+    reaches the disk, then end whatever is left of it."""
+    asked = False
+    if os.name == "nt":
+        # Without /F, taskkill asks a process's windows to close.
+        script = ("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and "
+                  "$_.CommandLine.Contains('--user-data-dir') -and "
+                  "$_.CommandLine.Contains($env:PERSONAGENT_PROFILE) -and "
+                  "-not $_.CommandLine.Contains('--type=') } | ForEach-Object { "
+                  "taskkill.exe /PID $_.ProcessId | Out-Null; if ($LASTEXITCODE -eq 0) { 'asked' } }")
+        try:
+            done = subprocess.run(["powershell", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
+                                  env={**os.environ, "PERSONAGENT_PROFILE": str(profile)},
+                                  stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30)
+            asked = "asked" in done.stdout
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    elif window is not None and window.poll() is None:
+        import signal
+
+        try:
+            os.killpg(window.pid, signal.SIGTERM)       # a browser closes cleanly on SIGTERM
+            asked = True
+        except (ProcessLookupError, PermissionError):
+            pass
+    if asked:
+        deadline = time.monotonic() + web.CLOSE_S
+        while time.monotonic() < deadline and profile_open(profile):
+            time.sleep(0.2)
+        # The window is gone a moment before the profile is written out.
+        time.sleep(1.0)
+    web.end_profile(profile, window)
+
+
+def browser_sign_in(home: Path, spec: conn.Platform, *, done: Callable[[], bool] = lambda: False,
+                    should_stop: Callable[[], bool] = lambda: False,
+                    opened: Callable[[], None] = lambda: None,
+                    checking: Callable[[], None] = lambda: None) -> dict:
+    """Open a window for the owner to sign in, wait until `done()` or the
+    window is closed, then read which account is signed in there; the values
+    to store. Nothing here sees what the owner types in the window."""
+    problem = browser_support()
+    if problem:
+        raise RuntimeError(problem)
+    profile = web.profile_path(home, spec.kind)
+    try:
+        window = open_window(profile, direct.sign_in_url(spec.kind))
+    except direct_base.Refused as exc:
+        raise RuntimeError(str(exc) if str(exc) in NAMED_REFUSALS else web.NO_BROWSER) from None
+    except OSError:
+        raise RuntimeError(web.NO_BROWSER) from None
+    opened()
+    started, seen = time.monotonic(), False
+    try:
+        while not done():
+            if should_stop():
+                raise RuntimeError("cancelled")
+            # The first process may hand the window to another and end: the profile's lock says it is open.
+            showing = (window is not None and window.poll() is None) or profile_open(profile)
+            seen = seen or showing
+            if not showing and (seen or window is None or time.monotonic() - started > WINDOW_START_S):
+                break
+            time.sleep(0.3)
+    finally:
+        close_window(profile, window)
+    checking()
+    return check(home, spec, {})
+
+
+def forget_sign_in(home: Path, kind: str) -> None:
+    """A removed browser platform's sign-in (its browser profile) and what was
+    learned about its pages. Run while nothing has the profile open."""
+    profile = web.profile_path(home, kind)
+    web.end_profile(profile)
+    shutil.rmtree(profile, ignore_errors=True)
+    profile.with_suffix(".learned.json").unlink(missing_ok=True)

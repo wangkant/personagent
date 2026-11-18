@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Bilibili and YouTube with a personal account.** A new group in Connect apps, **Sign in to a personal account**, connects a site that has no bot interface for a personal account: personagent opens an ordinary browser window on this computer (the Edge, Chrome or Chromium already installed), the owner signs in there, and personagent then works the website as that account. personagent never sees or stores the password; the sign-in stays in a profile folder under `platforms/browser/` in the home and is deleted on disconnecting. The panel states the risk before anything opens (most sites' terms restrict automated use of personal accounts, and the account may be limited or closed; the risk is the account owner's, a separate account is advised, verifications are never got around, and content is to be marked as AI-generated where the site or the law requires it), and the button works only once the owner has ticked that they accept it. After the sign-in, **Signed in, continue** (or closing the window) reads which account is signed in and shows its name. The window opens only from the computer itself, never from another device. The page, `personagent connect bilibili` / `youtube` (with `--accept-risk` for `--no-input`) and `personagent doctor` name each new reason: nobody signed in, a verification to complete in the browser window, a sign-in that expired, a changed page, today's message limit, no browser found, and browser support missing, with the exact command that adds it to this copy. Browser support is the new `web` extra (`pip install "personagent[web]"`, Playwright, which drives the installed browser and downloads none).
+
 ## [1.5.0] — 2026-11-16
 
 Beside the mature assistants: a connected platform answers only the chats its admin approves, OpenRouter signs in without a pasted key, the character uses tools from MCP servers, and personagent runs on a server or in Docker with its page behind a password.

@@ -206,6 +206,8 @@
 "no ledgers yet": "尚无学习记录",
 "a chat platform, astrbot, claude-code, codex, dsh or api; omit it to list the chat platforms": "聊天平台、astrbot、claude-code、codex、dsh 或 api；省略时列出各聊天平台",
 "a chat platform: ask nothing; give every required value as an option": "聊天平台：不进行任何询问；所有必填项均须以参数形式提供",
+"bilibili, youtube: accept the risks of using a personal account, which connecting otherwise asks about": "bilibili、youtube：接受使用个人账号的风险；未提供时，连接过程中会就此询问",
+"--accept-risk applies only to connecting bilibili or youtube": "--accept-risk 仅适用于连接 bilibili 或 youtube",
 "the language of this command's messages (default: the saved one)": "此命令输出信息所用的语言（默认为已保存的语言）",
 "values of a chat platform (asked in a terminal when not given)": "聊天平台的各项设置（未提供时，将在终端中询问）",
 "{0}: not a value of the platform {1}": "{0}：不是平台 {1} 的设置项",

@@ -12,19 +12,22 @@ def test_every_platform_is_listed_once_and_only_scan_platforms_may_ask_for_nothi
     assert {p.kind for p in conn.PLATFORMS if p.group == conn.SCAN} == {"weixin_oc", "qq_official"}
     assert {p.kind for p in conn.PLATFORMS if conn.is_direct(p.kind)} == {
         "qq_official", "weixin_oc", "telegram", "discord",
-        "matrix", "twitch", "irc", "zulip", "vk", "stoat"}
+        "matrix", "twitch", "irc", "zulip", "vk", "stoat", "bilibili", "youtube"}
     for item in conn.PLATFORMS:
-        assert item.group in (conn.SCAN, conn.KEY, conn.ADVANCED)
-        # A scan platform's fields, if any, are for a bot made elsewhere.
-        assert item.fields or item.group == conn.SCAN
+        assert item.group in (conn.SCAN, conn.KEY, conn.ADVANCED, conn.BROWSER)
+        # A scan platform's fields, if any, are for a bot made elsewhere; a browser one signs in in a window.
+        assert item.fields or item.group in (conn.SCAN, conn.BROWSER)
         # The exceptions: an unregistered IRC nickname has no password, and a
         # Matrix bot signs in either with its user ID and password or with a token.
         optional = [f.key for f in item.fields if not f.required]
         assert (not optional or item.group == conn.ADVANCED or optional == ["irc_password"]
                 or optional == ["matrix_user", "matrix_password", "matrix_token"])
         # Only a direct platform with a login flow signs in by link.
-        assert item.sign_in in ("", "link")
-        assert not item.sign_in or conn.is_direct(item.kind) and item.group == conn.KEY
+        assert item.sign_in in ("", "link", "browser")
+        assert item.sign_in != "link" or conn.is_direct(item.kind) and item.group == conn.KEY
+        # A personal account in a browser: no fields, its own group, worked by personagent itself.
+        assert (item.sign_in == "browser") == (item.group == conn.BROWSER)
+        assert item.sign_in != "browser" or conn.is_direct(item.kind) and not item.fields
     # LINE always routes callbacks through AstrBot's dashboard, which does not run.
     assert "line" not in kinds
 
@@ -37,7 +40,7 @@ def test_the_catalog_never_carries_values():
     # Steps are [en, zh] pairs like every other text, so translations find them.
     assert all(len(step) == 2 and all(isinstance(s, str) and s.strip() for s in step)
                for p in listed for step in p["steps"])
-    assert [p["id"] for p in listed if p["signIn"]] == ["twitch"]
+    assert [p["id"] for p in listed if p["signIn"]] == ["twitch", "bilibili", "youtube"]
 
 
 def test_the_new_direct_platforms_ask_for_their_own_values():

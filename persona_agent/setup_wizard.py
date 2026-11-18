@@ -472,6 +472,46 @@ _TEXT: dict[str, tuple[str, str]] = {
     "direct_removed": ("{name} is disconnected, and its saved values have been deleted.",
                        "{name} 已断开连接，已保存的信息已删除。"),
     "direct_not_connected": ("{name} is not connected. Nothing was changed.", "{name} 未连接，未作任何更改。"),
+    # a personal account worked in a browser
+    "web_what": ("personagent opens a browser window on this computer, and you sign in there yourself. "
+                 "personagent never sees or stores your password. The sign-in is kept in a folder on this "
+                 "computer: {folder}",
+                 "personagent 会在本机打开一个浏览器窗口，由你本人在其中登录。personagent 不会看到也不会保存你的"
+                 "密码。登录状态保存在本机的一个文件夹中：{folder}"),
+    "web_risk_title": ("Before you continue:", "继续之前，请注意："),
+    "web_risk_account": ("This uses a personal account. The terms of most sites restrict automated use of "
+                         "personal accounts, and the site may limit or close the account.",
+                         "此方式使用的是个人账号。大多数网站的条款限制以自动化方式使用个人账号，网站可能会限制"
+                         "或关闭该账号。"),
+    "web_risk_owner": ("The risk is borne by the owner of the account. A separate account for the character "
+                       "is advised.",
+                       "相关风险由账号所有者自行承担。建议为角色单独使用一个账号。"),
+    "web_risk_verify": ("personagent does not get around verifications. When the site asks for one, "
+                        "personagent stops and waits until you complete it in the browser window.",
+                        "personagent 不会绕过任何验证。网站要求验证时，personagent 会暂停操作，直至你在浏览器"
+                        "窗口中完成验证。"),
+    "web_risk_label": ("Mark the character's content as AI-generated wherever the site or the law requires it.",
+                       "凡网站规定或法律要求之处，请将角色发布的内容标明为 AI 生成。"),
+    "web_accept_ask": ("Do you accept these risks for this account and continue?",
+                       "你是否接受上述风险并继续？"),
+    "web_accept_needed": ("Connecting {name} uses a personal account, and --no-input asks nothing. Read the "
+                          "text above and add --accept-risk to accept it, or run this command without "
+                          "--no-input.",
+                          "连接 {name} 需使用个人账号，而 --no-input 不会进行任何询问。请阅读上述说明后添加 "
+                          "--accept-risk 以表示接受，或不加 --no-input 运行此命令。"),
+    "web_declined": ("The risks were not accepted. Nothing was opened or saved.",
+                     "未接受上述风险，未打开任何窗口，也未保存任何内容。"),
+    "web_opening": ("A browser window opens at the sign-in page of {name}. Sign in there with the account "
+                    "the character will use.",
+                    "浏览器窗口将打开 {name} 的登录页面。请在其中登录角色将使用的账号。"),
+    "web_enter": ("When you are signed in, press Enter here. Closing the window also continues.",
+                  "登录完成后，请在此处按 Enter。关闭该窗口同样会继续。"),
+    "web_close": ("When you are signed in, close the window to continue.",
+                  "登录完成后，请关闭该窗口以继续。"),
+    "web_checking": ("Reading which account is signed in to {name}.", "正在读取 {name} 上已登录的账号。"),
+    "web_signed_in": ("Signed in to {name} as {account}.", "已以 {account} 的身份登录 {name}。"),
+    "web_forgotten": ("The sign-in to {name} kept on this computer has been deleted.",
+                      "本机保存的 {name} 登录状态已删除。"),
     "menu_platforms": ("Which chat platform should the character join?", "请选择角色要加入的聊天平台。"),
     "menu_astrbot": ("Another platform through AstrBot (Slack, KOOK, Feishu and others)",
                      "通过 AstrBot 接入的其他平台（Slack、KOOK、飞书等）"),
@@ -629,6 +669,25 @@ _TEXT: dict[str, tuple[str, str]] = {
         "请填写机器人账号的用户 ID 和密码，或填写其访问令牌。"),
     "refused_invite_declined": ("The bot declined a room invitation from a Matrix ID other than yours. It accepts invitations only from the Matrix ID saved here; if you sent the invitation yourself, set Matrix up again and check your Matrix ID.",
         "机器人拒绝了一个来自其他 Matrix ID 的房间邀请。它只接受此处保存的 Matrix ID 发出的邀请；如果邀请是你本人发出的，请重新设置 Matrix 并检查你的 Matrix ID。"),
+    # `<code>_web`: the wording for every platform worked through its website
+    "refused_sign_in_missing_web": ("Nobody was signed in to {name} when the window closed, so nothing was saved. Connect {name} again and sign in in the window before closing it or continuing.",
+        "关闭窗口时 {name} 上没有已登录的账号，因此未保存任何内容。请重新连接 {name}，并在关闭窗口或继续之前于窗口中完成登录。"),
+    "refused_sign_in_expired_web": ("{name} has signed the account out. Connect {name} again and sign in in the browser window that opens.",
+        "{name} 已将该账号退出登录。请重新连接 {name}，并在随后打开的浏览器窗口中登录。"),
+    "refused_verification_needed": ("{name} asks for a verification that only the account owner can complete. Open the {name} browser window from the taskbar and complete it there; personagent then continues by itself. If no such window is open, connect {name} again and complete the verification in the sign-in window.",
+        "{name} 要求进行只能由账号所有者完成的验证。请从任务栏打开 {name} 的浏览器窗口并在其中完成验证，personagent 随后会自动继续。如未打开此类窗口，请重新连接 {name}，并在登录窗口中完成验证。"),
+    "refused_page_changed": ("The {name} website has changed, and personagent could not find a step on its pages. The connection is kept and the step is tried again later; if this persists, update personagent.",
+        "{name} 网站有所变动，personagent 未能在页面上找到某个操作步骤。连接仍然保留，稍后会再次尝试；如此情况持续存在，请更新 personagent。"),
+    "refused_browser_missing": ("No Microsoft Edge, Google Chrome or Chromium was found on this computer. Install one of them, then connect {name} again. The PERSONA_BROWSER_PATH setting can name a browser installed elsewhere.",
+        "本机未找到 Microsoft Edge、Google Chrome 或 Chromium。请安装其中之一，然后重新连接 {name}。如浏览器安装在其他位置，可通过 PERSONA_BROWSER_PATH 设置指定。"),
+    "refused_browser_support_missing": ("This copy of personagent lacks browser support (Playwright). Run the following command, then connect {name} again:\n  {cmd}",
+        "此 personagent 副本缺少浏览器支持（Playwright）。请运行以下命令，然后重新连接 {name}：\n  {cmd}"),
+    "refused_browser_start_failed": ("The browser did not start. Close any {name} browser window that is open and connect {name} again; if it still fails, restart the computer and try once more.",
+        "浏览器未能启动。请关闭已打开的 {name} 浏览器窗口后重新连接 {name}；如仍然失败，请重启电脑后再试。"),
+    "refused_channel_missing": ("The Google account signed in to YouTube has no YouTube channel, and YouTube accepts comments only from an account with a channel. Create a channel for this account on YouTube, then connect YouTube again.",
+        "登录 YouTube 的 Google 账号没有 YouTube 频道，而 YouTube 只接受有频道的账号发表评论。请先在 YouTube 上为该账号创建频道，然后重新连接 YouTube。"),
+    "refused_daily_limit": ("The character has sent today's limit of messages on {name}; nothing more is sent there until tomorrow. The WEB_POSTS_A_DAY setting sets the limit.",
+        "角色今天在 {name} 上发送的消息已达上限，明天之前不会再发送。上限由 WEB_POSTS_A_DAY 设置决定。"),
     # finish
     "done": ("Setup complete", "设置完成"),
     "next": ("Next:", "接下来："),
@@ -2472,12 +2531,17 @@ def _shower(spec: connections.Platform, name: str, launcher: Launcher):
 
 def refusal(code: str, spec: connections.Platform, name: str, lang: str | None = None) -> str:
     """Why a platform was not connected, in words; in `lang`, else the terminal's."""
+    from persona_agent import direct_setup
+
     short = spec.kind.split("_")[0]
-    key = next((k for k in (f"refused_{code}_{short}", f"refused_{code}") if k in _TEXT),
+    web = (f"refused_{code}_web",) if direct_setup.is_browser(spec) else ()
+    key = next((k for k in (f"refused_{code}_{short}", *web, f"refused_{code}") if k in _TEXT),
                "refused_platform_rejected")
+    # Browser support missing: the command that adds it to this copy.
+    cmd = direct_setup.support_command() if code == direct_setup.web.NO_DRIVER else ""
     if lang is None:
-        return t(key, name=name)
-    return langs.say(*_TEXT[key], lang).format(name=name)
+        return t(key, name=name, cmd=cmd)
+    return langs.say(*_TEXT[key], lang).format(name=name, cmd=cmd)
 
 
 def _introduce(spec: connections.Platform, name: str, scan: bool) -> None:
@@ -2496,8 +2560,67 @@ def _introduce(spec: connections.Platform, name: str, scan: bool) -> None:
     print()
 
 
+def _browser_account(home: Path, spec: connections.Platform, name: str, *, accept_risk: bool,
+                     asking: bool) -> dict | int:
+    """A personal account: the explanation and the risks, an explicit yes,
+    the sign-in window, then the account signed in there; an exit code when
+    it does not come to that."""
+    import threading
+
+    from persona_agent import direct_setup
+    from persona_agent.direct import browser as web
+
+    print()
+    _header(name)
+    _say(_shown(spec.note))
+    print()
+    _say(t("web_what", folder=web.profile_path(home, spec.kind)))
+    print()
+    _say(t("web_risk_title"))
+    for key in ("web_risk_account", "web_risk_owner", "web_risk_verify", "web_risk_label"):
+        _say("  - " + t(key))
+    print()
+    problem = direct_setup.browser_support()
+    if problem:
+        sys.stdout.flush()
+        print(t("direct_failed", name=name), file=sys.stderr)
+        print(refusal(problem, spec, name), file=sys.stderr)
+        return 1
+    if not accept_risk:
+        if not asking:
+            sys.stdout.flush()
+            print(t("web_accept_needed", name=name), file=sys.stderr)
+            print(t("direct_nothing_saved"), file=sys.stderr)
+            return 2
+        if not ask_yn(t("web_accept_ask"), default_yes=False):
+            _say(t("web_declined"))
+            return 1
+    entered = threading.Event()
+
+    def opened() -> None:
+        _say(t("web_opening", name=name))
+        if not asking:
+            _say(t("web_close"))
+            return
+        _say(t("web_enter"))
+
+        def wait() -> None:
+            try:
+                input()
+            except (EOFError, OSError, RuntimeError):
+                return
+            entered.set()
+        # A closed window continues as well, so the wait for Enter must not hold the command.
+        threading.Thread(target=wait, name="personagent-signed-in", daemon=True).start()
+    values = direct_setup.browser_sign_in(home, spec, done=entered.is_set, opened=opened,
+                                          checking=lambda: _say(t("web_checking", name=name)))
+    _say(t("web_signed_in", name=name, account=values.get("account") or values.get("account_id") or ""))
+    return values
+
+
 def connect_platform(home: Path, kind: str, given: dict, *, remove: bool = False,
-                     no_input: bool = False, launcher: Launcher | None = None) -> int:
+                     no_input: bool = False, launcher: Launcher | None = None,
+                     accept_risk: bool = False) -> int:
     """`personagent connect <platform>`: what the page's Connect and
     Disconnect do, with the same checks and the same saved form."""
     from persona_agent import approvals, direct_setup
@@ -2506,6 +2629,7 @@ def connect_platform(home: Path, kind: str, given: dict, *, remove: bool = False
     spec = connections.platform(kind)
     name = _shown(spec.name)
     launcher = launcher or Launcher(python=sys.executable, home=home)
+    browser = direct_setup.is_browser(spec)
     try:
         if remove:
             if kind not in direct_setup.stored(home) and kind not in _via_astrbot(home):
@@ -2514,6 +2638,9 @@ def connect_platform(home: Path, kind: str, given: dict, *, remove: bool = False
             direct_setup.remove(home, spec)
             direct_setup.clear_state(home, kind)
             _say(t("direct_removed", name=name))
+            if browser:
+                direct_setup.forget_sign_in(home, kind)
+                _say(t("web_forgotten", name=name))
             _say(t("direct_restart"))
             return 0
         asking = not no_input and langs.interactive()
@@ -2526,7 +2653,7 @@ def connect_platform(home: Path, kind: str, given: dict, *, remove: bool = False
         if scan and spec.fields and asking:
             _say(t("direct_qq_ways"))
             scan = ask_number(t("direct_way"), 2, 1) == 1
-        if asking or scan:
+        if (asking or scan) and not browser:
             _introduce(spec, name, scan)
         values: dict = {}
         if not scan:
@@ -2536,9 +2663,15 @@ def connect_platform(home: Path, kind: str, given: dict, *, remove: bool = False
                 return 2
             values = found
         try:
-            if scan or spec.sign_in:
+            if browser:
+                # Read from the window's sign-in, which is the check.
+                account = _browser_account(home, spec, name, accept_risk=accept_risk, asking=asking)
+                if isinstance(account, int):
+                    return account
+                values = account
+            elif scan or spec.sign_in:
                 values = direct_setup.sign_in(spec, values, _shower(spec, name, launcher))
-            if not scan:
+            if not scan and not browser:
                 _say(t("direct_checking", name=name))
                 # And the verdict the page waits for: Discord refuses a missing intent only in a session.
                 values = direct_setup.check(home, spec, values, session=True) or values
@@ -2605,6 +2738,9 @@ def connect_parser(prog: str) -> argparse.ArgumentParser:
                    help=langs.term("a chat platform, claude-code, codex, dsh or api: disconnect it again"))
     p.add_argument("--no-input", action="store_true",
                    help=langs.term("a chat platform: ask nothing; give every required value as an option"))
+    p.add_argument("--accept-risk", action="store_true",
+                   help=langs.term("bilibili, youtube: accept the risks of using a personal account, which "
+                                   "connecting otherwise asks about"))
     p.add_argument("--lang", choices=LANGS,
                    help=langs.term("the language of this command's messages (default: the saved one)"))
     values = p.add_argument_group(langs.term("values of a chat platform (asked in a terminal when not given)"))
@@ -2748,6 +2884,8 @@ def _connect_main(argv: list[str], prog: str, chosen: str) -> int:
         if fields or args.remove or args.no_input:
             raise SystemExit(langs.term(f"Name the chat platform, for example: {command('connect telegram', home)}"))
         return list_platforms(home)
+    if args.accept_risk and not (kind and connections.platform(kind).sign_in == "browser" and not args.remove):
+        raise SystemExit(langs.term("--accept-risk applies only to connecting bilibili or youtube"))
     if kind:
         own = {item.key for item in connections.platform(kind).fields}
         stray = [_flag(key) for key in fields if key not in own]
@@ -2755,7 +2893,8 @@ def _connect_main(argv: list[str], prog: str, chosen: str) -> int:
             raise SystemExit(langs.term(f"{', '.join(stray)}: not a value of the platform {args.target}"))
         if args.remove and fields:
             raise SystemExit(langs.term("--remove does not accept platform values"))
-        return connect_platform(home, kind, fields, remove=args.remove, no_input=args.no_input)
+        return connect_platform(home, kind, fields, remove=args.remove, no_input=args.no_input,
+                                accept_risk=args.accept_risk)
     if args.target == "api":
         stray = [option for option in _given(args, args.not_for_platforms) if option != "--new-key"]
         if stray or fields or args.no_input:

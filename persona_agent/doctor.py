@@ -255,8 +255,9 @@ def _direct_running(found: Path) -> bool:
 def direct_platforms(found: Path) -> dict:
     """The platforms personagent connects itself and, while it runs, the state
     each one reports. Nothing is asked of a platform."""
+    from persona_agent import connections
     from persona_agent.direct import base
-    from persona_agent.direct_setup import NAMED_REFUSALS, stored
+    from persona_agent.direct_setup import NAMED_REFUSALS, browser_support, is_browser, stored
 
     found = found.resolve()
     running = _direct_running(found)
@@ -265,12 +266,18 @@ def direct_platforms(found: Path) -> dict:
     except (OSError, ValueError):
         states = {}
     rows = []
+    support = None
     for kind in stored(found):
         state = states.get(kind) if isinstance(states.get(kind), dict) else {}
         detail = str(state.get("detail") or "")
         # Only the named codes: any other detail may quote the platform's own text.
-        rows.append({"id": kind, "state": str(state.get("state") or ""),
-                     "detail": detail if detail in NAMED_REFUSALS else ""})
+        row = {"id": kind, "state": str(state.get("state") or ""),
+               "detail": detail if detail in NAMED_REFUSALS else ""}
+        if is_browser(connections.platform(kind)):
+            # Worked in a browser: what this computer lacks for it, running or not.
+            support = browser_support() if support is None else support
+            row["missing"] = support
+        rows.append(row)
     return {"running": running, "platforms": rows}
 
 
@@ -282,27 +289,42 @@ def direct_row(found: dict) -> tuple[str, str]:
     if not found["platforms"]:
         return "  -  ", langs.term("none connected")
     named = [(connections.say(connections.platform(p["id"]).name, lang), p) for p in found["platforms"]]
+    # A browser platform this computer cannot work, with the sentence that says how to fix it.
+    missing = [f"{name}: " + _refusal(p["missing"], p["id"], name, lang) for name, p in named if p.get("missing")]
     if not found["running"]:
-        return "  -  ", langs.term(f"{', '.join(name for name, _ in named)} (state unknown: personagent is not running)")
+        line = langs.term(f"{', '.join(name for name, _ in named)} (state unknown: personagent is not running)")
+        return (" FAIL" if missing else "  -  "), "; ".join([line, *missing])
     words = {"connected": "{0}: connected", "connecting": "{0}: connecting",
              "refused": "{0}: refused the connection", "error": "{0}: stopped by an error"}
     parts = []
     for name, platform in named:
-        if platform["detail"] and platform["state"] == "retrying":
+        if platform.get("missing"):
+            continue
+        browser = connections.platform(platform["id"]).sign_in == "browser"
+        if platform["detail"] and (platform["state"] == "retrying" or browser and platform["detail"] in _EXPLAINED):
             # The sentence `personagent connect` prints for the same cause.
-            from persona_agent import setup_wizard
-
-            parts.append(f"{name}: " + setup_wizard.refusal(platform["detail"], connections.platform(platform["id"]),
-                                                            name, lang=lang))
+            parts.append(f"{name}: " + _refusal(platform["detail"], platform["id"], name, lang))
             continue
         if platform["detail"] and platform["state"] == "refused":
             sentence = f"{name}: refused the connection ({platform['detail']})"
         else:
             sentence = words.get(platform["state"], "{0}: not started yet").replace("{0}", name)
         parts.append(langs.term(sentence))
-    failed = any(p["state"] in ("refused", "error") for _, p in named)
+    failed = bool(missing) or any(p["state"] in ("refused", "error") for _, p in named)
     ok = all(p["state"] == "connected" for _, p in named)
-    return (" FAIL" if failed else "  OK " if ok else "  -  "), "; ".join(parts)
+    return (" FAIL" if failed else "  OK " if ok else "  -  "), "; ".join(parts + missing)
+
+
+# Codes of a browser platform that say what to do, refused or not.
+_EXPLAINED = ("sign_in_expired", "verification_needed", "page_changed", "browser_missing",
+              "browser_start_failed", "channel_missing",
+              "browser_support_missing", "daily_limit")
+
+
+def _refusal(code: str, kind: str, name: str, lang: str) -> str:
+    from persona_agent import connections, setup_wizard
+
+    return setup_wizard.refusal(code, connections.platform(kind), name, lang=lang)
 
 
 def chat_api_state() -> dict:

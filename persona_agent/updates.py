@@ -157,6 +157,39 @@ def how_to_update() -> tuple[str, bool]:
     return f"{_program(_python())} -m pip install -U personagent", False
 
 
+BROWSER_SUPPORT = "playwright>=1.49,<2"
+
+
+def how_to_add_browser_support() -> str:
+    """The command that adds the `web` extra (Playwright) to this installation,
+    told apart as how_to_update tells it apart. Playwright drives the browser
+    already installed, so no browser is downloaded."""
+    from .pageaccess import in_container
+    from .setup_wizard import _program, _quote
+
+    wanted = f'"{BROWSER_SUPPORT}"'
+    if in_container():
+        return 'pip install "personagent[web]"'
+    if homes.is_checkout():
+        # Quoted always: a shell such as zsh reads the brackets as a pattern.
+        return f'{_program(_python())} -m pip install -e "{homes.CHECKOUT}[web]"'
+    prefix = Path(sys.prefix)
+    if langs.under_uvx():
+        # uvx builds its environment for each start: the extra goes in the start command.
+        return 'uvx --from "personagent[web]" personagent'
+    if (prefix / "uv-receipt.toml").is_file():
+        return 'uv tool install --reinstall "personagent[web]"'
+    if (prefix / "pipx_metadata.json").is_file():
+        return f"pipx inject personagent {wanted}"
+    try:
+        config = (prefix / "pyvenv.cfg").read_text(encoding="utf-8")
+    except OSError:
+        config = ""
+    if re.search(r"^uv\s*=", config, re.MULTILINE):
+        return f"uv pip install {wanted} --python {_quote(_python())}"
+    return f"{_program(_python())} -m pip install {wanted}"
+
+
 def plan() -> tuple[str, list[list[str]]]:
     """How this installation came to be, and the commands that update it for
     the app to run after it quits. A source ZIP and uvx have none: the first

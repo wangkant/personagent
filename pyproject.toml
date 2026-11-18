@@ -63,10 +63,13 @@ dependencies = [
 # The window of its own on macOS and Linux; without it the page opens in the browser.
 # pywebview alone brings no toolkit on Linux, so Qt comes with it there.
 app = ["pywebview>=6,<7; sys_platform != 'linux'", "pywebview[qt]>=6,<7; sys_platform == 'linux'"]
+# Bilibili and YouTube with a personal account: drives the Edge, Chrome or
+# Chromium already installed, so no browser is downloaded.
+web = ["playwright>=1.49,<2"]
 # What CI installs on top of the runtime dependencies.
 # mcp: the official SDK, only so the tests can run personagent's own MCP client
 # against its servers; it supports Python 3.10 to 3.14, the same range as here.
-dev = ["pytest>=8,<10", "ruff>=0.6,<1", "mcp>=2.3,<3"]
+dev = ["pytest>=8,<10", "ruff>=0.6,<1", "mcp>=2.3,<3", "playwright>=1.49,<2"]
 
 [project.scripts]
 personagent = "persona_agent.cli:main"

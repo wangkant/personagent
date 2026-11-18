@@ -107,7 +107,9 @@ LOCAL_ONLY = frozenset({
     # A card is saved into a folder of this computer.
     ("POST", "/api/cards/export"),
     # A coding assistant's own settings, or an AstrBot folder the caller names, on this computer.
-    ("POST", "/api/agents/coding"), ("POST", "/api/agents/astrbot"), ("POST", "/api/agents/astrbot/remove")})
+    ("POST", "/api/agents/coding"), ("POST", "/api/agents/astrbot"), ("POST", "/api/agents/astrbot/remove"),
+    # A browser window opened on this computer for the owner to sign in.
+    ("POST", "/api/platforms/browser"), ("POST", "/api/platforms/signed-in")})
 SIGNIN_ASSETS = ("signin.js", "signin.css")
 # Seconds between the headless page's checks that the character still runs.
 KEEP_RUNNING_S = 5.0
@@ -256,6 +258,10 @@ class Workspace:
         self._astrbot_changed = False
         # A platform whose saved state belongs to a login that just ended.
         self._stale_state = ""
+        # A removed browser platform whose sign-in goes with it, once nothing has it open.
+        self._forget_sign_in = ""
+        # The owner said the sign-in in the browser window is done.
+        self._signed_in = False
         # A platform the running job connects for the first time.
         self._new_platform = ""
         self._was_connected = False
@@ -300,7 +306,7 @@ class Workspace:
             asking = approvals.current_policy(self.home)
             platforms = [p.kind for p in conn.PLATFORMS
                          if p.kind in stored or (p.kind in via_astrbot and p.kind not in stored)]
-            status, details = {}, {}
+            status, details, accounts = {}, {}, {}
             for kind in platforms:
                 if kind in stored:
                     # A refusal outlives the runner, which exits once nothing is left to run.
@@ -312,6 +318,8 @@ class Workspace:
                     # Only the named codes: any other detail may quote the platform's own text.
                     if detail in NAMED_REFUSALS and status[kind] != "paused":
                         details[kind] = detail
+                    if direct_setup.is_browser(conn.platform(kind)):
+                        accounts[kind] = str(stored[kind].get("account") or "")[:64]
                 else:
                     status[kind] = "running" if self.services.running("astrbot") else "paused"
             updates.refresh_soon(self.home)
@@ -336,6 +344,10 @@ class Workspace:
                     # Changes with the file, so the page fetches a replaced picture again.
                     "ownAvatar": self._own_avatar_version(own_picture),
                     "platforms": platforms, "platformStatus": status, "platformDetail": details,
+                    # The account a browser platform is signed in to, and the command that adds browser support.
+                    "platformAccount": accounts,
+                    "browserSupportCommand": (direct_setup.support_command()
+                                              if direct_setup.web.NO_DRIVER in details.values() else ""),
                     "platformReach": {kind: reach(kind, values, asking) for kind in platforms},
                     # Where new chats wait for the admin, and how many wait now.
                     "platformApproval": {kind: kind in asking for kind in platforms if approval_applies(kind)},
@@ -836,33 +848,36 @@ class Workspace:
                 raise ValueError("key_required")
             if action == "start":
                 args = ()
-            elif action in ("scan", "connect", "disconnect"):
+            elif action in ("scan", "connect", "disconnect", "browser"):
                 spec = conn.platform(kind)
                 # A scan platform may also take pasted values, if it has fields.
-                if action == "scan" and spec.group != conn.SCAN or action == "connect" and not spec.fields:
+                if (action == "scan" and spec.group != conn.SCAN or action == "connect" and not spec.fields
+                        or action == "browser" and not direct_setup.is_browser(spec)):
                     raise ValueError("invalid_platform")
                 args = (spec, conn.clean_values(spec, values or {})) if action == "connect" else (spec,)
             else:
                 raise ValueError("invalid_action")
             own = bool(args) and conn.is_direct(kind)
             # A platform connected for the first time starts out asking for approval of new chats.
-            self._new_platform = kind if action in ("scan", "connect") else ""
+            self._new_platform = kind if action in ("scan", "connect", "browser") else ""
             # Already connected (from before approval existed, or set up again): the owner's choice stands.
             self._was_connected = bool(self._new_platform) and self._connected(kind)
-            stage = ("start" if action in ("start", "disconnect") else
+            stage = ("start" if action in ("start", "disconnect") else "window" if action == "browser" else
                      "prepare" if own and action == "scan" else "check" if own else "install")
             self.job = {"state": "working", "stage": stage, "error": "", "action": action,
                         "platform": kind}
             self._cancelled = False
+            self._signed_in = False
             self._astrbot_changed = False
             self._stale_state = ""
+            self._forget_sign_in = ""
             self._future = self.worker.submit(self._job, action, *args)
 
     def _job(self, action: str, *args) -> None:
         own = bool(args) and conn.is_direct(args[0].kind)
         try:
             if own:
-                {"scan": self._scan_direct, "connect": self._connect_direct,
+                {"scan": self._scan_direct, "connect": self._connect_direct, "browser": self._browser_direct,
                  "disconnect": self._disconnect_direct}[action](*args)
             elif action == "connect":
                 self._connect(*args)
@@ -920,7 +935,10 @@ class Workspace:
                          else "setup_failed")
                 self.job = ({"state": "idle", "stage": "", "error": ""} if self._cancelled else
                             {**self.job, "state": "error", "stage": "", "error": error,
-                             "service": service})
+                             "service": service,
+                             # What this copy runs to add browser support.
+                             **({"command": direct_setup.support_command()}
+                                if error == direct_setup.web.NO_DRIVER else {})})
         finally:
             if self._closed:
                 self.services.close()
@@ -1002,16 +1020,39 @@ class Workspace:
 
         return direct_setup.sign_in(spec, values, show, lambda: self._cancelled or self._closed)
 
+    def _browser_direct(self, spec: conn.Platform) -> None:
+        """A personal account: the owner signs in in a browser window, then the
+        account signed in there is read and kept."""
+        values = direct_setup.browser_sign_in(
+            self.home, spec, done=lambda: self._signed_in,
+            should_stop=lambda: self._cancelled or self._closed,
+            checking=lambda: self._stage("check"))
+        self.job = {**self.job, "account": str(values.get("account") or "")[:64]}
+        self._store_direct(spec, values)
+
+    def signed_in(self, kind: str) -> None:
+        """The owner says the sign-in in the browser window is done."""
+        job = self.job
+        if not (job.get("state") == "working" and job.get("action") == "browser"
+                and job.get("platform") == kind and job.get("stage") == "window"):
+            raise ValueError("invalid_platform")
+        self._signed_in = True
+
     def _disconnect_direct(self, spec: conn.Platform) -> None:
         self._stale_state = spec.kind
+        if direct_setup.is_browser(spec) and self.job.get("action") == "disconnect":
+            self._forget_sign_in = spec.kind
         if direct_setup.remove(self.home, spec):
             self._astrbot_changed = True
 
     def _clear_stale_state(self) -> None:
         """Run between stopping and starting the direct process: the old
-        process would otherwise write the ended login's state back."""
+        process would otherwise write the ended login's state back, and its
+        browser holds the profile of a sign-in that goes."""
         if self._stale_state:
             direct_setup.clear_state(self.home, self._stale_state)
+        if self._forget_sign_in:
+            direct_setup.forget_sign_in(self.home, self._forget_sign_in)
 
     def _await_direct(self, spec: conn.Platform) -> None:
         """Wait for the new session to be accepted; a refusal is rolled back."""
@@ -1791,6 +1832,21 @@ def create_app(home: Path, token: str, *, workspace: Workspace | None = None,
         # A scan platform takes pasted values only when the page says so.
         scan = conn.platform(kind).group == conn.SCAN and payload.get("mode") != "paste"
         workspace.start_job("scan" if scan else "connect", kind, payload.get("values") or {})
+        return {"ok": True}
+
+    @app.post("/api/platforms/browser")
+    async def browser_platform(request: Request):
+        payload = await body(request)
+        # A personal account: the owner has read the risks and taken them on.
+        if payload.get("allowConversations") is not True or payload.get("acceptRisk") is not True:
+            raise ValueError("permission_required")
+        workspace.start_job("browser", str(payload.get("platform") or ""))
+        return {"ok": True}
+
+    @app.post("/api/platforms/signed-in")
+    async def browser_signed_in(request: Request):
+        payload = await body(request)
+        workspace.signed_in(str(payload.get("platform") or ""))
         return {"ok": True}
 
     @app.post("/api/platforms/disconnect")

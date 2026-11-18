@@ -429,6 +429,34 @@ const translations = {
     login_unsupported: "该服务器不接受程序以密码登录，因此未保存任何内容。请改为粘贴机器人账号的访问令牌。",
     sign_in_missing: "请填写机器人账号的用户 ID 和密码，或填写其访问令牌。",
     invite_declined: "机器人拒绝了一个来自其他 Matrix ID 的房间邀请。它只接受此处保存的 Matrix ID 发出的邀请；如果邀请是你本人发出的，请重新设置 Matrix 并检查你的 Matrix ID。",
+    groupBrowser: "登录个人账号",
+    groupBrowserHint: "在本机的浏览器窗口中登录，personagent 随后以该账号操作网站。",
+    howBrowser: "个人账号",
+    browserWhatTitle: "工作方式",
+    browserWhat: "personagent 会在本机打开一个浏览器窗口，由你本人在其中登录。personagent 不会看到也不会保存你的密码。登录状态保存在本机的一个文件夹中，断开连接时将被删除。",
+    browserRiskTitle: "风险说明",
+    browserRiskAccount: "此方式使用的是个人账号。大多数网站的条款限制以自动化方式使用个人账号，网站可能会限制或关闭该账号。",
+    browserRiskOwner: "相关风险由账号所有者自行承担。建议为角色单独使用一个账号。",
+    browserRiskVerify: "personagent 不会绕过任何验证。网站要求验证时，personagent 会暂停操作，直至你在浏览器窗口中完成验证。",
+    browserRiskLabel: "凡网站规定或法律要求之处，请将角色发布的内容标明为 AI 生成。",
+    browserAccept: "我已阅读上述说明，并为此账号承担相关风险。",
+    browserOpen: "打开登录窗口",
+    windowTitle: "请在浏览器窗口中登录 {platform}。",
+    windowHint: "personagent 看不到你在其中输入的内容。登录完成后，请点击「已登录，继续」。关闭该窗口同样会继续。",
+    browserContinue: "已登录，继续",
+    browserContinuing: "正在继续…",
+    browserCheckTitle: "正在读取 {platform} 上已登录的账号…",
+    browserCheckHint: "浏览器将在后台短暂启动，随后自动关闭。",
+    doneAccount: "已登录账号：{account}。",
+    sign_in_missing_web: "关闭窗口时没有已登录的账号，因此未保存任何内容。请再次点击按钮，并在关闭窗口或继续之前于窗口中完成登录。",
+    sign_in_expired_web: "网站已将该账号退出登录。请点击「重新设置」，并在随后打开的浏览器窗口中登录。",
+    verification_needed: "网站要求进行只能由账号所有者完成的验证。请从任务栏打开该平台的浏览器窗口并在其中完成验证，personagent 随后会自动继续。如未打开此类窗口，请点击「重新设置」，并在登录窗口中完成验证。",
+    page_changed: "该网站有所变动，personagent 未能在页面上找到某个操作步骤。连接仍然保留，稍后会再次尝试；如此情况持续存在，请更新 personagent。",
+    browser_missing: "本机未找到 Microsoft Edge、Google Chrome 或 Chromium。请安装其中之一，然后重新连接。如浏览器安装在其他位置，可通过 PERSONA_BROWSER_PATH 设置指定。",
+    browser_support_missing: "此 personagent 副本缺少浏览器支持（Playwright）。请运行以下命令，然后重新连接：",
+    daily_limit: "角色今天在该平台上发送的消息已达上限，明天之前不会再发送。上限由 WEB_POSTS_A_DAY 设置决定。",
+    browser_start_failed: "浏览器未能启动。请关闭该平台已打开的浏览器窗口后重新连接；如仍然失败，请重启电脑后再试。",
+    channel_missing: "登录 YouTube 的 Google 账号没有 YouTube 频道，而 YouTube 只接受有频道的账号发表评论。请先在 YouTube 上为该账号创建频道，然后重新连接 YouTube。",
     retryingState: "正在重试",
     download_stalled: "下载已有五分钟没有进展，因此已停止。请检查网络连接和代理设置，然后点击「连接」重试；personagent 也会尝试中国大陆的镜像。",
     installStep_network: "正在检查能否访问 PyPI 和 GitHub…",
@@ -924,6 +952,35 @@ const translations = {
     login_unsupported: "This homeserver does not accept a password sign-in from programs, so nothing was saved. Paste an access token of the bot account instead.",
     sign_in_missing: "Enter either the bot account's user ID and password, or its access token.",
     invite_declined: "The bot declined a room invitation from a Matrix ID other than yours. It accepts invitations only from the Matrix ID saved here; if you sent the invitation yourself, set Matrix up again and check your Matrix ID.",
+    // A personal account worked in a browser; `<code>_web` is its wording of a shared code.
+    groupBrowser: "Sign in to a personal account",
+    groupBrowserHint: "Sign in in a browser window on this computer; personagent then works the website as that account.",
+    howBrowser: "Personal account",
+    browserWhatTitle: "How it works",
+    browserWhat: "personagent opens a browser window on this computer, and you sign in there yourself. personagent never sees or stores your password. The sign-in is kept in a folder on this computer and is deleted when you disconnect.",
+    browserRiskTitle: "Risks",
+    browserRiskAccount: "This uses a personal account. The terms of most sites restrict automated use of personal accounts, and the site may limit or close the account.",
+    browserRiskOwner: "The risk is borne by the owner of the account. A separate account for the character is advised.",
+    browserRiskVerify: "personagent does not get around verifications. When the site asks for one, personagent stops and waits until you complete it in the browser window.",
+    browserRiskLabel: "Mark the character's content as AI-generated wherever the site or the law requires it.",
+    browserAccept: "I have read the above and accept the risk for this account.",
+    browserOpen: "Open the sign-in window",
+    windowTitle: "Sign in to {platform} in the browser window.",
+    windowHint: "personagent does not see what you type there. When you are signed in, select Signed in, continue. Closing the window also continues.",
+    browserContinue: "Signed in, continue",
+    browserContinuing: "Continuing…",
+    browserCheckTitle: "Reading which account is signed in to {platform}…",
+    browserCheckHint: "A browser starts briefly in the background and closes again.",
+    doneAccount: "Signed in as {account}.",
+    sign_in_missing_web: "Nobody was signed in when the window closed, so nothing was saved. Select the button again and sign in in the window before closing it or continuing.",
+    sign_in_expired_web: "The site has signed this account out. Select Set up again and sign in in the browser window that opens.",
+    verification_needed: "The site asks for a verification that only the account owner can complete. Open the browser window of this platform from the taskbar and complete it there; personagent then continues by itself. If no such window is open, select Set up again and complete the verification in the sign-in window.",
+    page_changed: "The website has changed, and personagent could not find a step on its pages. The connection is kept and the step is tried again later; if this persists, update personagent.",
+    browser_missing: "No Microsoft Edge, Google Chrome or Chromium was found on this computer. Install one of them, then connect again. The PERSONA_BROWSER_PATH setting can name a browser installed elsewhere.",
+    browser_support_missing: "This copy of personagent lacks browser support (Playwright). Run the following command, then connect again:",
+    browser_start_failed: "The browser did not start. Close any browser window of this platform that is open and connect again; if it still fails, restart the computer and try once more.",
+    channel_missing: "The Google account signed in to YouTube has no YouTube channel, and YouTube accepts comments only from an account with a channel. Create a channel for this account on YouTube, then connect YouTube again.",
+    daily_limit: "The character has sent today's limit of messages on this platform; nothing more is sent there until tomorrow. The WEB_POSTS_A_DAY setting sets the limit.",
     retryingState: "Retrying",
     download_stalled: "The download made no progress for five minutes and was stopped. Check the network connection and proxy settings, then select Connect to try again; personagent tries the mirrors in mainland China as well.",
     installStep_network: "Checking whether PyPI and GitHub can be reached…",
@@ -1033,6 +1090,8 @@ let state = null,
   pasting = false,
   fresh = false,
   panelError = "",
+  // "Signed in, continue" was pressed and the sign-in window is being closed.
+  continuing = false,
   view = "chat",
   chatting = false,
   saving = false,
@@ -1071,8 +1130,14 @@ const t = (key, fields = {}) =>
       translations.en.generic,
   );
 // A shared code in one platform's own words (`token_rejected_zulip`), when it has them.
+// A platform worked in a browser has its own wording too (`sign_in_missing_web`).
 const tFor = (key, kind) =>
-  translations.en[`${key}_${kind}`] ? t(`${key}_${kind}`) : t(key);
+  translations.en[`${key}_${kind}`]
+    ? t(`${key}_${kind}`)
+    : isBrowser(kind) && translations.en[`${key}_web`]
+      ? t(`${key}_web`)
+      : t(key);
+const isBrowser = (kind) => Boolean(catalog) && spec(kind)?.signIn === "browser";
 // `undo`, when given, is {label, run}: a button in the message that runs it,
 // which is returned. A focus left in the message goes to `after` when it closes.
 function toast(text, undo, after = null) {
@@ -1521,6 +1586,8 @@ const MARKS = {
   weixin_oc: ["微", "#07c160", "wechat"],
   telegram: ["T", "#26a5e4", "telegram"],
   discord: ["D", "#5865f2", "discord"],
+  bilibili: ["B", "#00a1d6"],
+  youtube: ["Y", "#ff0000"],
   kook: ["K", "#1c1c1a", "kook"],
   lark: ["飞", "#3370ff", "feishu"],
   dingtalk: ["钉", "#0089ff", "dingtalk"],
@@ -1583,6 +1650,8 @@ function describe(item) {
   const how =
     item.group === "scan"
       ? t("howScan")
+      : item.group === "browser"
+        ? t("howBrowser")
       : item.group === "advanced"
         ? t("howAdvanced")
         : t("howPaste", {
@@ -1672,7 +1741,15 @@ function buildFields(keep = false) {
     input.value = kept[field.key] || "";
     box.append(label, input);
   }
-  $("panel-submit").textContent = t(scanning ? "getQr" : "connectNow");
+  // A personal account: what happens and the risks, accepted before the window opens.
+  const browser = item.signIn === "browser";
+  $("panel-browser").hidden = !browser;
+  if (!keep) $("browser-accept").checked = false;
+  $("panel-submit").textContent = t(browser ? "browserOpen" : scanning ? "getQr" : "connectNow");
+}
+// Opening a window is for the computer itself; the box must be ticked first.
+function browserBlocked() {
+  return isBrowser(selected) && (Boolean(state?.remote) || !$("browser-accept").checked);
 }
 function openPanel(kind) {
   const job = state.job;
@@ -1704,7 +1781,7 @@ let connectedShown = "",
   policySaving = "";
 function connectedKey(connected, working) {
   return JSON.stringify([lang, Boolean(catalog), connected, working, policySaving, state.platformStatus, state.platformDetail,
-    state.platformReach, state.platformApproval]);
+    state.platformReach, state.platformApproval, state.platformAccount, state.browserSupportCommand]);
 }
 function renderConnected(connected, working) {
   const key = connectedKey(connected, working);
@@ -1717,6 +1794,14 @@ function renderConnected(connected, working) {
     const row = document.createElement("li");
     const name = document.createElement("strong");
     name.textContent = platformName(kind);
+    // The personal account a browser platform is signed in to.
+    const account = (state.platformAccount || {})[kind];
+    if (account) {
+      const who = document.createElement("small");
+      who.className = "connected-account";
+      who.textContent = account;
+      name.append(" ", who);
+    }
     const status = document.createElement("span");
     const current = (state.platformStatus || {})[kind] || "paused";
     status.className = "state";
@@ -1760,6 +1845,12 @@ function connectedNote(kind, working) {
     why.dataset.state = (state.platformStatus || {})[kind] || "";
     why.textContent = tFor(detail, kind);
     note.append(why);
+    if (detail === "browser_support_missing" && state.browserSupportCommand) {
+      const command = document.createElement("code");
+      command.className = "connected-command";
+      command.textContent = state.browserSupportCommand;
+      note.append(command);
+    }
   }
   note.append(reachLine(kind, working));
   return note;
@@ -2010,13 +2101,24 @@ function renderStatus() {
   $("panel-steps").hidden = active || !$("panel-steps").children.length;
   $("panel-progress").hidden = !active;
   $("panel-done").hidden = !done;
-  $("panel-submit").disabled = working;
+  const remote = Boolean(state.remote);
+  $("browser-remote").hidden = !remote;
+  $("browser-accept").disabled = remote || working;
+  const blocked = browserBlocked();
+  $("panel-submit").disabled = working || blocked;
+  $("panel-submit").classList.toggle("gated", blocked && !working);
   const error = failed ? tFor(job.error, selected) : panelError;
   $("panel-error").hidden = !error;
   $("panel-error").textContent = error;
+  // Browser support missing: the command that adds it to this copy.
+  const command = failed && job.error === "browser_support_missing" ? job.command || "" : "";
+  $("panel-command-row").hidden = !command;
+  if ($("panel-command").textContent !== command) $("panel-command").textContent = command;
   $("done-title").textContent = t("doneTitle", {
     platform: platformName(selected),
   });
+  $("done-account").hidden = !(done && job.account);
+  $("done-account").textContent = done && job.account ? t("doneAccount", { account: job.account }) : "";
   // Who the character now answers there, said as soon as the platform connects.
   const doneKey = done && state.platforms.includes(selected) ? connectedKey([selected], working) : "";
   if ($("done-reach").dataset.shown !== doneKey) {
@@ -2026,7 +2128,23 @@ function renderStatus() {
     $("done-reach").replaceChildren(...(doneKey ? [reachLine(selected, working, "done")] : []));
     if (hadFocus) $("done-reach").querySelector(`[data-focus-key="${CSS.escape(hadFocus)}"]`)?.focus();
   }
+  const signing = active && job.action === "browser" && job.stage === "window";
+  if (!signing) continuing = false;
+  $("browser-continue").hidden = !signing;
+  $("browser-continue").disabled = continuing;
+  $("browser-continue").setAttribute("aria-busy", String(continuing));
+  $("browser-continue").textContent = t(continuing ? "browserContinuing" : "browserContinue");
   if (!active) return;
+  if (job.action === "browser") {
+    // The window is the owner's; here only what to do in it, then the check.
+    $("qr-box").hidden = true;
+    $("progress-spinner").hidden = false;
+    $("cancel-platform").hidden = job.stage !== "window";
+    const step = signing ? "window" : job.stage === "check" ? "browserCheck" : job.stage;
+    $("progress-title").textContent = t(`${step}Title`, { platform: platformName(selected) });
+    $("progress-hint").textContent = t(`${step}Hint`);
+    return;
+  }
   const scan = job.stage === "scan";
   // A sign-in by link (Twitch) shows the link itself; its QR is for a phone.
   const link = scan && spec(selected)?.signIn === "link";
@@ -3562,13 +3680,21 @@ $("platform-form").addEventListener("submit", async (event) => {
     for (const input of $("panel-fields").querySelectorAll("input"))
       values[input.name] = input.value;
   panelError = "";
+  if (isBrowser(selected) && browserBlocked()) return;
   try {
-    await api("platforms/connect", {
-      platform: selected,
-      values,
-      mode: pasting ? "paste" : "",
-      allowConversations: true,
-    });
+    if (isBrowser(selected))
+      await api("platforms/browser", {
+        platform: selected,
+        allowConversations: true,
+        acceptRisk: $("browser-accept").checked,
+      });
+    else
+      await api("platforms/connect", {
+        platform: selected,
+        values,
+        mode: pasting ? "paste" : "",
+        allowConversations: true,
+      });
     fresh = true;
     await refresh();
   } catch (error) {
@@ -3588,6 +3714,29 @@ $("platform-panel").addEventListener("keydown", (event) => {
   if (event.key === "Escape" && selected !== null && !$("panel-back").hidden && state.job.state !== "working") {
     event.preventDefault();
     closePanel();
+  }
+});
+$("browser-accept").addEventListener("change", () => renderStatus());
+$("browser-continue").addEventListener("click", async () => {
+  if (continuing) return;
+  continuing = true;
+  renderStatus();
+  try {
+    await api("platforms/signed-in", { platform: selected });
+    await refresh();
+  } catch (error) {
+    continuing = false;
+    renderStatus();
+    toast(t(error.message));
+  }
+});
+$("panel-copy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("panel-command").textContent);
+    $("panel-copy").textContent = t("copied");
+    setTimeout(() => ($("panel-copy").textContent = t("copy")), 2000);
+  } catch {
+    getSelection().selectAllChildren($("panel-command"));
   }
 });
 $("cancel-platform").addEventListener("click", async () => {

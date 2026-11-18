@@ -1,8 +1,9 @@
 """The chat platforms the local page can connect.
 
 QQ, WeChat, Telegram, Discord, Matrix, Twitch, IRC, Zulip, VK and Stoat are
-connected by personagent itself (persona_agent.direct); the rest go through
-the managed AstrBot. Each
+connected by personagent itself (persona_agent.direct), Bilibili and YouTube
+through a personal account the owner signs in to in a browser; the rest go
+through the managed AstrBot. Each
 platform asks only for what its owner must copy from the platform's own
 console; for AstrBot every other adapter setting comes from its template for
 that adapter, so a new AstrBot release brings its own defaults. Platforms
@@ -20,7 +21,7 @@ from urllib.parse import quote, urlsplit
 
 from .astrbot_install import AstrBotInstallation
 
-SCAN, KEY, ADVANCED = "scan", "key", "advanced"
+SCAN, KEY, ADVANCED, BROWSER = "scan", "key", "advanced", "browser"
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,8 @@ class Platform:
     # Numbered how-to steps shown under the note, each (en, zh).
     steps: tuple[tuple[str, str], ...] = ()
     # "link": after the fields, the owner approves a sign-in through a link.
+    # "browser": a personal account the owner signs in to in a browser window
+    # on this computer, whose website personagent then works (direct.WEB).
     sign_in: str = ""
 
 
@@ -623,6 +626,17 @@ PLATFORMS: tuple[Platform, ...] = (
                  ("To talk to the bot directly, open a direct message with it from its profile.",
                   "如需与机器人单独交谈，请从其资料页向它发送私信。"),
              )),
+    # Personal accounts: no fields, the owner signs in in a browser window.
+    Platform("bilibili", ("Bilibili", "哔哩哔哩"), BROWSER,
+             note=("personagent works the Bilibili website with the account you sign in with, and the "
+                   "character answers there as that account.",
+                   "personagent 将使用你登录的账号操作哔哩哔哩网站，角色将以该账号的身份在那里作答。"),
+             sign_in="browser"),
+    Platform("youtube", ("YouTube", "YouTube"), BROWSER,
+             note=("personagent works the YouTube website with the Google account you sign in with, and "
+                   "the character answers there as that account.",
+                   "personagent 将使用你登录的 Google 账号操作 YouTube 网站，角色将以该账号的身份在那里作答。"),
+             sign_in="browser"),
     Platform("wecom",("WeCom app", "企业微信应用"), ADVANCED,
              (_plain("corpid", "Corp ID", "企业 ID"), _token("secret", "Secret", "Secret"),
               _token("token", "Callback token", "回调 Token"),

@@ -666,6 +666,8 @@ def test_every_listed_kind_builds_its_own_platform_and_keeps_state_per_login(tmp
     for kind in direct.KINDS:
         platform = direct.platform_for(kind, {}, tmp_path)
         assert platform.kind == kind
+        if kind in direct.WEB:
+            assert platform.home == tmp_path and platform.seen.path == direct.state_path(tmp_path, kind)
         if kind in ("matrix", "twitch", "weixin_oc"):
             assert platform.state_path == direct.state_path(tmp_path, kind)
         close = getattr(platform, "close", None)

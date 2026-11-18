@@ -510,6 +510,13 @@
               </p>
             </div>
             <div class="tiles" data-group="key"></div>
+            <div class="group-head">
+              <h3 class="group-title" data-t="groupBrowser">登录个人账号</h3>
+              <p class="group-hint" data-t="groupBrowserHint">
+                在本机的浏览器窗口中登录，personagent 随后以该账号操作网站。
+              </p>
+            </div>
+            <div class="tiles" data-group="browser"></div>
             <details id="advanced-platforms">
               <summary data-t="groupAdvanced">
                 高级：需要公网地址或本机其他软件
@@ -542,8 +549,33 @@
               >
             </div>
             <form id="platform-form">
+              <div id="panel-browser" class="browser-consent" hidden>
+                <h3 data-t="browserWhatTitle">工作方式</h3>
+                <p data-t="browserWhat">
+                  personagent 会在本机打开一个浏览器窗口，由你本人在其中登录。
+                </p>
+                <h3 data-t="browserRiskTitle">风险说明</h3>
+                <ul>
+                  <li data-t="browserRiskAccount">此方式使用的是个人账号。</li>
+                  <li data-t="browserRiskOwner">相关风险由账号所有者自行承担。</li>
+                  <li data-t="browserRiskVerify">personagent 不会绕过任何验证。</li>
+                  <li data-t="browserRiskLabel">请将角色发布的内容标明为 AI 生成。</li>
+                </ul>
+                <label class="check browser-accept"
+                  ><input type="checkbox" id="browser-accept" /><span data-t="browserAccept"
+                    >我已阅读上述说明，并为此账号承担相关风险。</span
+                  ></label
+                >
+                <p id="browser-remote" class="field-note" data-t="local_only" hidden>
+                  此操作只能在运行 personagent 的电脑上进行。
+                </p>
+              </div>
               <div id="panel-fields"></div>
               <div id="panel-error" class="error" role="alert" hidden></div>
+              <div class="update-command" id="panel-command-row" hidden>
+                <code id="panel-command"></code
+                ><button type="button" class="quiet" id="panel-copy" data-t="copy">复制</button>
+              </div>
               <button class="primary full" type="submit" id="panel-submit">
                 连接
               </button>
@@ -566,6 +598,7 @@
               <div id="progress-spinner" class="spinner"></div>
               <h2 id="progress-title"></h2>
               <p id="progress-hint"></p>
+              <button type="button" class="primary" id="browser-continue" hidden></button>
               <button class="quiet" id="cancel-platform" data-t="cancel">
                 取消
               </button>
@@ -573,6 +606,7 @@
             <div id="panel-done" hidden>
               <div class="success-mark" aria-hidden="true">✓</div>
               <h2 id="done-title"></h2>
+              <p id="done-account" hidden></p>
               <div id="done-reach"></div>
               <button class="secondary" id="panel-finish" data-t="backToList">
                 返回平台列表
