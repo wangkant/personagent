@@ -386,6 +386,7 @@ def test_send_skips_images_without_a_file_server_and_stops_on_failure():
     assert run(bot.send("C1", [{"type": "image", "b64": "aGk="}, {"type": "text", "text": "ok"}])) == 1
     failing = Server(**{"/channels/C1/messages": httpx.Response(403, json={"type": "MissingPermission"})})
     assert run(bot_with(failing).send("C1", [{"type": "text", "text": "a"}, {"type": "text", "text": "b"}])) == 0
+    assert len([r for r in failing.requests if r.url.path == "/channels/C1/messages"]) == 1
 
 
 def test_target_uses_the_reply_handle():

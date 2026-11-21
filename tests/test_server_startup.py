@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from persona_agent import dashboard, server
+from persona_agent import dashboard, paths, server
 from persona_agent.storage import RuntimeInstanceLock
 
 with warnings.catch_warnings():
@@ -43,6 +43,7 @@ def test_a_missing_home_is_refused_in_one_sentence(monkeypatch, tmp_path, capsys
 
 def test_a_second_instance_is_refused_in_one_sentence(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(server, "ROOT", tmp_path)
+    monkeypatch.setattr(paths, "ROOT", tmp_path)  # the memory files startup_problem reads
     monkeypatch.setattr(server, "AGENT_ENABLED", True)
     holder = RuntimeInstanceLock(tmp_path)
     holder.acquire()
@@ -152,6 +153,7 @@ def test_a_blank_server_host_means_loopback(monkeypatch, tmp_path) -> None:
     assert server._listen_host(" 0.0.0.0 ") == "0.0.0.0"
     started = []
     monkeypatch.setattr(server, "ROOT", tmp_path)
+    monkeypatch.setattr(paths, "ROOT", tmp_path)  # the memory files startup_problem reads
     monkeypatch.setattr(server, "SERVER_HOST", "")
     monkeypatch.setattr(server, "_LISTEN", dict(server._LISTEN))
     monkeypatch.setattr(server, "_bind_problem", lambda host, port: None)
@@ -349,6 +351,7 @@ async def test_a_disabled_agent_answers_owned_false_and_says_why_once(
 def test_the_startup_refusal_path_is_wired_into_main(monkeypatch, tmp_path, capsys) -> None:
     started = []
     monkeypatch.setattr(server, "ROOT", tmp_path)
+    monkeypatch.setattr(paths, "ROOT", tmp_path)  # the memory files startup_problem reads
     monkeypatch.setattr(server, "_LISTEN", dict(server._LISTEN))
     monkeypatch.setattr(server, "_bind_problem", lambda host, port: "port 1 is taken")
 

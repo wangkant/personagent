@@ -152,6 +152,11 @@ async def test_html_decoded_cap() -> None:
     check("html: decoded gzip body over cap rejected", got == "", repr(got))
 
 
+def _public_address(*args, **kwargs):
+    """example.com as a resolver would answer it; the suite is offline."""
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))]
+
+
 async def test_gzip_site_og_tags_are_actually_parsed() -> None:
     """A gzip-served page must yield its OG tags.
 
@@ -174,7 +179,8 @@ async def test_gzip_site_og_tags_are_actually_parsed() -> None:
         eager_text=decoded.decode(),
     ))
     agent._http = lambda **kwargs: fake
-    got = await agent._fetch_og_meta("https://example.com/gzipped")
+    with patch("persona_agent.ingestion.socket.getaddrinfo", _public_address):
+        got = await agent._fetch_og_meta("https://example.com/gzipped")
     check("html: gzip page yields its og:title", "Real Title" in got, repr(got))
 
 
@@ -348,9 +354,10 @@ async def test_bootstrap_uses_guarded_bounded_fetch() -> None:
     )
     check("bootstrap: internal URL never requested", calls == 0, repr(calls))
 
-    got_large = await download_sticker(
-        client, "https://example.com/large.png",
-    )
+    with patch("persona_agent.ingestion.socket.getaddrinfo", _public_address):
+        got_large = await download_sticker(
+            client, "https://example.com/large.png",
+        )
     check(
         "bootstrap: oversized body rejected",
         got_large is None,

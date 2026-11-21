@@ -2,25 +2,28 @@
 from __future__ import annotations
 
 import asyncio
+import errno
 import inspect
+import ipaddress
 import os
+import socket
 from pathlib import Path
 
+import dotenv
 import pytest
 
 from persona_agent import home as _home
 
-_real_load_env = _home.load_env
+
+def _no_env_file() -> Path:
+    """Modules load <home>/.env as they import; whatever home is found, a
+    developer's real .env, with its keys and language, must not reach the tests."""
+    return _home.find_home()
 
 
-def _load_env_outside_the_checkout() -> Path:
-    """Modules load <home>/.env as they import; a developer's own .env in the
-    checkout, with its keys and language, must not reach the tests."""
-    found = _home.find_home()
-    return found if found == _home.CHECKOUT else _real_load_env()
-
-
-_home.load_env = _load_env_outside_the_checkout
+_home.load_env = _no_env_file
+# tools/*.py load <checkout>/.env as they import.
+dotenv.load_dotenv = lambda *args, **kwargs: False
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -44,6 +47,41 @@ def _no_bare_call_wait(request: pytest.FixtureRequest,
     """Skip the 5 s bare-call debounce unless a test is marked bare_call_wait."""
     if request.node.get_closest_marker("bare_call_wait") is None:
         monkeypatch.setattr("persona_agent.turns.BARE_CALL_DEBOUNCE_S", 0.0)
+
+
+_LOCAL_NAMES = {"localhost", socket.gethostname()}
+
+
+def _is_local(host) -> bool:
+    host = host.decode() if isinstance(host, bytes) else str(host or "localhost")
+    try:
+        return ipaddress.ip_address(host.split("%")[0]).is_loopback
+    except ValueError:
+        return host in _LOCAL_NAMES or host.endswith(".localhost")
+
+
+@pytest.fixture(autouse=True)
+def _offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The suite is offline: a lookup or connection off this host fails as
+    it would without a network."""
+    real_lookup, real_connect, real_connect_ex = (
+        socket.getaddrinfo, socket.socket.connect, socket.socket.connect_ex)
+
+    def lookup(host, *args, **kwargs):
+        if not _is_local(host):
+            raise socket.gaierror(socket.EAI_NONAME, f"offline test run: {host!r}")
+        return real_lookup(host, *args, **kwargs)
+
+    def guarded(real):
+        def connect(self, address):
+            if isinstance(address, tuple) and not _is_local(address[0]):
+                raise OSError(errno.ENETUNREACH, f"offline test run: {address[0]}")
+            return real(self, address)
+        return connect
+
+    monkeypatch.setattr(socket, "getaddrinfo", lookup)
+    monkeypatch.setattr(socket.socket, "connect", guarded(real_connect))
+    monkeypatch.setattr(socket.socket, "connect_ex", guarded(real_connect_ex))
 
 
 @pytest.fixture(autouse=True)

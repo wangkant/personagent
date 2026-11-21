@@ -322,7 +322,7 @@ def test_a_gateway_that_accepts_is_saved(tmp_path, monkeypatch):
     assert direct_setup.verdict({"state": "retrying", "detail": "unreachable"}) == ""
 
 
-def test_wechat_scan_results_and_twitch_denial_are_named():
+def test_wechat_scan_results_and_a_missing_token_are_named():
     async def scan(statuses):
         answers = iter([{"qrcode": "q", "qrcode_img_content": "https://qr"}, *statuses])
 

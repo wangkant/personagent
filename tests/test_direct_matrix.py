@@ -338,18 +338,18 @@ def test_send_text_split_mention_image_and_thread():
     assert len(set(txns)) == len(txns)
 
 
-def test_send_stops_at_a_failure_and_never_writes_into_an_encrypted_room():
+def test_send_goes_on_past_a_failed_item_and_never_writes_into_an_encrypted_room():
     answers = iter([200, 500])
 
     def handler(request):
         if "/send/" in request.url.path:
-            status = next(answers, 500)
+            status = next(answers, 200)
             return httpx.Response(status, json={"event_id": "$x"} if status == 200 else {"errcode": "M_UNKNOWN"})
         return httpx.Response(200, json={})
     connection = bot(handler)
     connection.bot_id = BOT
     items = [{"type": "text", "text": "one"}, {"type": "text", "text": "two"}, {"type": "text", "text": "three"}]
-    assert run(connection.send(ROOM, items)) == 1
+    assert run(connection.send(ROOM, items)) == 2
     connection.rooms[ROOM] = {"members": 3, "encrypted": True}
     assert run(connection.send(ROOM, items)) == 0
 
