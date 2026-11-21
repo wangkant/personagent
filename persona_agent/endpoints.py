@@ -114,7 +114,9 @@ def adapt_rejected_payload(payload: dict, error_text: str) -> str:
     model = str(payload.get("model") or "").lower()
     if model:
         text = re.sub(rf"(?<!\w){re.escape(model)}(?!\w)", " ", text)
-    if payload.get("reasoning") == {"enabled": False} and "reasoning is mandatory" in text:
+    # Or an upstream whose lowest effort is above none ("reasoning_effort none is not supported").
+    if payload.get("reasoning") == {"enabled": False} and (
+            "reasoning is mandatory" in text or re.search(r"effort[\"' ]{0,3}none[^.\n]{0,40}not supported", text)):
         payload["reasoning"] = {"effort": "minimal"}
         return "reasoning"
     if "thinking" in payload and _refuses_field(text, "thinking"):
@@ -123,7 +125,68 @@ def adapt_rejected_payload(payload: dict, error_text: str) -> str:
     if "max_tokens" in payload and _refuses_field(text, "max_tokens"):
         payload["max_completion_tokens"] = payload.pop("max_tokens")
         return "max_tokens"
-    if "temperature" in payload and _refuses_field(text, "temperature"):
+    # Or a model that runs at one fixed temperature (Kimi K3, Claude 4.7 and later).
+    if "temperature" in payload and (_refuses_field(text, "temperature") or re.search(
+            r"temperature.{0,60}(?:\bonly\b|is fixed|fixed (?:at|to)|deprecated)|\bonly\b.{0,30}temperature", text)):
         payload.pop("temperature")
         return "temperature"
+    # Qwen's switch, refused by a model that always thinks or by a host that has no such field.
+    if "enable_thinking" in payload and "enable_thinking" in text:
+        payload.pop("enable_thinking")
+        return "enable_thinking"
+    # A model whose lowest effort is above "none" steps up to "low"; one that takes no effort at all drops it.
+    if "reasoning_effort" in payload and "reasoning_effort" in text:
+        if payload["reasoning_effort"] == "none":
+            payload["reasoning_effort"] = "low"
+            return "reasoning_effort_none"
+        payload.pop("reasoning_effort")
+        return "reasoning_effort"
+    # JSON mode refused, or no host behind a router takes it (OpenRouter's 404 "no endpoints
+    # found ... filter by parameters"): the prompts ask for the JSON in words too.
+    # Claude's compatible endpoint takes only json_schema and 400s json_object; any 400
+    # naming the field is about it.
+    if "response_format" in payload and (_refuses_field(text, "response_format") or re.search(
+            r"json_object|response_format", text) or (
+            re.search(r"no endpoints? found", text) and "parameter" in text)):
+        payload.pop("response_format")
+        return "response_format"
+    return ""
+
+
+# What went wrong with a call, told apart by its status and the provider's own
+# words. The spellings are the ones each vendor's documentation shows.
+_PROBLEM_WORDS = (
+    ("no_balance", r"insufficient[ _](?:balance|quota|credits?|funds)|exceeded (?:your )?current[ _]quota"
+                   r"|exceeded_current_quota|credit balance is too low|arrear|good standing|account ?overdue"
+                   r"|payment required|prepay|欠费|余额不足|额度不足|资源包"),
+    ("key", r"invalid[ _-]?(?:api[ _-]?key|authentication|token)|incorrect api key|api[ _]key[ _]invalid"
+            r"|valid api key|api key not valid|authentication[ _](?:error|fails?)|invalid_iam_token|login fail|令牌已过期或验证不正确"),
+    ("not_found", r"model[^.\n]{0,40}(?:not (?:found|exist)|does not exist|is not a valid|not available|unknown)"
+                  r"|unknown model|model_not_found|no such model|invalid model|endpointormodel\.notfound|模型不存在"),
+    ("context", r"context[ _](?:length|window)|maximum context|input token length too long|prompt is too long"
+                r"|range of input length|tokens? exceeds?|exceeds? the (?:maximum|context)"),
+    ("refused", r"content[ _]?filter|content[ _]policy|data_inspection_failed|inappropriate content"
+                r"|considered high risk|sensitive ?content|不安全|敏感内容"),
+)
+
+
+def model_problem(status, text: str) -> str:
+    """What went wrong with a failed call: "no_balance", "key", "limited",
+    "not_found", "context", "refused", or "" (an outage, or nothing known).
+    The account's words come first: Kimi and Zhipu answer an empty balance with
+    a 429, DashScope and Claude with a 400, Gemini a wrong key with a 400."""
+    text = (text or "").lower()
+    found = next((kind for kind, words in _PROBLEM_WORDS if re.search(words, text)), "")
+    if status == 402 or found == "no_balance":
+        return "no_balance"
+    if status in (401, 403):
+        return "key"
+    if status == 429:
+        return "limited"
+    if status == 404:
+        return "not_found"
+    if status == 413:
+        return "context"
+    if status in (400, 422) or status is None:
+        return found
     return ""

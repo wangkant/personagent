@@ -363,12 +363,18 @@ def salvage_json_object(raw: str) -> dict | None:
         try:
             data = json.loads(m.group(0))
         except json.JSONDecodeError:
-            return None
+            # Braces in the prose after the object: the object alone.
+            try:
+                data = json.JSONDecoder().raw_decode(m.group(0))[0]
+            except json.JSONDecodeError:
+                return None
     return data if isinstance(data, dict) else None
 
 
 #: The keys `_parse_model_output` reads; `_is_protocol_dict` is the one test.
 _PROTOCOL_KEYS = frozenset({"reply", "reasoning", "intent", "mem"})
+# Keys a model that ignores the protocol puts its answer under.
+_ANSWER_KEYS = frozenset({"response", "answer", "message", "text", "output", "content"})
 
 
 def _protocol_key(key) -> str:
@@ -413,7 +419,11 @@ def _protocol_fields(data: dict, model: str = "") -> Optional[dict]:
                 continue
             drift.append(("key spelled", _short_repr(key)))
         fields[name] = value
-    if fields.get("reply") is not None and not isinstance(fields["reply"], str):
+    reply = fields.get("reply")
+    if isinstance(reply, list) and all(isinstance(part, str) for part in reply):
+        # A reply written as a list of messages is its lines.
+        fields["reply"] = "\n".join(reply)
+    elif reply is not None and not isinstance(reply, str):
         return None
     mem = fields.get("mem")
     if mem is not None and not isinstance(mem, str):
@@ -2091,7 +2101,9 @@ class TextProcessing:
 
         Fail-closed: without a protocol key and a text `reply` it yields
         ("", raw[:240], "", ""), since a bare reasoning fragment looks like a
-        chat line. Fences, a wrapping array and trailing objects are tolerated."""
+        chat line; only an object that is one text under a key naming the
+        answer ({"response": "..."}) gives that text. Fences, a wrapping array and
+        trailing objects are tolerated."""
         if not raw or not raw.strip():
             return "", "", "", ""
         s = raw.strip()
@@ -2118,7 +2130,13 @@ class TextProcessing:
             logger.warning("[Agent] parser: model output is not JSON, dropping raw=%r",
                            raw[:200])
             return "", raw.strip()[:240], "", ""
-        fields = _protocol_fields(data, model) if _is_protocol_dict(data) else None
+        if _is_protocol_dict(data):
+            fields = _protocol_fields(data, model)
+        else:
+            # One text under a key that plainly names the answer; any other key may hold its thinking.
+            texts = [value for key, value in data.items()
+                     if str(key).lower() in _ANSWER_KEYS and isinstance(value, str) and value.strip()]
+            fields = {"reply": texts[0]} if len(texts) == 1 and len(data) == 1 else None
         if fields is None:
             logger.warning("[Agent] parser: invalid JSON protocol field types/keys")
             return "", raw.strip()[:240], "", ""

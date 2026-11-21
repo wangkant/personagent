@@ -244,6 +244,7 @@
 "[error: {error}]": "[오류: {error}]",
 "the model provider refused the key or the account{http}; check LLM_API_KEY, then run {doctor}": "모델 서비스가 키 또는 계정을 거부했습니다{http}. LLM_API_KEY를 확인한 뒤 {doctor} 명령을 실행하십시오",
 "the model provider rejected the request{http}; check LLM_MODEL and LLM_BASE_URL, then run {doctor}": "모델 서비스가 요청을 거부했습니다{http}. LLM_MODEL과 LLM_BASE_URL을 확인한 뒤 {doctor} 명령을 실행하십시오",
+"the conversation is longer than the model can read at once{http}; choose a model with a longer context window": "대화가 모델이 한 번에 읽을 수 있는 길이를 넘었습니다{http}. 컨텍스트 창이 더 긴 모델을 선택하십시오",
 "the model provider is rate limiting or out of credit{http}; wait a moment and try again": "모델 서비스의 속도 제한에 걸렸거나 크레딧이 없습니다{http}. 잠시 뒤 다시 시도하십시오",
 "could not reach the model provider; check LLM_BASE_URL and the network, then run {doctor}": "모델 서비스에 연결할 수 없습니다. LLM_BASE_URL과 네트워크를 확인한 뒤 {doctor} 명령을 실행하십시오",
 "the model provider had an error{http}; try again in a moment": "모델 서비스에 오류가 났습니다{http}. 잠시 뒤 다시 시도하십시오",

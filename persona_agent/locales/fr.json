@@ -269,6 +269,7 @@
 "[error: {error}]": "[erreur : {error}]",
 "the model provider refused the key or the account{http}; check LLM_API_KEY, then run {doctor}": "le fournisseur du modèle a refusé la clé ou le compte{http} ; vérifiez LLM_API_KEY, puis lancez {doctor}",
 "the model provider rejected the request{http}; check LLM_MODEL and LLM_BASE_URL, then run {doctor}": "le fournisseur du modèle a rejeté la requête{http} ; vérifiez LLM_MODEL et LLM_BASE_URL, puis lancez {doctor}",
+"the conversation is longer than the model can read at once{http}; choose a model with a longer context window": "la conversation est plus longue que ce que le modèle peut lire en une fois{http} ; choisissez un modèle doté d'une fenêtre de contexte plus large",
 "the model provider is rate limiting or out of credit{http}; wait a moment and try again": "le fournisseur du modèle limite le débit ou le crédit est épuisé{http} ; attendez un instant et réessayez",
 "could not reach the model provider; check LLM_BASE_URL and the network, then run {doctor}": "impossible de joindre le fournisseur du modèle ; vérifiez LLM_BASE_URL et le réseau, puis lancez {doctor}",
 "the model provider had an error{http}; try again in a moment": "le fournisseur du modèle a eu une erreur{http} ; réessayez dans un instant",

@@ -315,9 +315,9 @@ async def test_typed_input_is_not_echoed(tmp: Path, monkeypatch, capsys) -> None
 
 # -- findings from the review of the trial ------------------------------------
 
-def _http_error(status: int) -> httpx.HTTPStatusError:
+def _http_error(status: int, body: str = "nope") -> httpx.HTTPStatusError:
     request = httpx.Request("POST", "https://api.example.test/v1/chat/completions")
-    response = httpx.Response(status, request=request, text="nope")
+    response = httpx.Response(status, request=request, text=body)
     return httpx.HTTPStatusError(
         f"Client error '{status}' for url '{request.url}'\n"
         "For more information check: https://developer.mozilla.org/en-US/docs/Web",
@@ -381,6 +381,8 @@ async def test_a_failed_judge_call_is_not_an_unreadable_verdict(tmp: Path) -> No
     (_http_error(401), "auth", "refused the key or the account (HTTP 401)"),
     (_http_error(402), "auth", "(HTTP 402)"),
     (_http_error(404), "request", "LLM_MODEL and LLM_BASE_URL"),
+    (_http_error(400, '{"error": {"message": "maximum context length is 65536 tokens"}}'),
+     "context", "read at once (HTTP 400)"),
     (_http_error(429), "rate_limit", "rate limiting or out of credit (HTTP 429)"),
     (_http_error(503), "server", "had an error (HTTP 503)"),
     (httpx.ConnectError("All connection attempts failed"), "unreachable",

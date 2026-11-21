@@ -23,7 +23,8 @@ from . import timewords
 from .llm import purpose
 from .memory import _SENTENCE_END
 from .storage import num as _num
-from .textproc import _clean_prompt_source, _fence_user_data, _focus_tokens, strip_json_fences
+from .textproc import (_clean_prompt_source, _fence_user_data, _focus_tokens,
+                       salvage_json_object, strip_json_fences)
 
 logger = logging.getLogger("agent")
 
@@ -574,7 +575,7 @@ class Consolidation:
                         model=self.llm_judge_model, max_tokens=MAX_TOKENS,
                         enable_search=False, json_object=True),
                         max(1.0, float(self.llm_timeout_s) * 2))
-                plan = json.loads(strip_json_fences(raw))
+                plan = salvage_json_object(strip_json_fences(raw))
                 if not self._usable_plan(plan):
                     raise ValueError("not a consolidation answer")
             except asyncio.CancelledError:

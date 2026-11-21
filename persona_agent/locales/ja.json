@@ -244,6 +244,7 @@
 "[error: {error}]": "［エラー：{error}］",
 "the model provider refused the key or the account{http}; check LLM_API_KEY, then run {doctor}": "モデルサービスがキーまたはアカウントを拒否しました{http}。LLM_API_KEY を確認してから {doctor} を実行してください",
 "the model provider rejected the request{http}; check LLM_MODEL and LLM_BASE_URL, then run {doctor}": "モデルサービスがリクエストを拒否しました{http}。LLM_MODEL と LLM_BASE_URL を確認してから {doctor} を実行してください",
+"the conversation is longer than the model can read at once{http}; choose a model with a longer context window": "会話がモデルの一度に読み取れる長さを超えています{http}。コンテキストウィンドウがより長いモデルを選択してください",
 "the model provider is rate limiting or out of credit{http}; wait a moment and try again": "モデルサービスのレート制限か、クレジット切れです{http}。少し待ってもう一度試してください",
 "could not reach the model provider; check LLM_BASE_URL and the network, then run {doctor}": "モデルサービスに接続できません。LLM_BASE_URL とネットワークを確認してから {doctor} を実行してください",
 "the model provider had an error{http}; try again in a moment": "モデルサービスでエラーが起きました{http}。少し待ってもう一度試してください",

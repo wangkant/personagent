@@ -41,6 +41,7 @@ def test_only_an_account_status_reads_the_body_for_account_words() -> None:
             (401, "invalid api key", "fatal_auth"),
             (403, "Insufficient Balance", "fatal_auth"),
             (429, '{"error": {"type": "insufficient_quota"}}', "fatal_auth"),
+            (429, '{"error": {"message": "账户余额不足"}}', "fatal_auth"),
             (429, "rate limit reached", "rate_limit")):
         got = classify(_error(status, body))
         check(f"{status} {body!r} -> {want}", got == want, got)
@@ -1161,12 +1162,12 @@ async def test_a_reasoning_model_gets_the_spelling_it_takes(tmp: Path) -> None:
 
     check("the gate answers on a reasoning model", await gate() == "ok")
     check("...after one retry per refused field",
-          sent == [["max_tokens", "temperature"],
-                   ["max_completion_tokens", "temperature"],
-                   ["max_completion_tokens"]], repr(sent))
+          sent == [["max_tokens", "reasoning_effort", "temperature"],
+                   ["max_completion_tokens", "reasoning_effort", "temperature"],
+                   ["max_completion_tokens", "reasoning_effort"]], repr(sent))
     sent.clear()
     check("the next call is spelled right the first time", await gate() == "ok")
-    check("...with no 400 at all", sent == [["max_completion_tokens"]], repr(sent))
+    check("...with no 400 at all", sent == [["max_completion_tokens", "reasoning_effort"]], repr(sent))
 
 
 async def test_a_model_that_must_reason_is_asked_for_the_lowest_effort(tmp: Path) -> None:

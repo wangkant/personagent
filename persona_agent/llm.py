@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from .access import ADMIN_MODE
-from .endpoints import adapt_rejected_payload, chat_completions_url, endpoint_for
+from .endpoints import adapt_rejected_payload, chat_completions_url, endpoint_for, model_problem
 from .usage import USAGE_FILE, UsageBook
 from .textproc import (
     _as_protocol_object,
@@ -42,12 +42,22 @@ def purpose(label: str):
 # asked by its first thinking-off call and the answer remembered.
 _THINKING_HOSTS = ("deepseek.com", "bigmodel.cn", "z.ai", "moonshot.cn",
                    "moonshot.ai", "volces.com")
+# Hosts whose switch is Qwen's `enable_thinking` (DashScope, SiliconFlow,
+# Qianfan, Tencent TokenHub): they are sent that instead.
+_ENABLE_THINKING_HOSTS = ("aliyuncs.com", "siliconflow.cn", "siliconflow.com",
+                          "baidubce.com", "tencentmaas.com", "tencentcloudmaas.com")
 _NO_THINKING_HOSTS = ("openai.com", "groq.com", "googleapis.com",
-                      "openrouter.ai", "mistral.ai", "anthropic.com")
+                      "openrouter.ai", "mistral.ai", "anthropic.com",
+                      "x.ai") + _ENABLE_THINKING_HOSTS
+# Hosts where reasoning is lowered with `reasoning_effort`, and the lowest
+# value each documents for all its models (OpenAI's older lines refuse "none"
+# and are moved to "low"). Gemini 3 and 4 and Grok cannot switch it off.
+_EFFORT_HOSTS = (("openai.com", "none"), ("googleapis.com", "low"), ("x.ai", "low"))
 
 # Words in an error that put the account, not the request, at fault.
 _BILLING_WORDS = ("payment required", "insufficient", "balance", "quota",
-                  "billing", "arrear")
+                  "billing", "arrear", "good standing", "overdue", "欠费", "余额不足",
+                  "资源包")
 
 
 def _host(url: str) -> str:
@@ -66,14 +76,39 @@ def thinking_off(payload: dict, url: str, takes_thinking, *,
     a caller that survives its refusal (`_post_chat`) passes None.
     `k2_temperature` also moves a K2 model to the one temperature it answers
     at with thinking off; a caller that chose its temperature leaves it out."""
-    if takes_thinking is not False:
+    host = _host(url)
+    model = str(payload.get("model") or "").lower()
+    if _on_host(host, _ENABLE_THINKING_HOSTS):
+        payload["enable_thinking"] = False
+    elif takes_thinking is not False:
         payload["thinking"] = {"type": "disabled"}
-        if k2_temperature and "k2" in str(payload.get("model") or "").lower():
+        if k2_temperature and "k2" in model:
             payload["temperature"] = 0.6
+    effort = next((low for domain, low in _EFFORT_HOSTS if _on_host(host, (domain,))), "")
+    # Kimi K3 always reasons, at "max" unless told; K2 took `thinking` and refuses an effort.
+    if not effort and takes_thinking is False and _on_host(host, ("moonshot.cn", "moonshot.ai")) and "k2" not in model:
+        effort = "low"
+    if effort:
+        payload["reasoning_effort"] = effort
     if "openrouter.ai" in (url or ""):
         # The exclude/max_tokens form is 400-rejected by some upstreams.
         payload["reasoning"] = {"enabled": False}
     return payload
+
+
+# Reasoning a model writes into its answer (MiniMax without reasoning_split,
+# DeepSeek-R1 and Qwen3 on a local server without a reasoning parser).
+_THINK_RE = re.compile(r"^\s*<think>.*?</think>\s*", re.S)
+
+
+def answer_text(message: dict) -> str:
+    """The answer's words: a content list (Mistral's reasoning models send
+    thinking and text parts) read for its text, a leading <think> block dropped."""
+    content = message.get("content") or ""
+    if isinstance(content, list):
+        content = "".join(str(p.get("text") or "") for p in content
+                          if isinstance(p, dict) and p.get("type") == "text")
+    return _THINK_RE.sub("", str(content)).strip()
 
 
 def known_to_take_thinking(url: str, model: str) -> bool:
@@ -119,7 +154,25 @@ def _error_text(e: BaseException, status) -> str:
     text = str(e).lower()
     if status in (None, 401, 402, 403, 429):
         text += " " + _response_text(e).lower()
+    elif status in (400, 404, 422):
+        # Only the provider's own message, where Gemini says the key is wrong,
+        # Claude or DashScope that the balance is gone, any that the context is.
+        text += " " + _provider_message(e).lower()
     return text
+
+
+def _provider_message(e: BaseException) -> str:
+    """The `error` object's message, code and type from a JSON error body."""
+    try:
+        body = json.loads(_response_text(e) or "{}")
+    except ValueError:
+        return ""
+    error = body.get("error") if isinstance(body, dict) else None
+    if isinstance(error, str):
+        return error[:300]
+    if not isinstance(error, dict):
+        return ""
+    return " ".join(str(error.get(k) or "") for k in ("message", "code", "type"))[:300]
 
 
 class ProviderError(Exception):
@@ -243,11 +296,21 @@ class ModelCalls:
             payload.pop("temperature", None)
         if ("reasoning", url, model) in quirks and payload.get("reasoning") == {"enabled": False}:
             payload["reasoning"] = {"effort": "minimal"}
+        if ("response_format", url, model) in quirks:
+            payload.pop("response_format", None)
+        if ("enable_thinking", url, model) in quirks:
+            payload.pop("enable_thinking", None)
+        if ("reasoning_effort_none", url, model) in quirks and payload.get("reasoning_effort") == "none":
+            payload["reasoning_effort"] = "low"
+        if ("reasoning_effort", url, model) in quirks:
+            payload.pop("reasoning_effort", None)
 
     def _remember_refusal(self, url: str, model: str, field: str) -> None:
         self._api_quirks[(field, url, model)] = False if field == "thinking" else True
         instead = {"max_tokens": "sending max_completion_tokens instead",
-                   "reasoning": "asking for the lowest effort instead"}.get(field, "leaving it out")
+                   "reasoning": "asking for the lowest effort instead",
+                   "response_format": "asking for JSON in the prompt alone",
+                   "reasoning_effort_none": "asking for low effort instead"}.get(field, "leaving it out")
         logger.info("[Agent] %s does not take `%s` for model %s; %s from now on",
                     _host(url) or url, field, model, instead)
 
@@ -269,7 +332,8 @@ class ModelCalls:
             for _ in range(4):
                 resp = await client.post(url, json=dict(payload), headers=headers)
                 status = getattr(resp, "status_code", 200)
-                if status not in (400, 422):
+                # OpenRouter answers 404 when no host of the model takes JSON mode.
+                if status not in (400, 422) and not (status == 404 and "response_format" in payload):
                     break
                 field = adapt_rejected_payload(
                     payload, str(getattr(resp, "text", "") or ""))
@@ -377,8 +441,9 @@ class ModelCalls:
         # token count is not read as one.
         status = _status_of(e)
         msg = _error_text(e, status)
-        # Before the 429 check: OpenAI answers an exhausted quota with a 429.
-        if status == 402 or any(k in msg for k in (
+        # Before the 429 check: OpenAI, Kimi and Zhipu answer an exhausted
+        # quota with a 429; a wrong Gemini key is a 400.
+        if status == 402 or model_problem(status, msg) in ("no_balance", "key") or any(k in msg for k in (
                 "payment required", "insufficient_quota", "insufficient balance",
                 "exceeded your current quota")):
             return "fatal_auth"
@@ -537,7 +602,7 @@ class ModelCalls:
 
         def _pick(d: dict) -> tuple[str, str]:
             choice = (d.get("choices") or [{}])[0]
-            return (((choice.get("message") or {}).get("content") or "").strip(),
+            return (answer_text(choice.get("message") or {}),
                     choice.get("finish_reason", "?"))
 
         def _hidden_reasoning(d: dict) -> str:

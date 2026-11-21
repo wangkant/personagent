@@ -35,7 +35,8 @@ from persona_agent.agent import Agent
 from persona_agent.connector import ConnectorSink, current_sink
 from persona_agent.decision import (GATED_MODES, ONLY_WHEN_CALLED, choose_group_mode,
                                     is_pass_sentinel, pacing_skip)
-from persona_agent.llm import _status_of
+from persona_agent.endpoints import model_problem
+from persona_agent.llm import _error_text, _status_of
 from persona_agent.memstore import MemoryFileDamaged
 from persona_agent.prompt import BUFFERED_LINE_CHARS
 from persona_agent.settings import AgentSettings
@@ -99,6 +100,8 @@ _TEXT = {
                      "check LLM_API_KEY, then run {doctor}"),
             "request": ("the model provider rejected the request{http}; check "
                         "LLM_MODEL and LLM_BASE_URL, then run {doctor}"),
+            "context": ("the conversation is longer than the model can read at once"
+                        "{http}; choose a model with a longer context window"),
             "rate_limit": ("the model provider is rate limiting or out of credit"
                            "{http}; wait a moment and try again"),
             "unreachable": ("could not reach the model provider; check "
@@ -215,6 +218,7 @@ _TEXT = {
         "failures": {
             "auth": "模型服务拒绝了该密钥或账号{http}；请检查 LLM_API_KEY，然后运行 {doctor}",
             "request": "模型服务拒绝了此次请求{http}；请检查 LLM_MODEL 和 LLM_BASE_URL，然后运行 {doctor}",
+            "context": "对话内容超出模型一次可读取的长度{http}；请改用上下文窗口更长的模型",
             "rate_limit": "模型服务已限流或额度不足{http}；请稍后重试",
             "unreachable": "无法连接模型服务；请检查 LLM_BASE_URL 和网络连接，然后运行 {doctor}",
             "server": "模型服务发生错误{http}；请稍后重试",
@@ -333,6 +337,8 @@ def describe_failure(exc: BaseException) -> Failure:
     if kind == "fatal_auth":
         return Failure("auth", status)
     if kind == "fatal_request":
+        if model_problem(status, _error_text(exc, status)) == "context":
+            return Failure("context", status)
         return Failure("request", status)
     if kind == "rate_limit":
         return Failure("rate_limit", status)

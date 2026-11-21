@@ -170,6 +170,7 @@
 "[error: {error}]": "[錯誤：{error}]",
 "the model provider refused the key or the account{http}; check LLM_API_KEY, then run {doctor}": "模型服務拒絕了該金鑰或帳號{http}；請檢查 LLM_API_KEY，然後執行 {doctor}",
 "the model provider rejected the request{http}; check LLM_MODEL and LLM_BASE_URL, then run {doctor}": "模型服務拒絕了此次請求{http}；請檢查 LLM_MODEL 和 LLM_BASE_URL，然後執行 {doctor}",
+"the conversation is longer than the model can read at once{http}; choose a model with a longer context window": "對話內容超出模型一次可讀取的長度{http}；請改用上下文視窗更長的模型",
 "the model provider is rate limiting or out of credit{http}; wait a moment and try again": "模型服務已限制請求頻率或額度不足{http}；請稍後重試",
 "could not reach the model provider; check LLM_BASE_URL and the network, then run {doctor}": "無法連線至模型服務；請檢查 LLM_BASE_URL 和網路連線，然後執行 {doctor}",
 "the model provider had an error{http}; try again in a moment": "模型服務發生錯誤{http}；請稍後重試",

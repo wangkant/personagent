@@ -2813,11 +2813,13 @@ def test_the_parser_reads_past_keys_a_model_adds() -> None:
                       ('{"Reply":"hi","Intent":"Chat"}', ("hi", "chat", "")),
                       ('{"reply":"hi","reasoning":{"step":1},"mem":"likes tea"}',
                        ("hi", "", "likes tea")),
-                      ('{"reply":"yo","Reply":"hi"}', ("yo", "", ""))):
+                      ('{"reply":"yo","Reply":"hi"}', ("yo", "", "")),
+                      ('{"reply":["hi","there"]}', ("hi\nthere", "", "")),
+                      ('{"response":"hi"}', ("hi", "", ""))):
         reply, _reasoning, intent, mem = TP._parse_model_output(raw, "open-model")
         check(f"read past the drift: {raw}", (reply, intent, mem) == want,
               repr((reply, intent, mem)))
-    for raw in ('{"reply":["hi"]}', '{"reply":"hi","mem":{"a":1}}',
+    for raw in ('{"reply":[1]}', '{"reply":"hi","mem":{"a":1}}',
                 '{"role":"user","content":"hi"}', '{"thought":"just thinking"}'):
         check(f"still fails closed: {raw}",
               TP._parse_model_output(raw, "open-model")[0] == "", raw)

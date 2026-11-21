@@ -269,6 +269,7 @@
 "[error: {error}]": "[ошибка: {error}]",
 "the model provider refused the key or the account{http}; check LLM_API_KEY, then run {doctor}": "поставщик модели отклонил ключ или учётную запись{http}; проверьте LLM_API_KEY и запустите {doctor}",
 "the model provider rejected the request{http}; check LLM_MODEL and LLM_BASE_URL, then run {doctor}": "поставщик модели отклонил запрос{http}; проверьте LLM_MODEL и LLM_BASE_URL и запустите {doctor}",
+"the conversation is longer than the model can read at once{http}; choose a model with a longer context window": "разговор длиннее, чем модель может прочитать за один раз{http}; выберите модель с более длинным контекстным окном",
 "the model provider is rate limiting or out of credit{http}; wait a moment and try again": "поставщик модели ограничивает частоту запросов или средства исчерпаны{http}; подождите немного и повторите попытку",
 "could not reach the model provider; check LLM_BASE_URL and the network, then run {doctor}": "не удалось связаться с поставщиком модели; проверьте LLM_BASE_URL и сеть и запустите {doctor}",
 "the model provider had an error{http}; try again in a moment": "у поставщика модели произошла ошибка{http}; повторите попытку чуть позже",
