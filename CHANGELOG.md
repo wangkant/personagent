@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The licence is now Apache 2.0.** personagent is free to use, change and share, for commercial purposes too. The connectors under `integrations/` stay under the MIT License, and the three character portraits stay under CC BY-NC-SA 4.0, which does not allow commercial use. Versions 1.4.1 to 1.5.0 were released under the PolyForm Noncommercial License 1.0.0 and copies of them stay under it. A `NOTICE` file names the parts and their licences.
 
+### Fixed
+
+- **Replies a model sent in another shape are no longer lost.** A reply that arrives as a list of parts, after a `<think>` block, as a list of lines, or as one text under a key such as `response` is read; before, the character said nothing. An object whose only text sits under any other key is still dropped. The tidy-up of memory reads a JSON object wrapped in prose.
+- **Each provider is asked in its own spelling.** Thinking is switched off with `enable_thinking` on the Qwen-family hosts and with `reasoning_effort` where that is the control. A refusal of JSON mode (including OpenRouter's 404), of a fixed temperature or of an effort level is learned and the call repeated without it. A 429 that says the balance is gone is reported as a billing problem, and a conversation too long for the model has its own message.
+- **Web search finds more and names its source.** The keyless search asks in the region of the chat's language, asks again across a fixed list of engines when an answer is empty, stays within 20 seconds, and also runs when Tavily fails. Every result keeps its address.
+- **A lookup that failed is said, not hidden.** A search that found nothing and a tool that failed or was refused now leave a short line for the reply, and the character says it could not check instead of answering as if it knew. Tool arguments sent as an object are read.
+- **ID numbers, card numbers, passwords and one-time codes are never saved as notes.** A Chinese ID number with a correct check digit, a card number that passes the Luhn check, or a password or code word followed by its value is refused by every path that keeps a note, and the person who asked is told so in their chat language. Order numbers, phone numbers and group ids are kept as before. The chat log still holds the line as typed.
+- **A tool its MCP server marks destructive cannot be opened to anyone.** It is offered only on the admin's turns, even where an older `mcp.json` says anyone. Tools without that mark behave as before.
+
 ## [1.5.0] — 2026-11-16
 
 Beside the mature assistants: a connected platform answers only the chats its admin approves, OpenRouter signs in without a pasted key, the character uses tools from MCP servers, and personagent runs on a server or in Docker with its page behind a password.
