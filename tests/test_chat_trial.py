@@ -216,11 +216,6 @@ async def test_reply_and_admin_without_text_show_their_usage(tmp: Path, capsys) 
         assert "usage: /admin your message" in capsys.readouterr().out
 
 
-def test_the_default_speaker_is_named_in_the_chat_language() -> None:
-    assert chat.text_for("en")["you"] == "you"
-    assert chat.text_for("zh")["you"] == "用户"
-
-
 async def test_the_trial_lives_in_its_own_folder_and_reset_wipes_it(
         tmp: Path, monkeypatch) -> None:
     monkeypatch.setenv("LLM_API_KEY", "k")

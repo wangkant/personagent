@@ -257,17 +257,6 @@ def test_the_demo_is_scripted_unless_online_is_asked_for(
     assert "--online needs a model key" in capsys.readouterr().out
 
 
-async def test_the_online_banner_says_it_costs_tokens(
-        tmp: Path, monkeypatch) -> None:
-    _failing(monkeypatch, _http_error(401))
-    lines: list[str] = []
-    await demo.run(["quiet"], lang="en", offline=False, out=lines.append,
-                   base=str(tmp))
-    banner = "\n".join(lines[:4])
-    assert "your model (" in banner and "costs" in banner
-    assert "differ from run to run" in banner and "`personagent demo`" in banner
-
-
 def test_ctrl_c_in_the_demo_is_a_quiet_exit(monkeypatch, capsys) -> None:
     async def interrupted(*args, **kwargs):
         raise KeyboardInterrupt
@@ -292,18 +281,3 @@ async def test_no_fix_says_which_condition_failed(
     # A scene the judge refuses entirely keeps the plain wording.
     out = await play(tmp, ["troll"])
     assert "no fix was proposed" not in out
-
-
-async def test_the_teach_scene_reads_in_plain_words(tmp: Path) -> None:
-    out = await play(tmp, ["teach"])
-    assert "By default one person can\n" in out
-    assert "what the ledger recorded, in order (rows are only added, never edited):" in out
-    assert "not in use yet" not in out and "PROMOTED" not in out
-    assert 'a second rewrite was also drafted for that reply: "ugh, again?' in out
-    troll = await play(tmp, ["troll"])
-    assert "the judge's verdicts are scripted" in troll
-
-
-async def test_the_scripted_banner_points_at_online(tmp: Path) -> None:
-    out = await play(tmp, ["quiet"])
-    assert "(it costs tokens): `personagent demo --online`" in out

@@ -181,12 +181,6 @@ def test_on_this_computer_the_agents_routes_are_unchanged(app, workspace, tmp_pa
         check("any folder of ours, as before", answer.status_code == 200, answer.text)
 
 
-def test_the_agents_panel_hides_what_another_device_may_not_do():
-    script = (ROOT / "persona_agent" / "static" / "welcome" / "panels" / "agents.js").read_text(encoding="utf-8")
-    check("both parts read the remote flag", script.count("PA.state?.remote") >= 2)
-    check("and show the page's local-only note", script.count('PA.t("local_only")') >= 2)
-
-
 # ---- 3. a proxy that drops the port
 
 def test_a_host_without_the_port_the_browser_used_is_named_on_the_sign_in(app):

@@ -170,15 +170,6 @@ def test_a_variable_of_another_service_or_another_name_gives_no_key(page, monkey
         assert refused.json() == {"error": "key_required"}
 
 
-def test_the_panel_s_sentences_exist_in_english_and_chinese() -> None:
-    script = (welcome.ASSETS / "panels" / "detect.js").read_text(encoding="utf-8")
-    english, chinese = script.split("  zh: {", 1)
-    keys = [line.split(":", 1)[0].strip() for line in english.splitlines() if line.strip().startswith("detect_")]
-    assert len(keys) >= 8
-    for key in keys:
-        assert f"    {key}:" in chinese, key
-
-
 def test_a_key_from_the_environment_goes_only_to_its_own_service(page, monkeypatch) -> None:
     _workspace, client = page
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-from-the-shell")

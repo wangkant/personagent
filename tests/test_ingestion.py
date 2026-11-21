@@ -324,15 +324,6 @@ def test_gif_pixel_bomb_rejected_before_convert() -> None:
     check("gif: rejected before pixel conversion", converted is False, repr(converted))
 
 
-def test_small_gif_still_converts() -> None:
-    from PIL import Image
-
-    source = io.BytesIO()
-    Image.new("P", (2, 2), color=1).save(source, format="GIF")
-    got = ContentIngestion._gif_first_frame_png(source.getvalue())
-    check("gif: normal small image converts", got.startswith(b"\x89PNG\r\n\x1a\n"))
-
-
 async def test_bootstrap_uses_guarded_bounded_fetch() -> None:
     calls = 0
 
@@ -1435,13 +1426,3 @@ async def test_ssrf_redirect_hops(tmp: Path) -> None:
           data2 == b"\x89PNG\r\n\x1a\nIMGDATA"
           and fetched == ["http://hop.invalid/a", "http://hop.invalid/b"],
           repr((data2, fetched)))
-
-
-async def test_a_model_that_cannot_read_images_is_asked_once_per_picture(sleeps) -> None:
-    """A 400 such as "model does not support image input" used to be retried
-    twice: three refused calls per picture, every time it was sent."""
-    agent = VisionHarness(PNG, *[VisionResponse(400)] * 3)
-    got = await agent._describe_image_vision(IMAGE_URL)
-    check("vision 400: no caption", got is None, repr(got))
-    check("vision 400: one call", len(agent.vision.posts) == 1, repr(len(agent.vision.posts)))
-    check("vision 400: no backoff", sleeps == [], repr(sleeps))

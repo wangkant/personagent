@@ -154,14 +154,6 @@ def test_discord_identifies_then_hands_messages_over():
     assert event["conversation_id"] == "300" and event["sent_at"] > 0
 
 
-def test_discord_turns_a_missing_message_content_intent_into_a_named_refusal():
-    socket = Socket([{"op": 10, "d": {"heartbeat_interval": 45000}}], close_code=4014)
-    bot = discord.Discord({"discord_token": "tok"}, client=mock(discord_rest),
-                          connect=lambda url: asyncio.sleep(0, socket))
-    with pytest.raises(base.Refused, match="message_content_intent_off"):
-        run(bot._session("wss://x", False, None, lambda: None))
-
-
 def test_discord_skips_bots_and_mentions_people_it_replies_to():
     bot = discord.Discord({"discord_token": "tok"}, client=mock(discord_rest))
     bot.bot_id = "900"

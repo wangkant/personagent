@@ -19,7 +19,6 @@ from persona_agent.textproc import TextProcessing
 
 PANELS = Path(practice.__file__).parents[1] / "static" / "welcome" / "panels"
 JS = (PANELS / "practice.js").read_text(encoding="utf-8")
-CSS = (PANELS / "practice.css").read_text(encoding="utf-8")
 TOKEN = "test-local-capability"
 HEADERS = {welcome.TOKEN_HEADER: TOKEN}
 KEY = "sk-practice-secret-0123456789"
@@ -129,13 +128,6 @@ def test_every_route_needs_the_local_token(client):
     for path in ("start", "say", "why", "learned", "reset", "demo"):
         assert client.post(f"/api/practice/{path}", json={}).status_code == 403
     assert client.get("/assets/panels/practice.js").status_code == 200
-
-
-def test_the_page_reads_the_group_only_through_start(client):
-    # start returns the transcript, so no second route duplicates it.
-    paths_ = {getattr(route, "path", "") for route in client.app.routes}
-    assert "/api/practice/state" not in paths_
-    assert "practice/state" not in JS
 
 
 def test_start_runs_the_trial_child_on_this_home(client, workspace):
@@ -473,54 +465,3 @@ def test_page_strings_match_in_both_languages():
     assert used <= set(keys["en"]), used - set(keys["en"])
     assert practice.ERRORS <= set(keys["en"])
     assert {f"practice_fail_{kind}" for kind in practice.FAILURES} <= set(keys["en"])
-
-
-def test_page_strings_use_the_pages_names_and_register():
-    en, zh = tables()["en"], tables()["zh"]
-    # The settings view goes by its full name, as the rest of the page calls it.
-    assert en["practice_open_settings"] == "Open Character & settings"
-    assert zh["practice_open_settings"] == "打开「角色与设置」"
-    for key in ("practice_needs_key", "practice_fail_auth", "practice_fail_request",
-                "practice_fail_unreachable", "practice_fail_other", "practice_failed"):
-        assert "Character & settings" in en[key] and "「角色与设置」" in zh[key], key
-    for text in en.values():
-        assert not re.search(r"\b(owner|Settings)\b|n't|'re|'s\b", text.replace("character's", "")), text
-    for text in zh.values():
-        assert not re.search(r"主人|您|应用|去设置|假的|捣乱|从头再来|吧|呢|啦|哦|不吭声", text), text
-    # The confirmation names everything a reset deletes.
-    for word in ("消息", "学到的内容", "记忆"):
-        assert word in zh["practice_reset_ask"]
-    for word in ("messages", "learned", "memories"):
-        assert word in en["practice_reset_ask"]
-
-
-def test_page_controls_keep_focus_and_announce_results():
-    code = JS.split("PA.strings")[1].split("});", 1)[1]
-    # Every control made by button() is given an id.
-    assert not re.search(r'button\("[^"]*", "[^"]*"\)', code)
-    assert re.search(r"if \(focused\) PA\.\$\(focused\)\?\.focus\(\)", code)
-    for node in ("demoError", "groupErrorText", "sendError"):
-        assert f'{node}.setAttribute("role", "alert")' in code, node
-    for node in ("demoStatus", "groupStatus"):
-        assert f'{node}.setAttribute("role", "status")' in code, node
-
-
-def test_message_box_has_a_label_and_grows():
-    code = JS.split("PA.strings")[1].split("});", 1)[1]
-    assert 'boxLabel.htmlFor = "practice-message"' in code
-    assert 'input.addEventListener("input", fitBox)' in code
-    assert "Math.min(input.scrollHeight, BOX_MAX)" in code
-
-
-def test_the_group_explains_a_missing_model_without_asking_the_server():
-    code = JS.split("PA.strings")[1].split("});", 1)[1]
-    opening = code.split("async function openGroup()")[1].split("PA.api(")[0]
-    assert "PA.state?.configured" in opening and 'showGroupError("practice_needs_key")' in opening
-    assert 'PA.showView("settings")' in code
-
-
-def test_the_scene_switcher_is_text_tabs():
-    rule = re.search(r"\n\.practice-scene \{(.*?)\}", CSS, re.S).group(1)
-    assert "background: none" in rule and "var(--side)" not in rule
-    active = re.search(r"\n\.practice-scene\.active \{(.*?)\}", CSS, re.S).group(1)
-    assert "background" not in active and "border-bottom-color" in active

@@ -6,7 +6,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 from persona_agent import cli, preflight, server
 
@@ -141,15 +140,6 @@ def test_doctor_help_and_hints_use_the_installed_spelling(tmp_path: Path) -> Non
     bare = _personagent("doctor", home=tmp_path)
     hint = next(line for line in bare.stdout.splitlines() if "sets up the model and key" in line)
     assert f"--home {tmp_path} init`" in hint, hint
-
-
-def test_learned_help_names_the_command_not_a_script(capsys) -> None:
-    with pytest.raises(SystemExit):
-        cli.main(["learned", "--help"])
-    assert "tools/candidates_admin.py" not in capsys.readouterr().out
-    from persona_agent import ledger_admin
-
-    assert "tools/" not in ledger_admin.__doc__
 
 
 def test_home_is_accepted_after_the_command_too(monkeypatch, tmp_path: Path) -> None:

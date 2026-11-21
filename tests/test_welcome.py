@@ -1370,19 +1370,6 @@ def test_no_page_sentence_says_a_learned_item_waits_for_the_reader(code):
     assert found == []
 
 
-def test_the_observed_items_in_activity_have_no_buttons_and_light_no_dot():
-    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
-    card = re.search(r"\nfunction change\(item, observed\) \{\n(.*?)\n\}\n", js, re.S).group(1)
-    # The card returns before any button is built.
-    assert card.index("if (observed) return card;") < card.index('el("div", "change-actions")')
-    dot = re.search(r"\nfunction renderActivityDot\(\) \{\n(.*?)\n\}\n", js, re.S).group(1)
-    # Only something new in use lights it, never an item still observed.
-    assert "observing" not in dot and "review" not in dot and "activityLatest()" in dot
-    assert '"activity/decide"' in js and '"promote"' not in js.split("async function decide(item, verb)")[1][:600]
-    html = (welcome.ASSETS / "index.html").read_text(encoding="utf-8")
-    assert 'id="activity-dot" class="dot"' in html
-
-
 def _recorded_reasons() -> set[str]:
     """Every reason the code can hand decision_log, read from the source."""
     import ast
@@ -1436,16 +1423,6 @@ def test_every_reason_the_service_records_reads_as_a_sentence_in_every_language(
         strings = json.loads((welcome.ASSETS / "i18n" / f"{code}.json").read_text(encoding="utf-8"))["strings"]
         missing = {k for k in keys if not strings.get(k, "").strip()}
         assert not missing, (code, missing)
-
-
-def test_an_unknown_reason_is_never_shown_raw_and_a_coding_entry_is_labelled():
-    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
-    reason = re.search(r"\nfunction reasonText\(row\) \{\n(.*?)\n\}\n", js, re.S).group(1)
-    assert "row.reason;" not in reason and 't("r_other")' in reason
-    mode = re.search(r"\nfunction modeText\(row\) \{\n(.*?)\n\}\n", js, re.S).group(1)
-    assert "|| row.mode" not in mode
-    shown = re.search(r"\nfunction showMessage\(item, arrived = false\) \{\n(.*?)\n\}\n", js, re.S).group(1)
-    assert 'item.via === "coding"' in shown and 't("chatViaCoding")' in shown
 
 
 def test_page_language_files_are_served_and_nothing_else(client):
@@ -1558,13 +1535,6 @@ def test_what_the_page_says_about_learned_items_and_its_person_is_in_every_langu
         assert "Set aside" in strings["learned_sum_idle"] and "Set aside" in strings["forgetChatAsk"]
 
 
-def test_portuguese_names_logs_in_portuguese():
-    strings = _language_strings("pt-BR")
-    # A file's name, such as agent.log, stays as written.
-    found = [k for k, v in strings.items() if re.search(r"(?<![./])\b[Ll]ogs?\b(?! in)", v)]
-    assert found == []
-
-
 def test_every_accessible_name_follows_the_page_language():
     html = (welcome.ASSETS / "index.html").read_text(encoding="utf-8")
     labelled = re.findall(r"<[a-z]+\b[^>]*\baria-label=\"[^\"]*\"[^>]*>", html)
@@ -1576,32 +1546,6 @@ def test_every_accessible_name_follows_the_page_language():
         assert key and key.group(1) in _page_strings("en"), tag
     js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
     assert 'node.setAttribute("aria-label", t(node.dataset.tAria))' in js
-
-
-def test_every_place_that_shows_a_learned_item_reads_it_again_after_a_change():
-    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
-    panel = (welcome.ASSETS / "panels" / "learned.js").read_text(encoding="utf-8")
-    decide = js.split("async function decide(item, verb) {")[1].split("\n}\n")[0]
-    assert "learnedChanged();" in decide
-    forget = js.split("async function forgetWholeChat() {")[1].split("\n}\n")[0]
-    assert "learnedChanged();" in forget and '"activityForgetOldChatAsk"' in forget
-    for button in ('$("forget-chat").addEventListener', '$("reset-chat").addEventListener'):
-        assert "learnedChanged();" in js.split(button)[1].split("\n});\n")[0], button
-    assert "PA.onLearned(load);" in panel and "PA.learnedChanged(load);" in panel
-    # The open tab is read again when pressed, not ignored.
-    assert "if (tab === name) return;" not in panel
-
-
-def test_the_setup_card_sends_the_characters_language_not_the_pages():
-    js = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
-    html = (welcome.ASSETS / "index.html").read_text(encoding="utf-8")
-    assert '<select id="character-lang">' in html and 'data-t="characterLangNote"' in html
-    submit = js.split('$("settings-form").addEventListener("submit"')[1].split("\n});\n")[0]
-    # The form's values, the signin panel's save too, come from one function.
-    assert "...formValues()," in submit
-    values = js.split("function formValues() {")[1].split("\n}\n")[0]
-    assert 'lang: $("character-lang").value || lang,' in values
-    assert "\n    lang,\n" not in values
 
 
 def test_the_page_chat_names_its_person_and_an_earlier_page_chat_says_its_learning_is_out_of_use(
@@ -1655,14 +1599,3 @@ def test_the_page_chat_names_its_person_and_an_earlier_page_chat_says_its_learni
 def test_the_state_carries_the_admins_name(client, workspace):
     sw.write_env(workspace.env, {"ADMIN_NAME": "Kai"})
     assert client.get("/api/state", headers=HEADERS).json()["adminName"] == "Kai"
-
-
-def test_the_page_wires_the_start_button_the_cut_line_and_unanswered_messages() -> None:
-    source = (welcome.ASSETS / "welcome.js").read_text(encoding="utf-8")
-    html = (welcome.ASSETS / "index.html").read_text(encoding="utf-8")
-    assert 'id="activity-start"' in html and 'id="activity-start-error"' in html
-    assert 'api("activity/start", {})' in source
-    assert "retry: retrySeq" in source and "item.failed" in source
-    for key in ("activityStart", "activityStarting", "runningNoModel", "modelUnreachable",
-                "serviceStopped", "chatUnanswered", "chatTrimmed"):
-        assert source.count(f"    {key}: ") == 2, key

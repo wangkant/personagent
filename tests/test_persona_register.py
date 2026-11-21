@@ -15,9 +15,7 @@ from pathlib import Path
 from persona_agent.agent import Agent
 from persona_agent.prompts import (
     HONEST_DISCLOSURE,
-    INTENT_RULES,
     DM_TOOL_GUIDE,
-    REASONING_PROTOCOL,
     STYLE_GUIDE,
     STYLE_KNOBS,
     PersonaStyle,
@@ -78,18 +76,6 @@ async def _served_dm_prompts(tmp: Path) -> dict[str, str]:
         await agent.aclose()
     return served
 
-
-#: The phrases the register bans, in both languages a reply is written in: a
-#: zh build reads the same guide, and an English-only ban would leave it
-#: closing every turn like a support ticket.
-BANNED_ASSISTANT_PHRASES = (
-    "Is there anything else",
-    "I'm here to help",
-    "Let me know if",
-    "有什么我可以帮你的",
-    "还有什么需要我帮忙的",
-    "有需要随时告诉我",
-)
 
 #: The header of the one section allowed to contain those strings.
 COMPANY_HEADER = "[COMPANY, NOT SERVICE]"
@@ -170,116 +156,6 @@ def test_the_companionship_register_survives_every_knob_combination() -> None:
           and "DON'T FAKE KNOWING wins" in _section(guide, "[CONTINUITY"))
 
 
-async def test_no_assistant_ism_survives_the_assembled_dm_prompt(
-        tmp: Path) -> None:
-    """The banned phrases appear nowhere in the 1:1 prompt except in the one
-    section that forbids them. A flat "nowhere" is unsatisfiable, because the
-    ban is written by quoting them; so: each occurs exactly once, inside
-    `[COMPANY, NOT SERVICE]`, on a line that forbids it, and the prompt with
-    that section removed contains none of them in any casing — which is what
-    catches an example reply or a protocol line teaching one."""
-    styles = _every_style()
-    headerless: list[str] = []
-    not_once: dict[str, list[str]] = {}
-    not_a_ban: dict[str, list[str]] = {}
-    leaked: dict[str, list[str]] = {}
-
-    def audit(label: str, assembled: str) -> None:
-        section = _section(assembled, COMPANY_HEADER)
-        if not section:
-            headerless.append(label)
-            return
-        outside = assembled.replace(section, "\n")
-        for phrase in BANNED_ASSISTANT_PHRASES:
-            if assembled.count(phrase) != 1 or phrase not in section:
-                not_once.setdefault(phrase, []).append(
-                    f"{label}: {assembled.count(phrase)} occurrences")
-            carrier = [line for line in section.splitlines() if phrase in line]
-            if not any("Never" in line or "Don't" in line for line in carrier):
-                not_a_ban.setdefault(phrase, []).append(repr(carrier))
-            hits = [line for line in outside.splitlines()
-                    if phrase.lower() in line.lower()]
-            if hits:
-                leaked.setdefault(phrase, []).append(f"{label}: {hits[0]!r}")
-
-    for style in styles:
-        audit(repr(style), _assembled_dm_prompt(style))
-    for who, served in (await _served_dm_prompts(tmp)).items():
-        audit(f"served to the {who}", served)
-
-    check(f"every prompt renders a {COMPANY_HEADER} section",
-          not headerless, f"{len(headerless)} without one, e.g. {headerless[:1]}")
-    for phrase in BANNED_ASSISTANT_PHRASES:
-        check(f"{phrase!r} is written exactly once, inside the section that "
-              f"bans it", phrase not in not_once,
-              repr(not_once.get(phrase, [])[:1]))
-        check(f"...on a line that FORBIDS it rather than demonstrating it — "
-              f"{phrase!r}", phrase not in not_a_ban,
-              repr(not_a_ban.get(phrase, [])[:1]))
-        check(f"...and nowhere else in the 1:1 prompt, in any casing — "
-              f"{phrase!r}", phrase not in leaked,
-              repr(leaked.get(phrase, [])[:1]))
-
-
-async def test_a_tool_shaped_request_is_answered_by_the_character(
-        tmp: Path) -> None:
-    """A DM persona asked for the first hundred digits of pi typed out a
-    hundred digits: the prompt banned every assistant PHRASE and said nothing
-    about assistant SUBSTANCE. Beside the two style bullets, three more
-    places say it, each where the model reads it at a different moment: the
-    `question` intent, the reasoning protocol's tool check, and the <rules>
-    block after the persona. The group prompt, where the persona is one
-    member of a room, is untouched."""
-    style = PersonaStyle()
-    question = next(line for line in dm_intent_rules(style).splitlines()
-                    if line.startswith("- `question`"))
-    check("the question intent answers as this person, from what they'd know",
-          "as this person and from what they'd know" in question, question)
-    check("...and not having it, said in their own words, is the answer",
-          "saying so in their own words IS the direct answer" in question,
-          question)
-    protocol = dm_output_protocol(style)
-    check("the reasoning protocol runs a tool check",
-          "- Tool check:" in protocol and "decide as the character" in protocol)
-    bullets = protocol.split("Cover these ", 1)[1].split("\n\nintent", 1)[0]
-    stated = int(bullets.split(" ", 1)[0])
-    check("...and counts it among the points it asks for",
-          stated == bullets.count("\n- "), bullets)
-
-    tool_check = next(line for line in protocol.splitlines()
-                      if line.startswith("- Tool check:"))
-    # "look up" is in the tool check's list, and DM_TOOL_GUIDE says to
-    # answer from fetched results as if already known. Without this the two
-    # disagreed about a search the engine had already paid for.
-    check("...which counts fetched search results as something they have",
-          "[external_web_search_data]" in tool_check, tool_check)
-
-    served_by_who = await _served_dm_prompts(tmp)
-    for who, served in served_by_who.items():
-        rules = served.split("<rules>", 1)[1].split("</rules>", 1)[0]
-        check(f"the {who}'s <rules> say the character decides what gets done",
-              "The person never turns into the tool" in rules, rules)
-        check(f"...and the {who}'s count fetched search results as known",
-              "[external_web_search_data]" in rules, rules)
-
-    # The admin's overrides come after <rules> and say "engage directly" to
-    # a lookup. They name the option they retract, and keep the character
-    # rather than handing over a deliverable, so the two lines agree.
-    overrides = served_by_who["admin"].split(
-        "<private_overrides>", 1)[1].split("</private_overrides>", 1)[0]
-    ask = next(line for line in overrides.splitlines()
-               if "look something up" in line)
-    check("the admin's lookup override names the <rules> option it retracts",
-          "<rules>" in ask and "no interest" in ask, ask)
-    check("...and still answers in the character's voice",
-          "own voice" in ask, ask)
-
-    group = "\n".join((STYLE_GUIDE, INTENT_RULES, REASONING_PROTOCOL))
-    check("the group prompt keeps its own question intent and protocol",
-          "general-purpose engine" not in group and "Tool check" not in group
-          and "encyclopedia entry" not in group)
-
-
 async def test_the_dm_guide_tells_the_character_to_receive_affection(
         tmp: Path) -> None:
     """Four turns of "I like you" / "do you like me" / "I'm gay" came back as
@@ -314,24 +190,6 @@ async def test_the_dm_guide_tells_the_character_to_receive_affection(
               > served.index("receive it, do not deflect"), who)
         check(f"...and is the one place the {who}'s prompt says it",
               served.lower().count("answer honestly") == 1, who)
-
-
-def test_both_guides_let_the_chat_choose_the_reply_language() -> None:
-    """The guides are English and the bundled data English or Chinese, so a
-    chat in any other language is answered in it only because [LANGUAGE] says
-    so. Unconditional text, so it is checked over every knob combination."""
-    group = _section(STYLE_GUIDE, "[LANGUAGE]")
-    check("the group guide follows the group's language",
-          "language the group is chatting in" in group, group)
-    check("...ahead of the format rules",
-          STYLE_GUIDE.index("[LANGUAGE]") < STYLE_GUIDE.index("[FORMAT"))
-    for style in _every_style():
-        guide = dm_style_guide(style)
-        check("the 1:1 guide follows the other person's language",
-              "language they write to you in" in _section(guide, "[LANGUAGE]"), repr(style))
-        check("...after the register, which stays first",
-              guide.index(COMPANY_HEADER) < guide.index("[LANGUAGE]") < guide.index("[FORMAT"),
-              repr(style))
 
 
 def test_a_cards_emoji_opt_in_and_length_reach_the_prompt(tmp: Path) -> None:

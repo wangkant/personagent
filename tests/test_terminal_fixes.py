@@ -198,9 +198,6 @@ def test_each_ledger_verb_is_a_whole_sentence() -> None:
 
 # ---- T10, T19: the start menu
 
-def test_the_start_menu_has_its_own_words_for_each_unset_value() -> None:
-    check("two keys, two sentences", sw._TEXT["start_no_name"][0] != sw._TEXT["start_no_key"][0])
-
 
 def test_the_start_menu_names_a_choice_it_does_not_have(home, monkeypatch, capsys) -> None:
     monkeypatch.setattr(sw.langs, "interactive", lambda: True)

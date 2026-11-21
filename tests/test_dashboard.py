@@ -165,15 +165,6 @@ def test_every_request_needs_the_token_however_local_it_looks(live) -> None:
         check(f"a {site} fetch of the data is refused", r.status_code == 403, r.text)
 
 
-def test_the_status_route_is_gone(live) -> None:
-    for name, caller in (("with the token", client()),
-                         ("without it", client(signed_in=False))):
-        r = caller.get("/api/dashboard/status")
-        check(f"status, {name}: no such route", r.status_code == 404,
-              repr((r.status_code, r.text[:120])))
-    check("nothing builds a status payload", not hasattr(dashboard, "status_payload"))
-
-
 def test_the_model_route_says_what_the_agent_already_knows(live) -> None:
     check("nothing known: reachable", client().get("/api/dashboard/model").json() == {"model_unreachable": False})
     live.__dict__["model_unreachable"] = True

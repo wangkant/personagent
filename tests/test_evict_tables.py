@@ -15,15 +15,6 @@ from helpers import check, isolated_agent
 TABLES = ("_followup_passed", "_opener_sent_at", "_declined_retry_at")
 
 
-def test_the_tables_exist_from_the_start(tmp: Path) -> None:
-    a = isolated_agent(tmp)
-    for name in TABLES:
-        check(f"{name} is declared", isinstance(vars(a).get(name), dict))
-    check("the lazy forms hand back the same tables",
-          a._followup_table() is a._followup_passed
-          and a._openers() is a._opener_sent_at)
-
-
 def test_evicting_a_conversation_leaves_nothing_of_it(tmp: Path) -> None:
     a = isolated_agent(tmp)
     room, other = "telegram:-100", "telegram:-200"

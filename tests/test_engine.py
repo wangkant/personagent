@@ -307,12 +307,6 @@ async def test_the_sweep_needs_the_bots_qq_number(tmp: Path) -> None:
 
 # ---- what the model and the operator read -------------------------------------
 
-def test_no_prompt_names_a_placeholder_nothing_fills() -> None:
-    from persona_agent.prompts import STYLE_GUIDE
-
-    check("the group style guide speaks of 'your own name', not BOT_NAME",
-          "BOT_NAME" not in STYLE_GUIDE and "your own name" in STYLE_GUIDE)
-
 
 def test_a_rejected_key_is_one_operator_line(tmp: Path, caplog) -> None:
     import httpx

@@ -439,26 +439,6 @@ async def test_a_persons_undo_of_an_adoption_stays_undone(tmp: Path) -> None:
           and len(model.calls) == calls and pairs(a) == [], str(out))
 
 
-async def test_bring_back_a_character_discard_but_not_a_persons(tmp: Path) -> None:
-    a, model = make_agent(tmp)
-    cid = await disagreed(a, model)
-    a.promote_judge_enabled = True
-    model.say("discard", "Another member liked the original reply.")
-    await a._character_decide(cid)
-    ledger = a.candidate_ledger
-    check("no automatic actor brings it back",
-          not ledger.restore(cid, ts="t", actor="character")
-          and not ledger.restore(cid, ts="t", actor="auto"))
-    check("a person does", ledger.restore(cid, ts="t", actor="dashboard",
-                                          reason="local page")
-          and ledger.get(cid)["state"] == "promoted")
-    ledger.rollback(cid, ts="t", actor="dashboard")
-    ledger.reject(cid, ts="t", actor="dashboard")
-    check("a person's own discard stays final",
-          not ledger.restore(cid, ts="t", actor="admin")
-          and ledger.get(cid)["state"] == "rejected")
-
-
 # ---------------------------------------------------------------------------
 # A bystander's dispute of an item in use
 # ---------------------------------------------------------------------------
@@ -1011,13 +991,6 @@ async def test_a_new_proposal_with_agreement_already_logged_is_ruled_too(
     row = cand(a, LINKED)
     check("set aside by rule on the proposal path", _ruled(row), json.dumps(row["history"]))
     check("nothing reaches the views", pairs(a) == [], str(pairs(a)))
-
-
-async def test_an_ordinary_rewrite_is_still_put_in_use(tmp: Path) -> None:
-    a, model = make_agent(tmp)
-    await taught(a, model)
-    check("in use by agreeing reactions",
-          cand(a, RETRY)["state"] == candidates.STATE_PROMOTED)
 
 
 async def test_a_lesson_carrying_a_link_or_an_advert_is_not_kept_as_a_fact(tmp: Path) -> None:

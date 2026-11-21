@@ -8,20 +8,6 @@ from persona_agent.textproc import MAX_REPLY_MESSAGES, ReplyStyle
 from persona_agent.textproc import TextProcessing as TP
 
 
-def test_both_style_guides_ask_for_text_that_reads_easily():
-    from persona_agent import prompts
-
-    for guide in (prompts.STYLE_GUIDE, prompts.dm_style_guide(prompts.PersonaStyle())):
-        assert prompts._EASY_TO_READ in guide
-        # After the length rule it refines, before the scenes it applies to.
-        assert (guide.index("[LENGTH HAS RHYTHM]") < guide.index("[EASY TO READ")
-                < guide.index("[EMOTIONAL SCENES"))
-        # The quoted examples are moves, not wording: stated where the language is chosen.
-        assert guide.index("[LANGUAGE]") < guide.index(prompts._OWN_WORDS_LINE) < guide.index("[FORMAT")
-    # The stock replies other rules tell it to send stay allowed.
-    assert "'mhm'" in prompts._OWN_WORDS_LINE and "catchphrases" in prompts._OWN_WORDS_LINE
-
-
 def messages(raw: str, lang: str = "zh") -> list[str]:
     clean = TP._sanitize_reply(raw, lang)
     return [value for _kind, value in

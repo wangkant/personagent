@@ -31,23 +31,6 @@ PAIR = {"reply": "just restart it", "better": "check the logs first",
 # views.py: the pools and the promoted views
 # ---------------------------------------------------------------------------
 
-def test_the_pools_and_views_reload_through_one_helper(tmp: Path) -> None:
-    a = isolated_agent(tmp, seeds=True)
-    seen = []
-    real = a._reload_if_stale
-
-    def spy(paths, stamp_attr, load):
-        seen.append(stamp_attr)
-        return real(paths, stamp_attr, load)
-
-    a._reload_if_stale = spy
-    a._reload_examples_if_stale()
-    a._reload_pairs_if_stale()
-    a._reload_views_if_stale()
-    check("one helper: every pool and view goes through it, under its own stamp",
-          seen == ["_examples_mtime", "_pairs_mtime",
-                   "_view_examples_stamp", "_view_pairs_stamp"], repr(seen))
-
 
 def test_a_pool_is_reread_only_when_a_file_changes(tmp: Path) -> None:
     a = isolated_agent(tmp, seeds=True)

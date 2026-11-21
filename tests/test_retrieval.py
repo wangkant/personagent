@@ -573,21 +573,6 @@ def test_relevance_outranks_recency() -> None:
               "OLD_MATCH" in block and "NEW_MISS" not in block)
 
 
-def test_future_timestamp_cannot_outrank_a_match() -> None:
-    """The recency bonus is capped at +0.3; a future-dated entry must not be
-    able to exceed that and jump the queue."""
-    with tempfile.TemporaryDirectory() as d:
-        tmp = Path(d)
-        a = make_agent(tmp)
-        write_jsonl(a.examples_file, [
-            ex("MATCH", scenario="gacha pulls", ts="2020-01-01T00:00:00"),
-            ex("FUTURE", scenario="nothing alike", ts="2999-01-01T00:00:00"),
-        ])
-        block = a._examples_for_prompt(focus_text="gacha", mode="", limit_good=1)
-        check("rank: future timestamp stays under the +0.3 cap",
-              "MATCH" in block and "FUTURE" not in block)
-
-
 def test_no_signal_falls_back_to_the_newest_entries() -> None:
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)

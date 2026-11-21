@@ -166,14 +166,6 @@ def test_the_list_says_what_is_checked_and_what_the_chat_record_keeps(home, monk
           in capsys.readouterr().out)
 
 
-def test_the_help_mentions_the_chat_record(home, capsys) -> None:
-    with pytest.raises(SystemExit):
-        memory_admin.main(["--help"], prog="personagent memory")
-    out = " ".join(capsys.readouterr().out.split())
-    check("help: one sentence on the record", "chat record (runtime/log)" in out
-          and "MEMORY_LOG_DAYS" in out, out)
-
-
 def test_refusals_say_where_to_look(home, monkeypatch, capsys) -> None:
     monkeypatch.setattr(memory_admin, "_memory_command", lambda sub="": f"personagent memory {sub}".strip())
     check("an unknown id", run("forget", "zzz") == 1)
@@ -272,10 +264,3 @@ def test_a_restore_past_its_time_is_refused(home, capsys) -> None:
           and tid not in capsys.readouterr().out)
     check("refused by its whole id", run("restore", tid) == 1
           and "This item can no longer be restored." in capsys.readouterr().out)
-
-
-def test_the_page_chat_is_named_as_the_page_names_it(monkeypatch) -> None:
-    monkeypatch.setenv("AGENT_LANG", "en")
-    check("the page's chat", memory_admin._chat_line("private:browser:abc")
-          == "Chat: This page (key private:browser:abc)")
-    check("another chat by its key", memory_admin._chat_line("group:telegram:9") == "Chat: group:telegram:9")

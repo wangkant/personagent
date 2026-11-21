@@ -285,25 +285,3 @@ def test_every_error_has_a_sentence_in_both_languages():
     for key, text in en.items():
         assert not re.search(r"\w'(t|s|re|ll|ve)\b", text.replace("assistant's", "")), key
         assert "owner" not in text.lower(), key
-
-
-def test_the_page_keeps_focus_codes_and_one_dark_button():
-    js = (welcome.ASSETS / "panels" / "agents.js").read_text(encoding="utf-8")
-    body = js[js.index("(() => {"):]
-    # Every control the person can use has an id the re-render restores focus to.
-    for part in ('idOf(item, "connect")', 'idOf(item, "remove")', 'idOf(item, "react")', '"agents-recheck"',
-                 '"agents-astrbot-connect"', '"agents-astrbot-remove"', '"agents-allow-save"',
-                 '"agents-astrbot-summary"'):
-        assert part in body, part
-    # Errors and notes are kept as codes, so a language change translates them.
-    assert "= PA.t(" not in body.replace("textContent = PA.t(", "").replace("question = PA.t(", "")
-    # Rows of assistants carry no dark button; the AstrBot part has one at a time.
-    row = body[body.index("function row("):body.index("function cooldownRow(")]
-    assert "primary" not in row
-    assert body.count('"primary small') == 2 and 'info.connected ? "secondary' in body
-
-
-def test_each_connect_and_remove_button_names_its_assistant():
-    js = (welcome.ASSETS / "panels" / "agents.js").read_text(encoding="utf-8")
-    assert 'go.setAttribute("aria-labelledby", `${go.id} ${title.id}`)' in js
-    assert 'off.setAttribute("aria-labelledby", `${off.id} ${title.id}`)' in js

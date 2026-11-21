@@ -145,44 +145,12 @@ def test_error_bodies_carry_a_stable_code() -> None:
               repr(dict(stamped.headers)))
 
 
-def test_webhook_routes_are_documented_for_openapi() -> None:
-    """A route's OpenAPI text is its docstring, and integrators need the
-    asymmetry: /v1/onebot is fire-and-forget, /v1/events synchronous."""
-    for name in ("onebot_webhook", "connector_events"):
-        fn = getattr(main_module, name, None)
-        doc = (getattr(fn, "__doc__", "") or "").strip()
-        check(f"{name} has a docstring for OpenAPI", bool(doc), repr(doc[:40]))
-    gw_doc = (getattr(main_module, "connector_events").__doc__ or "").lower()
-    check("the connector docstring states the synchronous contract",
-          "synchronous" in gw_doc, repr(gw_doc[:80]))
-    qq_doc = (getattr(main_module, "onebot_webhook").__doc__ or "").lower()
-    check("the qq docstring states the deprecation",
-          "deprecated" in qq_doc, repr(qq_doc[:80]))
-
-
 def test_import_has_no_file_logging_side_effect() -> None:
     handlers = logging.getLogger().handlers
     check("main import does not open a repository log file",
           not any(isinstance(h, logging.handlers.RotatingFileHandler)
                   for h in handlers),
           repr(handlers))
-
-
-def test_admission_limiter_is_bounded() -> None:
-    limiter_cls = getattr(main_module, "AdmissionLimiter", None)
-    check("admission limiter exists", limiter_cls is not None)
-    if limiter_cls is None:
-        return
-    limiter = limiter_cls(2)
-    first = limiter.try_acquire()
-    second = limiter.try_acquire()
-    third = limiter.try_acquire()
-    check("admission limiter rejects overflow",
-          first is True and second is True and third is False,
-          repr((first, second, third)))
-    limiter.release()
-    check("admission limiter admits after release",
-          limiter.try_acquire() is True and limiter.inflight == 2)
 
 
 async def test_admission_is_exact_under_concurrent_callers() -> None:

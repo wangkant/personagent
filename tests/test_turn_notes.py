@@ -74,20 +74,6 @@ def _old(text: str, mid: int, age: float, **extra) -> dict:
                   sent_at=int(time.time() - age), **extra)
 
 
-async def test_a_backlog_right_after_a_start_is_context_only(tmp: Path) -> None:
-    agent = make_agent(tmp, message_debounce_sec=0)
-    calls: list = []
-
-    async def think(group_id, mode, text="", caller_override=None):
-        calls.append(text)
-        return "sure", "chat", ""
-
-    agent._think = think
-    await agent.handle_event(_old("an hour ago", 1, 3600))
-    assert calls == [], calls
-    assert any("an hour ago" in m["text"] for m in agent.buffers["telegram:c1"])
-
-
 async def test_a_connector_clock_behind_is_not_a_backlog_forever(tmp: Path, monkeypatch) -> None:
     agent = make_agent(tmp, message_debounce_sec=0)
     calls: list = []

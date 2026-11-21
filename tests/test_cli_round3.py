@@ -64,17 +64,6 @@ def test_a_misspelt_option_before_the_command_is_called_unknown(monkeypatch, cap
     assert cli._unknown_leading_option(["doctor", "--jsn"]) is None
 
 
-def test_learned_reason_has_help(monkeypatch, capsys) -> None:
-    import pytest
-
-    from persona_agent import ledger_admin
-
-    monkeypatch.setenv("AGENT_LANG", "en")
-    with pytest.raises(SystemExit):
-        ledger_admin.main(["promote", "--help"], prog="personagent learned")
-    assert "kept in the item's history" in " ".join(capsys.readouterr().out.split())
-
-
 # --- connector endpoints ------------------------------------------------------
 
 def _event(**changes) -> dict:

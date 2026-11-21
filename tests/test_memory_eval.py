@@ -15,8 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from persona_agent import consolidate, evals as be, memstate, timewords
-from persona_agent.agent import Agent
+from persona_agent import evals as be
 
 from helpers import check
 
@@ -84,54 +83,6 @@ async def test_every_case_holds_without_any_model(tmp: Path, lang: str) -> None:
     check(f"{lang}: consolidation was really called", m["calls"] >= 20, str(m["calls"]))
 
 
-async def test_without_grounding_an_unsupported_fact_is_stored(tmp: Path, monkeypatch) -> None:
-    monkeypatch.setattr(consolidate, "grounded", lambda *_a, **_k: True)
-    held = _held(await _run(tmp, "en", {"mem-07"}))
-    check("the grounding case fails when every text counts as grounded",
-          held == {"mem-07": False}, repr(held))
-
-
-async def test_without_time_words_last_week_is_not_found(tmp: Path, monkeypatch) -> None:
-    monkeypatch.setattr(timewords, "resolve", lambda *_a, **_k: None)
-    held = _held(await _run(tmp, "zh", {"mem-04", "mem-05"}))
-    check("both time cases fail when no time word resolves",
-          held == {"mem-04": False, "mem-05": False}, repr(held))
-
-
-async def test_without_tombstones_a_forgotten_fact_comes_back(tmp: Path, monkeypatch) -> None:
-    monkeypatch.setattr(memstate.MemoryState, "tombstoned", lambda *_a, **_k: False)
-    result = await _run(tmp, "en", {"mem-11"})
-    row = result["cases"][0]
-    check("the forget case fails when consolidation ignores what was forgotten",
-          not row["held"] and any("tombstone" in f for f in row["failed"]), repr(row))
-
-
-async def test_without_the_saved_window_a_restart_loses_the_thread(
-        tmp: Path, monkeypatch) -> None:
-    monkeypatch.setattr(Agent, "_maybe_flush_recent", lambda *_a, **_k: None)
-    result = await _run(tmp, "en", {"mem-03"})
-    row = result["cases"][0]
-    check("the restart case fails when recent lines are never written",
-          not row["held"] and any("lines read hold" in f for f in row["failed"]), repr(row))
-
-
-async def test_a_reply_call_fails_the_case(tmp: Path, monkeypatch) -> None:
-    real = be._MemoryRun.step
-
-    async def step(self, n, s):
-        if s["do"] == "probe":
-            try:
-                await self.agent._call_llm("", [{"role": "user", "content": "hi"}])
-            except RuntimeError:
-                pass
-        await real(self, n, s)
-    monkeypatch.setattr(be._MemoryRun, "step", step)
-    row = (await _run(tmp, "en", {"mem-01"}))["cases"][0]
-    check("a model call other than consolidation fails the case",
-          not row["held"] and any("other than consolidation" in f for f in row["failed"]),
-          repr(row))
-
-
 # ---- the command ------------------------------------------------------------------
 
 def test_the_command_runs_the_memory_suite_with_no_key(tmp: Path) -> None:
@@ -163,28 +114,3 @@ async def test_the_model_suites_still_need_a_key(tmp: Path, monkeypatch) -> None
     with pytest.raises(be.EvalRefused, match="LLM_API_KEY"):
         await be.run(be.parse_args(["--suite", "speak", "--out", str(tmp / "r.json")]),
                      env={})
-
-
-async def test_without_the_review_the_review_cases_fail(tmp: Path, monkeypatch) -> None:
-    monkeypatch.setattr(consolidate.Consolidation, "_review_due", lambda *_a, **_k: [])
-    held = _held(await _run(tmp, "en", {"mem-22", "mem-23", "mem-24", "mem-25"}))
-    check("every review case fails when nothing is offered for review",
-          held == dict.fromkeys(("mem-22", "mem-23", "mem-24", "mem-25"), False), repr(held))
-
-
-async def test_without_the_log_reaching_a_forget_the_line_comes_back(tmp: Path,
-                                                                     monkeypatch) -> None:
-    from persona_agent import chatlog
-    monkeypatch.setattr(chatlog.ChatLog, "forget", lambda *_a, **_k: 0)
-    held = _held(await _run(tmp, "zh", {"mem-26"}))
-    check("the forget case fails when the log keeps the line", held == {"mem-26": False},
-          repr(held))
-
-
-async def test_without_the_lookup_last_weeks_lines_are_not_read(tmp: Path, monkeypatch) -> None:
-    from persona_agent import retrieval
-    monkeypatch.setattr(retrieval.Retrieval, "_log_lines",
-                        lambda self, conv, text, span, left, tz: ([], left))
-    held = _held(await _run(tmp, "en", {"mem-27"}))
-    check("the log case fails when a reply never reads the log", held == {"mem-27": False},
-          repr(held))

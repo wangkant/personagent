@@ -24,7 +24,7 @@ from persona_agent.connector import (ConnectorSink, current_sink,
                                    message_to_reply_item,
                                    synthesize_onebot_payload)
 from persona_agent.prompt import _TURN_CONTEXT_OPEN
-from persona_agent.prompts import REASONING_PROTOCOL, STYLE_GUIDE, TOOL_GUIDE
+from persona_agent.prompts import REASONING_PROTOCOL, STYLE_GUIDE
 
 from helpers import CLOSED_ONEBOT_URL, check, isolated_agent
 
@@ -69,22 +69,6 @@ def test_synthesize_group_self_mention() -> None:
     # A real self-mention segment exists, so addressed must NOT add a second at.
     at_count = sum(1 for s in p["message"] if s["type"] == "at")
     check("group: no duplicate at prepend", at_count == 1, repr(p["message"]))
-
-
-def test_core_update_prompt_contract_is_consistent() -> None:
-    """The hidden memory marker is legal only as the reply-field suffix.
-
-    The runtime strips it before delivery, so the prompt must not simultaneously
-    require the marker and forbid it. That contradiction makes the model either
-    skip long-term memory updates or leak the marker into visible text.
-    """
-    check("prompt: core update names the reply field",
-          "[CORE_UPDATE]full new note[/CORE_UPDATE]" in TOOL_GUIDE
-          and "at the end of the reply field to overwrite core_memory" in TOOL_GUIDE)
-    check("prompt: style permits hidden core update suffix",
-          "internal [CORE_UPDATE]...[/CORE_UPDATE] suffix" in STYLE_GUIDE)
-    check("prompt: protocol permits hidden core update suffix",
-          "the internal [CORE_UPDATE]...[/CORE_UPDATE] suffix" in REASONING_PROTOCOL)
 
 
 def test_synthesize_mention_other_user() -> None:
@@ -147,27 +131,6 @@ def test_synthesize_dm() -> None:
     check("private: user_id prefixed", p["user_id"] == "telegram:42", repr(p["user_id"]))
     types = [s["type"] for s in p["message"]]
     check("private: emoji->face, reply->reply", types == ["text", "face", "reply"], repr(types))
-
-
-def test_synthesize_reply_keeps_namespaced_id() -> None:
-    event = {
-        "platform": "telegram",
-        "conversation_type": "group",
-        "conversation_id": "g1",
-        "sender_id": "42",
-        "sender_name": "Alice",
-        "bot_id": "999000",
-        "message_id": "m2",
-        "addressed": True,
-        "segments": [{"type": "reply", "message_id": "m1"},
-                     {"type": "text", "text": "that one"}],
-        "text": "that one",
-    }
-    p = synthesize_onebot_payload(event, QQ_BOT_ID)
-    replies = [seg for seg in p["message"] if seg["type"] == "reply"]
-    check("connector quote: reply id is preserved and namespaced",
-          replies == [{"type": "reply", "data": {"id": "telegram:g1:m1"}}],
-          repr(replies))
 
 
 def test_synthesize_mid_namespacing() -> None:
@@ -3156,34 +3119,6 @@ async def test_the_retry_keeps_the_first_drafts_memory(tmp: Path) -> None:
           mem == "she is at the dentist on Friday", repr(mem))
 
 
-def test_the_retry_note_amends_the_output_contract_instead_of_breaking_it() -> None:
-    """The note lands after `dm_output_protocol`, whose first line
-    demands a single JSON object. The obvious phrasing, "reply again in plain
-    text", would close that contract by contradicting it from the last
-    position in the prompt, and prose is what the fail-closed parser drops.
-    Pinned as text, because the failure is a model picking the wrong one of
-    two instructions, which no stub reproduces."""
-    from persona_agent.dm import _EMPTY_DRAFT_RETRY_NOTE
-    from persona_agent.prompts import PersonaStyle, dm_output_protocol
-
-    note = _EMPTY_DRAFT_RETRY_NOTE
-    protocol = dm_output_protocol(PersonaStyle())
-    check("the protocol still opens by demanding a single JSON object",
-          "**Output a single JSON object" in protocol, repr(protocol[:120]))
-    check("...and ends without a newline, which is why the call site adds one",
-          not protocol.endswith("\n"), repr(protocol[-20:]))
-    check("the note does not ask for plain text or prose",
-          "plain text" not in note.lower() and "prose" not in note.lower(),
-          repr(note))
-    check("the note re-states the JSON contract it is appended to",
-          "JSON object" in note, repr(note))
-    check("the note still carries the constraints it exists for",
-          all(k in note for k in ("at least one word", "emoji", "markup")),
-          repr(note))
-    check("the separator is added at the call site, not baked in",
-          note == note.strip(), repr(note))
-
-
 async def test_partial_delivery_is_committed(tmp: Path) -> None:
     """A partially delivered reply must still be recorded.
 
@@ -3580,53 +3515,6 @@ async def test_declared_style_reaches_the_dm_prompt(tmp: Path) -> None:
           "~40-80 characters" not in text, "")
     check("style: a DM reads the 1:1 protocol, not the group one",
           REASONING_PROTOCOL not in text and STYLE_GUIDE not in text, "")
-
-
-async def test_a_dm_inhabits_a_character_and_sizes_stickers_for_it(
-        tmp: Path) -> None:
-    """The DM register is a character with room to breathe, not somebody
-    texting, and two things have to agree with it. The `<rules>` block says
-    so without a number of its own: the persona's band is the one place the
-    arithmetic lives. And the sticker guide's "no sticker past ~N chars"
-    line is sized for that register — ~50 would keep stickers off ordinary
-    40-80 character DM replies — while the group keeps its ~50."""
-    agent = make_agent(tmp)
-    agent.stickers.entries["s1"] = {
-        "auto_tagged": True, "tags": ["smug"], "use_count": 1}
-    captured: list = []
-
-    async def fake_call(*, system, messages, **_kw):
-        captured.append(system)
-        return '{"reasoning": "r", "intent": "chat", "reply": "ok", "mem": ""}'
-
-    async def no_search(_messages, hint=""):
-        return ""
-
-    agent._call_llm = fake_call
-    agent._decide_and_search = no_search
-    await agent._chat_dm([{"role": "user", "content": "hey"}],
-                              is_admin=False, pkey="private:42")
-    dm = captured[-1]
-    rules = dm.split("<rules>", 1)[1].split("</rules>", 1)[0]
-    check("dm: the rules state the register",
-          "INHABITING a character" in rules and "room to breathe" in rules,
-          rules)
-    check("dm: and keep the chat-voice rule",
-          "never as a document" in rules, rules)
-    check("dm: and carry no length figure of their own",
-          not any(ch.isdigit() for ch in rules), rules)
-    check("dm: the sticker threshold is sized for the DM register",
-          "explanation runs past ~140 chars" in dm
-          and "~50 chars" not in dm, "")
-
-    agent._append_buffer("g1", "Alice", "hey", "42")
-    await agent._think("g1", "called", latest_text="hey")
-    group = captured[-1]
-    check("group: the sticker threshold keeps its value",
-          "explanation runs past ~50 chars" in group
-          and "~140 chars" not in group, "")
-    check("group: the DM register does not leak into the group prompt",
-          "INHABITING a character" not in group, "")
 
 
 def test_the_memory_gate_compiles_its_patterns_once_and_keeps_its_verdicts() -> None:

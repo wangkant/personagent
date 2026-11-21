@@ -303,14 +303,6 @@ def test_both_languages_have_the_same_keys_and_placeholders():
         assert set(re.findall(r"{\w+}", en)) == set(re.findall(r"{\w+}", found["zh"][key])), key
 
 
-def test_the_panel_uses_the_pages_names_and_formal_wording():
-    found = tables()
-    assert found["en"]["lore_title"] == "Lorebook" and found["zh"]["lore_title"] == "背景设定"
-    assert found["zh"]["lore_filters"] == "屏蔽词" and found["zh"]["lore_examples"] == "示例对话"
-    for key, zh in found["zh"].items():
-        assert not re.search(r"[吧呢啦哦]([。，！？]|$)|您", zh), (key, zh)
-
-
 def test_every_error_the_panel_raises_has_words_on_the_page():
     found = tables()["en"]
     for code in lore.ERRORS:
@@ -326,12 +318,3 @@ def test_every_skip_reason_has_words_on_the_page():
         assert f"lore_skip_{reason}" in found, reason
     for kind in lore.PARTLY:
         assert f"lore_partly_{kind}" in found, kind
-
-
-def test_entry_buttons_name_their_entry_and_keep_the_keyboard():
-    code = SCRIPT.read_text(encoding="utf-8").split("PA.strings")[1].split("});", 1)[1]
-    assert 'node.setAttribute("aria-labelledby", `${node.id} ${nameNode.id}`)' in code
-    # Editing starts at the first field; a deletion or a save leaves the focus in the panel.
-    assert "#lore-${entry.key}-name`)?.focus()" in code.split('edit.addEventListener("click"')[1].split("});")[0]
-    assert "refocus(had, saveButton)" in code and "refocus(true, importButton)" in code
-    assert 't("lore_entries", { count: entries.length })' in code

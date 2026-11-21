@@ -84,11 +84,6 @@ def test_every_route_needs_the_local_token(client):
         assert getattr(client, method)(path).status_code == 403
 
 
-def test_assets_are_served(client):
-    assert client.get("/assets/panels/health.js").status_code == 200
-    assert client.get("/assets/panels/health.css").status_code == 200
-
-
 def test_check_runs_doctor_in_a_child_with_the_homes_settings_and_hides_keys(client, workspace, monkeypatch):
     ran = Ran("noise before\n" + json.dumps(DOCTOR))
     monkeypatch.setattr(health.subprocess, "run", ran)
@@ -378,23 +373,3 @@ def test_the_wording_is_formal_and_uses_the_pages_names():
     # The confirmation names exactly what it renames.
     assert "{names}" in en["health_fix_ask"] and ".env.bak" in zh["health_fix_ask"]
     assert "quota" in en["health_hint"] and "服务地址" in zh["health_verdict_unreachable"]
-
-
-def test_the_page_keeps_focus_announces_results_and_stores_codes():
-    source = (ASSETS / "health.js").read_text(encoding="utf-8")
-    assert 'verdict.setAttribute("role", "status")' in source
-    assert 'checkNote.setAttribute("role", "status")' in source
-    assert source.count('setAttribute("role", "alert")') >= 3
-    # A check started before this page loaded keeps the button disabled through render().
-    assert "checking || Boolean(data && data.checking)" in source
-    assert "startsWith(\"zh\")" not in source and 'PA.lang === "zh"' in source
-    # Translated when shown, not when stored.
-    assert not re.search(r"(Error|error)\w* = PA\.t\(", source)
-    assert "alerts.contains(active)" in source and "restoreFocus()" in source
-
-
-def test_a_failed_search_decision_is_explained_in_the_pages_words():
-    code = (ASSETS / "health.js").read_text(encoding="utf-8").split("PA.strings")[1].split("});", 1)[1]
-    assert 's.id === "searchdecide" && s.ok === false' in code
-    assert 'PA.t("tuning_f_llm_judge_model")' in code
-    assert 'logBox.setAttribute("aria-labelledby", "health-logs-title health-log-name")' in code

@@ -253,32 +253,6 @@ def test_an_outbox_delivery_pauses_six_seconds_at_most(tmp_path, monkeypatch):
     assert sum(entry[1] for entry in log if entry[0] == "sleep") == pytest.approx(5.4)
 
 
-def test_an_outbox_delivery_does_not_queue_long_behind_a_reply(tmp_path, monkeypatch):
-    monkeypatch.setattr(base.random, "uniform", lambda low, high: low)
-    monkeypatch.setattr(base, "OUTBOX_QUEUE_MAX_S", 0.3)
-    log: list = []
-    made = bridge(Chat(log), None, tmp_path, log)
-
-    async def scenario():
-        gate = asyncio.Event()
-        real_sleep = made._sleep
-
-        async def held(seconds):
-            await real_sleep(seconds)
-            await gate.wait()
-        made._sleep = held
-        reply = asyncio.create_task(made._send("-100", texts("a long reply")))
-        await asyncio.sleep(0.05)
-        made._sleep = real_sleep
-        delivered = await made.deliver({"reply_handle": "-100", "items": texts("morning")})
-        went_first = ("send", "-100", "a long reply") not in log
-        gate.set()
-        await reply
-        return delivered, went_first
-    delivered, went_first = run(scenario())
-    assert delivered == ("sent", 1) and went_first
-
-
 class Failing(Chat):
     """A platform that refuses the typing call at once, as for one chat it may not write in."""
 

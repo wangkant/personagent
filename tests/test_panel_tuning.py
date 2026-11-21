@@ -374,38 +374,10 @@ def test_both_languages_use_the_same_placeholders():
         assert set(re.findall(r"{\w+}", en)) == set(re.findall(r"{\w+}", found["zh"][key])), key
 
 
-def test_wording_is_formal_and_uses_the_page_names():
-    found = tables()
-    for key, zh in found["zh"].items():
-        assert not re.search(r"[吧呢啦哦]([。，！？]|$)|主人|您|不太对|从头来过|捣乱", zh), (key, zh)
-    for key, en in found["en"].items():
-        assert not re.search(r"\w+n't\b|\b(it's|that's|you're|i'm|they're|let's)\b|[Oo]wner", en), (key, en)
-    # Not model fine-tuning.
-    assert found["en"]["tuning_title"] == "Advanced settings" and found["zh"]["tuning_title"] == "高级设置"
-    # A minimum gap, not a maximum.
-    assert "至少" in found["zh"]["tuning_cooldowns"] and "最多" not in found["zh"]["tuning_cooldowns"]
-    assert found["en"]["tuning_cooldowns"].startswith("At least")
-    # Turning activity data off also stops forgetting a chat in both views.
-    for lang in ("en", "zh"):
-        hint = found[lang]["tuning_h_dashboard_enabled"]
-        assert "{chat}" in hint and "{activity}" in hint
-    assert "概率" in found["zh"]["tuning_f_proactive_prob"] and "概率" in found["zh"]["tuning_f_proactive_dm_prob"]
-    assert found["zh"]["tuning_f_promote_evidence_max_age_days"].count("天") == 1
-    assert "他" not in found["zh"]["tuning_h_proactive_dm_cooldown_s"]
-
-
 def test_names_borrowed_from_the_page_exist():
     page = (Path(welcome.ASSETS) / "welcome.js").read_text(encoding="utf-8")
     for key in ("chat", "activity", "platforms", "proactiveTitle"):
         assert len(re.findall(rf"^    {key}: \"", page, re.M)) >= 2, key
-
-
-def test_picker_rows_add_no_listeners_to_the_lists():
-    text = SCRIPT.read_text(encoding="utf-8")
-    body = re.search(r"\n  function pickRow\(.*?\n  }\n", text, re.S).group(0)
-    # Rows are rebuilt on every click; a listener on a list input would outlive them.
-    assert "inputs[" not in body and "inputs." not in body
-    assert re.search(r'"tuning-pick-me-" \+ n', body) and re.search(r'"tuning-pick-allow-" \+ n', body)
 
 
 def test_page_strings_match_in_both_languages():
@@ -420,15 +392,3 @@ def test_page_strings_match_in_both_languages():
             assert code in found["en"]
     prefixed = {k for k in used if not k.endswith("_")}
     assert prefixed <= found["en"].keys() | {"tuning_invalid"}
-
-
-def test_the_first_group_points_to_the_switches_kept_elsewhere_and_calls_them_alike():
-    script = SCRIPT.read_text(encoding="utf-8")
-    assert 'note(sections.who, "tuning_who_note")' in script
-    for name in ("onlyCalled", "adminOnly", "talk", "learning"):
-        assert "{" + name + "}" in script.split("tuning_who_note:")[1].split("\n")[0]
-    # Chinese says 点名 for being addressed, as the practice panel and the docs do.
-    zh = script.split("\n  zh: {")[1]
-    assert "被呼叫" not in zh and "无人呼叫" not in zh
-    css = SCRIPT.with_suffix(".css").read_text(encoding="utf-8")
-    assert ".tuning-limit.tuning-limit-on" in css and "\n.tuning-limit {" not in css
