@@ -178,6 +178,31 @@ def test_memory_replies_follow_the_language(tmp: Path) -> None:
                       == shown)
 
 
+def test_a_secret_is_never_kept_and_ordinary_numbers_are(tmp: Path) -> None:
+    a = make_agent(tmp, name="小夏", lang="zh")
+    g = "g-secret"
+    # Made-up ID with its check digit computed here; a card from the test range.
+    base = "11010119900307123"
+    weights = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
+    fake_id = base + "10X98765432"[sum(int(c) * w for c, w in zip(base, weights)) % 11]
+    for text in (f"小夏 记住 我的身份证号是{fake_id}", f"小夏 记住 阿杰的身份证 {fake_id}",
+                 "小夏 记住 我的卡号 4111 1111 1111 1111", "小夏 记住 我的密码是hunter2",
+                 "小夏 记住 验证码 482913"):
+        check(f"refused: {text!r}", a._handle_memory_command(g, text, "42", "阿杰")
+              in _COMMAND_REPLIES["zh"]["secret"])
+    check("nothing secret was kept", a.memories.get(g, []) == [], repr(a.memories.get(g)))
+    check("the gate under every other save refuses it too",
+          a._validate_memory_candidate("password: hunter2") == "")
+    ordinary = ("订单号 202611201234567890", "我的手机号 13812345678", "我的QQ号是123456789",
+                "群号 987654321012", "阿杰生于1990年", "我总忘记密码",
+                f"阿杰的号码 {fake_id[:-1]}{'0' if fake_id[-1] != '0' else '1'}")
+    for note in ordinary:
+        check(f"kept: {note!r}", a._handle_memory_command(g, f"小夏 记住 {note}", "42", "阿杰")
+              in _COMMAND_REPLIES["zh"]["noted"])
+    check("all ordinary numbers kept", len(a.memories.get(g, [])) == len(ordinary),
+          repr(a.memories.get(g)))
+
+
 def test_a_forget_naming_no_note_deletes_nothing(tmp: Path) -> None:
     a = make_agent(tmp)
     a.admin_ids = {"admin"}

@@ -18,7 +18,7 @@ import re
 CODES = ("en", "zh", "zh-TW", "ja", "ko", "es", "fr", "de", "pt-BR", "ru")
 
 #: Keys every `Spec.replies` carries, and the placeholders in each.
-REPLY_KEYS = ("remember_what", "not_instructions", "noted", "forget_what",
+REPLY_KEYS = ("remember_what", "not_instructions", "secret", "noted", "forget_what",
               "nothing_to_forget", "forgotten", "empty", "recall_head",
               "said", "about", "from", "approval_dm", "approval_group")
 

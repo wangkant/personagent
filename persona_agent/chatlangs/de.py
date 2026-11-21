@@ -70,6 +70,7 @@ SPEC = Spec(
         "remember_what": ("was soll ich mir merken? du hast nix gesagt",
                           "na sag schon", "merken, was denn"),
         "not_instructions": ("ich merk mir Fakten, keine Anweisungen",),
+        "secret": ("Nicht gespeichert: Ausweis- und Kartennummern, Passwörter und Codes werden nie gespeichert.",),
         "noted": ("notiert", "okay, gemerkt", "hab ich mir gemerkt"),
         "forget_what": ("was soll ich vergessen? sag genauer",
                         "welches denn? sag mehr"),

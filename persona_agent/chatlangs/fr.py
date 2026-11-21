@@ -69,6 +69,7 @@ SPEC = Spec(
         "remember_what": ("retenir quoi ? t'as rien dit", "vas-y, dis",
                           "je retiens quoi lol"),
         "not_instructions": ("je retiens des faits, pas des consignes",),
+        "secret": ("Pas gardé : les numéros d'identité et de carte, les mots de passe et les codes ne sont jamais enregistrés.",),
         "noted": ("noté", "ok, c'est retenu", "retenu"),
         "forget_what": ("oublier quoi ? sois plus précis", "laquelle ? dis-en plus"),
         "nothing_to_forget": ("euh, j'ai jamais noté ça", "ça me dit rien",

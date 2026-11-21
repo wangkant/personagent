@@ -5,6 +5,7 @@ import logging
 import random
 import re
 import time
+import unicodedata
 from datetime import datetime
 from typing import Callable, Optional
 
@@ -242,6 +243,41 @@ _OUTPUT_CONTROL = _shapes(
     r"^(?:\u4ee5\u540e|\u4eca\u540e)\u7528.{1,16}(?:\u56de\u590d|\u56de\u7b54|\u8f93\u51fa|\u8bf4|\u8bf4\u8bdd)$",
     r"^\u6240\u6709(?:\u56de\u590d|\u56de\u7b54|\u8f93\u51fa)\u90fd\u7528.{1,16}$",
 )
+
+# A password's or a one-time code's word, in the ten chat languages.
+_SECRET_WORD = (r"\u5bc6\u7801|\u5bc6\u78bc|\u53e3\u4ee4|\u9a8c\u8bc1\u7801|\u9a57\u8b49\u78bc|\u6821\u9a8c\u7801|\u6821\u9a57\u78bc|\u52a8\u6001\u7801|\u52d5\u614b\u78bc|"
+                r"passwords?|passcodes?|passwd|\bpin\b|verification code|security code|one[- ]time code|\botp\b"
+                r"|\bcvv2?\b|\bcvc\b|\u30d1\u30b9\u30ef\u30fc\u30c9|\u6697\u8a3c\u756a\u53f7|\u8a8d\u8a3c\u30b3\u30fc\u30c9|\u78ba\u8a8d\u30b3\u30fc\u30c9|\u30ef\u30f3\u30bf\u30a4\u30e0(?:\u30d1\u30b9\u30ef\u30fc\u30c9|\u30b3\u30fc\u30c9)"
+                r"|\ube44\ubc00\ubc88\ud638|\uc554\ud638|\uc778\uc99d\s?\ubc88\ud638|\uc778\uc99d\s?\ucf54\ub4dc|contrase\u00f1a|c\u00f3digo de (?:verificaci\u00f3n|seguridad)"
+                r"|mot de passe|code de (?:v\u00e9rification|s\u00e9curit\u00e9|confirmation)|passwort|kennwort"
+                r"|best\u00e4tigungscode|verifizierungscode|sicherheitscode|senha|c\u00f3digo de (?:verifica\u00e7\u00e3o|confirma\u00e7\u00e3o)"
+                r"|\u043f\u0430\u0440\u043e\u043b\u044c|\u043a\u043e\u0434 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u044f|\u043a\u043e\u0434 \u0438\u0437 \u0441\u043c\u0441")
+# The word with its value after it ("\u5bc6\u7801\u662f\u2026", "password: \u2026", "\u9a8c\u8bc1\u7801 482913"); the word alone ("\u6211\u603b\u5fd8\u8bb0\u5bc6\u7801") is none.
+_SECRET = re.compile(rf"(?:{_SECRET_WORD})\s*(?:\u662f|\u4e3a|\u70ba|\u306f|\ub294|\uc740|:|\uff1a|=|\bis\b|\bist\b|\bes\b|\best\b|\b\u00e9\b|\u2014)\s*\S"
+                     rf"|(?:{_SECRET_WORD})\D{{0,6}}\d{{4,}}", re.IGNORECASE)
+_ID18 = re.compile(r"(?<![0-9A-Za-z])\d{17}[0-9Xx](?![0-9A-Za-z])")
+_CARD = re.compile(r"(?<![\d-])\d(?:[ -]?\d){12,18}(?![\d-])")
+_ID_WEIGHTS = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
+
+
+def _luhn(digits: str) -> bool:
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        d = int(ch) * (2 if i % 2 else 1)
+        total += d - 9 if d > 9 else d
+    return total % 10 == 0
+
+
+def secret(text: str) -> bool:
+    """A Chinese ID number (its check digit right), a card number (Luhn), a password or a one-time code:
+    never kept, whoever writes it."""
+    text = unicodedata.normalize("NFKC", str(text or ""))
+    if _SECRET.search(text):
+        return True
+    if any("10X98765432"[sum(int(c) * w for c, w in zip(m.group(), _ID_WEIGHTS)) % 11] == m.group()[-1].upper()
+           for m in _ID18.finditer(text)):
+        return True
+    return any(_luhn(re.sub(r"\D", "", m.group())) for m in _CARD.finditer(text))
 
 
 class Memory:
@@ -588,6 +624,8 @@ class Memory:
             # "Luna, remember!" names nothing to keep.
             if not content.strip(_QUERY_TRIM):
                 return say("remember_what")
+            if secret(content):
+                return say("secret")
             content = self._validate_memory_candidate(content)
             if not content:
                 return say("not_instructions")
@@ -1521,6 +1559,8 @@ class Memory:
         """Accept short user facts; reject durable prompt or persona controls.
         Memory reaches every later prompt, so claims about the assistant's
         identity or permissions are refused like imperatives."""
+        if secret(text):
+            return ""
         note = str(text or "").strip().replace("\r", " ").replace("\n", " ")
         note = re.sub(r"\s+", " ", note)[:max_chars]
         if not note or any(token in note for token in ("<", ">", "{", "}", "[", "]")):
