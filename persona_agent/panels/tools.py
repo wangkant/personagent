@@ -12,7 +12,7 @@ from .. import mcp_tools
 ERRORS: frozenset[str] = frozenset({
     "tools_bad_snippet", "tools_bad_name", "tools_bad_url", "tools_name_taken", "tools_too_many",
     "tools_unknown_server", "tools_unknown_tool", "tools_sse_unsupported", "tools_write_failed",
-    "tools_bad_request", "tools_local_only", "tools_local_address", "tools_file_damaged",
+    "tools_bad_request", "tools_destructive", "tools_local_only", "tools_local_address", "tools_file_damaged",
 })
 MAX_FIELD_CHARS = 8192
 

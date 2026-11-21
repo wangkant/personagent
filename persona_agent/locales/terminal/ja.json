@@ -594,6 +594,7 @@
 "That server uses the older SSE transport, which personagent does not support. Use its Streamable HTTP address.": "そのサーバーは旧来の SSE トランスポートを使用しており、personagent は対応していません。Streamable HTTP のアドレスを使用してください。",
 "The tools file could not be written.": "ツールの設定ファイルに書き込めませんでした。",
 "That request is not valid.": "このリクエストは無効です。",
+"That tool's server marks it as destructive, so only the admin can cause it to be used.": "このツールはサーバーによって破壊的と示されているため、使用のきっかけにできるのは管理者だけです。",
 "Tools (MCP servers)": "ツール（MCP サーバー）",
 "none added; `personagent tools add` adds a server": "未追加。`personagent tools add` でサーバーを追加できます",
 "servers: {0}, tools on: {1}": "サーバー：{0}、オンのツール：{1}",

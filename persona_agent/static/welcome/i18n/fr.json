@@ -1512,6 +1512,7 @@
     "tools_sse_unsupported": "Ce serveur utilise l'ancien transport SSE, que personagent ne prend pas en charge. Utilisez son adresse Streamable HTTP.",
     "tools_write_failed": "Le fichier des réglages des outils n'a pas pu être écrit. Fermez tout programme qui l'utilise, puis réessayez.",
     "tools_bad_request": "Cette requête n'est pas valide.",
+    "tools_destructive": "Le serveur de cet outil le signale comme destructif : seul l'administrateur peut en déclencher l'utilisation.",
     "practice_why_searched": "Avant de répondre, il a fait une recherche sur le web.",
     "practice_why_tool": "Avant de répondre, il a utilisé l'outil {name}.",
     "runtime_use_tools": "Décision d'utiliser un outil",

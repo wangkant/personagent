@@ -595,6 +595,7 @@
 "That server uses the older SSE transport, which personagent does not support. Use its Streamable HTTP address.": "Этот сервер использует устаревший транспорт SSE, который personagent не поддерживает. Используйте его адрес Streamable HTTP.",
 "The tools file could not be written.": "Не удалось записать файл инструментов.",
 "That request is not valid.": "Недопустимый запрос.",
+"That tool's server marks it as destructive, so only the admin can cause it to be used.": "Сервер этого инструмента помечает его как разрушительный, поэтому вызвать его использование может лишь администратор.",
 "Tools (MCP servers)": "Инструменты (MCP-серверы)",
 "none added; `personagent tools add` adds a server": "не добавлены; добавить сервер можно командой `personagent tools add`",
 "servers: {0}, tools on: {1}": "серверов: {0}, включённых инструментов: {1}",

@@ -1530,6 +1530,7 @@
     "tools_sse_unsupported": "該伺服器使用舊版的 SSE 傳輸方式，personagent 不支援。請使用其 Streamable HTTP 位址。",
     "tools_write_failed": "無法寫入工具設定檔。請關閉正在使用該檔案的程式後重試。",
     "tools_bad_request": "此請求無效。",
+    "tools_destructive": "該工具的伺服器將其標記為破壞性工具，因此只有管理員可以讓角色使用它。",
     "activitySearched": "已進行網路搜尋",
     "activityUsedTool": "已使用工具 {name}",
     "signOut": "登出",

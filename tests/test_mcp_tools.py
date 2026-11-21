@@ -462,6 +462,8 @@ async def test_a_turn_records_the_tool_and_the_reply_carries_it(tmp: Path) -> No
 async def test_the_hub_runs_offers_and_ends_its_servers_and_their_children(tmp: Path) -> None:
     mcp_tools.add_servers(tmp, {"stand": dict(STDIO), "broken": {**STDIO, "args": [STANDIN, "--die"]}})
     mcp_tools.set_tool(tmp, "stand", "echo", who="anyone")
+    # Before any list is read nothing is known to refuse: this stands for a file saved before hints were kept.
+    mcp_tools.set_tool(tmp, "stand", "die", who="anyone")
     hub = mcp_tools.ToolHub(tmp, reports=True)
     hub.start()
     try:
@@ -470,7 +472,13 @@ async def test_the_hub_runs_offers_and_ends_its_servers_and_their_children(tmp: 
             await asyncio.sleep(0.1)
         admin = {o.tool for o in hub.offer(True)}
         anyone = {o.tool for o in hub.offer(False)}
-        assert "add" in admin and anyone == {"echo"}
+        assert "add" in admin and "die" in admin and anyone == {"echo"}
+        die = next(o for o in hub.offer(True) if o.tool == "die")
+        assert die.who == "admin"
+        listed = {t["name"]: t["hints"] for t in hub._runners["stand"].tools}
+        assert listed["die"] == {"readOnlyHint": False, "destructiveHint": True} and listed["echo"] == {}
+        with pytest.raises(mcp_tools.ToolsError, match="tools_destructive"):
+            mcp_tools.set_tool(tmp, "stand", "die", who="anyone")
         status = mcp_tools.read_status(tmp)["servers"]
         assert status["stand"]["state"] == "running"
         while mcp_tools.read_status(tmp)["servers"]["broken"]["state"] != "failed":

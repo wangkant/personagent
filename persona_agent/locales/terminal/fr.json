@@ -595,6 +595,7 @@
 "That server uses the older SSE transport, which personagent does not support. Use its Streamable HTTP address.": "Ce serveur utilise l'ancien transport SSE, que personagent ne prend pas en charge. Utilisez son adresse Streamable HTTP.",
 "The tools file could not be written.": "Le fichier des outils n'a pas pu être écrit.",
 "That request is not valid.": "Cette requête n'est pas valide.",
+"That tool's server marks it as destructive, so only the admin can cause it to be used.": "Le serveur de cet outil le signale comme destructif : seul l'administrateur peut en déclencher l'utilisation.",
 "Tools (MCP servers)": "Outils (serveurs MCP)",
 "none added; `personagent tools add` adds a server": "aucun ajouté ; `personagent tools add` ajoute un serveur",
 "servers: {0}, tools on: {1}": "serveurs : {0}, outils activés : {1}",

@@ -1512,6 +1512,7 @@
     "tools_sse_unsupported": "Dieser Server verwendet den älteren SSE-Transport, den personagent nicht unterstützt. Verwenden Sie seine Streamable-HTTP-Adresse.",
     "tools_write_failed": "Die Datei mit den Werkzeugeinstellungen konnte nicht geschrieben werden. Schließen Sie alle Programme, die sie verwenden, und versuchen Sie es erneut.",
     "tools_bad_request": "Diese Anfrage ist ungültig.",
+    "tools_destructive": "Der Server dieses Werkzeugs kennzeichnet es als destruktiv, daher kann nur der Administrator seine Verwendung auslösen.",
     "practice_why_searched": "Vor der Antwort hat die Figur im Web gesucht.",
     "practice_why_tool": "Vor der Antwort hat die Figur das Werkzeug {name} verwendet.",
     "runtime_use_tools": "Entscheidung, ob ein Werkzeug verwendet wird",

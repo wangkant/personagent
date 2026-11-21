@@ -37,6 +37,7 @@ logger = logging.getLogger("agent.tools")
 CONFIG_FILE = "mcp.json"
 ADMIN, ANYONE = "admin", "anyone"
 WHO = (ADMIN, ANYONE)
+HINTS = ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")
 MAX_SERVERS = 20
 #: Tools offered to one decision request, over all servers.
 MAX_OFFERED = 24
@@ -146,6 +147,11 @@ def tool_setting(spec: dict, tool: str) -> dict:
     """A tool's switch and who may use it; a tool never set is on, for the admin only."""
     row = (spec.get("personagent") or {}).get("tools", {}).get(tool)
     return dict(row) if row else {"enabled": True, "who": ADMIN}
+
+
+def destructive(tool: dict) -> bool:
+    """Whether the tool's server marks it destructive; lists saved before hints were kept carry none."""
+    return tool.get("hints", {}).get("destructiveHint") is True
 
 
 def _locked_update(path: Path, change) -> None:
@@ -353,6 +359,8 @@ def set_tool(home: Path, server: str, tool: str, *, enabled: Optional[bool] = No
         raise ToolsError("tools_unknown_tool")
     if who is not None and who not in WHO:
         raise ToolsError("tools_bad_request")
+    if who == ANYONE and any(t["name"] == tool and destructive(t) for t in known_tools(home, server, spec) or ()):
+        raise ToolsError("tools_destructive")
     row = tool_setting(spec, tool)
     if enabled is not None:
         row["enabled"] = bool(enabled)
@@ -385,7 +393,8 @@ def clean_tool(raw: dict) -> Optional[dict]:
     if not isinstance(schema, dict) or len(json.dumps(schema, ensure_ascii=False)) > SCHEMA_CHARS:
         schema = {"type": "object"}
     return {"name": name, "title": scrub_third_party_text(title).strip()[:100],
-            "description": description, "inputSchema": schema}
+            "description": description, "inputSchema": schema,
+            "hints": {k: annotations[k] for k in HINTS if isinstance(annotations.get(k), bool)}}
 
 
 def clean_tools(raw: list) -> list[dict]:
@@ -726,9 +735,10 @@ class ToolHub:
             spec = self._config["mcpServers"].get(name) or runner.spec
             for tool in runner.tools:
                 row = tool_setting(spec, tool["name"])
-                if row["enabled"] and (admin or row["who"] == ANYONE):
-                    out.append(Offered(name, tool["name"], tool["description"], tool["inputSchema"],
-                                       row["who"]))
+                # A destructive tool stays the admin's even where an older file says anyone.
+                who = ADMIN if destructive(tool) else row["who"]
+                if row["enabled"] and (admin or who == ANYONE):
+                    out.append(Offered(name, tool["name"], tool["description"], tool["inputSchema"], who))
         return out[:MAX_OFFERED]
 
     async def call(self, offered: Offered, arguments: dict, timeout: float = TURN_CALL_TIMEOUT_S) -> ToolResult:
@@ -905,6 +915,7 @@ REFUSALS = {
                              "Use its Streamable HTTP address.",
     "tools_write_failed": "The tools file could not be written.",
     "tools_bad_request": "That request is not valid.",
+    "tools_destructive": "That tool's server marks it as destructive, so only the admin can cause it to be used.",
     "tools_file_damaged": "The file mcp.json in the home folder cannot be read as JSON. Correct it or remove it.",
 }
 

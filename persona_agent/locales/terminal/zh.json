@@ -595,6 +595,7 @@
 "That server uses the older SSE transport, which personagent does not support. Use its Streamable HTTP address.": "该服务器使用旧版 SSE 传输方式，personagent 不支持。请使用其 Streamable HTTP 地址。",
 "The tools file could not be written.": "无法写入工具设置文件。",
 "That request is not valid.": "该请求无效。",
+"That tool's server marks it as destructive, so only the admin can cause it to be used.": "该工具的服务器将其标记为破坏性工具，因此只有管理员可以让角色使用它。",
 "Tools (MCP servers)": "工具（MCP 服务器）",
 "none added; `personagent tools add` adds a server": "尚未添加；可使用 `personagent tools add` 添加服务器",
 "servers: {0}, tools on: {1}": "服务器数：{0}，已开启的工具数：{1}",

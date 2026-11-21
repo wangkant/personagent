@@ -1512,6 +1512,7 @@
     "tools_sse_unsupported": "Este servidor usa o transporte SSE antigo, que o personagent não suporta. Use o endereço Streamable HTTP dele.",
     "tools_write_failed": "Não foi possível gravar o arquivo de configurações das ferramentas. Feche qualquer programa que o esteja usando e tente novamente.",
     "tools_bad_request": "Esta solicitação não é válida.",
+    "tools_destructive": "O servidor desta ferramenta a marca como destrutiva, por isso só o administrador pode fazer com que ela seja usada.",
     "practice_why_searched": "Antes de responder, ele pesquisou na web.",
     "practice_why_tool": "Antes de responder, ele usou a ferramenta {name}.",
     "runtime_use_tools": "Decisão de usar uma ferramenta",

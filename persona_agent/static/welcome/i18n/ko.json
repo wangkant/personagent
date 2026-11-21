@@ -1530,6 +1530,7 @@
     "tools_sse_unsupported": "이 서버는 이전 방식인 SSE 전송을 사용하며, personagent는 이를 지원하지 않습니다. 서버의 Streamable HTTP 주소를 사용하십시오.",
     "tools_write_failed": "도구 설정 파일을 기록할 수 없습니다. 해당 파일을 사용 중인 프로그램을 닫은 후 다시 시도하십시오.",
     "tools_bad_request": "잘못된 요청입니다.",
+    "tools_destructive": "이 도구는 서버가 파괴적인 도구로 표시했으므로 사용하게 할 수 있는 사람은 관리자뿐입니다.",
     "activitySearched": "웹 검색함",
     "activityUsedTool": "도구 {name} 사용함",
     "signOut": "로그아웃",

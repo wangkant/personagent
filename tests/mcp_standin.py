@@ -31,7 +31,8 @@ TOOLS = [
     {"name": "picture", "description": "A picture and a caption.", "inputSchema": {"type": "object"}},
     {"name": "fail", "description": "Reports an error.", "inputSchema": {"type": "object"}},
     {"name": "spawn", "description": "Starts a helper process and names its pid.", "inputSchema": {"type": "object"}},
-    {"name": "die", "description": "Exits mid-call.", "inputSchema": {"type": "object"}},
+    {"name": "die", "description": "Exits mid-call.", "inputSchema": {"type": "object"},
+     "annotations": {"destructiveHint": True, "readOnlyHint": False}},
     {"name": "env", "description": "Names its environment.", "inputSchema": {"type": "object"}},
     {"name": "argv", "description": "Its own arguments.", "inputSchema": {"type": "object"}},
 ]
