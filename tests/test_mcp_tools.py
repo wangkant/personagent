@@ -426,12 +426,39 @@ async def test_arguments_that_break_the_schema_call_nothing(tmp: Path) -> None:
     hub = agent.tool_hub = _Hub([OPEN])
     _decision(agent, ("t_echo", {"text": 5}))
     with search.tool_caller(True):
-        assert await agent._decide_and_search([], hint="say five") == ""
+        assert await agent._decide_and_search([], hint="say five") == (
+            "(the tool echo was not run: bad arguments; nothing was done)")
     assert hub.calls == []
     hub.result = McpError("timeout", "20 s")
     _decision(agent, ("t_echo", {"text": "x"}))
     with search.tool_caller(True):
-        assert await agent._decide_and_search([], hint="say x") == ""
+        assert await agent._decide_and_search([], hint="say x") == (
+            "(the tool echo failed: timeout; nothing was done)")
+    await agent.aclose()
+
+
+async def test_object_arguments_are_read_and_an_empty_search_says_so(tmp: Path) -> None:
+    agent = isolated_agent(tmp)
+    asked: list = []
+
+    async def post(url, key, payload, timeout=0):
+        call = {"name": "web_search", "arguments": {"query": "pixel 11"}}
+        return _Response({"choices": [{"message": {"content": "", "tool_calls": [
+            {"id": "c", "type": "function", "function": call}]}}], "usage": {}})
+    agent._post_chat = post
+
+    async def nothing(query, max_results=4):
+        asked.append(query)
+        return ""
+    agent._web_search = nothing
+    assert await agent._decide_and_search([], hint="what is the pixel 11?") == (
+        "Web search for: pixel 11\n(nothing found)")
+    assert asked == ["pixel 11"]
+
+    async def down(url, key, payload, timeout=0):
+        return _Response.refused()
+    agent._post_chat = down
+    assert await agent._decide_and_search([], hint="what is the pixel 11?") == search._NO_LOOKUP
     await agent.aclose()
 
 

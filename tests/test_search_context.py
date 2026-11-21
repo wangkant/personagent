@@ -4,6 +4,8 @@ whether the decision runs at all still depends on the trigger alone."""
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 
 from persona_agent.agent import Agent
@@ -106,6 +108,30 @@ async def test_context_never_opens_a_decision_the_trigger_would_not(tmp: Path) -
     hint = await _hint_from_think(agent, "lol nice")
     check("no decision call for a trigger the gate skips",
           await _decision_posts(agent, hint) == [], repr(hint))
+
+
+async def test_the_keyless_search_retries_in_the_chat_region_and_keeps_urls(tmp: Path, monkeypatch) -> None:
+    asked: list = []
+
+    class _DDGS:
+        def text(self, query, region, max_results, backend):
+            asked.append((region, backend))
+            if len(asked) < 2:
+                return []
+            return [{"title": "Pixel 11", "href": "https://example.com/p11", "body": "A phone."}]
+    monkeypatch.setitem(sys.modules, "ddgs", types.SimpleNamespace(DDGS=_DDGS))
+    agent = isolated_agent(tmp, seeds=True)
+    agent.chat_lang, agent.tavily_key = "zh", "tvly-test"
+
+    async def tavily_down(query, max_results=4):
+        return ""
+    agent._web_search_tavily = tavily_down
+    found = await agent._web_search("pixel 11")
+    await agent.aclose()
+    check("a failed Tavily falls back; an empty answer is asked again, an English query in English",
+          asked == [("us-en", "yahoo, startpage, mojeek, duckduckgo"),
+                    ("us-en", "duckduckgo, mojeek, startpage, yahoo")], repr(asked))
+    check("the row keeps its URL", found == "- Pixel 11 (https://example.com/p11): A phone.", repr(found))
 
 
 async def test_a_trigger_without_a_buffer_is_decided_alone(tmp: Path) -> None:
